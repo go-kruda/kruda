@@ -1,13 +1,13 @@
 package kruda
 
 import (
-	"encoding/json"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -75,8 +75,8 @@ func defaultConfig() Config {
 		BodyLimit:       4 * 1024 * 1024, // 4MB
 		HeaderLimit:     8 * 1024,        // 8KB
 		ShutdownTimeout: 10 * time.Second,
-		JSONEncoder:     json.Marshal,
-		JSONDecoder:     json.Unmarshal,
+		JSONEncoder:     krudajson.Marshal,
+		JSONDecoder:     krudajson.Unmarshal,
 		Logger:          slog.Default(),
 		Security: SecurityConfig{
 			XSSProtection:      "1; mode=block",

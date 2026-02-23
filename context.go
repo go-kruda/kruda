@@ -522,24 +522,24 @@ func (c *Ctx) writeHeaders() {
 		h.Add("Set-Cookie", formatCookie(cookie))
 	}
 
-	// Security headers
+	// Security headers — only set if not already present (user-set values take priority)
 	sec := c.app.config.Security
-	if sec.XSSProtection != "" {
+	if sec.XSSProtection != "" && h.Get("X-XSS-Protection") == "" {
 		h.Set("X-XSS-Protection", sec.XSSProtection)
 	}
-	if sec.ContentTypeNosniff != "" {
+	if sec.ContentTypeNosniff != "" && h.Get("X-Content-Type-Options") == "" {
 		h.Set("X-Content-Type-Options", sec.ContentTypeNosniff)
 	}
-	if sec.XFrameOptions != "" {
+	if sec.XFrameOptions != "" && h.Get("X-Frame-Options") == "" {
 		h.Set("X-Frame-Options", sec.XFrameOptions)
 	}
-	if sec.ReferrerPolicy != "" {
+	if sec.ReferrerPolicy != "" && h.Get("Referrer-Policy") == "" {
 		h.Set("Referrer-Policy", sec.ReferrerPolicy)
 	}
-	if sec.ContentSecurityPolicy != "" {
+	if sec.ContentSecurityPolicy != "" && h.Get("Content-Security-Policy") == "" {
 		h.Set("Content-Security-Policy", sec.ContentSecurityPolicy)
 	}
-	if sec.HSTSMaxAge > 0 {
+	if sec.HSTSMaxAge > 0 && h.Get("Strict-Transport-Security") == "" {
 		h.Set("Strict-Transport-Security", "max-age="+strconv.Itoa(sec.HSTSMaxAge))
 	}
 }

@@ -71,9 +71,13 @@ func isValidRequestID(id string) bool {
 }
 
 // generateUUID generates a UUID v4 string using crypto/rand.
+// Panics if the system's entropy source fails — a zero UUID would defeat
+// the purpose of request identification and mask debugging issues.
 func generateUUID() string {
 	var uuid [16]byte
-	_, _ = io.ReadFull(rand.Reader, uuid[:])
+	if _, err := io.ReadFull(rand.Reader, uuid[:]); err != nil {
+		panic("kruda: crypto/rand failed: " + err.Error())
+	}
 	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 2
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",

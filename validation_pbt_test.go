@@ -114,7 +114,7 @@ func TestPropertyValidateMaxSizeAgreesWithParseSize(t *testing.T) {
 
 		fu := &FileUpload{Size: in.FileSize}
 		got := validateMaxSize(fu, param)
-		expected := in.FileSize <= int64(maxBytes)
+		expected := in.FileSize <= maxBytes
 		return got == expected
 	}
 

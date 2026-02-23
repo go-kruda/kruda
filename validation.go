@@ -1,14 +1,13 @@
 package kruda
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/mail"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
-
-	krudajson "github.com/go-kruda/kruda/json"
 )
 
 // ValidatorFunc is the signature for validation rule functions.
@@ -48,7 +47,7 @@ func (e *ValidationError) MarshalJSON() ([]byte, error) {
 		Message string       `json:"message"`
 		Errors  []FieldError `json:"errors"`
 	}
-	return krudajson.Marshal(response{
+	return json.Marshal(response{
 		Code:    422,
 		Message: "Validation failed",
 		Errors:  e.Errors,
@@ -587,7 +586,7 @@ func validateMaxSize(value any, param string) bool {
 	if err != nil {
 		return false
 	}
-	return fu.Size <= int64(maxBytes)
+	return fu.Size <= maxBytes
 }
 
 // validateMime checks file Content-Type against a pattern.

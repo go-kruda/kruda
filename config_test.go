@@ -25,7 +25,7 @@ func TestWithShutdownTimeout(t *testing.T) {
 func TestParseSize(t *testing.T) {
 	tests := []struct {
 		input string
-		want  int
+		want  int64
 	}{
 		{"4MB", 4 * 1024 * 1024},
 		{"4mb", 4 * 1024 * 1024},

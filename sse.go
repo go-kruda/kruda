@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // SSEStream provides methods for writing Server-Sent Events.
@@ -18,6 +19,7 @@ type SSEStream struct {
 
 // Event writes a named SSE event with JSON-serialized data.
 // Format: "event: {name}\ndata: {json}\n\n"
+// Newlines and carriage returns in name are stripped to prevent SSE injection.
 func (s *SSEStream) Event(name string, data any) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
@@ -26,7 +28,7 @@ func (s *SSEStream) Event(name string, data any) error {
 	if err != nil {
 		return fmt.Errorf("kruda: SSE encode error: %w", err)
 	}
-	_, err = fmt.Fprintf(s.writer, "event: %s\ndata: %s\n\n", name, jsonData)
+	_, err = fmt.Fprintf(s.writer, "event: %s\ndata: %s\n\n", sanitizeSSEField(name), jsonData)
 	if err != nil {
 		return err
 	}
@@ -37,6 +39,7 @@ func (s *SSEStream) Event(name string, data any) error {
 // EventWithID writes a named SSE event with an ID for reconnection support.
 // The client stores the last event ID and sends it as Last-Event-ID on reconnect.
 // Format: "id: {id}\nevent: {name}\ndata: {json}\n\n"
+// Newlines and carriage returns in id and name are stripped to prevent SSE injection.
 func (s *SSEStream) EventWithID(id, name string, data any) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
@@ -45,7 +48,7 @@ func (s *SSEStream) EventWithID(id, name string, data any) error {
 	if err != nil {
 		return fmt.Errorf("kruda: SSE encode error: %w", err)
 	}
-	_, err = fmt.Fprintf(s.writer, "id: %s\nevent: %s\ndata: %s\n\n", id, name, jsonData)
+	_, err = fmt.Fprintf(s.writer, "id: %s\nevent: %s\ndata: %s\n\n", sanitizeSSEField(id), sanitizeSSEField(name), jsonData)
 	if err != nil {
 		return err
 	}
@@ -69,6 +72,15 @@ func (s *SSEStream) Data(data any) error {
 	}
 	s.flusher.Flush()
 	return nil
+}
+
+// sanitizeSSEField strips newlines and carriage returns from SSE field values
+// to prevent protocol injection. Only allocates if the string contains \n or \r.
+func sanitizeSSEField(s string) string {
+	if !strings.ContainsAny(s, "\n\r") {
+		return s
+	}
+	return strings.NewReplacer("\n", "", "\r", "").Replace(s)
 }
 
 // Comment writes an SSE comment line (prefixed with ':').

@@ -1,13 +1,13 @@
 package kruda
 
 import (
+	"encoding/json"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -75,8 +75,8 @@ func defaultConfig() Config {
 		BodyLimit:       4 * 1024 * 1024, // 4MB
 		HeaderLimit:     8 * 1024,        // 8KB
 		ShutdownTimeout: 10 * time.Second,
-		JSONEncoder:     krudajson.Marshal,
-		JSONDecoder:     krudajson.Unmarshal,
+		JSONEncoder:     json.Marshal,
+		JSONDecoder:     json.Unmarshal,
 		Logger:          slog.Default(),
 		Security: SecurityConfig{
 			XSSProtection:      "1; mode=block",
@@ -177,7 +177,7 @@ func applyEnvConfig(prefix string, cfg *Config) {
 	}
 	if v := os.Getenv(prefix + "_BODY_LIMIT"); v != "" {
 		if n, err := parseSize(v); err == nil {
-			cfg.BodyLimit = n
+			cfg.BodyLimit = int(n)
 		}
 	}
 	if v := os.Getenv(prefix + "_SHUTDOWN_TIMEOUT"); v != "" {
@@ -194,31 +194,32 @@ func applyEnvConfig(prefix string, cfg *Config) {
 // F5 limitations (by design, sufficient for Phase 1):
 //   - Decimal values not supported ("1.5MB" → error). Use "1536KB" instead.
 //   - "B" suffix not recognized. Plain numbers are already treated as bytes.
-func parseSize(s string) (int, error) {
+func parseSize(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	upper := strings.ToUpper(s)
 	if strings.HasSuffix(upper, "GB") {
-		n, err := strconv.Atoi(strings.TrimSpace(s[:len(s)-2]))
+		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
 		if err != nil {
 			return 0, err
 		}
 		return n * 1024 * 1024 * 1024, nil
 	}
 	if strings.HasSuffix(upper, "MB") {
-		n, err := strconv.Atoi(strings.TrimSpace(s[:len(s)-2]))
+		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
 		if err != nil {
 			return 0, err
 		}
 		return n * 1024 * 1024, nil
 	}
 	if strings.HasSuffix(upper, "KB") {
-		n, err := strconv.Atoi(strings.TrimSpace(s[:len(s)-2]))
+		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
 		if err != nil {
 			return 0, err
 		}
 		return n * 1024, nil
 	}
-	return strconv.Atoi(s)
+	n, err := strconv.ParseInt(s, 10, 64)
+	return n, err
 }
 
 // WithValidator sets a pre-configured Validator on the App.

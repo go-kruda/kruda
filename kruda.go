@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ type App struct {
 	errorMap   map[error]ErrorMapping
 	transport  transport.Transport
 	ctxPool    sync.Pool
+	routeInfos []routeInfo // collected from typed handler registrations for OpenAPI
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -42,11 +44,12 @@ func New(opts ...Option) *App {
 	// Default transport if none was set via options
 	if app.config.Transport == nil {
 		app.config.Transport = transport.NewNetHTTP(transport.NetHTTPConfig{
-			ReadTimeout:  app.config.ReadTimeout,
-			WriteTimeout: app.config.WriteTimeout,
-			IdleTimeout:  app.config.IdleTimeout,
-			MaxBodySize:  app.config.BodyLimit,
-			TrustProxy:   app.config.TrustProxy,
+			ReadTimeout:    app.config.ReadTimeout,
+			WriteTimeout:   app.config.WriteTimeout,
+			IdleTimeout:    app.config.IdleTimeout,
+			MaxBodySize:    app.config.BodyLimit,
+			MaxHeaderBytes: app.config.HeaderLimit,
+			TrustProxy:     app.config.TrustProxy,
 		})
 	}
 	app.transport = app.config.Transport
@@ -190,6 +193,19 @@ func (app *App) Use(middleware ...HandlerFunc) *App {
 // Listen compiles the router, starts the transport in a goroutine,
 // and blocks waiting for SIGINT or SIGTERM to initiate graceful shutdown.
 func (app *App) Listen(addr string) error {
+	// Build and serve OpenAPI spec if configured (must be before Compile)
+	if app.config.openAPIInfo.Title != "" {
+		specJSON, err := app.buildOpenAPISpec()
+		if err != nil {
+			return fmt.Errorf("kruda: failed to build OpenAPI spec: %w", err)
+		}
+		app.Get(app.config.openAPIPath, func(c *Ctx) error {
+			c.SetHeader("Content-Type", "application/json")
+			c.SetHeader("Cache-Control", "public, max-age=3600")
+			return c.sendBytes(specJSON)
+		})
+	}
+
 	app.router.Compile()
 
 	errCh := make(chan error, 1)
@@ -265,11 +281,67 @@ func (app *App) OnShutdown(fn func()) *App {
 	return app
 }
 
+// OnParse registers a hook that fires after input parsing but before validation.
+// The hook receives the parsed input as `any` — type-assert to the specific type.
+// Returning an error stops the pipeline (skips validation and handler).
+func (app *App) OnParse(fn func(c *Ctx, input any) error) *App {
+	app.hooks.OnParse = append(app.hooks.OnParse, fn)
+	return app
+}
+
+// Validator returns the app's Validator instance, creating one if needed.
+// Use this to register custom rules or override messages.
+func (app *App) Validator() *Validator {
+	if app.config.Validator == nil {
+		app.config.Validator = NewValidator()
+	}
+	return app.config.Validator
+}
+
 // handleError converts an error to a KrudaError, executes OnError hooks,
 // and sends the appropriate JSON error response.
+//
+// ValidationError handling: when a validation error occurs, handleError wraps it
+// in a *KrudaError{Code: 422, Message: "Validation failed", Err: ve}. If a custom
+// ErrorHandler is configured, it receives this *KrudaError. To access the underlying
+// *ValidationError from the handler, use:
+//
+//	var ve *kruda.ValidationError
+//	if errors.As(ke.Unwrap(), &ve) {
+//	    // ve.Errors contains per-field validation failures
+//	}
+//
 // F1 fix: checks c.Responded() before writing to avoid double-write when
 // a middleware or handler has already sent a response.
 func (app *App) handleError(c *Ctx, err error) {
+	// Check for ValidationError first — it has its own JSON structure
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		// OnError hooks still fire for validation errors
+		ke := &KrudaError{Code: 422, Message: "Validation failed", Err: ve}
+		for _, hook := range app.hooks.OnError {
+			hook(c, ke)
+		}
+
+		// F1: don't write if response already sent
+		if c.Responded() {
+			return
+		}
+
+		// Use custom error handler if configured
+		if app.config.ErrorHandler != nil {
+			app.config.ErrorHandler(c, ke)
+			return
+		}
+
+		// Default: use ValidationError's own JSON marshaling
+		c.Status(422)
+		data, _ := ve.MarshalJSON()
+		c.SetHeader("Content-Type", "application/json; charset=utf-8")
+		_ = c.sendBytes(data)
+		return
+	}
+
 	ke := app.resolveError(err)
 
 	// Execute OnError hooks (always fire, even if already responded,

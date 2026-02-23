@@ -83,6 +83,26 @@ func (g *Group) Patch(path string, handler HandlerFunc) *Group {
 	return g
 }
 
+// Options registers an OPTIONS route on this group.
+func (g *Group) Options(path string, handler HandlerFunc) *Group {
+	g.addRoute("OPTIONS", path, handler)
+	return g
+}
+
+// Head registers a HEAD route on this group.
+func (g *Group) Head(path string, handler HandlerFunc) *Group {
+	g.addRoute("HEAD", path, handler)
+	return g
+}
+
+// All registers a route on all standard HTTP methods on this group.
+func (g *Group) All(path string, handler HandlerFunc) *Group {
+	for _, method := range standardMethods {
+		g.addRoute(method, path, handler)
+	}
+	return g
+}
+
 // Done returns the parent App for method chaining back to the root.
 //
 //	app.Group("/api").

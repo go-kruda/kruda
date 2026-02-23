@@ -98,7 +98,9 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 		} else if originSet[origin] {
 			allowOrigin = origin
 		} else {
-			// Origin not allowed — skip CORS headers, proceed normally.
+			// Origin not allowed — set Vary but skip CORS headers.
+			// Vary: Origin prevents CDN from caching a non-CORS response for a valid origin.
+			c.AddHeader("Vary", "Origin")
 			return c.Next()
 		}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -17,11 +18,12 @@ type NetHTTPTransport struct {
 
 // NetHTTPConfig holds configuration for the net/http transport.
 type NetHTTPConfig struct {
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
-	MaxBodySize  int
-	TrustProxy   bool // C6: only trust X-Forwarded-For/X-Real-IP when true
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
+	MaxBodySize    int
+	MaxHeaderBytes int  // maps to http.Server.MaxHeaderBytes
+	TrustProxy     bool // C6: only trust X-Forwarded-For/X-Real-IP when true
 }
 
 // NewNetHTTP creates a new net/http transport.
@@ -45,6 +47,9 @@ func (t *NetHTTPTransport) ListenAndServe(addr string, handler Handler) error {
 	}
 	if t.config.IdleTimeout > 0 {
 		t.server.IdleTimeout = t.config.IdleTimeout
+	}
+	if t.config.MaxHeaderBytes > 0 {
+		t.server.MaxHeaderBytes = t.config.MaxHeaderBytes
 	}
 	srv := t.server
 	t.mu.Unlock()
@@ -85,6 +90,8 @@ type netHTTPRequest struct {
 	body       []byte
 	bodyErr    error
 	bodyRead   bool
+	queryVals  url.Values // cached parsed query string
+	queryDone  bool       // whether queryVals has been parsed
 }
 
 func (r *netHTTPRequest) Method() string { return r.r.Method }
@@ -134,9 +141,13 @@ func (r *netHTTPRequest) Body() ([]byte, error) {
 }
 
 // QueryParam returns a query parameter value.
-// N7: note that URL.Query() re-parses on each call; caching is done at the Ctx level.
+// Parses the query string once and caches the result for subsequent calls.
 func (r *netHTTPRequest) QueryParam(key string) string {
-	return r.r.URL.Query().Get(key)
+	if !r.queryDone {
+		r.queryVals = r.r.URL.Query()
+		r.queryDone = true
+	}
+	return r.queryVals.Get(key)
 }
 
 // RemoteAddr returns the client IP. Only trusts proxy headers (X-Forwarded-For,
@@ -240,6 +251,14 @@ func (w *netHTTPResponseWriter) Write(data []byte) (int, error) {
 // Unwrap returns the underlying http.ResponseWriter for use with http.ServeFile etc.
 func (w *netHTTPResponseWriter) Unwrap() http.ResponseWriter {
 	return w.w
+}
+
+// Flush delegates to the underlying http.ResponseWriter if it supports flushing.
+// Required for SSE (Server-Sent Events) streaming.
+func (w *netHTTPResponseWriter) Flush() {
+	if f, ok := w.w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // --- HeaderMap implementation ---

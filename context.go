@@ -2,8 +2,10 @@ package kruda
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,7 +38,6 @@ type Ctx struct {
 	method     string
 	path       string
 	params     map[string]string // pre-allocated, reset per request
-	query      map[string]string // lazy parsed
 	headers    map[string]string // lazy parsed, cached
 	bodyBytes  []byte
 	bodyParsed bool
@@ -67,6 +68,9 @@ type Ctx struct {
 
 	// Logger (lazy-init, cached per request)
 	logger *slog.Logger
+
+	// Multipart form reference for cleanup (RemoveAll temp files)
+	multipartForm *multipart.Form
 }
 
 // newCtx creates a new context with pre-allocated maps.
@@ -74,7 +78,6 @@ func newCtx(app *App) *Ctx {
 	return &Ctx{
 		app:         app,
 		params:      make(map[string]string, 4),
-		query:       make(map[string]string, 8),
 		headers:     make(map[string]string, 8),
 		respHeaders: make(map[string][]string, 8),
 		locals:      make(map[string]any, 4),
@@ -97,13 +100,19 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.startTime = time.Now()
 	c.writer = w
 	c.request = r
-	c.ctx = nil
 	c.logger = nil
+	c.multipartForm = nil
 	c.cookies = c.cookies[:0]
+
+	// Init context from the underlying request so client disconnects propagate.
+	if raw, ok := r.RawRequest().(*http.Request); ok {
+		c.ctx = raw.Context()
+	} else {
+		c.ctx = nil
+	}
 
 	// Reset maps without reallocating
 	clear(c.params)
-	clear(c.query)
 	clear(c.headers)
 	clear(c.respHeaders)
 	clear(c.locals)
@@ -111,6 +120,11 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 
 // cleanup prepares the context for returning to the pool.
 func (c *Ctx) cleanup() {
+	// Remove multipart temp files now that the handler is done.
+	if c.multipartForm != nil {
+		_ = c.multipartForm.RemoveAll()
+		c.multipartForm = nil
+	}
 	c.writer = nil
 	c.request = nil
 	c.bodyBytes = nil
@@ -142,13 +156,8 @@ func (c *Ctx) ParamInt(name string) (int, error) {
 // This is intentional for Phase 1 — Phase 2 binding will distinguish
 // between "present but empty" and "absent" via struct tags.
 func (c *Ctx) Query(name string, def ...string) string {
-	if v, ok := c.query[name]; ok && v != "" {
-		return v
-	}
-	// Try from raw request (lazy parse + cache)
 	if c.request != nil {
 		if v := c.request.QueryParam(name); v != "" {
-			c.query[name] = v
 			return v
 		}
 	}
@@ -178,14 +187,16 @@ func (c *Ctx) QueryInt(name string, def ...int) int {
 }
 
 // Header returns a request header value (lazy parsed, cached).
+// Keys are normalized to canonical form so lookups are case-insensitive.
 func (c *Ctx) Header(name string) string {
-	if v, ok := c.headers[name]; ok {
+	key := http.CanonicalHeaderKey(name)
+	if v, ok := c.headers[key]; ok {
 		return v
 	}
 	if c.request != nil {
 		v := c.request.Header(name)
 		if v != "" {
-			c.headers[name] = v
+			c.headers[key] = v
 		}
 		return v
 	}
@@ -407,11 +418,68 @@ func (c *Ctx) Log() *slog.Logger {
 	return c.logger
 }
 
+// SSE starts a Server-Sent Events stream.
+// Sets appropriate headers and creates an SSEStream for the callback.
+// Returns when the callback returns or the client disconnects.
+func (c *Ctx) SSE(fn func(*SSEStream) error) error {
+	// Check flusher support before writing headers
+	flusher, ok := c.writer.(http.Flusher)
+	if !ok {
+		return InternalError("SSE requires a transport that supports flushing")
+	}
+
+	// Set SSE headers
+	c.SetHeader("Content-Type", "text/event-stream")
+	c.SetHeader("Cache-Control", "no-cache")
+	c.SetHeader("Connection", "keep-alive")
+
+	// Write headers immediately
+	c.writeHeaders()
+	c.writer.WriteHeader(200)
+	c.responded = true
+
+	stream := &SSEStream{
+		writer:  writerAdapter{c.writer},
+		flusher: flusher,
+		encode:  c.app.config.JSONEncoder,
+		ctx:     c.Context(),
+	}
+
+	return fn(stream)
+}
+
+// Provide stores a typed value in the request context for later retrieval via Need.
+// This is a semantic alias for Set — it signals intent for dependency injection.
+func (c *Ctx) Provide(key string, value any) {
+	c.locals[key] = value
+}
+
+// Need retrieves a typed value from the request context.
+// Returns the value and true if found and castable to T, or zero value and false otherwise.
+// This is a package-level generic function because Go methods cannot have type parameters.
+func Need[T any](c *Ctx, key string) (T, bool) {
+	val, ok := c.locals[key]
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	typed, ok := val.(T)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	return typed, true
+}
+
 // --- Internal send helpers ---
+
+// ErrAlreadyResponded is returned when a handler attempts to write a response
+// after one has already been sent. Check with errors.Is(err, ErrAlreadyResponded).
+var ErrAlreadyResponded = fmt.Errorf("kruda: response already sent")
 
 func (c *Ctx) send() error {
 	if c.responded {
-		return nil
+		return ErrAlreadyResponded
 	}
 	c.responded = true
 	c.writeHeaders()
@@ -421,7 +489,7 @@ func (c *Ctx) send() error {
 
 func (c *Ctx) sendBytes(data []byte) error {
 	if c.responded {
-		return nil
+		return ErrAlreadyResponded
 	}
 	c.responded = true
 	// M12: set Content-Length
@@ -470,6 +538,9 @@ func (c *Ctx) writeHeaders() {
 	}
 	if sec.ContentSecurityPolicy != "" {
 		h.Set("Content-Security-Policy", sec.ContentSecurityPolicy)
+	}
+	if sec.HSTSMaxAge > 0 {
+		h.Set("Strict-Transport-Security", "max-age="+strconv.Itoa(sec.HSTSMaxAge))
 	}
 }
 

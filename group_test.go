@@ -380,3 +380,57 @@ func TestCollectMiddleware_EmptyGroups(t *testing.T) {
 		t.Fatalf("collected length = %d, want 0", len(collected))
 	}
 }
+
+// --- Options, Head, All methods ---
+
+func TestGroup_Options(t *testing.T) {
+	app := testApp()
+	g := app.Group("/api")
+	g.Options("/cors", dummyHandler())
+
+	params := make(map[string]string, 4)
+	if app.router.find("OPTIONS", "/api/cors", params) == nil {
+		t.Error("OPTIONS /api/cors should be registered")
+	}
+}
+
+func TestGroup_Head(t *testing.T) {
+	app := testApp()
+	g := app.Group("/api")
+	g.Head("/ping", dummyHandler())
+
+	params := make(map[string]string, 4)
+	if app.router.find("HEAD", "/api/ping", params) == nil {
+		t.Error("HEAD /api/ping should be registered")
+	}
+}
+
+func TestGroup_All(t *testing.T) {
+	app := testApp()
+	g := app.Group("/api")
+	g.All("/any", dummyHandler())
+
+	params := make(map[string]string, 4)
+	for _, method := range standardMethods {
+		clear(params)
+		if app.router.find(method, "/api/any", params) == nil {
+			t.Errorf("%s /api/any should be registered via All()", method)
+		}
+	}
+}
+
+func TestGroup_OptionsHeadAllReturnGroup(t *testing.T) {
+	app := testApp()
+	g := app.Group("/api")
+	h := dummyHandler()
+
+	if g.Options("/a", h) != g {
+		t.Error("Options() should return group")
+	}
+	if g.Head("/b", h) != g {
+		t.Error("Head() should return group")
+	}
+	if g.All("/c", h) != g {
+		t.Error("All() should return group")
+	}
+}

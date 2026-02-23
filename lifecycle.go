@@ -14,4 +14,5 @@ type Hooks struct {
 	OnResponse []HookFunc
 	OnError    []ErrorHookFunc
 	OnShutdown []func()
+	OnParse    []func(c *Ctx, input any) error // fires after parse, before validate
 }

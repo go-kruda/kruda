@@ -1,13 +1,13 @@
 package kruda
 
 import (
-	"encoding/json"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -41,11 +41,18 @@ type Config struct {
 	// Logging
 	Logger *slog.Logger // default: slog.Default()
 
-	// Error handler
-	// F6 note: signature uses `error` (not `*KrudaError`) so custom handlers
-	// can receive any error type. Use errors.As() to extract *KrudaError if needed.
-	// Consider changing to `func(c *Ctx, err *KrudaError)` before API freeze (Phase 5).
-	ErrorHandler func(c *Ctx, err error)
+	// Error handler — receives *KrudaError with HTTP status code and message.
+	// Use ke.Unwrap() to access the original error if needed.
+	ErrorHandler func(c *Ctx, err *KrudaError)
+
+	// Validator holds the validation engine. nil = no validation (zero overhead).
+	// Set via WithValidator() option or lazy-created via app.Validator().
+	Validator *Validator
+
+	// OpenAPI configuration (zero value = disabled, zero overhead)
+	openAPIInfo openAPIInfo
+	openAPIPath string
+	openAPITags []openAPITagDef
 }
 
 // SecurityConfig controls security headers and behavior.
@@ -68,8 +75,8 @@ func defaultConfig() Config {
 		BodyLimit:       4 * 1024 * 1024, // 4MB
 		HeaderLimit:     8 * 1024,        // 8KB
 		ShutdownTimeout: 10 * time.Second,
-		JSONEncoder:     json.Marshal,
-		JSONDecoder:     json.Unmarshal,
+		JSONEncoder:     krudajson.Marshal,
+		JSONDecoder:     krudajson.Unmarshal,
 		Logger:          slog.Default(),
 		Security: SecurityConfig{
 			XSSProtection:      "1; mode=block",
@@ -114,7 +121,7 @@ func WithLogger(l *slog.Logger) Option {
 }
 
 // WithErrorHandler sets a custom error handler.
-func WithErrorHandler(h func(c *Ctx, err error)) Option {
+func WithErrorHandler(h func(c *Ctx, err *KrudaError)) Option {
 	return func(a *App) { a.config.ErrorHandler = h }
 }
 
@@ -212,4 +219,38 @@ func parseSize(s string) (int, error) {
 		return n * 1024, nil
 	}
 	return strconv.Atoi(s)
+}
+
+// WithValidator sets a pre-configured Validator on the App.
+func WithValidator(v *Validator) Option {
+	return func(a *App) { a.config.Validator = v }
+}
+
+// WithOpenAPIInfo enables OpenAPI spec generation with the given metadata.
+// When configured, a GET handler is auto-registered at the OpenAPI path (default: /openapi.json).
+func WithOpenAPIInfo(title, version, description string) Option {
+	return func(a *App) {
+		a.config.openAPIInfo = openAPIInfo{
+			Title:       title,
+			Version:     version,
+			Description: description,
+		}
+		if a.config.openAPIPath == "" {
+			a.config.openAPIPath = "/openapi.json"
+		}
+	}
+}
+
+// WithOpenAPIPath sets the path where the OpenAPI spec is served.
+func WithOpenAPIPath(path string) Option {
+	return func(a *App) { a.config.openAPIPath = path }
+}
+
+// WithOpenAPITag adds a tag definition to the OpenAPI spec.
+func WithOpenAPITag(name, description string) Option {
+	return func(a *App) {
+		a.config.openAPITags = append(a.config.openAPITags, openAPITagDef{
+			Name: name, Description: description,
+		})
+	}
 }

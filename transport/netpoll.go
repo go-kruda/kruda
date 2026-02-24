@@ -100,8 +100,8 @@ func (t *NetpollTransport) ListenAndServe(addr string, handler Handler) error {
 	return evl.Serve(ln)
 }
 
-// onConnect is a no-op — buffers are pooled per-request (not per-connection)
-// to avoid a race where keep-alive connections share a returned-to-pool buffer.
+// onConnect is a no-op — buffers are pooled per-request to avoid a race
+// where keep-alive connections share a returned-to-pool buffer.
 func (t *NetpollTransport) onConnect(ctx context.Context, conn netpoll.Connection) context.Context {
 	return ctx
 }
@@ -158,9 +158,7 @@ func (t *NetpollTransport) onRequest(ctx context.Context, conn netpoll.Connectio
 	// Dispatch to the application handler.
 	t.handler.ServeKruda(w, req)
 
-	// Drain unread body to keep HTTP/1.1 framing correct for keep-alive.
-	// If the handler didn't call Body(), leftover bytes corrupt the next request.
-	// If draining fails (client disconnect, chunked encoding), close the connection.
+	// Drain unread body for keep-alive framing. Failure → close connection.
 	if err := req.drainBody(); err != nil {
 		reader.Release()
 		return conn.Close()
@@ -479,17 +477,13 @@ func (r *netpollRequest) Cookie(name string) string {
 // RawRequest returns nil — there is no underlying *http.Request for netpoll connections.
 func (r *netpollRequest) RawRequest() any { return nil }
 
-// drainBody skips any unread body bytes to maintain HTTP/1.1 keep-alive framing.
-// If the handler never called Body(), the Content-Length bytes are still in the
-// reader stream and would be misinterpreted as the next request.
-// Returns a non-nil error if draining fails — the caller must close the connection.
+// drainBody skips unread body bytes to keep HTTP/1.1 framing correct.
 func (r *netpollRequest) drainBody() error {
 	if r.bodyRead {
 		return nil
 	}
 	r.bodyRead = true
 
-	// Chunked encoding: we can't drain without parsing chunks → force close.
 	if te := r.headerVal("Transfer-Encoding"); strings.Contains(te, "chunked") {
 		return fmt.Errorf("netpoll: cannot drain chunked body")
 	}
@@ -499,7 +493,10 @@ func (r *netpollRequest) drainBody() error {
 		return nil
 	}
 	cl, err := strconv.Atoi(clStr)
-	if err != nil || cl <= 0 {
+	if err != nil || cl < 0 {
+		return fmt.Errorf("netpoll: invalid Content-Length %q", clStr)
+	}
+	if cl == 0 {
 		return nil
 	}
 	return r.reader.Skip(cl)
@@ -553,14 +550,12 @@ func (w *netpollResponseWriter) flush() error {
 	buf = append(buf, statusText(w.statusCode)...)
 	buf = append(buf, '\r', '\n')
 
-	// Write Content-Length if we have a body.
-	if len(w.bodyBuf) > 0 {
-		// Check if user already set Content-Length.
-		if w.headers.Get("Content-Length") == "" {
-			buf = append(buf, "Content-Length: "...)
-			buf = strconv.AppendInt(buf, int64(len(w.bodyBuf)), 10)
-			buf = append(buf, '\r', '\n')
-		}
+	// Always write Content-Length for keep-alive framing (1xx/204/304 excluded per RFC 7230).
+	if w.headers.Get("Content-Length") == "" &&
+		w.statusCode >= 200 && w.statusCode != 204 && w.statusCode != 304 {
+		buf = append(buf, "Content-Length: "...)
+		buf = strconv.AppendInt(buf, int64(len(w.bodyBuf)), 10)
+		buf = append(buf, '\r', '\n')
 	}
 
 	// Response headers.

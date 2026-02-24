@@ -290,7 +290,7 @@ func WithOpenAPITag(name, description string) Option {
 
 // selectTransport chooses the transport based on config, env, and OS.
 // Priority: explicit WithTransport() (cfg.Transport != nil) > WithTransportName() > KRUDA_TRANSPORT env > auto-detect.
-// Netpoll transport is not yet implemented — "netpoll" falls back to net/http with a warning.
+// Netpoll is the default on Linux/macOS; TLS or Windows forces net/http.
 func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {

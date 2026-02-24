@@ -138,3 +138,49 @@ func TestWithEnvPrefix(t *testing.T) {
 		t.Errorf("ReadTimeout = %v, want 3s", app.config.ReadTimeout)
 	}
 }
+
+func TestWithTLS_ConfigStored(t *testing.T) {
+	app := &App{config: defaultConfig()}
+	opt := WithTLS("/path/to/cert.pem", "/path/to/key.pem")
+	opt(app)
+
+	if app.config.TLSCertFile != "/path/to/cert.pem" {
+		t.Errorf("TLSCertFile = %q, want %q", app.config.TLSCertFile, "/path/to/cert.pem")
+	}
+	if app.config.TLSKeyFile != "/path/to/key.pem" {
+		t.Errorf("TLSKeyFile = %q, want %q", app.config.TLSKeyFile, "/path/to/key.pem")
+	}
+}
+
+func TestWithTLS_Option(t *testing.T) {
+	app := New(WithTLS("cert.pem", "key.pem"))
+
+	if app.config.TLSCertFile != "cert.pem" {
+		t.Errorf("TLSCertFile = %q, want %q", app.config.TLSCertFile, "cert.pem")
+	}
+	if app.config.TLSKeyFile != "key.pem" {
+		t.Errorf("TLSKeyFile = %q, want %q", app.config.TLSKeyFile, "key.pem")
+	}
+}
+
+func TestSelectTransport_TLSPassthrough(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.TLSCertFile = "cert.pem"
+	cfg.TLSKeyFile = "key.pem"
+
+	// selectTransport should create a transport without error when TLS is configured
+	tr := selectTransport(cfg, cfg.Logger)
+	if tr == nil {
+		t.Fatal("selectTransport returned nil")
+	}
+}
+
+func TestWithTLS_DefaultEmpty(t *testing.T) {
+	cfg := defaultConfig()
+	if cfg.TLSCertFile != "" {
+		t.Errorf("default TLSCertFile should be empty, got %q", cfg.TLSCertFile)
+	}
+	if cfg.TLSKeyFile != "" {
+		t.Errorf("default TLSKeyFile should be empty, got %q", cfg.TLSKeyFile)
+	}
+}

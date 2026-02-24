@@ -41,18 +41,8 @@ func New(opts ...Option) *App {
 		opt(app)
 	}
 
-	// Default transport if none was set via options
-	if app.config.Transport == nil {
-		app.config.Transport = transport.NewNetHTTP(transport.NetHTTPConfig{
-			ReadTimeout:    app.config.ReadTimeout,
-			WriteTimeout:   app.config.WriteTimeout,
-			IdleTimeout:    app.config.IdleTimeout,
-			MaxBodySize:    app.config.BodyLimit,
-			MaxHeaderBytes: app.config.HeaderLimit,
-			TrustProxy:     app.config.TrustProxy,
-		})
-	}
-	app.transport = app.config.Transport
+	// Select transport (respects WithTransport, WithTransportName, env, OS)
+	app.transport = selectTransport(app.config, app.config.Logger)
 
 	// Set up context pool
 	app.ctxPool = sync.Pool{
@@ -62,6 +52,13 @@ func New(opts ...Option) *App {
 	}
 
 	return app
+}
+
+// Compile freezes the router tree and applies AOT optimizations.
+// Called automatically by Listen(). Useful for benchmarks and tests
+// that call ServeKruda directly without Listen().
+func (app *App) Compile() {
+	app.router.Compile()
 }
 
 // ServeKruda implements transport.Handler. It acquires a Ctx from the pool,

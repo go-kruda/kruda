@@ -1,8 +1,10 @@
 package kruda
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +28,11 @@ type Config struct {
 	ShutdownTimeout time.Duration // default: 10s
 
 	// Transport
-	Transport transport.Transport // default: net/http (Phase 1), Netpoll (Phase 3)
+	Transport     transport.Transport // default: net/http (Phase 1), Netpoll (Phase 3)
+	TransportName string              // "auto", "netpoll", "nethttp" — default: "auto"
+	TLSCertFile   string              // TLS certificate file path
+	TLSKeyFile    string              // TLS key file path
+	HTTP3         bool                // enable HTTP/3 dual-stack (QUIC + TCP)
 
 	// Proxy trust (C6 fix: default false — only trust X-Forwarded-For/X-Real-IP when true)
 	TrustProxy bool
@@ -115,6 +121,12 @@ func WithTransport(t transport.Transport) Option {
 	return func(a *App) { a.config.Transport = t }
 }
 
+// WithTransportName selects a transport by name: "auto", "netpoll", "nethttp".
+// Use WithTransport() instead to provide a custom transport instance directly.
+func WithTransportName(name string) Option {
+	return func(a *App) { a.config.TransportName = name }
+}
+
 // WithLogger sets a custom logger.
 func WithLogger(l *slog.Logger) Option {
 	return func(a *App) { a.config.Logger = l }
@@ -144,6 +156,26 @@ func WithShutdownTimeout(d time.Duration) Option {
 // Default is false — only the direct connection's remote address is used.
 func WithTrustProxy(trust bool) Option {
 	return func(a *App) { a.config.TrustProxy = trust }
+}
+
+// WithTLS configures TLS for HTTPS and HTTP/2 auto-negotiation.
+// When used with Netpoll transport, automatically falls back to net/http.
+func WithTLS(certFile, keyFile string) Option {
+	return func(a *App) {
+		a.config.TLSCertFile = certFile
+		a.config.TLSKeyFile = keyFile
+	}
+}
+
+// WithHTTP3 enables HTTP/3 dual-stack serving (QUIC on UDP + HTTP/2 on TCP).
+// Requires TLS certificate and key since QUIC mandates TLS 1.3.
+// When enabled, the Alt-Svc header is auto-injected to advertise HTTP/3.
+func WithHTTP3(certFile, keyFile string) Option {
+	return func(a *App) {
+		a.config.TLSCertFile = certFile
+		a.config.TLSKeyFile = keyFile
+		a.config.HTTP3 = true
+	}
 }
 
 // WithEnvPrefix reads config from environment variables with the given prefix.
@@ -253,5 +285,104 @@ func WithOpenAPITag(name, description string) Option {
 		a.config.openAPITags = append(a.config.openAPITags, openAPITagDef{
 			Name: name, Description: description,
 		})
+	}
+}
+
+// selectTransport chooses the transport based on config, env, and OS.
+// Priority: explicit WithTransport() (cfg.Transport != nil) > WithTransportName() > KRUDA_TRANSPORT env > auto-detect.
+// Netpoll transport is not yet implemented — "netpoll" falls back to net/http with a warning.
+func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
+	// If user provided a concrete Transport instance, use it directly
+	if cfg.Transport != nil {
+		return cfg.Transport
+	}
+
+	name := cfg.TransportName
+	if name == "" || name == "auto" {
+		if env := os.Getenv("KRUDA_TRANSPORT"); env != "" {
+			name = env
+		} else {
+			name = "auto"
+		}
+	}
+
+	netHTTPCfg := transport.NetHTTPConfig{
+		ReadTimeout:    cfg.ReadTimeout,
+		WriteTimeout:   cfg.WriteTimeout,
+		IdleTimeout:    cfg.IdleTimeout,
+		MaxBodySize:    cfg.BodyLimit,
+		MaxHeaderBytes: cfg.HeaderLimit,
+		TrustProxy:     cfg.TrustProxy,
+		TLSCertFile:    cfg.TLSCertFile,
+		TLSKeyFile:     cfg.TLSKeyFile,
+	}
+
+	switch name {
+	case "nethttp":
+		logger.Info("transport selected", "name", "nethttp")
+		return transport.NewNetHTTP(netHTTPCfg)
+	case "netpoll":
+		// Netpoll doesn't support TLS — fall back to net/http for HTTP/2 via crypto/tls.
+		if cfg.TLSCertFile != "" {
+			logger.Warn("netpoll does not support TLS, falling back to nethttp")
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		netpollCfg := transport.NetpollConfig{
+			ReadTimeout:    cfg.ReadTimeout,
+			WriteTimeout:   cfg.WriteTimeout,
+			IdleTimeout:    cfg.IdleTimeout,
+			MaxBodySize:    cfg.BodyLimit,
+			MaxHeaderBytes: cfg.HeaderLimit,
+			TrustProxy:     cfg.TrustProxy,
+		}
+		np, err := transport.NewNetpoll(netpollCfg)
+		if err != nil {
+			logger.Warn("netpoll transport unavailable, falling back to nethttp", "error", err)
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		logger.Info("transport selected", "name", "netpoll")
+		return np
+	default: // "auto"
+		// TLS → use net/http for HTTP/2 auto-negotiation.
+		if cfg.TLSCertFile != "" {
+			logger.Info("transport selected", "name", "nethttp", "reason", "tls")
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		// Windows → use net/http (netpoll requires epoll/kqueue).
+		if runtime.GOOS == "windows" {
+			logger.Info("transport selected", "name", "nethttp", "reason", "windows")
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		// Linux/macOS → try netpoll, fall back to net/http on error.
+		netpollCfg := transport.NetpollConfig{
+			ReadTimeout:    cfg.ReadTimeout,
+			WriteTimeout:   cfg.WriteTimeout,
+			IdleTimeout:    cfg.IdleTimeout,
+			MaxBodySize:    cfg.BodyLimit,
+			MaxHeaderBytes: cfg.HeaderLimit,
+			TrustProxy:     cfg.TrustProxy,
+		}
+		np, err := transport.NewNetpoll(netpollCfg)
+		if err != nil {
+			logger.Warn("netpoll transport unavailable, falling back to nethttp", "error", err)
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		logger.Info("transport selected", "name", "netpoll")
+		return np
+	}
+}
+
+// altSvcMiddleware injects the Alt-Svc header on HTTP/2 responses
+// to advertise HTTP/3 availability. Auto-registered when WithHTTP3() is configured.
+// Accepts either a bare port ("3000") or a full address (":3000", "0.0.0.0:3000").
+func altSvcMiddleware(addr string) HandlerFunc {
+	port := addr
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		port = addr[i+1:]
+	}
+	altSvc := fmt.Sprintf(`h3=":%s"; ma=86400`, port)
+	return func(c *Ctx) error {
+		c.SetHeader("Alt-Svc", altSvc)
+		return c.Next()
 	}
 }

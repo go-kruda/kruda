@@ -261,6 +261,60 @@ func TestQueryParam_NoQueryString(t *testing.T) {
 	}
 }
 
+func TestQueryParam_NoReParseOnMiss(t *testing.T) {
+	r := httptest.NewRequest("GET", "/path?a=1", nil)
+	req := &netHTTPRequest{r: r}
+
+	// First call parses and caches
+	req.QueryParam("a")
+	if !req.queryDone {
+		t.Fatal("queryDone should be true after first call")
+	}
+
+	// Lookup a missing key — queryDone stays true (no re-parse)
+	if got := req.QueryParam("missing"); got != "" {
+		t.Errorf("QueryParam(missing) = %q, want empty", got)
+	}
+	if !req.queryDone {
+		t.Error("queryDone should still be true after missing key lookup")
+	}
+
+	// Lookup the same missing key again — still cached
+	if got := req.QueryParam("missing"); got != "" {
+		t.Errorf("QueryParam(missing) second call = %q, want empty", got)
+	}
+
+	// Original key still accessible from cache
+	if got := req.QueryParam("a"); got != "1" {
+		t.Errorf("QueryParam(a) after miss = %q, want 1", got)
+	}
+}
+
+func TestQueryParam_SingleParseMultipleKeys(t *testing.T) {
+	r := httptest.NewRequest("GET", "/path?x=10&y=20&z=30", nil)
+	req := &netHTTPRequest{r: r}
+
+	// Access keys in different order — all should work from single parse
+	if got := req.QueryParam("z"); got != "30" {
+		t.Errorf("QueryParam(z) = %q, want 30", got)
+	}
+	if !req.queryDone {
+		t.Fatal("queryDone should be true after first call")
+	}
+
+	if got := req.QueryParam("x"); got != "10" {
+		t.Errorf("QueryParam(x) = %q, want 10", got)
+	}
+	if got := req.QueryParam("y"); got != "20" {
+		t.Errorf("QueryParam(y) = %q, want 20", got)
+	}
+
+	// All three keys accessible — proves single parse cached all values
+	if len(req.queryVals) < 3 {
+		t.Errorf("queryVals has %d entries, want at least 3", len(req.queryVals))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ResponseWriter tests
 // ---------------------------------------------------------------------------

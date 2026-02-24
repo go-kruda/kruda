@@ -9,10 +9,24 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
 )
+
+// headerIntern caches canonical header keys to reduce allocations.
+var headerIntern sync.Map
+
+// internHeader returns the canonical form of a header key, using cache.
+func internHeader(key string) string {
+	if v, ok := headerIntern.Load(key); ok {
+		return v.(string)
+	}
+	canonical := http.CanonicalHeaderKey(key)
+	headerIntern.Store(key, canonical)
+	return canonical
+}
 
 // HandlerFunc is the function signature for route handlers and middleware.
 type HandlerFunc func(c *Ctx) error
@@ -49,6 +63,13 @@ type Ctx struct {
 	cookies     []*Cookie           // C4: separate cookie slice for multi-cookie support
 	responded   bool
 
+	// Fixed-slot response headers (Phase 3 optimization)
+	// Avoids map write + slice allocation for the most common headers.
+	contentType   string // Content-Type — set by JSON(), Text(), HTML(), SetHeader()
+	contentLength int    // Content-Length — set by sendBytes() (int avoids strconv until write)
+	cacheControl  string // Cache-Control — set by SetHeader()
+	location      string // Location — set by Redirect(), SetHeader()
+
 	// Internal
 	routeIndex int           // current position in handler chain
 	handlers   []HandlerFunc // middleware + handler chain
@@ -76,13 +97,14 @@ type Ctx struct {
 // newCtx creates a new context with pre-allocated maps.
 func newCtx(app *App) *Ctx {
 	return &Ctx{
-		app:         app,
-		params:      make(map[string]string, 4),
-		headers:     make(map[string]string, 8),
-		respHeaders: make(map[string][]string, 8),
-		locals:      make(map[string]any, 4),
-		cookies:     make([]*Cookie, 0, 4),
-		status:      200,
+		app:           app,
+		params:        make(map[string]string, 4),
+		headers:       make(map[string]string, 8),
+		respHeaders:   make(map[string][]string, 8),
+		locals:        make(map[string]any, 4),
+		cookies:       make([]*Cookie, 0, 4),
+		status:        200,
+		contentLength: -1,
 	}
 }
 
@@ -104,6 +126,12 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.multipartForm = nil
 	c.cookies = c.cookies[:0]
 
+	// Reset fixed-slot headers (zero-cost, no allocation)
+	c.contentType = ""
+	c.contentLength = -1
+	c.cacheControl = ""
+	c.location = ""
+
 	// Init context from the underlying request so client disconnects propagate.
 	if raw, ok := r.RawRequest().(*http.Request); ok {
 		c.ctx = raw.Context()
@@ -118,6 +146,17 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	clear(c.locals)
 }
 
+// Pool shrink thresholds — internal, not exported.
+// Maps exceeding these entry counts are reallocated to initial size on cleanup.
+// Go's len() on a map returns entry count (not capacity), but a map with
+// entries beyond the threshold was definitely allocated beyond initial capacity.
+const (
+	maxParamsCapacity      = 16 // initial: 4
+	maxHeadersCapacity     = 32 // initial: 8
+	maxRespHeadersCapacity = 32 // initial: 8
+	maxLocalsCapacity      = 16 // initial: 4
+)
+
 // cleanup prepares the context for returning to the pool.
 func (c *Ctx) cleanup() {
 	// Remove multipart temp files now that the handler is done.
@@ -125,6 +164,29 @@ func (c *Ctx) cleanup() {
 		_ = c.multipartForm.RemoveAll()
 		c.multipartForm = nil
 	}
+
+	// Shrink oversized maps, clear normal ones
+	if len(c.params) > maxParamsCapacity {
+		c.params = make(map[string]string, 4)
+	} else {
+		clear(c.params)
+	}
+	if len(c.headers) > maxHeadersCapacity {
+		c.headers = make(map[string]string, 8)
+	} else {
+		clear(c.headers)
+	}
+	if len(c.respHeaders) > maxRespHeadersCapacity {
+		c.respHeaders = make(map[string][]string, 8)
+	} else {
+		clear(c.respHeaders)
+	}
+	if len(c.locals) > maxLocalsCapacity {
+		c.locals = make(map[string]any, 4)
+	} else {
+		clear(c.locals)
+	}
+
 	c.writer = nil
 	c.request = nil
 	c.bodyBytes = nil
@@ -276,20 +338,20 @@ func (c *Ctx) JSON(v any) error {
 	if err != nil {
 		return err
 	}
-	c.SetHeader("Content-Type", "application/json; charset=utf-8")
+	c.contentType = "application/json; charset=utf-8"
 	return c.sendBytes(data)
 }
 
 // Text sends a plain text response.
 func (c *Ctx) Text(s string) error {
-	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
+	c.contentType = "text/plain; charset=utf-8"
 	return c.sendBytes([]byte(s))
 }
 
 // HTML sends an HTML response (raw string, no template).
 // For template rendering, use a template engine middleware.
 func (c *Ctx) HTML(html string) error {
-	c.SetHeader("Content-Type", "text/html; charset=utf-8")
+	c.contentType = "text/html; charset=utf-8"
 	return c.sendBytes([]byte(html))
 }
 
@@ -335,20 +397,47 @@ func (c *Ctx) Redirect(url string, code ...int) error {
 		status = code[0]
 	}
 	c.status = status
-	c.SetHeader("Location", url)
+	c.location = url // fixed slot — no map write
 	return c.send()
 }
 
 // SetHeader sets a response header, replacing any existing values. Chainable.
+// Common headers (Content-Type, Cache-Control, Location) use fixed slots
+// to avoid map allocation on the hot path.
 func (c *Ctx) SetHeader(key, value string) *Ctx {
-	c.respHeaders[key] = []string{value}
+	switch key {
+	case "Content-Type":
+		c.contentType = value
+	case "Cache-Control":
+		c.cacheControl = value
+	case "Location":
+		c.location = value
+	default:
+		c.respHeaders[internHeader(key)] = []string{value}
+	}
 	return c
 }
 
 // AddHeader appends a value to a response header without replacing existing values.
 // N2 fix: supports multi-value headers like Vary, Cache-Control. Chainable.
+// Fixed-slot headers: Content-Type and Location always replace (single-valued per RFC).
+// Cache-Control appends comma-separated (multi-valued per RFC 7234 section 5.2).
 func (c *Ctx) AddHeader(key, value string) *Ctx {
-	c.respHeaders[key] = append(c.respHeaders[key], value)
+	switch key {
+	case "Content-Type":
+		c.contentType = value
+	case "Cache-Control":
+		if c.cacheControl != "" {
+			c.cacheControl += ", " + value
+		} else {
+			c.cacheControl = value
+		}
+	case "Location":
+		c.location = value
+	default:
+		key = internHeader(key)
+		c.respHeaders[key] = append(c.respHeaders[key], value)
+	}
 	return c
 }
 
@@ -492,8 +581,7 @@ func (c *Ctx) sendBytes(data []byte) error {
 		return ErrAlreadyResponded
 	}
 	c.responded = true
-	// M12: set Content-Length
-	c.respHeaders["Content-Length"] = []string{strconv.Itoa(len(data))}
+	c.contentLength = len(data) // fixed slot — no map write, no strconv until writeHeaders
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -502,7 +590,22 @@ func (c *Ctx) sendBytes(data []byte) error {
 
 func (c *Ctx) writeHeaders() {
 	h := c.writer.Header()
-	// N2: write multi-value headers correctly
+
+	// Fixed-slot headers first (no map lookup, no slice allocation)
+	if c.contentType != "" {
+		h.Set("Content-Type", c.contentType)
+	}
+	if c.contentLength >= 0 {
+		h.Set("Content-Length", strconv.Itoa(c.contentLength))
+	}
+	if c.cacheControl != "" {
+		h.Set("Cache-Control", c.cacheControl)
+	}
+	if c.location != "" {
+		h.Set("Location", c.location)
+	}
+
+	// N2: write multi-value headers from map
 	for k, vals := range c.respHeaders {
 		if len(vals) == 1 {
 			h.Set(k, vals[0])

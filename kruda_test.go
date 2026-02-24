@@ -849,3 +849,68 @@ func TestIntegration_OpenAPI_ServedAtPath(t *testing.T) {
 		t.Error("POST /items should have 422 response (has validation)")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Ctx.Query() delegation tests (R5.5 — delegates to transport, no separate cache)
+// ---------------------------------------------------------------------------
+
+func TestCtxQuery_DelegatesToTransport(t *testing.T) {
+	app := New()
+	req := &mockRequest{
+		method: "GET",
+		path:   "/test",
+		query:  map[string]string{"page": "5", "sort": "name"},
+	}
+	resp := newMockResponse()
+
+	c := newCtx(app)
+	c.reset(resp, req)
+
+	// Query delegates to transport's QueryParam
+	if got := c.Query("page"); got != "5" {
+		t.Errorf("Query(page) = %q, want 5", got)
+	}
+	if got := c.Query("sort"); got != "name" {
+		t.Errorf("Query(sort) = %q, want name", got)
+	}
+}
+
+func TestCtxQuery_MissingKeyReturnsDefault(t *testing.T) {
+	app := New()
+	req := &mockRequest{
+		method: "GET",
+		path:   "/test",
+		query:  map[string]string{"a": "1"},
+	}
+	resp := newMockResponse()
+
+	c := newCtx(app)
+	c.reset(resp, req)
+
+	// Missing key without default returns ""
+	if got := c.Query("missing"); got != "" {
+		t.Errorf("Query(missing) = %q, want empty", got)
+	}
+
+	// Missing key with default returns default
+	if got := c.Query("missing", "fallback"); got != "fallback" {
+		t.Errorf("Query(missing, fallback) = %q, want fallback", got)
+	}
+
+	// Present key ignores default
+	if got := c.Query("a", "fallback"); got != "1" {
+		t.Errorf("Query(a, fallback) = %q, want 1", got)
+	}
+}
+
+func TestCtxQuery_NilRequest(t *testing.T) {
+	app := New()
+	c := newCtx(app)
+	// request is nil — should not panic, return default
+	if got := c.Query("any", "safe"); got != "safe" {
+		t.Errorf("Query with nil request = %q, want safe", got)
+	}
+	if got := c.Query("any"); got != "" {
+		t.Errorf("Query with nil request (no default) = %q, want empty", got)
+	}
+}

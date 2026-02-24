@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -55,16 +56,17 @@ type mockHeaderMap struct {
 	h map[string]string
 }
 
-func (m *mockHeaderMap) Set(key, value string) { m.h[key] = value }
-func (m *mockHeaderMap) Get(key string) string { return m.h[key] }
+func (m *mockHeaderMap) Set(key, value string) { m.h[http.CanonicalHeaderKey(key)] = value }
+func (m *mockHeaderMap) Get(key string) string { return m.h[http.CanonicalHeaderKey(key)] }
 func (m *mockHeaderMap) Add(key, value string) {
+	key = http.CanonicalHeaderKey(key)
 	if existing := m.h[key]; existing != "" {
 		m.h[key] = existing + ", " + value
 	} else {
 		m.h[key] = value
 	}
 }
-func (m *mockHeaderMap) Del(key string) { delete(m.h, key) }
+func (m *mockHeaderMap) Del(key string) { delete(m.h, http.CanonicalHeaderKey(key)) }
 
 // --- Test helpers ---
 

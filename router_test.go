@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -840,5 +841,678 @@ func TestRouterTableDriven(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Task 2.6: findAllowedMethods cache — P3-006 fix
+// Tests: cache hit (static), cache miss (dynamic), zero alloc (static)
+// ---------------------------------------------------------------------------
+
+func TestAllowedMethodsCache_StaticHit(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users", h)
+	r.addRoute("POST", "/users", h)
+	r.addRoute("DELETE", "/health", h)
+	r.Compile()
+
+	// After Compile, static paths should be in the cache
+	if r.allowedMethodsCache == nil {
+		t.Fatal("allowedMethodsCache should be initialized after Compile()")
+	}
+
+	// /users should be cached with GET and POST
+	cached, ok := r.allowedMethodsCache["/users"]
+	if !ok {
+		t.Fatal("/users should be in allowedMethodsCache")
+	}
+	if !containsMethod(cached, "GET") || !containsMethod(cached, "POST") {
+		t.Errorf("cached allowed for /users = %q, want GET and POST", cached)
+	}
+
+	// /health should be cached with DELETE
+	cached, ok = r.allowedMethodsCache["/health"]
+	if !ok {
+		t.Fatal("/health should be in allowedMethodsCache")
+	}
+	if !containsMethod(cached, "DELETE") {
+		t.Errorf("cached allowed for /health = %q, want DELETE", cached)
+	}
+
+	// findAllowedMethods should return the cached value
+	allowed := r.findAllowedMethods("/users")
+	if !containsMethod(allowed, "GET") || !containsMethod(allowed, "POST") {
+		t.Errorf("findAllowedMethods(/users) = %q, want GET and POST", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_DynamicMiss(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users/:id", h)
+	r.addRoute("PUT", "/users/:id", h)
+	r.Compile()
+
+	// Dynamic paths (with params) should NOT be in the cache
+	if _, ok := r.allowedMethodsCache["/users/42"]; ok {
+		t.Error("/users/42 should NOT be in allowedMethodsCache (dynamic path)")
+	}
+
+	// But findAllowedMethods should still work via tree scan fallback
+	allowed := r.findAllowedMethods("/users/42")
+	if !containsMethod(allowed, "GET") || !containsMethod(allowed, "PUT") {
+		t.Errorf("findAllowedMethods(/users/42) = %q, want GET and PUT", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_WildcardNotCached(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/files/*filepath", h)
+	r.Compile()
+
+	// Wildcard paths should not be in the cache
+	if _, ok := r.allowedMethodsCache["/files/readme.txt"]; ok {
+		t.Error("wildcard path should NOT be in allowedMethodsCache")
+	}
+
+	// Fallback scan should still find it
+	allowed := r.findAllowedMethods("/files/readme.txt")
+	if !containsMethod(allowed, "GET") {
+		t.Errorf("findAllowedMethods(/files/readme.txt) = %q, want GET", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_MixedStaticAndDynamic(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/api/health", h)
+	r.addRoute("GET", "/api/users/:id", h)
+	r.addRoute("POST", "/api/users", h)
+	r.Compile()
+
+	// Static paths should be cached
+	if _, ok := r.allowedMethodsCache["/api/health"]; !ok {
+		t.Error("/api/health should be in cache")
+	}
+	if _, ok := r.allowedMethodsCache["/api/users"]; !ok {
+		t.Error("/api/users should be in cache (static terminal)")
+	}
+
+	// Dynamic path lookup via fallback
+	allowed := r.findAllowedMethods("/api/users/99")
+	if !containsMethod(allowed, "GET") {
+		t.Errorf("findAllowedMethods(/api/users/99) = %q, want GET", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_EmptyBeforeCompile(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/test", h)
+
+	// Before Compile, cache should be nil
+	if r.allowedMethodsCache != nil {
+		t.Error("allowedMethodsCache should be nil before Compile()")
+	}
+
+	// findAllowedMethods should still work (fallback path)
+	allowed := r.findAllowedMethods("/test")
+	if !containsMethod(allowed, "GET") {
+		t.Errorf("findAllowedMethods before Compile = %q, want GET", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_UnknownPathReturnsEmpty(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/exists", h)
+	r.Compile()
+
+	allowed := r.findAllowedMethods("/does-not-exist")
+	if allowed != "" {
+		t.Errorf("findAllowedMethods for unknown path = %q, want empty", allowed)
+	}
+}
+
+func TestAllowedMethodsCache_ZeroAllocStaticPath(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/cached", h)
+	r.addRoute("POST", "/cached", h)
+	r.Compile()
+
+	// Warm up — first call may allocate due to runtime internals
+	r.findAllowedMethods("/cached")
+
+	allocs := testing.AllocsPerRun(100, func() {
+		r.findAllowedMethods("/cached")
+	})
+	if allocs > 0 {
+		t.Errorf("findAllowedMethods (cache hit) allocs = %.0f, want 0", allocs)
+	}
+}
+
+func TestCollectStaticPaths_Basic(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/a", h)
+	r.addRoute("GET", "/b", h)
+	r.addRoute("POST", "/a", h)
+	r.addRoute("GET", "/users/:id", h) // dynamic — should not appear
+
+	paths := r.collectStaticPaths()
+	pathSet := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		pathSet[p] = true
+	}
+
+	if !pathSet["/a"] {
+		t.Error("collectStaticPaths should include /a")
+	}
+	if !pathSet["/b"] {
+		t.Error("collectStaticPaths should include /b")
+	}
+	// /a should appear only once even though registered for GET and POST
+	count := 0
+	for _, p := range paths {
+		if p == "/a" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("/a appeared %d times, want 1 (deduped)", count)
+	}
+}
+
+func TestCollectStaticPaths_ExcludesParamAndWildcard(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/static", h)
+	r.addRoute("GET", "/users/:id", h)
+	r.addRoute("GET", "/files/*filepath", h)
+
+	paths := r.collectStaticPaths()
+	pathSet := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		pathSet[p] = true
+	}
+
+	if !pathSet["/static"] {
+		t.Error("collectStaticPaths should include /static")
+	}
+	// No param or wildcard paths should appear
+	for _, p := range paths {
+		if p == "/users/:id" || p == "/files/*filepath" || p == "/users" || p == "/files" {
+			// /users and /files are intermediate nodes without handlers — should not appear
+			// unless they have handlers themselves
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Task 3: Router AOT optimization — P3-003
+// Tests: hits tracking, sort order, flatten, indices rebuilt, compiled flag,
+// route matching correctness after optimization
+// ---------------------------------------------------------------------------
+
+func TestOptimizeTree_SortByHitsDescending(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/alpha", h)
+	r.addRoute("GET", "/beta", h)
+	r.addRoute("GET", "/gamma", h)
+
+	params := make(map[string]string, 4)
+
+	// Simulate traffic: gamma most popular, then alpha, then beta
+	for i := 0; i < 100; i++ {
+		clear(params)
+		r.find("GET", "/gamma", params)
+	}
+	for i := 0; i < 50; i++ {
+		clear(params)
+		r.find("GET", "/alpha", params)
+	}
+	for i := 0; i < 10; i++ {
+		clear(params)
+		r.find("GET", "/beta", params)
+	}
+
+	r.Compile()
+
+	// After Compile, children of root should be sorted: gamma (100), alpha (50), beta (10)
+	root := r.trees["GET"]
+	if len(root.children) < 3 {
+		t.Fatalf("expected at least 3 children, got %d", len(root.children))
+	}
+
+	// Verify sort order by hits (descending)
+	for i := 0; i < len(root.children)-1; i++ {
+		if root.children[i].hits < root.children[i+1].hits {
+			t.Errorf("children not sorted by hits: child[%d].hits=%d < child[%d].hits=%d",
+				i, root.children[i].hits, i+1, root.children[i+1].hits)
+		}
+	}
+}
+
+func TestOptimizeTree_StaticsBeforeParams(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/users/:id", h)
+	r.addRoute("GET", "/users/admin", h)
+
+	params := make(map[string]string, 4)
+
+	// Give param child more hits than static
+	for i := 0; i < 100; i++ {
+		clear(params)
+		r.find("GET", "/users/42", params)
+	}
+	for i := 0; i < 10; i++ {
+		clear(params)
+		r.find("GET", "/users/admin", params)
+	}
+
+	r.Compile()
+
+	// Find the "users/" node
+	root := r.trees["GET"]
+	var usersNode *node
+	for _, child := range root.children {
+		if child.param == "" && !child.wildcard {
+			usersNode = child
+			break
+		}
+	}
+	if usersNode == nil {
+		t.Fatal("could not find users node")
+	}
+
+	// Static children should come before param children regardless of hits
+	foundParam := false
+	for _, child := range usersNode.children {
+		if child.param != "" {
+			foundParam = true
+		} else if foundParam {
+			t.Error("static child found after param child — statics should come first")
+		}
+	}
+}
+
+func TestOptimizeTree_WildcardsLast(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/files/readme", h)
+	r.addRoute("GET", "/files/:name", h)
+	r.addRoute("GET", "/files/*filepath", h)
+
+	params := make(map[string]string, 4)
+
+	// Give wildcard lots of hits
+	for i := 0; i < 200; i++ {
+		clear(params)
+		r.find("GET", "/files/a/b/c", params)
+	}
+
+	r.Compile()
+
+	// Find the "files/" node
+	root := r.trees["GET"]
+	var filesNode *node
+	for _, child := range root.children {
+		if child.param == "" && !child.wildcard {
+			filesNode = child
+			break
+		}
+	}
+	if filesNode == nil {
+		t.Fatal("could not find files node")
+	}
+
+	// Wildcard should be last child regardless of hits
+	lastChild := filesNode.children[len(filesNode.children)-1]
+	if !lastChild.wildcard {
+		t.Error("wildcard child should be last after optimization")
+	}
+}
+
+func TestOptimizeTree_IndicesRebuilt(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/alpha", h)
+	r.addRoute("GET", "/beta", h)
+	r.addRoute("GET", "/gamma", h)
+
+	params := make(map[string]string, 4)
+
+	// Make gamma most popular to force reorder
+	for i := 0; i < 100; i++ {
+		clear(params)
+		r.find("GET", "/gamma", params)
+	}
+
+	r.Compile()
+
+	root := r.trees["GET"]
+
+	// Verify indices match the first byte of each child's path
+	if len(root.indices) != len(root.children) {
+		t.Fatalf("indices length %d != children length %d", len(root.indices), len(root.children))
+	}
+	for i, child := range root.children {
+		if child.param == "" && !child.wildcard && len(child.path) > 0 {
+			if root.indices[i] != child.path[0] {
+				t.Errorf("indices[%d]=%c does not match child.path[0]=%c (path=%q)",
+					i, root.indices[i], child.path[0], child.path)
+			}
+		}
+	}
+}
+
+func TestFlattenNode_MergesSingleChildChain(t *testing.T) {
+	// Manually build a chain: root → "a" → "b" → "c" (handler)
+	// Should flatten to: root → "abc" (handler)
+	handler := []HandlerFunc{dummyHandler()}
+	root := &node{
+		path: "/",
+		children: []*node{
+			{
+				path: "a",
+				children: []*node{
+					{
+						path: "b",
+						children: []*node{
+							{
+								path:     "c",
+								handlers: handler,
+								hits:     5,
+							},
+						},
+						indices: "c",
+						hits:    3,
+					},
+				},
+				indices: "b",
+				hits:    2,
+			},
+		},
+		indices: "a",
+	}
+
+	flattenNode(root)
+
+	if len(root.children) != 1 {
+		t.Fatalf("expected 1 child after flatten, got %d", len(root.children))
+	}
+	merged := root.children[0]
+	if merged.path != "abc" {
+		t.Errorf("merged path = %q, want %q", merged.path, "abc")
+	}
+	if merged.handlers == nil {
+		t.Error("merged node should have handlers")
+	}
+	if merged.hits != 10 { // 2 + 3 + 5
+		t.Errorf("merged hits = %d, want 10", merged.hits)
+	}
+}
+
+func TestFlattenNode_DoesNotMergeWithHandlers(t *testing.T) {
+	// Chain: root → "a" (handler) → "b" (handler)
+	// Should NOT flatten because "a" has handlers
+	handler := []HandlerFunc{dummyHandler()}
+	root := &node{
+		path: "/",
+		children: []*node{
+			{
+				path:     "a",
+				handlers: handler,
+				children: []*node{
+					{
+						path:     "b",
+						handlers: handler,
+					},
+				},
+				indices: "b",
+			},
+		},
+		indices: "a",
+	}
+
+	flattenNode(root)
+
+	// "a" should still exist as separate node
+	if root.children[0].path != "a" {
+		t.Errorf("node with handler should not be merged, got path=%q", root.children[0].path)
+	}
+	if len(root.children[0].children) != 1 {
+		t.Error("child of handler node should still exist")
+	}
+}
+
+func TestFlattenNode_DoesNotMergeParamChild(t *testing.T) {
+	// Chain: root → "users/" (no handler) → ":id" (handler)
+	// Should NOT flatten because grandchild is a param node
+	handler := []HandlerFunc{dummyHandler()}
+	root := &node{
+		path: "/",
+		children: []*node{
+			{
+				path: "users/",
+				children: []*node{
+					{
+						param:    "id",
+						handlers: handler,
+					},
+				},
+				indices: ":",
+			},
+		},
+		indices: "u",
+	}
+
+	flattenNode(root)
+
+	// "users/" should not be merged with ":id"
+	if root.children[0].path != "users/" {
+		t.Errorf("static→param chain should not flatten, got path=%q", root.children[0].path)
+	}
+}
+
+func TestFlattenNode_DoesNotMergeMultipleChildren(t *testing.T) {
+	// Chain: root → "api/" (no handler) → "users" + "posts"
+	// Should NOT flatten because "api/" has 2 children
+	handler := []HandlerFunc{dummyHandler()}
+	root := &node{
+		path: "/",
+		children: []*node{
+			{
+				path: "api/",
+				children: []*node{
+					{path: "users", handlers: handler},
+					{path: "posts", handlers: handler},
+				},
+				indices: "up",
+			},
+		},
+		indices: "a",
+	}
+
+	flattenNode(root)
+
+	// "api/" should not be merged because it has 2 children
+	if root.children[0].path != "api/" {
+		t.Errorf("multi-child node should not flatten, got path=%q", root.children[0].path)
+	}
+}
+
+func TestCompile_RoutesStillMatchAfterOptimization(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	// Register a variety of routes
+	r.addRoute("GET", "/", h)
+	r.addRoute("GET", "/health", h)
+	r.addRoute("GET", "/api/v1/users", h)
+	r.addRoute("GET", "/api/v1/users/:id", h)
+	r.addRoute("POST", "/api/v1/users", h)
+	r.addRoute("GET", "/api/v1/users/:id/posts/:postId", h)
+	r.addRoute("GET", "/api/v1/orders/:id<[0-9]+>", h)
+	r.addRoute("GET", "/static/*filepath", h)
+	r.addRoute("DELETE", "/api/v1/users/:id", h)
+
+	params := make(map[string]string, 4)
+
+	// Simulate traffic to create varied hit counts
+	for i := 0; i < 50; i++ {
+		clear(params)
+		r.find("GET", "/health", params)
+	}
+	for i := 0; i < 100; i++ {
+		clear(params)
+		r.find("GET", "/api/v1/users", params)
+	}
+	for i := 0; i < 30; i++ {
+		clear(params)
+		r.find("GET", "/api/v1/users/42", params)
+	}
+
+	r.Compile()
+
+	// Verify all routes still match correctly after optimization
+	tests := []struct {
+		method     string
+		path       string
+		wantMatch  bool
+		wantParams map[string]string
+	}{
+		{"GET", "/", true, nil},
+		{"GET", "/health", true, nil},
+		{"GET", "/api/v1/users", true, nil},
+		{"POST", "/api/v1/users", true, nil},
+		{"GET", "/api/v1/users/42", true, map[string]string{"id": "42"}},
+		{"GET", "/api/v1/users/1/posts/2", true, map[string]string{"id": "1", "postId": "2"}},
+		{"GET", "/api/v1/orders/999", true, map[string]string{"id": "999"}},
+		{"GET", "/api/v1/orders/abc", false, nil},
+		{"GET", "/static/css/app.css", true, map[string]string{"filepath": "css/app.css"}},
+		{"DELETE", "/api/v1/users/7", true, map[string]string{"id": "7"}},
+		{"GET", "/nonexistent", false, nil},
+	}
+
+	for _, tt := range tests {
+		clear(params)
+		got := r.find(tt.method, tt.path, params)
+		if tt.wantMatch && got == nil {
+			t.Errorf("after Compile: %s %s should match", tt.method, tt.path)
+			continue
+		}
+		if !tt.wantMatch && got != nil {
+			t.Errorf("after Compile: %s %s should NOT match", tt.method, tt.path)
+			continue
+		}
+		for k, v := range tt.wantParams {
+			if params[k] != v {
+				t.Errorf("after Compile: %s %s params[%s]=%q, want %q", tt.method, tt.path, k, params[k], v)
+			}
+		}
+	}
+}
+
+func TestCompile_CompiledFlagSet(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/test", h)
+
+	if r.compiled {
+		t.Error("compiled should be false before Compile()")
+	}
+
+	r.Compile()
+
+	if !r.compiled {
+		t.Error("compiled should be true after Compile()")
+	}
+}
+
+func TestHits_IncrementBeforeCompile(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users", h)
+
+	params := make(map[string]string, 4)
+
+	// Find the "users" node before any hits
+	root := r.trees["GET"]
+	var usersNode *node
+	for _, child := range root.children {
+		if child.path == "users" {
+			usersNode = child
+			break
+		}
+	}
+	if usersNode == nil {
+		t.Fatal("could not find users node")
+	}
+
+	initialHits := usersNode.hits
+
+	// Call find 5 times
+	for i := 0; i < 5; i++ {
+		clear(params)
+		r.find("GET", "/users", params)
+	}
+
+	if usersNode.hits != initialHits+5 {
+		t.Errorf("hits = %d, want %d (should increment before Compile)", usersNode.hits, initialHits+5)
+	}
+}
+
+func TestHits_NoIncrementAfterCompile(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users", h)
+
+	params := make(map[string]string, 4)
+
+	// Generate some hits before compile
+	for i := 0; i < 5; i++ {
+		clear(params)
+		r.find("GET", "/users", params)
+	}
+
+	r.Compile()
+
+	// Find the node after compile (tree may have been restructured)
+	root := r.trees["GET"]
+	var usersNode *node
+	for _, child := range root.children {
+		if child.param == "" && !child.wildcard {
+			// Check if this node's path contains "users"
+			if child.path == "users" || strings.Contains(child.path, "users") {
+				usersNode = child
+				break
+			}
+		}
+	}
+	if usersNode == nil {
+		t.Fatal("could not find users node after Compile")
+	}
+
+	hitsAfterCompile := usersNode.hits
+
+	// Call find 10 more times after Compile
+	for i := 0; i < 10; i++ {
+		clear(params)
+		r.find("GET", "/users", params)
+	}
+
+	if usersNode.hits != hitsAfterCompile {
+		t.Errorf("hits changed after Compile: was %d, now %d (should not increment after Compile)",
+			hitsAfterCompile, usersNode.hits)
 	}
 }

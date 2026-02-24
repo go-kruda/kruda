@@ -45,10 +45,12 @@ func Race(ctx context.Context, tasks ...func(context.Context) (any, error)) (any
 		err error
 	}
 	ch := make(chan result, 1)
+	raceCtx, cancel := context.WithCancel(ctx)
+	defer cancel() // Cancel remaining goroutines when first completes
 
 	for _, task := range tasks {
 		go func(fn func(context.Context) (any, error)) {
-			v, err := fn(ctx)
+			v, err := fn(raceCtx)
 			// Non-blocking send — only first goroutine succeeds
 			select {
 			case ch <- result{v, err}:

@@ -22,8 +22,10 @@ type NetHTTPConfig struct {
 	WriteTimeout   time.Duration
 	IdleTimeout    time.Duration
 	MaxBodySize    int
-	MaxHeaderBytes int  // maps to http.Server.MaxHeaderBytes
-	TrustProxy     bool // C6: only trust X-Forwarded-For/X-Real-IP when true
+	MaxHeaderBytes int    // maps to http.Server.MaxHeaderBytes
+	TrustProxy     bool   // C6: only trust X-Forwarded-For/X-Real-IP when true
+	TLSCertFile    string // path to TLS certificate file
+	TLSKeyFile     string // path to TLS private key file
 }
 
 // NewNetHTTP creates a new net/http transport.
@@ -54,6 +56,10 @@ func (t *NetHTTPTransport) ListenAndServe(addr string, handler Handler) error {
 	srv := t.server
 	t.mu.Unlock()
 
+	// TLS: use ListenAndServeTLS for HTTPS + HTTP/2 auto-negotiation
+	if t.config.TLSCertFile != "" && t.config.TLSKeyFile != "" {
+		return srv.ListenAndServeTLS(t.config.TLSCertFile, t.config.TLSKeyFile)
+	}
 	return srv.ListenAndServe()
 }
 

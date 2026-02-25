@@ -36,15 +36,14 @@ jobs:
         run: go vet -tags kruda_stdjson ./...
 
       - name: Lint (golangci-lint)
-        # Run lint only on Linux to avoid duplicate reports
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
         uses: golangci/golangci-lint-action@v6
         with:
           args: --build-tags kruda_stdjson
           version: v1.64
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out -tags kruda_stdjson ./...
+        run: go test -v -race -coverprofile coverage.out -tags kruda_stdjson ./...
 
       - name: Upload coverage to Codecov
         # Upload only once per Go version (Linux) to avoid duplicates

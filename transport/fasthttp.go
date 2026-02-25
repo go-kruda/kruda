@@ -167,8 +167,8 @@ func (w *fasthttpResponseWriter) Header() HeaderMap {
 }
 
 func (w *fasthttpResponseWriter) Write(data []byte) (int, error) {
-	w.ctx.Write(data)
-	return len(data), nil
+	_, err := w.ctx.Write(data)
+	return len(data), err
 }
 
 // --- HeaderMap implementation ---

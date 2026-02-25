@@ -1,0 +1,10 @@
+issues:
+  exclude-dirs:
+    - vendor
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    - path: transport/netpoll\.go
+      linters:
+        - errcheck

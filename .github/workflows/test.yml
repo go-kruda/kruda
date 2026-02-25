@@ -41,6 +41,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           args: --build-tags kruda_stdjson
+          version: v1.64
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out -tags kruda_stdjson ./...

@@ -377,3 +377,53 @@ func TestFastHTTPTransport_ZeroConfig(t *testing.T) {
 		t.Error("TrustProxy should be false by default")
 	}
 }
+
+func TestFastHTTPIntegration(t *testing.T) {
+	var capturedMethod, capturedPath string
+	var capturedHeaders map[string]string
+	var capturedQuery map[string]string
+	
+	handler := HandlerFunc(func(w ResponseWriter, r Request) {
+		capturedMethod = r.Method()
+		capturedPath = r.Path()
+		if ahp, ok := r.(AllHeadersProvider); ok {
+			capturedHeaders = ahp.AllHeaders()
+		}
+		if aqp, ok := r.(AllQueryProvider); ok {
+			capturedQuery = aqp.AllQuery()
+		}
+		w.Header().Set("X-Test", "response")
+		w.WriteHeader(201)
+		w.Write([]byte("created"))
+	})
+	
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetRequestURI("/api/test?param=value")
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Request.SetBody([]byte(`{"data":"test"}`))
+	
+	req := &fasthttpRequest{ctx: ctx, trustProxy: false}
+	resp := &fasthttpResponseWriter{ctx: ctx}
+	
+	handler.ServeKruda(resp, req)
+	
+	if capturedMethod != "POST" {
+		t.Errorf("expected POST, got %s", capturedMethod)
+	}
+	if capturedPath != "/api/test" {
+		t.Errorf("expected /api/test, got %s", capturedPath)
+	}
+	if capturedHeaders["Content-Type"] != "application/json" {
+		t.Errorf("expected application/json, got %s", capturedHeaders["Content-Type"])
+	}
+	if capturedQuery["param"] != "value" {
+		t.Errorf("expected value, got %s", capturedQuery["param"])
+	}
+	if ctx.Response.StatusCode() != 201 {
+		t.Errorf("expected 201, got %d", ctx.Response.StatusCode())
+	}
+	if string(ctx.Response.Body()) != "created" {
+		t.Errorf("expected created, got %s", ctx.Response.Body())
+	}
+}

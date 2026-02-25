@@ -386,15 +386,7 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		logger.Info("transport selected", "name", "nethttp")
 		return transport.NewNetHTTP(netHTTPCfg)
 	case "fasthttp":
-		fasthttpCfg := transport.FastHTTPConfig{
-			ReadTimeout:  cfg.ReadTimeout,
-			WriteTimeout: cfg.WriteTimeout,
-			IdleTimeout:  cfg.IdleTimeout,
-			MaxBodySize:  cfg.BodyLimit,
-			TrustProxy:   cfg.TrustProxy,
-		}
-		logger.Info("transport selected", "name", "fasthttp")
-		return transport.NewFastHTTP(fasthttpCfg)
+		return newFastHTTPTransport(cfg, logger)
 	case "netpoll":
 		// Netpoll doesn't support TLS — fall back to net/http for HTTP/2 via crypto/tls.
 		if cfg.TLSCertFile != "" {
@@ -428,15 +420,7 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
 		// Linux/macOS → try fasthttp first, then netpoll, fall back to net/http on error.
-		fasthttpCfg := transport.FastHTTPConfig{
-			ReadTimeout:  cfg.ReadTimeout,
-			WriteTimeout: cfg.WriteTimeout,
-			IdleTimeout:  cfg.IdleTimeout,
-			MaxBodySize:  cfg.BodyLimit,
-			TrustProxy:   cfg.TrustProxy,
-		}
-		logger.Info("transport selected", "name", "fasthttp")
-		return transport.NewFastHTTP(fasthttpCfg)
+		return newFastHTTPTransport(cfg, logger)
 	}
 }
 

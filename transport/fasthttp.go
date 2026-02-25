@@ -138,17 +138,17 @@ func (r *fasthttpRequest) Context() context.Context {
 
 func (r *fasthttpRequest) AllHeaders() map[string]string {
 	m := make(map[string]string)
-	r.ctx.Request.Header.VisitAll(func(k, v []byte) {
+	for k, v := range r.ctx.Request.Header.All() {
 		m[string(k)] = string(v)
-	})
+	}
 	return m
 }
 
 func (r *fasthttpRequest) AllQuery() map[string]string {
 	m := make(map[string]string)
-	r.ctx.QueryArgs().VisitAll(func(k, v []byte) {
+	for k, v := range r.ctx.QueryArgs().All() {
 		m[string(k)] = string(v)
-	})
+	}
 	return m
 }
 

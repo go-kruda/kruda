@@ -92,11 +92,7 @@ func TestPropertyResourceStatusCodes(t *testing.T) {
 		req = &mockRequest{method: "DELETE", path: "/users/abc"}
 		resp = newMockResponse()
 		app.ServeKruda(resp, req)
-		if resp.statusCode != 204 {
-			return false
-		}
-
-		return true
+		return resp.statusCode == 204
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 100}); err != nil {
 		t.Error(err)
@@ -227,11 +223,7 @@ func TestPropertyResourceErrorPassthrough(t *testing.T) {
 		req = &mockRequest{method: "DELETE", path: "/users/abc"}
 		resp = newMockResponse()
 		app.ServeKruda(resp, req)
-		if resp.statusCode != 500 {
-			return false
-		}
-
-		return true
+		return resp.statusCode == 500
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 100}); err != nil {
 		t.Error(err)

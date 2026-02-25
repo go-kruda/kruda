@@ -292,8 +292,7 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 	return nil
 }
 
-// bindInput parses the request body as JSON into type T.
-// Phase 1 compatibility: used by untyped handlers via c.Bind().
+//nolint:unused // referenced by typed handler registration
 func bindInput[T any](c *Ctx) (T, error) {
 	var v T
 	body, err := c.BodyBytes()

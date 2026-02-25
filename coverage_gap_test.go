@@ -165,12 +165,14 @@ func TestCtxLatency(t *testing.T) {
 	}
 }
 
+type ctxKey string
+
 func TestCtxSetContext(t *testing.T) {
 	app := New()
 	app.Get("/ctx", func(c *Ctx) error {
-		ctx := context.WithValue(c.Context(), "key", "value")
+		ctx := context.WithValue(c.Context(), ctxKey("key"), "value")
 		c.SetContext(ctx)
-		if c.Context().Value("key") != "value" {
+		if c.Context().Value(ctxKey("key")) != "value" {
 			return InternalError("context value not set")
 		}
 		return c.Text("ok")

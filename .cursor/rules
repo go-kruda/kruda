@@ -1,0 +1,35 @@
+# Kruda Framework — Cursor Rules
+
+## Project
+- Go web framework at github.com/go-kruda/kruda
+- Go 1.24+ required, zero external deps in core
+- Build/test: `go test -tags kruda_stdjson ./...`
+
+## Code Style
+- All exported types/functions must have doc comments
+- Functional options pattern: `WithXxx(value) Option`
+- Method chaining: methods return `*App` or `*Ctx`
+- Error handling: return `*KrudaError` or `error`
+- Use `slog` for logging, never `fmt.Println` or `log`
+
+## Patterns
+- Handlers: `func(c *Ctx) error` or typed `func(c *C[T]) (*Out, error)`
+- Middleware: `type MiddlewareFunc = HandlerFunc`
+- DI: `Give(value)` to register, `Use[T](container)` to resolve
+- Resources: implement `ResourceService[T]` interface for auto CRUD
+- Tests: white-box (same package), PBT files use `_pbt_test.go` suffix
+
+## Import Order
+1. Standard library
+2. `github.com/go-kruda/kruda/...` (internal packages)
+3. External dependencies (only in cmd/kruda and contrib)
+
+## Don'ts
+- Don't add external dependencies to core package
+- Don't use `interface{}` — use `any`
+- Don't use `init()` functions
+- Don't break Phase 1-4 public API
+
+## References
+- Spec: docs/kruda-spec.md
+- Architecture: CLAUDE.md

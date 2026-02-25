@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/textproto"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -29,6 +31,9 @@ type App struct {
 	container  *Container
 	errorTypes []errorTypeMapping // Phase 4: MapErrorType registrations
 	errorFuncs []errorFuncMapping // Phase 4: MapErrorFunc registrations
+
+	// Precomputed security headers (nil if SecurityHeaders=false)
+	secHeaders [][2]string
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -74,6 +79,33 @@ func New(opts ...Option) *App {
 // that call ServeKruda directly without Listen().
 func (app *App) Compile() {
 	app.router.Compile()
+
+	// Precompute security headers with canonical keys
+	if app.config.SecurityHeaders {
+		sec := app.config.Security
+		var headers [][2]string
+		
+		if sec.XSSProtection != "" {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("X-XSS-Protection"), sec.XSSProtection})
+		}
+		if sec.ContentTypeNosniff != "" {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("X-Content-Type-Options"), sec.ContentTypeNosniff})
+		}
+		if sec.XFrameOptions != "" {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("X-Frame-Options"), sec.XFrameOptions})
+		}
+		if sec.ReferrerPolicy != "" {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("Referrer-Policy"), sec.ReferrerPolicy})
+		}
+		if sec.ContentSecurityPolicy != "" {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("Content-Security-Policy"), sec.ContentSecurityPolicy})
+		}
+		if sec.HSTSMaxAge > 0 {
+			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("Strict-Transport-Security"), "max-age=" + strconv.Itoa(sec.HSTSMaxAge)})
+		}
+		
+		app.secHeaders = headers
+	}
 }
 
 // ServeKruda implements transport.Handler. It acquires a Ctx from the pool,

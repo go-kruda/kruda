@@ -1,0 +1,10 @@
+{
+  "name": "kruda-elysia-bench",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "bun server.ts"
+  },
+  "dependencies": {
+    "elysia": "^1.0.0"
+  }
+}

@@ -1,6 +1,10 @@
 package transport
 
-import "context"
+import (
+	"context"
+	"mime/multipart"
+	"net/http"
+)
 
 // Transport defines the network layer interface.
 // Implementations can be net/http, Netpoll, or custom transports.
@@ -50,4 +54,30 @@ type HeaderMap interface {
 	Add(key, value string) // appends a value (for multi-value headers like Set-Cookie)
 	Get(key string) string
 	Del(key string)
+}
+
+// DirectHeaderAccess is an optional interface that HeaderMap implementations
+// can implement to provide direct access to the underlying http.Header for optimization.
+type DirectHeaderAccess interface {
+	DirectHeader() http.Header
+}
+
+// MultipartProvider is implemented by transports that support multipart forms.
+type MultipartProvider interface {
+	MultipartForm(maxBytes int64) (*multipart.Form, error)
+}
+
+// ContextProvider is implemented by transports that carry a request context.
+type ContextProvider interface {
+	Context() context.Context
+}
+
+// AllHeadersProvider is implemented by transports that can enumerate all headers.
+type AllHeadersProvider interface {
+	AllHeaders() map[string]string
+}
+
+// AllQueryProvider is implemented by transports that can enumerate all query params.
+type AllQueryProvider interface {
+	AllQuery() map[string]string
 }

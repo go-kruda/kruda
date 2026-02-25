@@ -31,8 +31,27 @@ CLAUDE.md
 .kiro/
 .claude/
 
-# Build output (local binaries)
+# Build output (local binaries from examples/cmd)
 /crud
+/auth
+/auto-crud
+/database
+/di-services
+/health-checks
+/json-api
+/testing
+/typed-handlers
+
+# Bench artifacts
+bench/*.prof
+bench/kruda_server/kruda_server
+bench/kruda_server/kruda_server_bin
+
+# Node.js / Bun
+bench/elysia/node_modules/
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 
 # Environment
 .env

@@ -3,8 +3,10 @@ package transport
 import (
 	"context"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -189,6 +191,34 @@ func (r *netHTTPRequest) Cookie(name string) string {
 
 func (r *netHTTPRequest) RawRequest() any { return r.r }
 
+func (r *netHTTPRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if err := r.r.ParseMultipartForm(maxBytes); err != nil {
+		return nil, err
+	}
+	return r.r.MultipartForm, nil
+}
+
+func (r *netHTTPRequest) Context() context.Context {
+	return r.r.Context()
+}
+
+func (r *netHTTPRequest) AllHeaders() map[string]string {
+	m := make(map[string]string, len(r.r.Header))
+	for k, v := range r.r.Header {
+		m[k] = strings.Join(v, ", ")
+	}
+	return m
+}
+
+func (r *netHTTPRequest) AllQuery() map[string]string {
+	q := r.r.URL.Query()
+	m := make(map[string]string, len(q))
+	for k, v := range q {
+		m[k] = strings.Join(v, ", ")
+	}
+	return m
+}
+
 // trimSpace trims leading and trailing spaces from a string without importing strings.
 func trimSpace(s string) string {
 	for len(s) > 0 && s[0] == ' ' {
@@ -277,6 +307,9 @@ func (m *netHTTPHeaderMap) Set(key, value string) { m.h.Set(key, value) }
 func (m *netHTTPHeaderMap) Get(key string) string { return m.h.Get(key) }
 func (m *netHTTPHeaderMap) Del(key string)        { m.h.Del(key) }
 func (m *netHTTPHeaderMap) Add(key, value string) { m.h.Add(key, value) }
+
+// DirectHeader implements DirectHeaderAccess interface for optimization
+func (m *netHTTPHeaderMap) DirectHeader() http.Header { return m.h }
 
 // --- Errors ---
 

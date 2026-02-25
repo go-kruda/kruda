@@ -1,0 +1,57 @@
+# CI Test Pipeline — Kruda Framework
+# Runs tests, vet, lint, and coverage on every push/PR
+# Matrix: Go 1.24 + stable × {Linux, macOS, Windows}
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.24', 'stable']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Go vet
+        run: go vet -tags kruda_stdjson ./...
+
+      - name: Lint (golangci-lint)
+        # Run lint only on Linux to avoid duplicate reports
+        if: matrix.os == 'ubuntu-latest'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          args: --build-tags kruda_stdjson
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out -tags kruda_stdjson ./...
+
+      - name: Upload coverage to Codecov
+        # Upload only once per Go version (Linux) to avoid duplicates
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          flags: unittests
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

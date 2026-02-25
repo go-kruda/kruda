@@ -1,0 +1,97 @@
+# Benchmark Regression Detection — Kruda Framework
+# Runs on PRs that modify Go files, compares against baseline with benchstat,
+# and posts a PR comment if regression > 10% is detected.
+
+name: Benchmarks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmark Regression
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmarks
+        run: go test -bench=. -benchmem -count=5 -tags kruda_stdjson ./... > new.txt
+
+      - name: Download baseline artifact
+        id: download-baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: bench-baseline
+          path: .
+        continue-on-error: true
+
+      - name: Compare with baseline
+        id: benchstat
+        if: steps.download-baseline.outcome == 'success'
+        run: |
+          # Run benchstat comparison
+          benchstat old.txt new.txt > benchstat.txt 2>&1 || true
+
+          # Check for regressions > 10%
+          # benchstat output lines with "+" indicate slowdowns
+          if grep -E '\+[0-9]{2,}%' benchstat.txt | grep -v '~'; then
+            echo "regression=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "regression=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "--- Benchstat Results ---"
+          cat benchstat.txt
+
+      - name: Post PR comment on regression
+        if: steps.benchstat.outputs.regression == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const benchstat = fs.readFileSync('benchstat.txt', 'utf8');
+            const body = `## ⚠️ Benchmark Regression Detected
+
+            \`\`\`
+            ${benchstat}
+            \`\`\`
+
+            > Regressions greater than 10% were found. Please review the benchmark results above.
+            > Run \`go test -bench=. -benchmem -count=5 -tags kruda_stdjson ./...\` locally to verify.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Store benchmark results as baseline
+        if: always()
+        run: cp new.txt old.txt
+
+      - name: Upload baseline artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-baseline
+          path: old.txt
+          retention-days: 90
+          overwrite: true

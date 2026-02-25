@@ -134,10 +134,10 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.location = ""
 
 	// Init context from the underlying request so client disconnects propagate.
-	if raw, ok := r.RawRequest().(*http.Request); ok {
-		c.ctx = raw.Context()
+	if cp, ok := r.(transport.ContextProvider); ok {
+		c.ctx = cp.Context()
 	} else {
-		c.ctx = nil
+		c.ctx = context.Background()
 	}
 
 	// Reset maps without reallocating
@@ -376,7 +376,7 @@ func (c *Ctx) File(path string) error {
 			return nil
 		}
 	}
-	return InternalError("file serving requires net/http transport")
+	return InternalError("file serving requires net/http transport, use WithHTTP2() or WithTransportName(\"nethttp\")")
 }
 
 // Stream sends a streaming response from an io.Reader.
@@ -691,26 +691,30 @@ func (c *Ctx) writeHeaders() {
 		h.Add("Set-Cookie", formatCookie(cookie))
 	}
 
-	// Security headers — only set if SecurityHeaders is enabled and not already present
-	if c.app.config.SecurityHeaders {
-		sec := c.app.config.Security
-		if sec.XSSProtection != "" && h.Get("X-XSS-Protection") == "" {
-			h.Set("X-XSS-Protection", sec.XSSProtection)
-		}
-		if sec.ContentTypeNosniff != "" && h.Get("X-Content-Type-Options") == "" {
-			h.Set("X-Content-Type-Options", sec.ContentTypeNosniff)
-		}
-		if sec.XFrameOptions != "" && h.Get("X-Frame-Options") == "" {
-			h.Set("X-Frame-Options", sec.XFrameOptions)
-		}
-		if sec.ReferrerPolicy != "" && h.Get("Referrer-Policy") == "" {
-			h.Set("Referrer-Policy", sec.ReferrerPolicy)
-		}
-		if sec.ContentSecurityPolicy != "" && h.Get("Content-Security-Policy") == "" {
-			h.Set("Content-Security-Policy", sec.ContentSecurityPolicy)
-		}
-		if sec.HSTSMaxAge > 0 && h.Get("Strict-Transport-Security") == "" {
-			h.Set("Strict-Transport-Security", "max-age="+strconv.Itoa(sec.HSTSMaxAge))
+	// Security headers — use precomputed canonical keys for direct map access when possible
+	if len(c.app.secHeaders) > 0 {
+		// Try to access underlying http.Header for direct map access (optimization)
+		if directAccess, ok := h.(transport.DirectHeaderAccess); ok {
+			if httpHeader := directAccess.DirectHeader(); httpHeader != nil {
+				for _, kv := range c.app.secHeaders {
+					if httpHeader[kv[0]] == nil {
+						httpHeader[kv[0]] = []string{kv[1]}
+					}
+				}
+			} else {
+				for _, kv := range c.app.secHeaders {
+					if h.Get(kv[0]) == "" {
+						h.Set(kv[0], kv[1])
+					}
+				}
+			}
+		} else {
+			// Fallback to interface methods for other transports
+			for _, kv := range c.app.secHeaders {
+				if h.Get(kv[0]) == "" {
+					h.Set(kv[0], kv[1])
+				}
+			}
 		}
 	}
 }

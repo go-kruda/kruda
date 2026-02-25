@@ -1,0 +1,56 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkPlaintext-8                     9786896               127.5 ns/op            48 B/op          2 allocs/op
+BenchmarkPlaintext-8                     9942412               119.9 ns/op            48 B/op          2 allocs/op
+BenchmarkPlaintext-8                     9375894               121.1 ns/op            48 B/op          2 allocs/op
+BenchmarkPlaintext-8                    10018216               119.0 ns/op            48 B/op          2 allocs/op
+BenchmarkPlaintext-8                    10048567               120.1 ns/op            48 B/op          2 allocs/op
+BenchmarkJSON-8                          2936256               420.5 ns/op           480 B/op          7 allocs/op
+BenchmarkJSON-8                          3126478               382.8 ns/op           480 B/op          7 allocs/op
+BenchmarkJSON-8                          3110479               384.7 ns/op           480 B/op          7 allocs/op
+BenchmarkJSON-8                          3111423               388.6 ns/op           480 B/op          7 allocs/op
+BenchmarkJSON-8                          2920903               399.1 ns/op           480 B/op          7 allocs/op
+BenchmarkRouterStatic-8                  5794083               207.5 ns/op            72 B/op          2 allocs/op
+BenchmarkRouterStatic-8                  5679817               210.4 ns/op            72 B/op          2 allocs/op
+BenchmarkRouterStatic-8                  5670010               205.5 ns/op            72 B/op          2 allocs/op
+BenchmarkRouterStatic-8                  5832195               217.1 ns/op            72 B/op          2 allocs/op
+BenchmarkRouterStatic-8                  5702835               264.3 ns/op            72 B/op          2 allocs/op
+BenchmarkRouterParam-8                   5855389               208.0 ns/op            56 B/op          2 allocs/op
+BenchmarkRouterParam-8                   5772757               240.7 ns/op            56 B/op          2 allocs/op
+BenchmarkRouterParam-8                   5765185               211.2 ns/op            56 B/op          2 allocs/op
+BenchmarkRouterParam-8                   5911594               204.2 ns/op            56 B/op          2 allocs/op
+BenchmarkRouterParam-8                   5497623               201.3 ns/op            56 B/op          2 allocs/op
+BenchmarkMiddleware1-8                   9748284               122.3 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware1-8                   9762331               128.0 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware1-8                   9636363               123.2 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware1-8                   9691219               124.7 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware1-8                   9621150               122.5 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware5-8                   9511495               127.1 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware5-8                   9480784               135.6 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware5-8                   9473172               125.6 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware5-8                   9352194               127.9 ns/op            40 B/op          2 allocs/op
+BenchmarkMiddleware5-8                   9465638               142.9 ns/op            40 B/op          2 allocs/op
+BenchmarkTypedHandler-8                  3527700               332.7 ns/op           112 B/op          7 allocs/op
+BenchmarkTypedHandler-8                  3548329               337.9 ns/op           112 B/op          7 allocs/op
+BenchmarkTypedHandler-8                  3520839               334.2 ns/op           112 B/op          7 allocs/op
+BenchmarkTypedHandler-8                  3593546               351.6 ns/op           112 B/op          7 allocs/op
+BenchmarkTypedHandler-8                  3564235               336.5 ns/op           112 B/op          7 allocs/op
+BenchmarkContextPoolAcquireRelease-8    25046047                47.53 ns/op            0 B/op          0 allocs/op
+BenchmarkContextPoolAcquireRelease-8    25040842                48.68 ns/op            0 B/op          0 allocs/op
+BenchmarkContextPoolAcquireRelease-8    23549536                46.97 ns/op            0 B/op          0 allocs/op
+BenchmarkContextPoolAcquireRelease-8    25309869                46.86 ns/op            0 B/op          0 allocs/op
+BenchmarkContextPoolAcquireRelease-8    25189665                46.86 ns/op            0 B/op          0 allocs/op
+BenchmarkTypedHandlerValidation-8        2776266               378.5 ns/op           120 B/op          8 allocs/op
+BenchmarkTypedHandlerValidation-8        3083145               378.3 ns/op           120 B/op          8 allocs/op
+BenchmarkTypedHandlerValidation-8        3118005               386.1 ns/op           120 B/op          8 allocs/op
+BenchmarkTypedHandlerValidation-8        3096588               381.8 ns/op           120 B/op          8 allocs/op
+BenchmarkTypedHandlerValidation-8        3140595               383.7 ns/op           120 B/op          8 allocs/op
+BenchmarkDevErrorPageZeroOverhead-8       908487              1260 ns/op            2249 B/op         33 allocs/op
+BenchmarkDevErrorPageZeroOverhead-8       935101              1326 ns/op            2249 B/op         33 allocs/op
+BenchmarkDevErrorPageZeroOverhead-8       884696              1261 ns/op            2249 B/op         33 allocs/op
+BenchmarkDevErrorPageZeroOverhead-8       940370              1278 ns/op            2249 B/op         33 allocs/op
+BenchmarkDevErrorPageZeroOverhead-8       931182              1272 ns/op            2249 B/op         33 allocs/op
+PASS
+ok      github.com/go-kruda/kruda       73.830s

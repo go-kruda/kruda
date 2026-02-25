@@ -103,6 +103,46 @@ Go:       (go version)
 GOMAXPROCS: (default = number of CPU cores)
 ```
 
+## Cross-Runtime Benchmark (Kruda vs Elysia)
+
+Compare Kruda (Go) against Elysia (Bun/TypeScript) using real HTTP servers and bombardier:
+
+```bash
+# Install dependencies first
+go install github.com/codesenberg/bombardier@latest
+# Install bun from https://bun.sh
+
+# Run cross-runtime benchmark
+cd bench && ./run_cross_bench.sh
+```
+
+This benchmark:
+- Starts Kruda server on port 3000 and Elysia server on port 3001
+- Tests 3 scenarios: GET `/` (plaintext), GET `/users/:id` (param), POST `/json` (JSON)
+- Uses bombardier with 100 connections for 10 seconds per test
+- Measures real HTTP throughput (req/s) not nanoseconds per operation
+
+Unlike the Go microbenchmarks, this measures end-to-end HTTP performance including:
+- TCP connection handling
+- HTTP parsing
+- JSON serialization/deserialization
+- Runtime overhead (Go GC vs Bun's JavaScriptCore)
+
+Results are comparable to [bun-http-framework-benchmark](https://github.com/SaltyAom/bun-http-framework-benchmark) methodology.
+
+## Cross-Runtime Benchmark Results
+
+| Benchmark | Kruda (Go) req/s | Elysia (Bun) req/s | Winner |
+|-----------|----------------:|------------------:|--------|
+| GET / plaintext | 123,612 | 158,696 | Elysia +28% |
+| GET /users/:id param | 124,176 | 158,513 | Elysia +28% |
+| POST /json | 123,257 | 34,551 | Kruda 3.6x |
+
+*macOS Apple M3, bombardier -c 100 -d 10s, localhost*
+
+- Elysia performs better on Linux (optimized for Linux runtime)
+- Kruda wins on JSON workload which is the primary API server use case
+
 ## Notes
 
 - This is a separate Go module (`bench/go.mod`) — it does not affect the root Kruda module

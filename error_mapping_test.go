@@ -169,9 +169,7 @@ func TestErrorMappingRegistrationOrder(t *testing.T) {
 	app := New()
 
 	// Register two different type mappings
-	type anotherError struct{ Msg string }
-	// anotherError needs to implement error interface for MapErrorType
-	// Since it doesn't, we use testDomainError and a second custom type
+	// Use testDomainError which implements error interface
 
 	MapErrorType[*testDomainError](app, 422, "domain error mapped")
 

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -488,5 +489,325 @@ func TestHeader(t *testing.T) {
 	}
 	if got := req.Header("Missing"); got != "" {
 		t.Errorf("Header(Missing) = %q, want empty", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// New provider methods tests
+// ---------------------------------------------------------------------------
+
+func TestMultipartForm(t *testing.T) {
+	r := httptest.NewRequest("POST", "/", nil)
+	req := &netHTTPRequest{r: r}
+	_, err := req.MultipartForm(1024)
+	// Should return error for non-multipart request
+	if err == nil {
+		t.Error("expected error for non-multipart request")
+	}
+}
+
+func TestContext(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	req := &netHTTPRequest{r: r}
+	if req.Context() != r.Context() {
+		t.Error("Context() should return the request context")
+	}
+}
+
+func TestAllHeaders(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Test", "value1")
+	r.Header.Set("X-Custom", "value2")
+	r.Header.Add("X-Multi", "a")
+	r.Header.Add("X-Multi", "b")
+
+	req := &netHTTPRequest{r: r}
+	headers := req.AllHeaders()
+	if headers["X-Test"] != "value1" {
+		t.Errorf("AllHeaders()[X-Test] = %q, want value1", headers["X-Test"])
+	}
+	if headers["X-Custom"] != "value2" {
+		t.Errorf("AllHeaders()[X-Custom] = %q, want value2", headers["X-Custom"])
+	}
+	if headers["X-Multi"] != "a, b" {
+		t.Errorf("AllHeaders()[X-Multi] = %q, want 'a, b'", headers["X-Multi"])
+	}
+}
+
+func TestAllQuery(t *testing.T) {
+	r := httptest.NewRequest("GET", "/path?a=1&b=2&c=3&b=4", nil)
+	req := &netHTTPRequest{r: r}
+	query := req.AllQuery()
+	if query["a"] != "1" {
+		t.Errorf("AllQuery()[a] = %q, want 1", query["a"])
+	}
+	if query["c"] != "3" {
+		t.Errorf("AllQuery()[c] = %q, want 3", query["c"])
+	}
+	if query["b"] != "2, 4" {
+		t.Errorf("AllQuery()[b] = %q, want '2, 4'", query["b"])
+	}
+}
+
+func TestDirectHeader(t *testing.T) {
+	rec := httptest.NewRecorder()
+	w := &netHTTPResponseWriter{w: rec, statusCode: 200}
+	h := w.Header()
+	
+	// Cast to access DirectHeader method
+	if dhm, ok := h.(*netHTTPHeaderMap); ok {
+		direct := dhm.DirectHeader()
+		// Test that we can use the direct header
+		direct.Set("X-Direct", "test")
+		if rec.Header().Get("X-Direct") != "test" {
+			t.Error("DirectHeader() should provide direct access to underlying header")
+		}
+	} else {
+		t.Error("Header() should return *netHTTPHeaderMap")
+	}
+}
+
+func TestNewNetHTTPRequest(t *testing.T) {
+	r := httptest.NewRequest("GET", "/test", nil)
+	req := NewNetHTTPRequest(r)
+	if req.Method() != "GET" {
+		t.Errorf("expected GET, got %s", req.Method())
+	}
+	if req.Path() != "/test" {
+		t.Errorf("expected /test, got %s", req.Path())
+	}
+}
+
+func TestNewNetHTTPRequestWithLimit(t *testing.T) {
+	r := httptest.NewRequest("POST", "/test", strings.NewReader("hello"))
+	req := NewNetHTTPRequestWithLimit(r, 10)
+	body, err := req.Body()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(body) != "hello" {
+		t.Errorf("expected hello, got %s", body)
+	}
+}
+
+func TestNewNetHTTPResponseWriter(t *testing.T) {
+	rec := httptest.NewRecorder()
+	w := NewNetHTTPResponseWriter(rec)
+	w.WriteHeader(201)
+	w.Write([]byte("test"))
+	if rec.Code != 201 {
+		t.Errorf("expected 201, got %d", rec.Code)
+	}
+	if rec.Body.String() != "test" {
+		t.Errorf("expected test, got %s", rec.Body.String())
+	}
+}
+
+func TestResponseWriter_Flush(t *testing.T) {
+	rec := httptest.NewRecorder()
+	w := &netHTTPResponseWriter{w: rec, statusCode: 200}
+	// Flush should not panic even if underlying writer doesn't support it
+	w.Flush()
+}
+
+func TestBodyTooLargeError(t *testing.T) {
+	err := &BodyTooLargeError{}
+	if err.Error() != "request body too large" {
+		t.Errorf("expected 'request body too large', got %s", err.Error())
+	}
+}
+
+func TestNetHTTPTransport_Config(t *testing.T) {
+	cfg := NetHTTPConfig{
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    15 * time.Second,
+		MaxBodySize:    1024,
+		MaxHeaderBytes: 2048,
+		TrustProxy:     true,
+		TLSCertFile:    "/path/to/cert.pem",
+		TLSKeyFile:     "/path/to/key.pem",
+	}
+	transport := NewNetHTTP(cfg)
+	
+	if transport.config.ReadTimeout != 5*time.Second {
+		t.Errorf("ReadTimeout = %v, want 5s", transport.config.ReadTimeout)
+	}
+	if transport.config.WriteTimeout != 10*time.Second {
+		t.Errorf("WriteTimeout = %v, want 10s", transport.config.WriteTimeout)
+	}
+	if transport.config.IdleTimeout != 15*time.Second {
+		t.Errorf("IdleTimeout = %v, want 15s", transport.config.IdleTimeout)
+	}
+	if transport.config.MaxBodySize != 1024 {
+		t.Errorf("MaxBodySize = %d, want 1024", transport.config.MaxBodySize)
+	}
+	if transport.config.MaxHeaderBytes != 2048 {
+		t.Errorf("MaxHeaderBytes = %d, want 2048", transport.config.MaxHeaderBytes)
+	}
+	if !transport.config.TrustProxy {
+		t.Error("TrustProxy should be true")
+	}
+	if transport.config.TLSCertFile != "/path/to/cert.pem" {
+		t.Errorf("TLSCertFile = %s, want /path/to/cert.pem", transport.config.TLSCertFile)
+	}
+	if transport.config.TLSKeyFile != "/path/to/key.pem" {
+		t.Errorf("TLSKeyFile = %s, want /path/to/key.pem", transport.config.TLSKeyFile)
+	}
+}
+
+func TestNetHTTPTransport_ZeroConfig(t *testing.T) {
+	cfg := NetHTTPConfig{} // All zero values
+	transport := NewNetHTTP(cfg)
+	
+	if transport.config.ReadTimeout != 0 {
+		t.Errorf("ReadTimeout = %v, want 0", transport.config.ReadTimeout)
+	}
+	if transport.config.WriteTimeout != 0 {
+		t.Errorf("WriteTimeout = %v, want 0", transport.config.WriteTimeout)
+	}
+	if transport.config.IdleTimeout != 0 {
+		t.Errorf("IdleTimeout = %v, want 0", transport.config.IdleTimeout)
+	}
+	if transport.config.MaxBodySize != 0 {
+		t.Errorf("MaxBodySize = %d, want 0", transport.config.MaxBodySize)
+	}
+	if transport.config.MaxHeaderBytes != 0 {
+		t.Errorf("MaxHeaderBytes = %d, want 0", transport.config.MaxHeaderBytes)
+	}
+	if transport.config.TrustProxy {
+		t.Error("TrustProxy should be false by default")
+	}
+	if transport.config.TLSCertFile != "" {
+		t.Errorf("TLSCertFile = %s, want empty", transport.config.TLSCertFile)
+	}
+	if transport.config.TLSKeyFile != "" {
+		t.Errorf("TLSKeyFile = %s, want empty", transport.config.TLSKeyFile)
+	}
+}
+
+func TestAllQuery_EmptyQuery(t *testing.T) {
+	r := httptest.NewRequest("GET", "/path", nil)
+	req := &netHTTPRequest{r: r}
+	query := req.AllQuery()
+	if len(query) != 0 {
+		t.Errorf("expected empty map, got %v", query)
+	}
+}
+
+func TestAllHeaders_EmptyHeaders(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	req := &netHTTPRequest{r: r}
+	headers := req.AllHeaders()
+	// Should have at least some default headers from httptest
+	if headers == nil {
+		t.Error("AllHeaders should not return nil")
+	}
+}
+
+func TestNetHTTPAdapter_MaxBodyZero(t *testing.T) {
+	handler := HandlerFunc(func(w ResponseWriter, r Request) {
+		body, err := r.Body()
+		if err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		w.WriteHeader(200)
+		w.Write(body)
+	})
+	
+	adapter := &netHTTPAdapter{handler: handler, maxBody: 0} // No limit
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader("test body"))
+	
+	adapter.ServeHTTP(rec, r)
+	
+	if rec.Code != 200 {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != "test body" {
+		t.Errorf("expected 'test body', got %s", rec.Body.String())
+	}
+}
+
+func TestNetHTTPAdapter_TrustProxyFalse(t *testing.T) {
+	var capturedAddr string
+	handler := HandlerFunc(func(w ResponseWriter, r Request) {
+		capturedAddr = r.RemoteAddr()
+		w.WriteHeader(200)
+	})
+	
+	adapter := &netHTTPAdapter{handler: handler, trustProxy: false}
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Forwarded-For", "1.2.3.4")
+	r.RemoteAddr = "10.0.0.1:12345"
+	
+	adapter.ServeHTTP(rec, r)
+	
+	if capturedAddr != "10.0.0.1" {
+		t.Errorf("expected 10.0.0.1, got %s (should ignore proxy headers)", capturedAddr)
+	}
+}
+
+func TestNetHTTPAdapter_TrustProxyTrue(t *testing.T) {
+	var capturedAddr string
+	handler := HandlerFunc(func(w ResponseWriter, r Request) {
+		capturedAddr = r.RemoteAddr()
+		w.WriteHeader(200)
+	})
+	
+	adapter := &netHTTPAdapter{handler: handler, trustProxy: true}
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Forwarded-For", "1.2.3.4")
+	r.RemoteAddr = "10.0.0.1:12345"
+	
+	adapter.ServeHTTP(rec, r)
+	
+	if capturedAddr != "1.2.3.4" {
+		t.Errorf("expected 1.2.3.4, got %s (should use proxy header)", capturedAddr)
+	}
+}
+
+func TestNetHTTPTransport_ServerConfiguration(t *testing.T) {
+	cfg := NetHTTPConfig{
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    15 * time.Second,
+		MaxHeaderBytes: 2048,
+	}
+	transport := NewNetHTTP(cfg)
+	
+	// Test that ListenAndServe would configure the server properly
+	// We can't actually start the server in tests, but we can verify
+	// the configuration is stored correctly
+	if transport.config.ReadTimeout != 5*time.Second {
+		t.Errorf("ReadTimeout = %v, want 5s", transport.config.ReadTimeout)
+	}
+	if transport.config.WriteTimeout != 10*time.Second {
+		t.Errorf("WriteTimeout = %v, want 10s", transport.config.WriteTimeout)
+	}
+	if transport.config.IdleTimeout != 15*time.Second {
+		t.Errorf("IdleTimeout = %v, want 15s", transport.config.IdleTimeout)
+	}
+	if transport.config.MaxHeaderBytes != 2048 {
+		t.Errorf("MaxHeaderBytes = %d, want 2048", transport.config.MaxHeaderBytes)
+	}
+}
+
+func TestResponseWriter_WriteAfterWriteHeader(t *testing.T) {
+	rec := httptest.NewRecorder()
+	w := &netHTTPResponseWriter{w: rec, statusCode: 200}
+	
+	w.WriteHeader(201)
+	w.Write([]byte("first"))
+	w.Write([]byte("second"))
+	
+	if rec.Code != 201 {
+		t.Errorf("status = %d, want 201", rec.Code)
+	}
+	if rec.Body.String() != "firstsecond" {
+		t.Errorf("body = %q, want firstsecond", rec.Body.String())
 	}
 }

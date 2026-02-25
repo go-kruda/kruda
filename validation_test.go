@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// valueOf is a helper that returns reflect.Value of the underlying value.
-func valueOf(v any) reflect.Value {
-	return reflect.ValueOf(v)
-}
-
 // ---------------------------------------------------------------------------
 // Task 13.1: ValidationError.Error() and MarshalJSON
 // ---------------------------------------------------------------------------

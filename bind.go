@@ -2,9 +2,10 @@ package kruda
 
 import (
 	"fmt"
-	"net/http"
 	"reflect"
 	"strconv"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 // inputParser is pre-compiled at route registration time.
@@ -234,27 +235,22 @@ func hasBody(method string) bool {
 
 // parseMultipart parses multipart/form-data and populates form fields.
 func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
-	// Get the raw *http.Request for multipart parsing
-	raw := c.request.RawRequest()
-	r, ok := raw.(*http.Request)
+	mp, ok := c.request.(transport.MultipartProvider)
 	if !ok {
-		return BadRequest("multipart parsing requires net/http transport")
+		return BadRequest("multipart upload not supported by current transport")
 	}
-
-	// Parse multipart form with body limit
 	maxBytes := int64(c.app.config.BodyLimit)
-	if err := r.ParseMultipartForm(maxBytes); err != nil {
+	form, err := mp.MultipartForm(maxBytes)
+	if err != nil {
 		return BadRequest("failed to parse multipart form")
 	}
-	// Store reference so cleanup() can call RemoveAll after the handler completes.
-	// Do NOT defer RemoveAll here — FileUpload.Open() needs temp files alive.
-	c.multipartForm = r.MultipartForm
+	c.multipartForm = form
 
 	for _, ff := range p.formFields {
 		switch {
 		case ff.isFile:
 			// Single file upload
-			headers := r.MultipartForm.File[ff.tag]
+			headers := form.File[ff.tag]
 			if len(headers) == 0 {
 				continue // file not provided — let validation catch required
 			}
@@ -269,7 +265,7 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 
 		case ff.isMulti:
 			// Multiple file upload
-			headers := r.MultipartForm.File[ff.tag]
+			headers := form.File[ff.tag]
 			if len(headers) == 0 {
 				continue
 			}
@@ -286,9 +282,9 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 
 		case ff.isString:
 			// Text form field
-			val := r.FormValue(ff.tag)
-			if val != "" {
-				v.Field(ff.index).Set(reflect.ValueOf(val))
+			vals := form.Value[ff.tag]
+			if len(vals) > 0 && vals[0] != "" {
+				v.Field(ff.index).Set(reflect.ValueOf(vals[0]))
 			}
 		}
 	}
@@ -296,8 +292,7 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 	return nil
 }
 
-// bindInput parses the request body as JSON into type T.
-// Phase 1 compatibility: used by untyped handlers via c.Bind().
+//nolint:unused // referenced by typed handler registration
 func bindInput[T any](c *Ctx) (T, error) {
 	var v T
 	body, err := c.BodyBytes()

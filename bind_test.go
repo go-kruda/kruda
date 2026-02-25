@@ -503,6 +503,13 @@ type multipartMockRequest struct {
 
 func (r *multipartMockRequest) RawRequest() any { return r.raw }
 
+func (r *multipartMockRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if err := r.raw.ParseMultipartForm(maxBytes); err != nil {
+		return nil, err
+	}
+	return r.raw.MultipartForm, nil
+}
+
 // createMultipartRequest builds a real *http.Request with multipart form data.
 func createMultipartRequest(t *testing.T, fields map[string]string, files map[string][]fileEntry) *http.Request {
 	t.Helper()

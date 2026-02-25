@@ -3,6 +3,7 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -10,6 +11,14 @@ import (
 // NetpollTransport is a stub for Windows where netpoll is not supported.
 // On Linux and macOS, the real implementation in netpoll.go is used instead.
 type NetpollTransport struct{}
+
+func (t *NetpollTransport) ListenAndServe(addr string, handler Handler) error {
+	return errors.New("netpoll: not supported on Windows")
+}
+
+func (t *NetpollTransport) Shutdown(ctx context.Context) error {
+	return nil
+}
 
 // NetpollConfig holds configuration for the netpoll transport.
 // This is a stub matching the real config so code compiles on Windows.

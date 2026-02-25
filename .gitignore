@@ -31,8 +31,32 @@ CLAUDE.md
 .kiro/
 .claude/
 
-# Build output (local binaries)
+# Build output (root-level compiled binaries from go build/run)
+/auth
+/auto-crud
 /crud
+/database
+/di-services
+/health-checks
+/json-api
+/testing
+/typed-handlers
+
+# Bench artifacts
+*.prof
+bench/kruda_server/kruda_server*
+
+# Cross-framework comparison (separate repo: go-kruda/benchmarks)
+bench/elysia/
+bench/gin_test.go
+bench/fiber_test.go
+bench/echo_test.go
+bench/run_cross_bench.sh
+
+# Node.js / Bun
+node_modules/
+.vitepress/dist/
+.vitepress/cache/
 
 # Environment
 .env

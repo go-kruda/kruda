@@ -95,7 +95,7 @@ Listening on :3000
 ```
 
 **Requirements:**
-- Watch `.go` files recursively via `fsnotify` (or polling fallback)
+- Watch `.go` files recursively via stdlib `os.Stat` polling (500ms interval)
 - Debounce: wait 100ms after last change before rebuilding
 - Build: `go build -o .kruda-tmp ./`
 - Restart: kill old process, start new binary
@@ -114,10 +114,9 @@ Listening on :3000
 6. Middleware
 7. Error Handling
 8. Testing
-9. WebSocket (if supported)
-10. Health Checks
-11. Database Integration
-12. Authentication (JWT from contrib)
+9. Health Checks
+10. Database Integration
+11. Authentication pattern using `contrib/jwt`
 
 ### CI/CD
 - **On PR:** `go test ./...`, `go vet ./...`, bench regression

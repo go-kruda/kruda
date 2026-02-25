@@ -144,7 +144,7 @@ Create in `examples/`:
 - [ ] `groups/main.go` — route groups, prefixes, guards
 - [ ] `health-check/main.go` — HealthChecker interface, /health endpoint
 - [ ] `database/main.go` — database integration example
-- [ ] `auth/main.go` — JWT authentication (with contrib)
+- [ ] `auth/main.go` — Authentication pattern using `contrib/jwt`
 
 Each example:
 - [ ] Runnable: `go run examples/xxx/main.go`
@@ -182,7 +182,7 @@ Each example:
 - [ ] Create workflow: trigger on push to main, schedule daily
 - [ ] Run: `go test -bench=. -benchmem ./bench/`
 - [ ] Store baseline results
-- [ ] Compare to previous run, detect regressions >5%
+- [ ] Compare to previous run, detect regressions >10%
 - [ ] Comment on PR with results
 - [ ] Update README with latest benchmarks
 
@@ -240,14 +240,14 @@ Each example:
 
 ### Task 15: Hot Reload Dev Server (NEW)
 - [ ] Implement `kruda dev` CLI command
-  - [ ] Watch `.go` files recursively (use `fsnotify`)
+  - [ ] Watch `.go` files recursively (stdlib os.Stat polling, 100ms interval)
   - [ ] Debounce: 100ms after last change
   - [ ] Build: `go build -o .kruda-tmp ./`
   - [ ] Kill old process, start new binary
   - [ ] Reuse same port
   - [ ] Color output: green=success, red=build errors
   - [ ] Show build errors inline
-- [ ] Optional proxy mode: keep port alive during rebuild
+- [ ] Optional proxy mode: keep port alive during rebuild (deferred)
 - [ ] `kruda dev --port 3000` flag
 - [ ] Test: file change triggers rebuild
 - [ ] Test: build error displays correctly
@@ -257,17 +257,17 @@ Each example:
 
 ## Execution Order (Recommended)
 
-1. Security audit + write `docs/SECURITY.md`
-2. Review coverage, add missing tests (`*_test.go`)
-3. Write integration tests
-4. Set up VitePress site + publish
-5. Write getting started guides
-6. Write API reference docs
+1. Set up GitHub Actions CI/CD (get feedback loop first)
+2. Generate `bench/baseline.txt` (prerequisite for benchmark regression)
+3. Security audit + write `docs/SECURITY.md`
+4. Review coverage, add missing tests (`*_test.go`)
+5. Write integration tests
+6. Implement CLI Tier 1: `kruda new` + `kruda dev`
 7. Create 10+ example apps
-8. Implement CLI tool
-9. Set up GitHub Actions workflows
-10. Create AI-friendly files
-11. Write README.md + CHANGELOG.md
+8. Set up VitePress site + publish
+9. Write getting started guides + API reference docs
+10. Create AI-friendly files + README.md + CHANGELOG.md
+11. Implement CLI Tier 2: `kruda generate` + `kruda validate` (if time allows)
 12. Run full test suite, verify 100% on core + ≥90% overall
 13. Deploy docs site
 14. Tag v1.0.0-rc1

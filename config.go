@@ -385,6 +385,8 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	case "nethttp":
 		logger.Info("transport selected", "name", "nethttp")
 		return transport.NewNetHTTP(netHTTPCfg)
+	case "fasthttp":
+		return newFastHTTPTransport(cfg, logger)
 	case "netpoll":
 		// Netpoll doesn't support TLS — fall back to net/http for HTTP/2 via crypto/tls.
 		if cfg.TLSCertFile != "" {
@@ -412,27 +414,13 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			logger.Info("transport selected", "name", "nethttp", "reason", "tls")
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
-		// Windows → use net/http (netpoll requires epoll/kqueue).
+		// Windows → use net/http (fasthttp has build tag !windows).
 		if runtime.GOOS == "windows" {
 			logger.Info("transport selected", "name", "nethttp", "reason", "windows")
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
-		// Linux/macOS → try netpoll, fall back to net/http on error.
-		netpollCfg := transport.NetpollConfig{
-			ReadTimeout:    cfg.ReadTimeout,
-			WriteTimeout:   cfg.WriteTimeout,
-			IdleTimeout:    cfg.IdleTimeout,
-			MaxBodySize:    cfg.BodyLimit,
-			MaxHeaderBytes: cfg.HeaderLimit,
-			TrustProxy:     cfg.TrustProxy,
-		}
-		np, err := transport.NewNetpoll(netpollCfg)
-		if err != nil {
-			logger.Warn("netpoll transport unavailable, falling back to nethttp", "error", err)
-			return transport.NewNetHTTP(netHTTPCfg)
-		}
-		logger.Info("transport selected", "name", "netpoll")
-		return np
+		// Linux/macOS → try fasthttp first, then netpoll, fall back to net/http on error.
+		return newFastHTTPTransport(cfg, logger)
 	}
 }
 

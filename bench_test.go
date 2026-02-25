@@ -28,9 +28,9 @@ func (r *benchRequest) RawRequest() any          { return nil }
 // benchResponseWriter is a no-op transport.ResponseWriter for benchmarks.
 type benchResponseWriter struct{}
 
-func (w *benchResponseWriter) WriteHeader(int)                  {}
-func (w *benchResponseWriter) Header() transport.HeaderMap      { return &benchHeaderMap{} }
-func (w *benchResponseWriter) Write(data []byte) (int, error)   { return len(data), nil }
+func (w *benchResponseWriter) WriteHeader(int)                {}
+func (w *benchResponseWriter) Header() transport.HeaderMap    { return &benchHeaderMap{} }
+func (w *benchResponseWriter) Write(data []byte) (int, error) { return len(data), nil }
 
 type benchHeaderMap struct{}
 
@@ -182,6 +182,22 @@ func BenchmarkTypedHandler(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		app.ServeKruda(w, req)
+	}
+}
+
+// BenchmarkContextPoolAcquireRelease measures context pool get/put cycle overhead.
+func BenchmarkContextPoolAcquireRelease(b *testing.B) {
+	app := New()
+	req := &benchRequest{method: "GET", path: "/"}
+	w := &benchResponseWriter{}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c := app.ctxPool.Get().(*Ctx)
+		c.reset(w, req)
+		c.cleanup()
+		app.ctxPool.Put(c)
 	}
 }
 

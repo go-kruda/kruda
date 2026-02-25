@@ -285,3 +285,20 @@ var ErrBodyTooLarge = &BodyTooLargeError{}
 type BodyTooLargeError struct{}
 
 func (e *BodyTooLargeError) Error() string { return "request body too large" }
+
+// NewNetHTTPRequest wraps an *http.Request into a transport.Request.
+func NewNetHTTPRequest(r *http.Request) Request {
+	return &netHTTPRequest{r: r}
+}
+
+// NewNetHTTPRequestWithLimit wraps an *http.Request into a transport.Request
+// with a maximum body size limit. When the body exceeds maxBody bytes,
+// Body() returns ErrBodyTooLarge.
+func NewNetHTTPRequestWithLimit(r *http.Request, maxBody int) Request {
+	return &netHTTPRequest{r: r, maxBody: maxBody}
+}
+
+// NewNetHTTPResponseWriter wraps an http.ResponseWriter into a transport.ResponseWriter.
+func NewNetHTTPResponseWriter(w http.ResponseWriter) ResponseWriter {
+	return &netHTTPResponseWriter{w: w, statusCode: 200}
+}

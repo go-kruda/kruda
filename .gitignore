@@ -29,6 +29,10 @@ vendor/
 # AI tooling
 CLAUDE.md
 .kiro/
+.claude/
+
+# Build output (local binaries)
+/crud
 
 # Environment
 .env

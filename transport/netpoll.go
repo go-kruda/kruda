@@ -37,6 +37,7 @@ type NetpollConfig struct {
 	IdleTimeout    time.Duration
 	MaxBodySize    int
 	MaxHeaderBytes int
+	MaxQueryParams int // Maximum number of query parameters to parse (default: 512)
 	TrustProxy     bool
 }
 
@@ -144,6 +145,7 @@ func (t *NetpollTransport) onRequest(ctx context.Context, conn netpoll.Connectio
 		reader:     reader,
 		remoteAddr: conn.RemoteAddr(),
 		maxBody:    t.config.MaxBodySize,
+		maxParams:  t.config.MaxQueryParams,
 		trustProxy: t.config.TrustProxy,
 	}
 
@@ -158,14 +160,16 @@ func (t *NetpollTransport) onRequest(ctx context.Context, conn netpoll.Connectio
 	// Dispatch to the application handler.
 	t.handler.ServeKruda(w, req)
 
-	// Drain unread body for keep-alive framing. Failure → close connection.
-	if err := req.drainBody(); err != nil {
+	// Flush the response first — ensure the client gets the response even if
+	// drainBody fails (e.g. client disconnects mid-body).
+	if err := w.flush(); err != nil {
 		reader.Release()
 		return conn.Close()
 	}
 
-	// Flush the response to the connection.
-	if err := w.flush(); err != nil {
+	// Drain unread body to keep HTTP/1.1 framing correct for keep-alive.
+	// Must happen after flush (response sent) but before Release (reader still valid).
+	if err := req.drainBody(); err != nil {
 		reader.Release()
 		return conn.Close()
 	}
@@ -323,6 +327,7 @@ type netpollRequest struct {
 	reader     netpoll.Reader
 	remoteAddr net.Addr
 	maxBody    int
+	maxParams  int
 	trustProxy bool
 
 	// Lazy body.
@@ -354,16 +359,40 @@ func (r *netpollRequest) Header(key string) string {
 	return ""
 }
 
-// headerVal returns the value of the named header (case-insensitive).
+// headerVal returns the value of the named header.
 // Used internally for Content-Length and Transfer-Encoding lookups.
 // Returns zero-copy string — caller must not retain after Release().
+// Fast path: exact match (covers canonical casing from all major clients).
+// Slow path: case-insensitive fallback for non-standard proxies.
 func (r *netpollRequest) headerVal(key string) string {
+	for _, h := range r.headers {
+		if h[0] == key {
+			return h[1]
+		}
+	}
 	for _, h := range r.headers {
 		if strings.EqualFold(h[0], key) {
 			return h[1]
 		}
 	}
 	return ""
+}
+
+// parseContentLength parses and validates the Content-Length header.
+// Returns (length, error). Length 0 with nil error means no body.
+func (r *netpollRequest) parseContentLength() (int, error) {
+	clStr := r.headerVal("Content-Length")
+	if clStr == "" {
+		if te := r.headerVal("Transfer-Encoding"); strings.Contains(te, "chunked") {
+			return 0, fmt.Errorf("netpoll: chunked Transfer-Encoding not supported")
+		}
+		return 0, nil
+	}
+	cl, err := strconv.Atoi(clStr)
+	if err != nil || cl < 0 {
+		return 0, fmt.Errorf("netpoll: invalid Content-Length %q", clStr)
+	}
+	return cl, nil
 }
 
 // Body lazily reads the request body based on Content-Length.
@@ -375,19 +404,10 @@ func (r *netpollRequest) Body() ([]byte, error) {
 	}
 	r.bodyRead = true
 
-	clStr := r.headerVal("Content-Length")
-	if clStr == "" {
-		// Check for chunked Transfer-Encoding — not yet supported.
-		if te := r.headerVal("Transfer-Encoding"); strings.Contains(te, "chunked") {
-			r.bodyErr = fmt.Errorf("netpoll: chunked Transfer-Encoding not supported")
-			return nil, r.bodyErr
-		}
-		return nil, nil
-	}
-
-	cl, err := strconv.Atoi(clStr)
-	if err != nil || cl < 0 {
-		return nil, nil
+	cl, err := r.parseContentLength()
+	if err != nil {
+		r.bodyErr = err
+		return nil, err
 	}
 	if cl == 0 {
 		return nil, nil
@@ -415,7 +435,7 @@ func (r *netpollRequest) Body() ([]byte, error) {
 // Returns a safe copy — query values originate from the zero-copy reader buffer.
 func (r *netpollRequest) QueryParam(key string) string {
 	if !r.queryDone {
-		r.queryParams = parseQuery(r.rawQuery)
+		r.queryParams = parseQuery(r.rawQuery, r.maxParams)
 		r.queryDone = true
 	}
 	return strings.Clone(r.queryParams[key])
@@ -484,17 +504,9 @@ func (r *netpollRequest) drainBody() error {
 	}
 	r.bodyRead = true
 
-	if te := r.headerVal("Transfer-Encoding"); strings.Contains(te, "chunked") {
-		return fmt.Errorf("netpoll: cannot drain chunked body")
-	}
-
-	clStr := r.headerVal("Content-Length")
-	if clStr == "" {
-		return nil
-	}
-	cl, err := strconv.Atoi(clStr)
-	if err != nil || cl < 0 {
-		return fmt.Errorf("netpoll: invalid Content-Length %q", clStr)
+	cl, err := r.parseContentLength()
+	if err != nil {
+		return err
 	}
 	if cl == 0 {
 		return nil
@@ -676,13 +688,21 @@ func write400(w netpoll.Writer) {
 
 // parseQuery parses a query string into a map. First value wins for duplicate keys.
 // This is a custom implementation to avoid importing net/url.
-func parseQuery(query string) map[string]string {
+func parseQuery(query string, maxParams int) map[string]string {
 	m := make(map[string]string)
 	if query == "" {
 		return m
 	}
 
+	if maxParams <= 0 {
+		maxParams = 512
+	}
+	count := 0
 	for query != "" {
+		if count >= maxParams {
+			break
+		}
+		count++
 		var pair string
 		if idx := strings.IndexByte(query, '&'); idx >= 0 {
 			pair = query[:idx]

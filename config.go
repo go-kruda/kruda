@@ -44,6 +44,17 @@ type Config struct {
 	// Security (all enabled by default)
 	Security SecurityConfig
 
+	// SecurityHeaders controls whether default security headers are set on all responses.
+	// Default: true. Set to false via WithSecurityHeaders(false) to disable.
+	SecurityHeaders bool
+
+	// DevMode enables development features (dev error page, relaxed security headers).
+	// Default: false (production mode). Auto-detected via KRUDA_ENV=development.
+	DevMode bool
+
+	// devModeSet tracks whether DevMode was explicitly set via WithDevMode.
+	devModeSet bool
+
 	// Logging
 	Logger *slog.Logger // default: slog.Default()
 
@@ -64,12 +75,12 @@ type Config struct {
 // SecurityConfig controls security headers and behavior.
 type SecurityConfig struct {
 	// Security headers (all enabled by default)
-	XSSProtection         string // default: "1; mode=block"
+	XSSProtection         string // default: "0" (disabled per modern best practice)
 	ContentTypeNosniff    string // default: "nosniff"
-	XFrameOptions         string // default: "SAMEORIGIN"
+	XFrameOptions         string // default: "DENY"
 	HSTSMaxAge            int    // default: 0 (disabled), recommended: 31536000
 	ContentSecurityPolicy string // default: ""
-	ReferrerPolicy        string // default: "no-referrer"
+	ReferrerPolicy        string // default: "strict-origin-when-cross-origin"
 }
 
 // defaultConfig returns the default configuration.
@@ -84,11 +95,12 @@ func defaultConfig() Config {
 		JSONEncoder:     krudajson.Marshal,
 		JSONDecoder:     krudajson.Unmarshal,
 		Logger:          slog.Default(),
+		SecurityHeaders: true,
 		Security: SecurityConfig{
-			XSSProtection:      "1; mode=block",
+			XSSProtection:      "0",
 			ContentTypeNosniff: "nosniff",
-			XFrameOptions:      "SAMEORIGIN",
-			ReferrerPolicy:     "no-referrer",
+			XFrameOptions:      "DENY",
+			ReferrerPolicy:     "strict-origin-when-cross-origin",
 		},
 	}
 }
@@ -114,6 +126,50 @@ func WithIdleTimeout(d time.Duration) Option {
 // WithBodyLimit sets the maximum request body size.
 func WithBodyLimit(limit int) Option {
 	return func(a *App) { a.config.BodyLimit = limit }
+}
+
+// WithMaxBodySize sets the maximum request body size in bytes.
+// Alias for WithBodyLimit — provided for R4 (DoS Protection) compliance.
+// When a request body exceeds this limit, the framework responds with HTTP 413.
+// Default: 4MB (4 * 1024 * 1024). Set to 0 to disable the limit.
+func WithMaxBodySize(size int) Option {
+	return WithBodyLimit(size)
+}
+
+// WithDevMode enables or disables development mode.
+// When enabled, the framework relaxes X-Frame-Options to SAMEORIGIN
+// and activates the dev error page (when implemented).
+// Default: false (production mode). Also auto-detected via KRUDA_ENV=development.
+func WithDevMode(enabled bool) Option {
+	return func(a *App) {
+		a.config.DevMode = enabled
+		a.config.devModeSet = true
+	}
+}
+
+// WithSecurityHeaders enables or disables default security headers on all responses.
+// When false, no security headers (X-Content-Type-Options, X-Frame-Options,
+// X-XSS-Protection, Referrer-Policy) are set automatically.
+// Default: true.
+func WithSecurityHeaders(enabled bool) Option {
+	return func(a *App) { a.config.SecurityHeaders = enabled }
+}
+
+// WithLegacySecurityHeaders restores Phase 1-4 security header defaults
+// for backward compatibility. Sets:
+//   - X-XSS-Protection: "1; mode=block"
+//   - X-Frame-Options: "SAMEORIGIN"
+//   - Referrer-Policy: "no-referrer"
+//   - X-Content-Type-Options: "nosniff" (unchanged)
+func WithLegacySecurityHeaders() Option {
+	return func(a *App) {
+		a.config.Security = SecurityConfig{
+			XSSProtection:      "1; mode=block",
+			ContentTypeNosniff: "nosniff",
+			XFrameOptions:      "SAMEORIGIN",
+			ReferrerPolicy:     "no-referrer",
+		}
+	}
 }
 
 // WithTransport sets a custom transport.
@@ -257,6 +313,14 @@ func parseSize(s string) (int64, error) {
 // WithValidator sets a pre-configured Validator on the App.
 func WithValidator(v *Validator) Option {
 	return func(a *App) { a.config.Validator = v }
+}
+
+// WithContainer attaches a DI container to the App.
+// The container is optional — apps without it work identically to Phase 1-3.
+// When configured, the container is accessible to handlers via Resolve[T]()
+// and is automatically shut down when the App shuts down.
+func WithContainer(c *Container) Option {
+	return func(a *App) { a.container = c }
 }
 
 // WithOpenAPIInfo enables OpenAPI spec generation with the given metadata.

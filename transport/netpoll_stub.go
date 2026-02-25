@@ -19,6 +19,7 @@ type NetpollConfig struct {
 	IdleTimeout    time.Duration
 	MaxBodySize    int
 	MaxHeaderBytes int
+	MaxQueryParams int
 	TrustProxy     bool
 }
 

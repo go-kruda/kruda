@@ -46,6 +46,7 @@ CLAUDE.md
 bench/*.prof
 bench/kruda_server/kruda_server
 bench/kruda_server/kruda_server_bin
+bench/elysia/bun.lockb
 
 # Node.js / Bun
 bench/elysia/node_modules/

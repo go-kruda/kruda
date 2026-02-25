@@ -9,26 +9,29 @@
 
 ```go
 type Container struct {
-    singletons map[reflect.Type]any           // resolved singletons
-    transients map[reflect.Type]func() any    // transient factories
-    lazies     map[reflect.Type]func() any    // lazy factories
-    named      map[string]any                 // named instances
+    singletons map[reflect.Type]any             // resolved singletons
+    transients map[reflect.Type]*transientEntry  // transient factories
+    lazies     map[reflect.Type]*lazyEntry       // lazy factories (atomic.Bool done)
+    named      map[string]any                    // named instances
+    initOrder  []any                             // registration/resolution order
     mu         sync.RWMutex
 }
 
 func (c *Container) Give(instance any) error {
     t := reflect.TypeOf(instance)
     c.singletons[t] = instance
+    c.initOrder = append(c.initOrder, instance)
     return nil
 }
 
-func (c *Container) Use[T any](ctx *Ctx) (T, error) {
-    var zero T
-    t := reflect.TypeOf(zero)
+// Use is a free function (Go doesn't support generic methods)
+func Use[T any](c *Container) (T, error) {
+    t := reflect.TypeOf((*T)(nil)).Elem()
     if inst, ok := c.singletons[t]; ok {
         return inst.(T), nil
     }
-    // lazy init, caching
+    // transient → factory per call
+    // lazy → factory once, cached, retry on error
 }
 ```
 
@@ -62,10 +65,11 @@ type HealthChecker interface {
     Check(ctx context.Context) error
 }
 
-func HealthHandler(c *Ctx) error {
-    checks := discoverHealthCheckers(c.app.container)
-    results := runInParallel(checks, timeout)
-    return c.JSON(healthResponse)
+// discoverHealthCheckers scans singletons, resolved lazies (atomic.Bool),
+// and named instances with deduplication.
+func HealthHandler(opts ...HealthOption) HandlerFunc {
+    // discovers checkers from container, runs in parallel with timeout
+    // Response: {status: "ok"|"unhealthy", checks: {name: "ok"|"error msg"}}
 }
 ```
 
@@ -76,29 +80,24 @@ func HealthHandler(c *Ctx) error {
 ### Auto CRUD (`resource.go`)
 
 ```go
-type ResourceService interface {
-    List(ctx context.Context, page, limit int) ([]any, error)
-    Create(ctx context.Context, item any) (any, error)
-    Get(ctx context.Context, id string) (any, error)
-    Update(ctx context.Context, id string, item any) (any, error)
-    Delete(ctx context.Context, id string) error
+type ResourceService[T any, ID comparable] interface {
+    List(ctx context.Context, page, limit int) ([]T, int, error)
+    Create(ctx context.Context, item T) (T, error)
+    Get(ctx context.Context, id ID) (T, error)
+    Update(ctx context.Context, id ID, item T) (T, error)
+    Delete(ctx context.Context, id ID) error
 }
 
-func (app *App) Resource(path string, svc ResourceService) *App {
-    app.Get(path, listHandler(svc))
-    app.Post(path, createHandler(svc))
-    app.Get(path+"/:id", getHandler(svc))
-    app.Put(path+"/:id", updateHandler(svc))
-    app.Delete(path+"/:id", deleteHandler(svc))
-    return app
-}
+// Uses routeRegistrar interface to deduplicate App/Group registration.
+func Resource[T any, ID comparable](app *App, path string, svc ResourceService[T, ID], opts ...ResourceOption) *App
+func GroupResource[T any, ID comparable](g *Group, path string, svc ResourceService[T, ID], opts ...ResourceOption) *Group
 ```
 
 - Detects service methods via reflection
 - Auto-wires routes with error handling
 - Pagination: query params → method args
 
-### Test Client (`test.go`)
+### Test Client (`test_client.go`)
 
 ```go
 type TestClient struct {
@@ -126,7 +125,7 @@ container.go            (depends on context.go)
 module.go              (depends on container.go)
 health.go              (depends on container.go, context.go)
 resource.go            (depends on container.go, context.go)
-test.go                (depends on kruda.go)
+test_client.go         (depends on kruda.go)
 contrib/jwt/           (depends on container.go, context.go) [separate]
 contrib/swagger/       (depends on container.go) [separate]
 contrib/ratelimit/     (depends on context.go) [separate]
@@ -137,5 +136,5 @@ contrib/ratelimit/     (depends on context.go) [separate]
 - `container_test.go` — Give/Use, circular deps, thread-safety
 - `resource_test.go` — auto CRUD, route matching, error handling
 - `health_test.go` — health check discovery, parallel execution
-- `test_test.go` — test client request/response
+- `test_client_test.go` — test client request/response
 - Integration: test with real app + DI

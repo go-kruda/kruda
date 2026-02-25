@@ -181,6 +181,9 @@ func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
 	} else if p.hasBody && hasBody(c.method) {
 		body, err := c.BodyBytes()
 		if err != nil {
+			if isBodyTooLarge(err) {
+				return reflect.Value{}, NewError(413, "request entity too large", err)
+			}
 			return reflect.Value{}, BadRequest("failed to read request body")
 		}
 		if len(body) == 0 {
@@ -299,6 +302,9 @@ func bindInput[T any](c *Ctx) (T, error) {
 	var v T
 	body, err := c.BodyBytes()
 	if err != nil {
+		if isBodyTooLarge(err) {
+			return v, NewError(413, "request entity too large", err)
+		}
 		return v, BadRequest("failed to read request body")
 	}
 	if len(body) == 0 {

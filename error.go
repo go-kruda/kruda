@@ -3,15 +3,16 @@ package kruda
 import (
 	"errors"
 	"fmt"
+	"reflect"
 )
 
 // KrudaError is the standard error type for Kruda.
 // It carries an HTTP status code and is auto-serialized as JSON.
 type KrudaError struct {
-	Code    int    `json:"code"`              // HTTP status code
-	Message string `json:"message"`           // human-readable message
-	Detail  string `json:"detail,omitempty"`  // optional detail
-	Err     error  `json:"-"`                 // wrapped error (not exposed in JSON)
+	Code    int    `json:"code"`             // HTTP status code
+	Message string `json:"message"`          // human-readable message
+	Detail  string `json:"detail,omitempty"` // optional detail
+	Err     error  `json:"-"`                // wrapped error (not exposed in JSON)
 }
 
 // Error implements the error interface.
@@ -96,6 +97,48 @@ func (app *App) MapError(target error, status int, message string) *App {
 	return app
 }
 
+// --- Phase 4: Error Mapping Extensions ---
+
+// errorTypeMapping maps an error type to HTTP status + message.
+type errorTypeMapping struct {
+	errType    reflect.Type
+	statusCode int
+	message    string
+}
+
+// errorFuncMapping maps an error to a custom transformation function.
+type errorFuncMapping struct {
+	target error
+	fn     func(error) *KrudaError
+}
+
+// MapErrorType registers a type-based error mapping.
+// Matches any error of type T using errors.As.
+//
+// This is a free function (not a method on *App) because Go does not
+// support generic methods. Use: kruda.MapErrorType[*MyError](app, 422, "msg")
+func MapErrorType[T error](app *App, statusCode int, message string) {
+	t := reflect.TypeOf((*T)(nil)).Elem()
+	if t == reflect.TypeOf((*error)(nil)).Elem() {
+		panic("kruda: MapErrorType[error] would match all errors — use a specific type")
+	}
+	app.errorTypes = append(app.errorTypes, errorTypeMapping{
+		errType:    t,
+		statusCode: statusCode,
+		message:    message,
+	})
+}
+
+// MapErrorFunc registers a custom error transformation function.
+// When a handler returns an error matching target (via errors.Is),
+// fn is called to produce the KrudaError response.
+func MapErrorFunc(app *App, target error, fn func(error) *KrudaError) {
+	app.errorFuncs = append(app.errorFuncs, errorFuncMapping{
+		target: target,
+		fn:     fn,
+	})
+}
+
 // resolveError converts any error to a KrudaError using the error map.
 func (app *App) resolveError(err error) *KrudaError {
 	// 1. Already a KrudaError?
@@ -104,18 +147,41 @@ func (app *App) resolveError(err error) *KrudaError {
 		return ke
 	}
 
-	// 2. Check error map
+	// 2. Check error value map (errors.Is)
 	for target, mapping := range app.errorMap {
 		if errors.Is(err, target) {
 			return &KrudaError{
 				Code:    mapping.Status,
 				Message: mapping.Message,
+				Detail:  err.Error(),
 				Err:     err,
 			}
 		}
 	}
 
-	// 3. Default: 500 Internal Server Error
+	// 3. Check error func mappings (MapErrorFunc — errors.Is)
+	for _, ef := range app.errorFuncs {
+		if errors.Is(err, ef.target) {
+			return ef.fn(err)
+		}
+	}
+
+	// 4. Check error type mappings (MapErrorType — errors.As)
+	// NOTE: reflect.New per type is acceptable here — this runs only on error paths,
+	// not on successful requests. Typical apps have <10 type mappings.
+	for _, et := range app.errorTypes {
+		target := reflect.New(et.errType).Interface()
+		if errors.As(err, target) {
+			return &KrudaError{
+				Code:    et.statusCode,
+				Message: et.message,
+				Detail:  err.Error(),
+				Err:     err,
+			}
+		}
+	}
+
+	// 5. Default: 500 Internal Server Error
 	return &KrudaError{
 		Code:    500,
 		Message: "internal server error",

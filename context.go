@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -306,6 +307,9 @@ func (c *Ctx) BodyString() string {
 func (c *Ctx) Bind(v any) error {
 	body, err := c.BodyBytes()
 	if err != nil {
+		if isBodyTooLarge(err) {
+			return NewError(413, "request entity too large", err)
+		}
 		return BadRequest("failed to read request body")
 	}
 	if len(body) == 0 {
@@ -401,10 +405,62 @@ func (c *Ctx) Redirect(url string, code ...int) error {
 	return c.send()
 }
 
+// sanitizeHeaderValue strips CR and LF characters from a header value to prevent
+// HTTP header injection (CRLF injection). Most values pass through unchanged via
+// the fast path check.
+func sanitizeHeaderValue(value string) string {
+	if !strings.ContainsAny(value, "\r\n") {
+		return value
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for i := 0; i < len(value); i++ {
+		if value[i] != '\r' && value[i] != '\n' {
+			b.WriteByte(value[i])
+		}
+	}
+	return b.String()
+}
+
+// isValidHeaderKey checks if key contains only valid token characters per RFC 7230.
+// token = 1*tchar
+// tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+//
+//	"^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+func isValidHeaderKey(key string) bool {
+	if len(key) == 0 {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		if !isTokenChar(key[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isTokenChar returns true if c is a valid HTTP token character per RFC 7230.
+func isTokenChar(c byte) bool {
+	if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+		return true
+	}
+	switch c {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+		return true
+	}
+	return false
+}
+
 // SetHeader sets a response header, replacing any existing values. Chainable.
 // Common headers (Content-Type, Cache-Control, Location) use fixed slots
 // to avoid map allocation on the hot path.
+// Phase 5: validates key per RFC 7230 and strips CRLF from value to prevent header injection.
 func (c *Ctx) SetHeader(key, value string) *Ctx {
+	if !isValidHeaderKey(key) {
+		c.app.config.Logger.Warn("kruda: invalid header key, skipping", "key", key)
+		return c
+	}
+	value = sanitizeHeaderValue(value)
 	switch key {
 	case "Content-Type":
 		c.contentType = value
@@ -422,7 +478,13 @@ func (c *Ctx) SetHeader(key, value string) *Ctx {
 // N2 fix: supports multi-value headers like Vary, Cache-Control. Chainable.
 // Fixed-slot headers: Content-Type and Location always replace (single-valued per RFC).
 // Cache-Control appends comma-separated (multi-valued per RFC 7234 section 5.2).
+// Phase 5: validates key per RFC 7230 and strips CRLF from value to prevent header injection.
 func (c *Ctx) AddHeader(key, value string) *Ctx {
+	if !isValidHeaderKey(key) {
+		c.app.config.Logger.Warn("kruda: invalid header key, skipping", "key", key)
+		return c
+	}
+	value = sanitizeHeaderValue(value)
 	switch key {
 	case "Content-Type":
 		c.contentType = value
@@ -444,7 +506,11 @@ func (c *Ctx) AddHeader(key, value string) *Ctx {
 // SetCookie sets a cookie on the response. Supports multiple cookies (C4 fix).
 // Cookie values are sanitized to prevent header injection (H7 fix).
 // Supports SameSite attribute (M14 fix) and MaxAge<=0 for deletion (M15 fix).
+// Phase 5: additionally strips CRLF from cookie value, path, and domain fields.
 func (c *Ctx) SetCookie(cookie *Cookie) *Ctx {
+	cookie.Value = sanitizeHeaderValue(cookie.Value)
+	cookie.Path = sanitizeHeaderValue(cookie.Path)
+	cookie.Domain = sanitizeHeaderValue(cookie.Domain)
 	c.cookies = append(c.cookies, cookie)
 	return c
 }
@@ -625,25 +691,27 @@ func (c *Ctx) writeHeaders() {
 		h.Add("Set-Cookie", formatCookie(cookie))
 	}
 
-	// Security headers — only set if not already present (user-set values take priority)
-	sec := c.app.config.Security
-	if sec.XSSProtection != "" && h.Get("X-XSS-Protection") == "" {
-		h.Set("X-XSS-Protection", sec.XSSProtection)
-	}
-	if sec.ContentTypeNosniff != "" && h.Get("X-Content-Type-Options") == "" {
-		h.Set("X-Content-Type-Options", sec.ContentTypeNosniff)
-	}
-	if sec.XFrameOptions != "" && h.Get("X-Frame-Options") == "" {
-		h.Set("X-Frame-Options", sec.XFrameOptions)
-	}
-	if sec.ReferrerPolicy != "" && h.Get("Referrer-Policy") == "" {
-		h.Set("Referrer-Policy", sec.ReferrerPolicy)
-	}
-	if sec.ContentSecurityPolicy != "" && h.Get("Content-Security-Policy") == "" {
-		h.Set("Content-Security-Policy", sec.ContentSecurityPolicy)
-	}
-	if sec.HSTSMaxAge > 0 && h.Get("Strict-Transport-Security") == "" {
-		h.Set("Strict-Transport-Security", "max-age="+strconv.Itoa(sec.HSTSMaxAge))
+	// Security headers — only set if SecurityHeaders is enabled and not already present
+	if c.app.config.SecurityHeaders {
+		sec := c.app.config.Security
+		if sec.XSSProtection != "" && h.Get("X-XSS-Protection") == "" {
+			h.Set("X-XSS-Protection", sec.XSSProtection)
+		}
+		if sec.ContentTypeNosniff != "" && h.Get("X-Content-Type-Options") == "" {
+			h.Set("X-Content-Type-Options", sec.ContentTypeNosniff)
+		}
+		if sec.XFrameOptions != "" && h.Get("X-Frame-Options") == "" {
+			h.Set("X-Frame-Options", sec.XFrameOptions)
+		}
+		if sec.ReferrerPolicy != "" && h.Get("Referrer-Policy") == "" {
+			h.Set("Referrer-Policy", sec.ReferrerPolicy)
+		}
+		if sec.ContentSecurityPolicy != "" && h.Get("Content-Security-Policy") == "" {
+			h.Set("Content-Security-Policy", sec.ContentSecurityPolicy)
+		}
+		if sec.HSTSMaxAge > 0 && h.Get("Strict-Transport-Security") == "" {
+			h.Set("Strict-Transport-Security", "max-age="+strconv.Itoa(sec.HSTSMaxAge))
+		}
 	}
 }
 
@@ -734,4 +802,14 @@ type writerAdapter struct {
 
 func (a writerAdapter) Write(p []byte) (int, error) {
 	return a.w.Write(p)
+}
+
+// isBodyTooLarge checks if an error indicates the request body exceeded the size limit.
+// Works with transport.ErrBodyTooLarge from both net/http and Netpoll transports.
+func isBodyTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	var btle *transport.BodyTooLargeError
+	return errors.As(err, &btle)
 }

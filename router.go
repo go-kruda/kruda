@@ -1,13 +1,68 @@
 package kruda
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
+
+// errPathTraversal is returned when a request path contains directory traversal sequences.
+var errPathTraversal = errors.New("kruda: path traversal detected")
+
+// cleanPath normalizes a request path and rejects traversal attempts.
+// It decodes percent-encoded sequences, resolves . and .. segments via path.Clean,
+// and rejects any result that still contains "..".
+// This is called before route matching in ServeKruda.
+func cleanPath(raw string) (string, error) {
+	// 1. Decode percent-encoded sequences (e.g. %2e%2e%2f → ../)
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. Check for path traversal: walk segments and track depth.
+	// If depth goes below 0, the path tries to escape above root → reject.
+	if isTraversal(decoded) {
+		return "", errPathTraversal
+	}
+
+	// 3. Normalize with path.Clean (resolves . and safe ..)
+	cleaned := path.Clean(decoded)
+
+	// 4. Ensure leading slash
+	if !strings.HasPrefix(cleaned, "/") {
+		cleaned = "/" + cleaned
+	}
+
+	return cleaned, nil
+}
+
+// isTraversal reports whether the path contains ".." segments that would
+// traverse above the root directory. Safe relative ".." (e.g. /a/b/../c)
+// is allowed; only root-escaping traversal is rejected.
+func isTraversal(p string) bool {
+	depth := 0
+	for _, seg := range strings.Split(p, "/") {
+		switch seg {
+		case "", ".":
+			// skip empty segments and current-dir references
+		case "..":
+			depth--
+			if depth < 0 {
+				return true
+			}
+		default:
+			depth++
+		}
+	}
+	return false
+}
 
 // Router is a radix tree router with a separate tree per HTTP method.
 // It provides O(1) child lookup via the indices string on each node.

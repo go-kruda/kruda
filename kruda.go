@@ -24,6 +24,11 @@ type App struct {
 	transport  transport.Transport
 	ctxPool    sync.Pool
 	routeInfos []routeInfo // collected from typed handler registrations for OpenAPI
+
+	// Phase 4: DI container (nil by default = zero overhead)
+	container  *Container
+	errorTypes []errorTypeMapping // Phase 4: MapErrorType registrations
+	errorFuncs []errorFuncMapping // Phase 4: MapErrorFunc registrations
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -39,6 +44,16 @@ func New(opts ...Option) *App {
 	// Apply functional options
 	for _, opt := range opts {
 		opt(app)
+	}
+
+	// Phase 5: Auto-detect dev mode from KRUDA_ENV if not explicitly set
+	if !app.config.devModeSet && os.Getenv("KRUDA_ENV") == "development" {
+		app.config.DevMode = true
+	}
+
+	// Phase 5: Relax X-Frame-Options in dev mode
+	if app.config.DevMode {
+		app.config.Security.XFrameOptions = "SAMEORIGIN"
 	}
 
 	// Select transport (respects WithTransport, WithTransportName, env, OS)
@@ -83,6 +98,15 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 		c.cleanup()
 		app.ctxPool.Put(c)
 	}()
+
+	// Phase 5: Path traversal prevention — normalize and reject traversal attempts
+	cleaned, err := cleanPath(c.path)
+	if err != nil {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte("Bad Request"))
+		return
+	}
+	c.path = cleaned
 
 	// 1. Execute OnRequest hooks
 	for _, hook := range app.hooks.OnRequest {
@@ -239,6 +263,13 @@ func (app *App) shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// Shutdown DI container if configured (Phase 4)
+	if app.container != nil {
+		if err := app.container.Shutdown(ctx); err != nil {
+			app.config.Logger.Error("container shutdown error", "error", err)
+		}
+	}
+
 	err := app.transport.Shutdown(ctx)
 
 	app.runShutdownHooks()
@@ -250,6 +281,13 @@ func (app *App) shutdown() error {
 // Shutdown initiates graceful shutdown programmatically (useful for tests).
 // M1 fix: now also runs OnShutdown hooks in LIFO order.
 func (app *App) Shutdown(ctx context.Context) error {
+	// Shutdown DI container if configured (Phase 4)
+	if app.container != nil {
+		if err := app.container.Shutdown(ctx); err != nil {
+			app.config.Logger.Error("container shutdown error", "error", err)
+		}
+	}
+
 	err := app.transport.Shutdown(ctx)
 	app.runShutdownHooks()
 	return err
@@ -350,6 +388,13 @@ func (app *App) handleError(c *Ctx, err error) {
 	// F1: don't write if response already sent
 	if c.Responded() {
 		return
+	}
+
+	// Phase 5: Try dev error page first (only in DevMode)
+	if app.config.DevMode {
+		if devErr := renderDevErrorPage(c, err, ke.Code); devErr != nil {
+			return // dev page rendered successfully
+		}
 	}
 
 	// Use custom error handler if configured

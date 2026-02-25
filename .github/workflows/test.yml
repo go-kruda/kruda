@@ -37,7 +37,7 @@ jobs:
 
       - name: Lint (golangci-lint)
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           args: --build-tags kruda_stdjson
           version: v2.1

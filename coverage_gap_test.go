@@ -152,8 +152,9 @@ func TestCtxStream(t *testing.T) {
 func TestCtxLatency(t *testing.T) {
 	app := New()
 	app.Get("/latency", func(c *Ctx) error {
-		if c.Latency() <= 0 {
-			return InternalError("latency should be positive")
+		// Windows timer resolution is ~15ms; latency may be 0 for fast handlers.
+		if c.Latency() < 0 {
+			return InternalError("latency should be non-negative")
 		}
 		return c.Text("ok")
 	})

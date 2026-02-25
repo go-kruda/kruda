@@ -43,7 +43,8 @@ jobs:
           version: v1.64
 
       - name: Run tests
-        run: go test -v -race -coverprofile coverage.out -tags kruda_stdjson ./...
+        shell: bash
+        run: go test -v -race -tags kruda_stdjson -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
         # Upload only once per Go version (Linux) to avoid duplicates

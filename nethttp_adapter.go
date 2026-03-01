@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 
@@ -88,7 +89,12 @@ func (r *fastNetHTTPRequest) QueryParam(key string) string {
 	return r.queryVals.Get(key)
 }
 
-func (r *fastNetHTTPRequest) RemoteAddr() string { return r.r.RemoteAddr }
+func (r *fastNetHTTPRequest) RemoteAddr() string {
+	if host, _, err := net.SplitHostPort(r.r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.r.RemoteAddr
+}
 
 func (r *fastNetHTTPRequest) Cookie(name string) string {
 	c, err := r.r.Cookie(name)

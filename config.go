@@ -196,6 +196,14 @@ func NetHTTP() Option {
 	return func(a *App) { a.config.TransportName = "nethttp" }
 }
 
+// Wing selects the Wing transport for maximum performance.
+// Wing uses io_uring on Linux and kqueue on macOS for async I/O
+// without goroutine-per-connection overhead — 2x+ faster than fasthttp.
+// On unsupported platforms (Windows), falls back to fasthttp automatically.
+func Wing() Option {
+	return func(a *App) { a.config.TransportName = "wing" }
+}
+
 // TurboConfig controls CPU usage for turbo (prefork) mode.
 type TurboConfig struct {
 	// Processes sets the exact number of child processes to fork.
@@ -441,6 +449,13 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	case "nethttp":
 		logger.Debug("transport selected", "name", "nethttp")
 		return transport.NewNetHTTP(netHTTPCfg)
+	case "wing":
+		// TLS → force net/http for HTTP/2.
+		if cfg.TLSCertFile != "" {
+			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
+			return transport.NewNetHTTP(netHTTPCfg)
+		}
+		return newWingTransport(cfg, logger)
 	default: // "fasthttp" or any other value
 		// TLS → force net/http for HTTP/2 auto-negotiation.
 		if cfg.TLSCertFile != "" {

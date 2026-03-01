@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/bytedance/sonic v1.15.0
+	github.com/go-kruda/kruda/transport/wing v0.0.0
 	github.com/valyala/fasthttp v1.69.0
 )
 
@@ -20,3 +21,5 @@ require (
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 )
+
+replace github.com/go-kruda/kruda/transport/wing => ./transport/wing

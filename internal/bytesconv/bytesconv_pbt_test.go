@@ -1,6 +1,5 @@
 package bytesconv
 
-// **Validates: Requirements 13.4**
 // Property: For all byte slices b, UnsafeBytes(UnsafeString(b)) produces a slice
 // with content identical to b (round-trip consistency).
 

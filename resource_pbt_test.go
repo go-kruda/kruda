@@ -9,10 +9,8 @@ import (
 	"testing/quick"
 )
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 13: Resource Status Codes
+// Property: Resource Status Codes
 // For random page/limit, List→200, Get→200, Create→201, Update→200, Delete→204.
-// ---------------------------------------------------------------------------
 
 func TestPropertyResourceStatusCodes(t *testing.T) {
 	f := func(page uint8, limit uint8) bool {
@@ -99,11 +97,9 @@ func TestPropertyResourceStatusCodes(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 14: Resource List Pagination
+// Property: Resource List Pagination
 // For random page (1-100) and limit (1-50), response JSON has matching
 // page/limit fields.
-// ---------------------------------------------------------------------------
 
 func TestPropertyResourceListPagination(t *testing.T) {
 	f := func(pageRaw uint8, limitRaw uint8) bool {
@@ -145,10 +141,8 @@ func TestPropertyResourceListPagination(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 15: Resource Error Passthrough
+// Property: Resource Error Passthrough
 // When service returns error, status is 500 (non-KrudaError).
-// ---------------------------------------------------------------------------
 
 func TestPropertyResourceErrorPassthrough(t *testing.T) {
 	f := func(msg string) bool {
@@ -230,11 +224,9 @@ func TestPropertyResourceErrorPassthrough(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 16: Resource Method Filtering
+// Property: Resource Method Filtering
 // For random subset of methods via WithResourceOnly, only those methods
 // return 200 (or 201/204), others return 404/405.
-// ---------------------------------------------------------------------------
 
 func TestPropertyResourceMethodFiltering(t *testing.T) {
 	// allMethods maps HTTP method to the expected success status code.

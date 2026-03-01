@@ -8,10 +8,6 @@ import (
 
 // TestPropertyDateHeaderRFC1123Format validates that GetDateHeader() returns
 // a byte slice parseable as a valid RFC1123 date.
-//
-// **Validates: Requirements 13.2**
-//
-// Property 13: Date Header RFC1123 Format
 // For any call to GetDateHeader(), the returned byte slice must be parseable
 // as a valid RFC1123 date using http.TimeFormat.
 func TestPropertyDateHeaderRFC1123Format(t *testing.T) {

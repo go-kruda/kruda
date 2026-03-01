@@ -5,9 +5,6 @@ import (
 	"testing/quick"
 )
 
-// Feature: techempower-domination, Property 10: Buffer Pool Tier Selection
-// **Validates: Requirements 11.4**
-//
 // For any non-negative size, GetBuffer returns a buffer from the correct tier;
 // PutBuffer discards buffers > 64KB.
 func TestPropertyBufferPoolTierSelection(t *testing.T) {
@@ -57,9 +54,6 @@ func TestPropertyBufferPoolTierSelection(t *testing.T) {
 	}
 }
 
-// Feature: techempower-domination, Property 10: Buffer Pool Tier Selection (discard)
-// **Validates: Requirements 11.4**
-//
 // PutBuffer discards buffers with capacity > 64KB.
 func TestPropertyBufferPoolOversizeDiscard(t *testing.T) {
 	// Create an oversized buffer (cap > 64KB) and put it back.
@@ -79,9 +73,6 @@ func TestPropertyBufferPoolOversizeDiscard(t *testing.T) {
 	PutBuffer(got)
 }
 
-// Feature: techempower-domination, Property 10: Buffer Pool Tier Selection (nil safety)
-// **Validates: Requirements 11.4**
-//
 // PutBuffer with nil must not panic.
 func TestPropertyBufferPoolNilSafety(t *testing.T) {
 	PutBuffer(nil) // must not panic

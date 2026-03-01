@@ -114,10 +114,6 @@ func parseJSONBody(t *testing.T, body []byte) map[string]any {
 	return m
 }
 
-// =====================================================================
-// RequestID Tests
-// =====================================================================
-
 func TestRequestID_GeneratesUUID(t *testing.T) {
 	var gotLocal any
 	handler := func(c *kruda.Ctx) error {
@@ -202,10 +198,6 @@ func TestRequestID_CustomGenerator(t *testing.T) {
 	}
 }
 
-// =====================================================================
-// Logger Tests
-// =====================================================================
-
 func TestLogger_CallsNext(t *testing.T) {
 	called := false
 	handler := func(c *kruda.Ctx) error {
@@ -243,10 +235,6 @@ func TestLogger_SkipPaths(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.statusCode)
 	}
 }
-
-// =====================================================================
-// Recovery Tests
-// =====================================================================
 
 func TestRecovery_NoPanic(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
@@ -314,10 +302,6 @@ func TestRecovery_CustomPanicHandler(t *testing.T) {
 		t.Fatalf("expected custom=true, got %v", body)
 	}
 }
-
-// =====================================================================
-// CORS Tests
-// =====================================================================
 
 func TestCORS_PreflightRequest(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
@@ -451,10 +435,6 @@ func TestCORS_SpecificOrigin(t *testing.T) {
 	}
 }
 
-// =====================================================================
-// Timeout Tests
-// =====================================================================
-
 func TestTimeout_HandlerCompletesInTime(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
 		return c.JSON(kruda.Map{"ok": true})
@@ -497,9 +477,6 @@ func TestTimeout_HandlerExceedsTimeout(t *testing.T) {
 		t.Fatalf("expected timeout message, got %q", msg)
 	}
 }
-
-// =====================================================================
-// PathTraversal Tests
 
 func TestPathTraversal_BlocksTraversal(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {

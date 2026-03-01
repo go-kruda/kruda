@@ -9,9 +9,7 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------------------
 // stripPort tests
-// ---------------------------------------------------------------------------
 
 func TestStripPort_IPv4WithPort(t *testing.T) {
 	if got := stripPort("192.168.1.1:8080"); got != "192.168.1.1" {
@@ -63,9 +61,7 @@ func TestStripPort_IPv6UnclosedBracket(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // trimSpace tests
-// ---------------------------------------------------------------------------
 
 func TestTrimSpace(t *testing.T) {
 	tests := []struct{ in, want string }{
@@ -82,9 +78,7 @@ func TestTrimSpace(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // RemoteAddr tests
-// ---------------------------------------------------------------------------
 
 func TestRemoteAddr_NoTrustProxy(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
@@ -151,9 +145,7 @@ func TestRemoteAddr_IPv6(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Body tests
-// ---------------------------------------------------------------------------
 
 func TestBody_ReadOnce(t *testing.T) {
 	body := `{"key":"value"}`
@@ -220,9 +212,7 @@ func TestBody_ExactlyMaxBody(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // QueryParam caching tests
-// ---------------------------------------------------------------------------
 
 func TestQueryParam_Cached(t *testing.T) {
 	r := httptest.NewRequest("GET", "/path?a=1&b=2&c=3", nil)
@@ -316,9 +306,7 @@ func TestQueryParam_SingleParseMultipleKeys(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // ResponseWriter tests
-// ---------------------------------------------------------------------------
 
 func TestResponseWriter_WriteHeader_DoubleWrite(t *testing.T) {
 	rec := httptest.NewRecorder()
@@ -382,9 +370,7 @@ func TestResponseWriter_Unwrap(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Cookie test
-// ---------------------------------------------------------------------------
 
 func TestCookie(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
@@ -399,9 +385,7 @@ func TestCookie(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Path tests
-// ---------------------------------------------------------------------------
 
 func TestPath_Normal(t *testing.T) {
 	r := httptest.NewRequest("GET", "/users/123", nil)
@@ -420,9 +404,7 @@ func TestPath_Empty(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // RawRequest test
-// ---------------------------------------------------------------------------
 
 func TestRawRequest(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
@@ -432,9 +414,7 @@ func TestRawRequest(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Integration: netHTTPAdapter.ServeHTTP
-// ---------------------------------------------------------------------------
 
 func TestNetHTTPAdapter_ServeHTTP(t *testing.T) {
 	var capturedMethod, capturedPath string
@@ -475,9 +455,7 @@ func TestNetHTTPAdapter_ServeHTTP(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Header method test
-// ---------------------------------------------------------------------------
 
 func TestHeader(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
@@ -492,9 +470,7 @@ func TestHeader(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // New provider methods tests
-// ---------------------------------------------------------------------------
 
 func TestMultipartForm(t *testing.T) {
 	r := httptest.NewRequest("POST", "/", nil)
@@ -553,7 +529,7 @@ func TestDirectHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	w := &netHTTPResponseWriter{w: rec, statusCode: 200}
 	h := w.Header()
-	
+
 	// Cast to access DirectHeader method
 	if dhm, ok := h.(*netHTTPHeaderMap); ok {
 		direct := dhm.DirectHeader()
@@ -629,7 +605,7 @@ func TestNetHTTPTransport_Config(t *testing.T) {
 		TLSKeyFile:     "/path/to/key.pem",
 	}
 	transport := NewNetHTTP(cfg)
-	
+
 	if transport.config.ReadTimeout != 5*time.Second {
 		t.Errorf("ReadTimeout = %v, want 5s", transport.config.ReadTimeout)
 	}
@@ -659,7 +635,7 @@ func TestNetHTTPTransport_Config(t *testing.T) {
 func TestNetHTTPTransport_ZeroConfig(t *testing.T) {
 	cfg := NetHTTPConfig{} // All zero values
 	transport := NewNetHTTP(cfg)
-	
+
 	if transport.config.ReadTimeout != 0 {
 		t.Errorf("ReadTimeout = %v, want 0", transport.config.ReadTimeout)
 	}
@@ -715,13 +691,13 @@ func TestNetHTTPAdapter_MaxBodyZero(t *testing.T) {
 		w.WriteHeader(200)
 		w.Write(body)
 	})
-	
+
 	adapter := &netHTTPAdapter{handler: handler, maxBody: 0} // No limit
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/", strings.NewReader("test body"))
-	
+
 	adapter.ServeHTTP(rec, r)
-	
+
 	if rec.Code != 200 {
 		t.Errorf("expected 200, got %d", rec.Code)
 	}
@@ -736,15 +712,15 @@ func TestNetHTTPAdapter_TrustProxyFalse(t *testing.T) {
 		capturedAddr = r.RemoteAddr()
 		w.WriteHeader(200)
 	})
-	
+
 	adapter := &netHTTPAdapter{handler: handler, trustProxy: false}
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Forwarded-For", "1.2.3.4")
 	r.RemoteAddr = "10.0.0.1:12345"
-	
+
 	adapter.ServeHTTP(rec, r)
-	
+
 	if capturedAddr != "10.0.0.1" {
 		t.Errorf("expected 10.0.0.1, got %s (should ignore proxy headers)", capturedAddr)
 	}
@@ -756,15 +732,15 @@ func TestNetHTTPAdapter_TrustProxyTrue(t *testing.T) {
 		capturedAddr = r.RemoteAddr()
 		w.WriteHeader(200)
 	})
-	
+
 	adapter := &netHTTPAdapter{handler: handler, trustProxy: true}
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Forwarded-For", "1.2.3.4")
 	r.RemoteAddr = "10.0.0.1:12345"
-	
+
 	adapter.ServeHTTP(rec, r)
-	
+
 	if capturedAddr != "1.2.3.4" {
 		t.Errorf("expected 1.2.3.4, got %s (should use proxy header)", capturedAddr)
 	}
@@ -778,7 +754,7 @@ func TestNetHTTPTransport_ServerConfiguration(t *testing.T) {
 		MaxHeaderBytes: 2048,
 	}
 	transport := NewNetHTTP(cfg)
-	
+
 	// Test that ListenAndServe would configure the server properly
 	// We can't actually start the server in tests, but we can verify
 	// the configuration is stored correctly
@@ -799,11 +775,11 @@ func TestNetHTTPTransport_ServerConfiguration(t *testing.T) {
 func TestResponseWriter_WriteAfterWriteHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	w := &netHTTPResponseWriter{w: rec, statusCode: 200}
-	
+
 	w.WriteHeader(201)
 	w.Write([]byte("first"))
 	w.Write([]byte("second"))
-	
+
 	if rec.Code != 201 {
 		t.Errorf("status = %d, want 201", rec.Code)
 	}

@@ -5,9 +5,6 @@ import (
 	"testing/quick"
 )
 
-// Feature: techempower-domination, Property 9: Cache Lookup Correctness
-// **Validates: Requirements 9.8**
-//
 // For any ID in [1,10000], after warmup, Get(id) returns World with matching
 // ID and RandomNumber in [1,10000].
 func TestPropertyCacheLookupCorrectness(t *testing.T) {
@@ -44,9 +41,6 @@ func TestPropertyCacheLookupCorrectness(t *testing.T) {
 	}
 }
 
-// Feature: techempower-domination, Property 9: Cache Lookup Correctness (bounds)
-// **Validates: Requirements 9.8**
-//
 // Out-of-range IDs return zero-value World.
 func TestPropertyCacheBoundsCheck(t *testing.T) {
 	var cache WorldCache

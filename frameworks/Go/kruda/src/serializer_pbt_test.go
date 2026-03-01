@@ -8,8 +8,6 @@ import (
 	"testing/quick"
 )
 
-// Feature: techempower-domination, Property 1: World JSON Serialization Round-Trip
-// **Validates: Requirements 11.1, 11.2, 11.7, 6.6**
 func TestPropertyWorldJSONRoundTrip(t *testing.T) {
 	f := func(id, rn uint16) bool {
 		// Constrain to valid TFB range [1, 10000]
@@ -30,8 +28,6 @@ func TestPropertyWorldJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// Feature: techempower-domination, Property 1 (slice variant): World Slice JSON Round-Trip
-// **Validates: Requirements 11.1, 11.2, 11.7, 6.6**
 func TestPropertyWorldSliceJSONRoundTrip(t *testing.T) {
 	f := func(ids, rns []uint16) bool {
 		// Clamp slice length to [0, 500]
@@ -70,8 +66,6 @@ func TestPropertyWorldSliceJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// Feature: techempower-domination, Property 2: XSS Escape Completeness
-// **Validates: Requirements 8.6, 12.3, 12.4, 8.8**
 func TestPropertyXSSEscapeCompleteness(t *testing.T) {
 	f := func(s string) bool {
 		escaped := HTMLEscape(nil, s)
@@ -117,8 +111,6 @@ func TestPropertyXSSEscapeCompleteness(t *testing.T) {
 	}
 }
 
-// Feature: techempower-domination, Property 11: HTML Structure Completeness
-// **Validates: Requirements 12.2**
 func TestPropertyHTMLStructureCompleteness(t *testing.T) {
 	f := func(ids []int32, msgs []string) bool {
 		// Build a non-empty Fortune slice of length min(len(ids), len(msgs)), capped at 100

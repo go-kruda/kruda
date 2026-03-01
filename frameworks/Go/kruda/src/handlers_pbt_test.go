@@ -8,7 +8,6 @@ import (
 )
 
 // Property 3: Query Parameter Clamping
-// **Validates: Requirements 6.1, 6.2, 6.3, 7.1, 9.5, 9.6, 9.7**
 func TestPropertyQueryParameterClamping(t *testing.T) {
 	f := func(raw string) bool {
 		n := ParseQueries(raw)
@@ -25,7 +24,6 @@ func TestPropertyQueryParameterClamping(t *testing.T) {
 }
 
 // Property 4: Random Number Range
-// **Validates: Requirements 5.1, 10.2**
 func TestPropertyRandomNumberRange(t *testing.T) {
 	for range 100000 {
 		if id := randomWorldID(); id < 1 || id > 10000 {
@@ -35,7 +33,6 @@ func TestPropertyRandomNumberRange(t *testing.T) {
 }
 
 // Property 7: Sorted Unique IDs
-// **Validates: Requirements 7.2, 7.4**
 func TestPropertySortedUniqueIDs(t *testing.T) {
 	f := func(n uint16) bool {
 		count := int(n%500) + 1
@@ -61,7 +58,6 @@ func TestPropertySortedUniqueIDs(t *testing.T) {
 }
 
 // Property 5: DB Pool Configuration Formulas
-// **Validates: Requirements 4.1, 4.2**
 func TestPropertyDBPoolConfigFormulas(t *testing.T) {
 	f := func(g uint16) bool {
 		// Constrain GOMAXPROCS to [1, 1024]
@@ -94,7 +90,6 @@ func TestPropertyDBPoolConfigFormulas(t *testing.T) {
 }
 
 // Property 6: Fortune Sort Ordering
-// **Validates: Requirements 8.3**
 func TestPropertyFortuneSortOrdering(t *testing.T) {
 	f := func(ids []int32, msgs []string) bool {
 		// Build a Fortune slice from generated data

@@ -1,0 +1,124 @@
+# Release Workflow — Kruda Framework
+# Triggers on version tags (v*), runs full test suite, creates GitHub release
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        
+      - name: Run security scan
+        run: govulncheck ./...
+        
+  tfb-verify:
+    name: TFB Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          
+      - name: Build TFB Docker image
+        run: |
+          cd frameworks/Go/kruda
+          docker build -f kruda.dockerfile -t kruda-tfb .
+          
+      - name: Test TFB endpoints
+        run: |
+          # Start container
+          CONTAINER_ID=$(docker run -d -p 8080:8080 kruda-tfb)
+          sleep 10
+          
+          # Test endpoints
+          endpoints=("/json" "/plaintext" "/db" "/queries?queries=20" "/fortunes" "/cached-queries?count=20" "/updates?queries=20")
+          for endpoint in "${endpoints[@]}"; do
+            echo "Testing $endpoint..."
+            curl -f "http://localhost:8080$endpoint" || exit 1
+          done
+          
+          # Cleanup
+          docker stop "$CONTAINER_ID"
+          docker rm "$CONTAINER_ID"
+          
+  release:
+    name: Create Release
+    needs: [test, security, tfb-verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$(echo $VERSION | grep -E '(alpha|beta|rc)' && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          # Generate changelog
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG" > CHANGELOG_CURRENT.md
+            git log --oneline --no-merges ${PREV_TAG}..HEAD >> CHANGELOG_CURRENT.md
+          else
+            echo "## Initial Release" > CHANGELOG_CURRENT.md
+            git log --oneline --no-merges >> CHANGELOG_CURRENT.md
+          fi
+          
+          # Add benchmark info if available
+          echo "" >> CHANGELOG_CURRENT.md
+          echo "## Performance" >> CHANGELOG_CURRENT.md
+          echo "Run benchmarks: \`go test -bench=. -benchmem -count=5 -tags kruda_stdjson ./bench/...\`" >> CHANGELOG_CURRENT.md
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: CHANGELOG_CURRENT.md
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
+          files: |
+            LICENSE
+            README.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

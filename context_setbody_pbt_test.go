@@ -7,13 +7,10 @@ import (
 	"testing/quick"
 )
 
-// Feature: techempower-domination
-// Property 12: SetBody Lazy-Send Round-Trip
+// Property: SetBody Lazy-Send Round-Trip
 //
 // For any byte slice, SetBody(data) + send() writes exact bytes to the
 // response writer with correct Content-Length header.
-//
-// **Validates: Requirements 18.2, 13.4**
 
 func TestPropertySetBodyLazySendRoundTrip(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 200}

@@ -8,7 +8,7 @@ import (
 	"testing/quick"
 )
 
-// Feature: phase2b-extensions, Property 8: OpenAPI Type Mapping and Property Names
+// Property: OpenAPI Type Mapping and Property Names
 //
 // For any Go struct type with exported fields having json tags, generateSchema
 // should produce a JSON Schema where each json-tagged field appears as a property
@@ -66,7 +66,7 @@ func TestPropertyOpenAPITypeMapping(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 9: OpenAPI Validation Tag to Schema Constraint Mapping
+// Property: OpenAPI Validation Tag to Schema Constraint Mapping
 
 func TestPropertyOpenAPIValidationConstraints(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}
@@ -145,7 +145,7 @@ func TestPropertyOpenAPIValidationConstraints(t *testing.T) {
 	})
 }
 
-// Feature: phase2b-extensions, Property 10: OpenAPI Nested Struct $ref Generation
+// Property: OpenAPI Nested Struct $ref Generation
 
 func TestPropertyOpenAPINestedRef(t *testing.T) {
 	type Inner struct {
@@ -179,7 +179,7 @@ func TestPropertyOpenAPINestedRef(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 11: OpenAPI Pointer Nullable
+// Property: OpenAPI Pointer Nullable
 
 func TestPropertyOpenAPIPointerNullable(t *testing.T) {
 	type WithPtr struct {
@@ -214,7 +214,7 @@ func TestPropertyOpenAPIPointerNullable(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 12: OpenAPI Path Conversion
+// Property: OpenAPI Path Conversion
 //
 // For any Kruda path string containing :param segments, convertPath should
 // replace each :param with {param}. Applying convertPath twice should be idempotent.
@@ -264,7 +264,7 @@ func TestPropertyOpenAPIPathConversion(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 13: OpenAPI Spec Contains All Registered Routes
+// Property: OpenAPI Spec Contains All Registered Routes
 
 func TestPropertyOpenAPIAllRoutes(t *testing.T) {
 	type emptyIn struct{}
@@ -339,7 +339,7 @@ func TestPropertyOpenAPIAllRoutes(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 14: OpenAPI Response Schema Generation
+// Property: OpenAPI Response Schema Generation
 
 func TestPropertyOpenAPIResponseSchema(t *testing.T) {
 	type respOut struct {

@@ -1,10 +1,8 @@
 package kruda
 
-// Validates: Requirements 4.2
-//
-// Property 1: For any non-empty string s, validateEmail(s, "") agrees with net/mail.ParseAddress(s).
-// Property 2: For any non-empty string s, validateURL(s, "") agrees with net/url.Parse (scheme + host check).
-// Property 3: For any int n and int p, validateMin(n, strconv.Itoa(p)) iff n >= p.
+// Property: For any non-empty string s, validateEmail(s, "") agrees with net/mail.ParseAddress(s).
+// For any non-empty string s, validateURL(s, "") agrees with net/url.Parse (scheme + host check).
+// For any int n and int p, validateMin(n, strconv.Itoa(p)) iff n >= p.
 
 import (
 	"net/mail"
@@ -71,12 +69,9 @@ func TestPropertyValidateMinIntComparison(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase2b-extensions, Property 6: File Upload max_size Validation
+// Property: File Upload max_size Validation
 // For any FileUpload with a given Size and any valid size limit,
 // validateMaxSize passes iff FileUpload.Size <= parsedLimit
-// Validates: R5.1, R5.7
-// ---------------------------------------------------------------------------
 
 func TestPropertyValidateMaxSizeAgreesWithParseSize(t *testing.T) {
 	// We test with KB, MB, GB suffixes and a range of numeric values.
@@ -124,12 +119,9 @@ func TestPropertyValidateMaxSizeAgreesWithParseSize(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase2b-extensions, Property 7: File Upload mime Validation
+// Property: File Upload mime Validation
 // For any FileUpload with a given ContentType and any MIME pattern,
 // validateMime passes iff ContentType matches the pattern
-// Validates: R5.2, R5.3
-// ---------------------------------------------------------------------------
 
 func TestPropertyValidateMimeMatchesPattern(t *testing.T) {
 	// Generate random MIME types and patterns, verify validateMime agrees

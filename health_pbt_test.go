@@ -7,11 +7,9 @@ import (
 	"testing/quick"
 )
 
-// Feature: phase4-ecosystem, Property 11: Health Check Discovery and Status
+// Property: Health Check Discovery and Status
 
-// ---------------------------------------------------------------------------
 // PBT healthy checker types — each is a distinct type to avoid Give collisions.
-// ---------------------------------------------------------------------------
 
 type pbtHealthy1 struct{}
 
@@ -33,9 +31,7 @@ type pbtHealthy5 struct{}
 
 func (h *pbtHealthy5) Check(_ context.Context) error { return nil }
 
-// ---------------------------------------------------------------------------
 // PBT unhealthy checker types — each returns a fixed error message.
-// ---------------------------------------------------------------------------
 
 type pbtUnhealthy1 struct{ msg string }
 
@@ -49,11 +45,9 @@ type pbtUnhealthy3 struct{ msg string }
 
 func (h *pbtUnhealthy3) Check(_ context.Context) error { return errors.New(h.msg) }
 
-// ---------------------------------------------------------------------------
 // TestPropertyHealthCheckDiscovery verifies that for a random number of
 // healthy (0-5) and unhealthy (0-3) services registered in a container,
 // the HealthHandler returns the correct HTTP status and check entries.
-// ---------------------------------------------------------------------------
 
 func TestPropertyHealthCheckDiscovery(t *testing.T) {
 	// Pre-built pools of healthy and unhealthy instances.

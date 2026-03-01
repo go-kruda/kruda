@@ -29,7 +29,7 @@ trap cleanup EXIT
 wait_for_port() {
     local port=$1 name=$2
     for i in $(seq 1 30); do
-        if curl -sf "http://localhost:$port/json" >/dev/null 2>&1; then
+        if curl -sf "http://localhost:$port/plaintext" >/dev/null 2>&1; then
             ok "$name ready on :$port"; return 0
         fi; sleep 0.5
     done
@@ -61,6 +61,17 @@ run_wrk() {
 }
 extract_rps() { grep "Requests/sec:" "$1" | awk '{print $2}'; }
 median3() { printf '%s\n' "$1" "$2" "$3" | sort -g | sed -n '2p'; }
+# warmup_server warms up all 7 TFB endpoints on the given port.
+# Light pass for all endpoints, heavy pass for DB-intensive ones.
+warmup_server() {
+    local port=$1
+    for path in /json /plaintext /db "/queries?queries=20" /fortunes "/cached-queries?count=20" "/updates?queries=20"; do
+        wrk -t2 -c64 -d3s "http://localhost:$port$path" >/dev/null 2>&1 || true
+    done
+    for path in /db "/queries?queries=20" "/updates?queries=20"; do
+        wrk -t4 -c128 -d5s "http://localhost:$port$path" >/dev/null 2>&1 || true
+    done
+}
 
 # Run rounds of wrk for a given server+test, store median in MEDIAN_RESULT
 # Args: $1=server_name $2=test_name $3=test_path $4=threads(opt) $5=conns(opt)
@@ -187,12 +198,7 @@ run_mode() {
     wait_for_port "$PORT" "Kruda" || exit 1
 
     log "Warming up Kruda..."
-    for path in /json /plaintext /db "/queries?queries=20" /fortunes "/cached-queries?count=20" "/updates?queries=20"; do
-        wrk -t2 -c64 -d3s "http://localhost:$PORT$path" >/dev/null 2>&1 || true
-    done
-    for path in /db "/queries?queries=20" "/updates?queries=20"; do
-        wrk -t4 -c128 -d5s "http://localhost:$PORT$path" >/dev/null 2>&1 || true
-    done
+    warmup_server "$PORT"
     ok "Kruda warmed up"; sleep 2
 
     for i in 0 1 2 3 4 5 6; do
@@ -219,12 +225,7 @@ run_mode() {
     wait_for_port "$PORT" "Fiber" || exit 1
 
     log "Warming up Fiber..."
-    for path in /json /plaintext /db "/queries?queries=20" /fortunes "/cached-queries?count=20" "/updates?queries=20"; do
-        wrk -t2 -c64 -d3s "http://localhost:$PORT$path" >/dev/null 2>&1 || true
-    done
-    for path in /db "/queries?queries=20" "/updates?queries=20"; do
-        wrk -t4 -c128 -d5s "http://localhost:$PORT$path" >/dev/null 2>&1 || true
-    done
+    warmup_server "$PORT"
     ok "Fiber warmed up"; sleep 2
 
     for i in 0 1 2 3 4 5 6; do

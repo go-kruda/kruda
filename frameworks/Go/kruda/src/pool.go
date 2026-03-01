@@ -108,3 +108,17 @@ func PutFortuneSlice(s *[]Fortune) {
 	*s = (*s)[:0]
 	fortuneSlicePool.Put(s)
 }
+
+// bitmapPool provides reusable [10001]bool bitmaps for unique ID generation.
+// A [10001]bool (10KB) is cheaper than a map for 10,000 possible IDs.
+var bitmapPool = sync.Pool{New: func() any { return new([10001]bool) }}
+
+// GetBitmap returns a zeroed [10001]bool from the pool.
+func GetBitmap() *[10001]bool {
+	return bitmapPool.Get().(*[10001]bool)
+}
+
+// PutBitmap returns a bitmap to the pool. Caller must have already cleared used entries.
+func PutBitmap(b *[10001]bool) {
+	bitmapPool.Put(b)
+}

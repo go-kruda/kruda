@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/go-kruda/kruda"
 	"github.com/jackc/pgx/v5"
@@ -31,12 +30,9 @@ func randomWorldID() int32 {
 }
 
 // generateUniqueIDs returns n unique random IDs in [1, 10000], sorted ascending.
-// Uses a pooled bitmap instead of map to avoid allocation per request.
-// With 10,000 possible IDs, a [10001]bool (10KB) is cheaper than a map.
-var idBitmapPool = sync.Pool{New: func() any { return new([10001]bool) }}
-
-func generateUniqueIDs(n int) []int32 {
-	bp := idBitmapPool.Get().(*[10001]bool)
+// Returns a pooled *[]int32 — caller must call PutInt32Slice when done.
+func generateUniqueIDs(n int) *[]int32 {
+	bp := GetBitmap()
 	ids := GetInt32Slice()
 	*ids = (*ids)[:0]
 	for len(*ids) < n {
@@ -46,18 +42,13 @@ func generateUniqueIDs(n int) []int32 {
 			*ids = append(*ids, id)
 		}
 	}
-	// Clear only used entries
+	// Clear only used entries before returning bitmap to pool.
 	for _, id := range *ids {
 		bp[id] = false
 	}
-	idBitmapPool.Put(bp)
+	PutBitmap(bp)
 	slices.Sort(*ids)
-	// Return the underlying slice; caller owns it until next generateUniqueIDs call.
-	// This avoids copying — ids slice is reused directly as UNNEST $1 parameter.
-	result := *ids
-	// Don't put back to pool here — caller (updatesHandler) doesn't pool this.
-	// For queriesHandler path (no updates), ids is short-lived and GC'd.
-	return result
+	return ids
 }
 
 // newRandomNumber returns a new random int32 in [1, 10000] that differs from current.
@@ -71,18 +62,10 @@ func newRandomNumber(current int32) int32 {
 }
 
 // setDateHeader sets the Date response header from the cached value.
-// Uses direct fasthttp header access for zero-overhead on the hot path.
+// SetHeaderBytes already takes the zero-alloc fasthttp path via trySetHeaderBytesFastHTTP.
 func setDateHeader(c *kruda.Ctx) {
-	if h := c.RawResponseHeader(); h != nil {
-		h.SetBytesV("Date", GetDateHeader())
-		return
-	}
 	c.SetHeaderBytes("Date", GetDateHeader())
 }
-
-// ---------------------------------------------------------------------------
-// TFB Handlers — all use kruda.Ctx API exclusively
-// ---------------------------------------------------------------------------
 
 // jsonHandler handles GET /json — 0 allocations per request.
 func jsonHandler(c *kruda.Ctx) error {
@@ -118,12 +101,12 @@ func queriesHandler(c *kruda.Ctx) error {
 	setDateHeader(c)
 	n := ParseQueries(c.Query("queries"))
 
-	batch := &pgx.Batch{}
+	var batch pgx.Batch
 	for i := 0; i < n; i++ {
 		batch.Queue("selectWorld", randomWorldID())
 	}
 
-	br := db.SendBatch(context.Background(), batch)
+	br := db.SendBatch(context.Background(), &batch)
 
 	worlds := GetWorldSlice()
 	*worlds = (*worlds)[:n]
@@ -155,11 +138,13 @@ func updatesHandler(c *kruda.Ctx) error {
 	ctx := context.Background()
 
 	// Generate N unique sorted random IDs (deadlock prevention).
+	// Returns pooled *[]int32 — must call PutInt32Slice when done.
 	ids := generateUniqueIDs(n)
 
 	// Single-query read via ANY($1) — 1 Bind+Execute instead of N via pgx.Batch.
-	rows, err := db.Query(ctx, "selectWorldBatch", ids)
+	rows, err := db.Query(ctx, "selectWorldBatch", *ids)
 	if err != nil {
+		PutInt32Slice(ids)
 		c.Status(500)
 		return err
 	}
@@ -170,6 +155,7 @@ func updatesHandler(c *kruda.Ctx) error {
 	for rows.Next() {
 		if err := rows.Scan(&(*worlds)[i].ID, &(*worlds)[i].RandomNumber); err != nil {
 			rows.Close()
+			PutInt32Slice(ids)
 			PutWorldSlice(worlds)
 			c.Status(500)
 			return err
@@ -187,12 +173,14 @@ func updatesHandler(c *kruda.Ctx) error {
 	}
 
 	// Prepared "updateWorlds" — skips Parse+Describe on every request
-	if _, err := db.Exec(ctx, "updateWorlds", ids, *nums); err != nil {
+	if _, err := db.Exec(ctx, "updateWorlds", *ids, *nums); err != nil {
+		PutInt32Slice(ids)
 		PutInt32Slice(nums)
 		PutWorldSlice(worlds)
 		c.Status(500)
 		return err
 	}
+	PutInt32Slice(ids)
 	PutInt32Slice(nums)
 
 	buf := GetBuffer(n * 30)
@@ -212,18 +200,19 @@ func fortunesHandler(c *kruda.Ctx) error {
 		c.Status(500)
 		return err
 	}
-	defer rows.Close()
 
 	fp := GetFortuneSlice()
+	var f Fortune
 	for rows.Next() {
-		var f Fortune
 		if err := rows.Scan(&f.ID, &f.Message); err != nil {
+			rows.Close()
 			PutFortuneSlice(fp)
 			c.Status(500)
 			return err
 		}
 		*fp = append(*fp, f)
 	}
+	rows.Close()
 
 	*fp = append(*fp, Fortune{ID: 0, Message: "Additional fortune added at request time."})
 

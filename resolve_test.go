@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Task 7: App Integration — WithContainer, Resolve, InjectMiddleware, Shutdown
-// Requirements: R6 (App Integration)
-// ---------------------------------------------------------------------------
-
 // testDIService is a simple service for DI integration tests.
 type testDIService struct {
 	Name string

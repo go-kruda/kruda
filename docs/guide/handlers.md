@@ -6,7 +6,7 @@ A handler receives a `*Ctx` and returns an error:
 
 ```go
 app.Get("/hello", func(c *kruda.Ctx) error {
-    return c.String(200, "Hello, World!")
+    return c.Text("Hello, World!")
 })
 ```
 
@@ -21,26 +21,56 @@ type HandlerFunc func(c *Ctx) error
 Typed handlers use Go generics to auto-parse request data into a struct:
 
 ```go
-type CreateUserRequest struct {
+type CreateUserInput struct {
     Name  string `json:"name"  validate:"required"`
     Email string `json:"email" validate:"required,email"`
     Age   int    `json:"age"   validate:"min=0,max=150"`
 }
 
-app.Post("/users", kruda.TypedHandler[CreateUserRequest](func(c *kruda.C[CreateUserRequest]) error {
-    input := c.Input // auto-parsed and validated
-    // input.Name, input.Email, input.Age are ready to use
-    return c.JSON(201, map[string]string{"name": input.Name})
-}))
+type User struct {
+    ID    string `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+kruda.Post[CreateUserInput, User](app, "/users", func(c *kruda.C[CreateUserInput]) (*User, error) {
+    return &User{ID: "1", Name: c.In.Name, Email: c.In.Email}, nil
+})
 ```
 
-The `C[T]` type extends `Ctx` with a typed `Input` field:
+The `C[T]` type extends `Ctx` with a typed `In` field:
 
 ```go
 type C[T any] struct {
     *Ctx
-    Input T
+    In T // parsed input from request
 }
+```
+
+## Typed Handler Registration
+
+Package-level generic functions register typed handlers:
+
+```go
+kruda.Get[In, Out](app, path, handler, opts...)
+kruda.Post[In, Out](app, path, handler, opts...)
+kruda.Put[In, Out](app, path, handler, opts...)
+kruda.Delete[In, Out](app, path, handler, opts...)
+kruda.Patch[In, Out](app, path, handler, opts...)
+```
+
+Short variants (no error return, for prototyping):
+
+```go
+kruda.GetX[In, Out](app, path, handler, opts...)
+kruda.PostX[In, Out](app, path, handler, opts...)
+```
+
+Group-level typed handlers:
+
+```go
+kruda.GroupGet[In, Out](g, path, handler, opts...)
+kruda.GroupPost[In, Out](g, path, handler, opts...)
 ```
 
 ## Struct Tags
@@ -48,12 +78,12 @@ type C[T any] struct {
 Control how request data is bound to your struct:
 
 ```go
-type GetUserRequest struct {
+type GetUserInput struct {
     ID     string `param:"id"`              // from route parameter :id
     Fields string `query:"fields"`          // from query string ?fields=name,email
 }
 
-type UpdateUserRequest struct {
+type UpdateUserInput struct {
     ID   string `param:"id"`               // from route parameter
     Name string `json:"name"`              // from JSON body
     Age  int    `json:"age"`               // from JSON body
@@ -98,20 +128,37 @@ When validation fails, Kruda returns a structured error response:
 Handlers use `Ctx` methods to send responses:
 
 ```go
-// JSON response
-c.JSON(200, user)
+// JSON response (status set via Status())
+c.Status(200).JSON(user)
+c.JSON(user) // default status 200
 
-// String response
-c.String(200, "OK")
+// Text response
+c.Status(200).Text("OK")
+c.Text("OK")
 
-// Status only
-c.Status(204)
+// HTML response
+c.HTML("<h1>Hello</h1>")
+
+// No content (204)
+c.NoContent()
 
 // With headers (method chaining)
-c.Status(200).SetHeader("X-Custom", "value").JSON(200, data)
+c.Status(200).SetHeader("X-Custom", "value").JSON(data)
 
-// Redirect
-c.Redirect(302, "/new-location")
+// Redirect (default 302)
+c.Redirect("/new-location")
+c.Redirect("/new-location", 301)
 ```
 
 See [Context API](/api/context) for all response methods.
+
+## Route Options
+
+Add metadata for OpenAPI generation:
+
+```go
+kruda.Post[CreateUserInput, User](app, "/users", handler,
+    kruda.WithDescription("Create a new user"),
+    kruda.WithTags("users"),
+)
+```

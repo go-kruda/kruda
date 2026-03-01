@@ -38,9 +38,9 @@ svc := kruda.Use[*MyService](c)
 
 ## Transport Selection Issues
 
-### Netpoll not available on macOS/Windows
+### fasthttp not available on Windows
 
-Netpoll uses Linux epoll and is only available on Linux. On other platforms, Kruda automatically falls back to net/http. This is expected behavior.
+fasthttp uses optimized networking and is available on all platforms. Kruda automatically selects the best transport based on your configuration.
 
 To verify which transport is active, check the startup log output.
 
@@ -98,9 +98,9 @@ go build -tags kruda_stdjson ./...
 
 ## Windows Compatibility
 
-### Netpoll tests skipped
+### Transport tests skipped
 
-Netpoll tests are excluded on Windows via build tags. This is expected — Netpoll requires Linux epoll.
+Transport tests may be excluded on certain platforms via build tags. This is expected behavior for platform-specific optimizations.
 
 ### Path separator issues
 

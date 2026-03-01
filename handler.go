@@ -67,17 +67,14 @@ func buildTypedHandler[In any, Out any](
 		hasValidate: len(validators) > 0,
 	})
 
-	// Return closure — this runs at request time
 	return func(c *Ctx) error {
-		// 1. Parse input
 		val, err := parser.parse(c)
 		if err != nil {
 			return err
 		}
 
-		// 2. OnParse hooks (after parse, before validate)
 		if len(app.hooks.OnParse) > 0 {
-			ptr := val.Addr().Interface() // pass pointer so hooks can modify
+			ptr := val.Addr().Interface()
 			for _, hook := range app.hooks.OnParse {
 				if err := hook(c, ptr); err != nil {
 					return err
@@ -85,29 +82,24 @@ func buildTypedHandler[In any, Out any](
 			}
 		}
 
-		// 3. Validate (if configured)
 		if len(validators) > 0 {
 			if ve := validate(validators, val, app.config.Validator.messages); ve != nil {
 				return ve
 			}
 		}
 
-		// 4. Call user handler
 		tc := &C[In]{Ctx: c, In: val.Interface().(In)}
 		result, err := handler(tc)
 		if err != nil {
 			return err
 		}
 
-		// 5. Send response
 		if result != nil {
 			return c.JSON(result)
 		}
 		return c.NoContent()
 	}
 }
-
-// --- Typed handler registration functions ---
 
 // Get registers a typed GET handler with pre-compiled binding and validation.
 // Binds from param/query only (no body for GET).
@@ -140,8 +132,6 @@ func Patch[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, e
 	h := buildTypedHandler[In, Out](app, "PATCH", path, handler, opts)
 	app.Patch(path, h)
 }
-
-// --- Short Handlers (Prototyping Mode, spec 7.7) ---
 
 // GetX registers a short typed GET handler (no error return).
 // Panics are caught by Recovery middleware. For prototyping and simple endpoints.
@@ -178,8 +168,6 @@ func PatchX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, o
 		return handler(c), nil
 	}, opts...)
 }
-
-// --- Group typed handler registration ---
 
 // GroupGet registers a typed GET handler on a Group.
 func GroupGet[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption) {

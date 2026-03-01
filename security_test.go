@@ -6,13 +6,8 @@ import (
 	"time"
 )
 
-// =============================================================================
-// Path Traversal Prevention Tests (R2)
-// =============================================================================
-
-// TestPathTraversalDotDot verifies that raw .. segments in the path return 400.
 func TestPathTraversalDotDot(t *testing.T) {
-	app := New()
+	app := New(WithPathTraversal())
 	app.Get("/safe", func(c *Ctx) error {
 		return c.Text("ok")
 	})
@@ -36,10 +31,8 @@ func TestPathTraversalDotDot(t *testing.T) {
 	}
 }
 
-// TestPathTraversalEncoded verifies that percent-encoded traversal sequences
-// (e.g. %2e%2e) are decoded and rejected with 400.
 func TestPathTraversalEncoded(t *testing.T) {
-	app := New()
+	app := New(WithPathTraversal())
 	app.Get("/safe", func(c *Ctx) error {
 		return c.Text("ok")
 	})
@@ -62,10 +55,8 @@ func TestPathTraversalEncoded(t *testing.T) {
 	}
 }
 
-// TestPathTraversalDoubleEncoded verifies that double-encoded traversal
-// sequences (e.g. %252e%252e) are detected and rejected with 400.
 func TestPathTraversalDoubleEncoded(t *testing.T) {
-	app := New()
+	app := New(WithPathTraversal())
 	app.Get("/safe", func(c *Ctx) error {
 		return c.Text("ok")
 	})
@@ -99,10 +90,8 @@ func TestPathTraversalDoubleEncoded(t *testing.T) {
 	}
 }
 
-// TestPathTraversalNormalization verifies that /a/b/../c normalizes to /a/c
-// and routes correctly to the registered handler.
 func TestPathTraversalNormalization(t *testing.T) {
-	app := New()
+	app := New(WithPathTraversal())
 	app.Get("/a/c", func(c *Ctx) error {
 		return c.Text("reached /a/c")
 	})
@@ -121,10 +110,8 @@ func TestPathTraversalNormalization(t *testing.T) {
 	}
 }
 
-// TestPathTraversalCleanDot verifies that /a/./b normalizes to /a/b
-// and routes correctly.
 func TestPathTraversalCleanDot(t *testing.T) {
-	app := New()
+	app := New(WithPathTraversal())
 	app.Get("/a/b", func(c *Ctx) error {
 		return c.Text("reached /a/b")
 	})
@@ -143,8 +130,6 @@ func TestPathTraversalCleanDot(t *testing.T) {
 	}
 }
 
-// TestPathNormalRoutes verifies that normal routes still work correctly
-// after path traversal hardening is in place.
 func TestPathNormalRoutes(t *testing.T) {
 	app := New()
 	app.Get("/", func(c *Ctx) error {
@@ -188,12 +173,6 @@ func TestPathNormalRoutes(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Header Injection Prevention Tests (R3)
-// =============================================================================
-
-// TestHeaderInjectionCRLF verifies that CRLF characters in header values are
-// stripped to prevent HTTP header injection attacks.
 func TestHeaderInjectionCRLF(t *testing.T) {
 	app := New()
 	app.Get("/inject", func(c *Ctx) error {
@@ -230,8 +209,6 @@ func TestHeaderInjectionCRLF(t *testing.T) {
 	}
 }
 
-// TestHeaderInjectionKeyValidation verifies that header keys with invalid
-// characters (non-token per RFC 7230) are silently rejected.
 func TestHeaderInjectionKeyValidation(t *testing.T) {
 	app := New()
 	app.Get("/badkey", func(c *Ctx) error {
@@ -270,8 +247,6 @@ func TestHeaderInjectionKeyValidation(t *testing.T) {
 	}
 }
 
-// TestHeaderInjectionSetCookie verifies that CRLF characters in cookie
-// Value, Path, and Domain fields are stripped.
 func TestHeaderInjectionSetCookie(t *testing.T) {
 	app := New()
 	app.Get("/cookie", func(c *Ctx) error {
@@ -324,8 +299,6 @@ func TestHeaderInjectionSetCookie(t *testing.T) {
 	}
 }
 
-// TestHeaderNormalValues verifies that normal header values pass through
-// unchanged after header injection prevention is in place.
 func TestHeaderNormalValues(t *testing.T) {
 	app := New()
 	app.Get("/normal", func(c *Ctx) error {
@@ -404,14 +377,8 @@ func searchSubstring(s, substr string) bool {
 	return false
 }
 
-// =============================================================================
-// Secure Default Headers Tests (R6, R25)
-// =============================================================================
-
-// TestSecurityHeadersDefault verifies that all 4 Phase 5 security headers
-// are present by default on every response.
 func TestSecurityHeadersDefault(t *testing.T) {
-	app := New()
+	app := New(WithSecureHeaders())
 	app.Get("/hello", func(c *Ctx) error {
 		return c.Text("hello")
 	})
@@ -441,10 +408,8 @@ func TestSecurityHeadersDefault(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersDisabled verifies that WithSecurityHeaders(false)
-// removes all security headers from responses.
 func TestSecurityHeadersDisabled(t *testing.T) {
-	app := New(WithSecurityHeaders(false))
+	app := New()
 	app.Get("/hello", func(c *Ctx) error {
 		return c.Text("hello")
 	})
@@ -473,10 +438,8 @@ func TestSecurityHeadersDisabled(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersDevMode verifies that DevMode relaxes X-Frame-Options
-// to SAMEORIGIN while leaving other headers unchanged at Phase 5 values.
 func TestSecurityHeadersDevMode(t *testing.T) {
-	app := New(WithDevMode(true))
+	app := New(WithDevMode(true), WithSecureHeaders())
 	app.Get("/hello", func(c *Ctx) error {
 		return c.Text("hello")
 	})
@@ -508,8 +471,6 @@ func TestSecurityHeadersDevMode(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersNoServerHeader verifies that no Server header is
-// present in responses by default (no version information leakage).
 func TestSecurityHeadersNoServerHeader(t *testing.T) {
 	app := New()
 	app.Get("/hello", func(c *Ctx) error {
@@ -531,8 +492,6 @@ func TestSecurityHeadersNoServerHeader(t *testing.T) {
 	}
 }
 
-// TestSecurityHeadersLegacy verifies that WithLegacySecurityHeaders()
-// restores Phase 1-4 header values for backward compatibility.
 func TestSecurityHeadersLegacy(t *testing.T) {
 	app := New(WithLegacySecurityHeaders())
 	app.Get("/hello", func(c *Ctx) error {
@@ -564,12 +523,10 @@ func TestSecurityHeadersLegacy(t *testing.T) {
 	}
 }
 
-// TestDevModeAutoDetect verifies that KRUDA_ENV=development auto-enables
-// DevMode when WithDevMode is not explicitly called.
 func TestDevModeAutoDetect(t *testing.T) {
 	t.Setenv("KRUDA_ENV", "development")
 
-	app := New()
+	app := New(WithSecureHeaders())
 	app.Get("/hello", func(c *Ctx) error {
 		return c.Text("hello")
 	})
@@ -595,12 +552,9 @@ func TestDevModeAutoDetect(t *testing.T) {
 	}
 }
 
-// TestBackwardCompatNoDevMode verifies that an app created without DevMode
-// works identically to Phase 4 behavior: no dev error page, standard JSON
-// errors, and security headers present.
 func TestBackwardCompatNoDevMode(t *testing.T) {
-	// Create app with zero Phase 5 options — should behave like Phase 4
-	app := New()
+	// Create app with security headers enabled — verifies backward compat behavior
+	app := New(WithSecureHeaders())
 	app.Get("/hello", func(c *Ctx) error {
 		return c.Text("hello")
 	})
@@ -655,11 +609,6 @@ func TestBackwardCompatNoDevMode(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// DoS Protection Tests (R4)
-// =============================================================================
-
-// TestDoSDefaultTimeouts verifies the default timeout values in config.
 func TestDoSDefaultTimeouts(t *testing.T) {
 	app := New()
 
@@ -674,7 +623,6 @@ func TestDoSDefaultTimeouts(t *testing.T) {
 	}
 }
 
-// TestDoSDefaultBodyLimit verifies the default body limit is 4MB.
 func TestDoSDefaultBodyLimit(t *testing.T) {
 	app := New()
 	expected := 4 * 1024 * 1024 // 4MB
@@ -683,7 +631,6 @@ func TestDoSDefaultBodyLimit(t *testing.T) {
 	}
 }
 
-// TestDoSMaxBodySize verifies that a body exceeding the default 4MB limit returns 413.
 func TestDoSMaxBodySize(t *testing.T) {
 	app := New(WithMaxBodySize(1024)) // 1KB limit for fast test
 	app.Post("/upload", func(c *Ctx) error {
@@ -711,7 +658,6 @@ func TestDoSMaxBodySize(t *testing.T) {
 	}
 }
 
-// TestDoSCustomMaxBodySize verifies WithMaxBodySize limits the body size.
 func TestDoSCustomMaxBodySize(t *testing.T) {
 	app := New(WithMaxBodySize(512)) // 512 bytes
 	app.Post("/data", func(c *Ctx) error {
@@ -739,7 +685,6 @@ func TestDoSCustomMaxBodySize(t *testing.T) {
 	}
 }
 
-// TestDoSNormalBody verifies that a body within the limit processes normally.
 func TestDoSNormalBody(t *testing.T) {
 	app := New(WithMaxBodySize(4096)) // 4KB
 	app.Post("/data", func(c *Ctx) error {
@@ -765,7 +710,6 @@ func TestDoSNormalBody(t *testing.T) {
 	}
 }
 
-// TestDoSWithBodyLimitAlias verifies WithBodyLimit and WithMaxBodySize are equivalent.
 func TestDoSWithBodyLimitAlias(t *testing.T) {
 	app1 := New(WithBodyLimit(2048))
 	app2 := New(WithMaxBodySize(2048))

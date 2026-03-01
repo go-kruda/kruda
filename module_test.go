@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Module test helpers
-// ---------------------------------------------------------------------------
-
 // moduleA registers a *testService into the container.
 type moduleA struct{}
 
@@ -42,10 +38,6 @@ func (compositeModule) Install(c *Container) error {
 	return c.Give(&testService{Name: "from-composite"})
 }
 
-// ---------------------------------------------------------------------------
-// 1. TestModuleInstall — module registers service, Use[T] resolves it
-// ---------------------------------------------------------------------------
-
 func TestModuleInstall(t *testing.T) {
 	app := New()
 	app.container = NewContainer()
@@ -59,10 +51,6 @@ func TestModuleInstall(t *testing.T) {
 		t.Fatalf("expected from-module-a, got %s", got.Name)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 2. TestModuleAutoCreateContainer — app without container gets one created
-// ---------------------------------------------------------------------------
 
 func TestModuleAutoCreateContainer(t *testing.T) {
 	app := New()
@@ -84,10 +72,6 @@ func TestModuleAutoCreateContainer(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 3. TestModulePanicOnError — Install error causes panic
-// ---------------------------------------------------------------------------
-
 func TestModulePanicOnError(t *testing.T) {
 	app := New()
 
@@ -107,10 +91,6 @@ func TestModulePanicOnError(t *testing.T) {
 
 	app.Module(failModule{})
 }
-
-// ---------------------------------------------------------------------------
-// 4. TestModuleChaining — install 2 modules, both services resolve
-// ---------------------------------------------------------------------------
 
 func TestModuleChaining(t *testing.T) {
 	app := New()
@@ -132,10 +112,6 @@ func TestModuleChaining(t *testing.T) {
 		t.Fatalf("expected 42, got %d", gotB.Value)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 5. TestModuleComposition — module A installs module B inside Install
-// ---------------------------------------------------------------------------
 
 func TestModuleComposition(t *testing.T) {
 	app := New()

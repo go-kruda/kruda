@@ -4,13 +4,14 @@
 *.dll
 *.so
 *.dylib
-kruda
-/hello
 
-# Test
+# Test & Coverage
 *.test
 *.out
 coverage.html
+
+# Profiling
+*.prof
 
 # IDE
 .idea/
@@ -30,21 +31,30 @@ vendor/
 CLAUDE.md
 .kiro/
 .claude/
+.plan
+KIRO_*.md
 
-# Build output (root-level compiled binaries from go build/run)
+# Build output (root-level compiled binaries from examples)
 /auth
 /auto-crud
 /crud
 /database
 /di-services
 /health-checks
+/hello
 /json-api
 /testing
 /typed-handlers
+/kruda
+cmd/kruda/kruda
 
 # Bench artifacts
-*.prof
-bench/kruda_server/kruda_server*
+bench/*.txt
+bench/*.prof
+bench/bench.test
+
+bench/tfb/results/
+frameworks/Go/kruda/src/techempower-kruda
 
 # Cross-framework comparison (separate repo: go-kruda/benchmarks)
 bench/elysia/
@@ -52,6 +62,9 @@ bench/gin_test.go
 bench/fiber_test.go
 bench/echo_test.go
 bench/run_cross_bench.sh
+
+# Cross-runtime benchmark (separate concern, not part of core repo)
+bench/cross-runtime/
 
 # Node.js / Bun
 node_modules/

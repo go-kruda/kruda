@@ -84,7 +84,7 @@ func sanitizeSSEField(s string) string {
 }
 
 // Comment writes an SSE comment line (prefixed with ':').
-// Comments are typically used as keep-alive pings.
+// Typically used as keep-alive pings.
 func (s *SSEStream) Comment(text string) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
@@ -97,7 +97,7 @@ func (s *SSEStream) Comment(text string) error {
 	return nil
 }
 
-// Retry writes a retry field to set the client reconnection interval in milliseconds.
+// Retry sets the client reconnection interval in milliseconds.
 func (s *SSEStream) Retry(ms int) error {
 	if err := s.ctx.Err(); err != nil {
 		return err

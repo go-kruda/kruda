@@ -1,0 +1,17 @@
+package main
+
+import (
+	"github.com/go-kruda/kruda"
+)
+
+func main() {
+	app := kruda.New()
+
+	app.Get("/", func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{
+			"message": "Hello from {{.ProjectName}}!",
+		})
+	})
+
+	app.Listen(":3000")
+}

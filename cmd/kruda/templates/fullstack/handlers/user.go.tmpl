@@ -1,0 +1,109 @@
+package handlers
+
+import (
+	"fmt"
+	"sync"
+
+	"github.com/go-kruda/kruda"
+
+	"{{.ModuleName}}/models"
+)
+
+// UserHandler handles user-related HTTP requests.
+type UserHandler struct {
+	mu    sync.RWMutex
+	users map[string]models.User
+	nextID int
+}
+
+// NewUserHandler creates a UserHandler with sample data.
+func NewUserHandler() *UserHandler {
+	return &UserHandler{
+		users: map[string]models.User{
+			"1": {ID: "1", Name: "Alice", Email: "alice@example.com"},
+			"2": {ID: "2", Name: "Bob", Email: "bob@example.com"},
+		},
+		nextID: 3,
+	}
+}
+
+// List returns all users.
+func (h *UserHandler) List(c *kruda.Ctx) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	list := make([]models.User, 0, len(h.users))
+	for _, u := range h.users {
+		list = append(list, u)
+	}
+	return c.JSON(list)
+}
+
+// GetByID returns a single user by ID.
+func (h *UserHandler) GetByID(c *kruda.Ctx) error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	id := c.Param("id")
+	user, ok := h.users[id]
+	if !ok {
+		return c.Status(404).JSON(kruda.Map{"error": "user not found"})
+	}
+	return c.JSON(user)
+}
+
+// Create adds a new user.
+func (h *UserHandler) Create(c *kruda.Ctx) error {
+	var input models.CreateUserInput
+	if err := c.Bind(&input); err != nil {
+		return c.Status(400).JSON(kruda.Map{"error": "invalid request body"})
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	id := fmt.Sprintf("%d", h.nextID)
+	h.nextID++
+
+	user := models.User{ID: id, Name: input.Name, Email: input.Email}
+	h.users[id] = user
+
+	return c.Status(201).JSON(user)
+}
+
+// Update modifies an existing user.
+func (h *UserHandler) Update(c *kruda.Ctx) error {
+	id := c.Param("id")
+
+	var input models.CreateUserInput
+	if err := c.Bind(&input); err != nil {
+		return c.Status(400).JSON(kruda.Map{"error": "invalid request body"})
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.users[id]; !ok {
+		return c.Status(404).JSON(kruda.Map{"error": "user not found"})
+	}
+
+	user := models.User{ID: id, Name: input.Name, Email: input.Email}
+	h.users[id] = user
+
+	return c.JSON(user)
+}
+
+// Delete removes a user by ID.
+func (h *UserHandler) Delete(c *kruda.Ctx) error {
+	id := c.Param("id")
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, ok := h.users[id]; !ok {
+		return c.Status(404).JSON(kruda.Map{"error": "user not found"})
+	}
+
+	delete(h.users, id)
+	return c.Status(204).Send(nil)
+}

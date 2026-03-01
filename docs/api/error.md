@@ -6,37 +6,24 @@ Structured error handling with error mapping and custom error types.
 
 ```go
 type KrudaError struct {
-    Code    int         `json:"code"`
-    Message string      `json:"error"`
-    Details interface{} `json:"details,omitempty"`
+    Code    int    `json:"code"`             // HTTP status code
+    Message string `json:"message"`          // human-readable message
+    Detail  string `json:"detail,omitempty"` // optional detail
+    Err     error  `json:"-"`                // wrapped error (not exposed in JSON)
 }
 ```
 
 ### NewError
 
 ```go
-func NewError(code int, message string) *KrudaError
+func NewError(code int, message string, err ...error) *KrudaError
 ```
 
-Creates a new HTTP error.
+Creates a new HTTP error. Optionally wraps an underlying error.
 
 ```go
 return kruda.NewError(404, "User not found")
-return kruda.NewError(400, "Invalid request")
-```
-
-### NewErrorWithDetails
-
-```go
-func NewErrorWithDetails(code int, message string, details interface{}) *KrudaError
-```
-
-Creates an error with additional details.
-
-```go
-return kruda.NewErrorWithDetails(422, "Validation failed", []map[string]string{
-    {"field": "email", "message": "must be a valid email"},
-})
+return kruda.NewError(400, "Invalid request", err)
 ```
 
 ### Error Response Format
@@ -44,28 +31,26 @@ return kruda.NewErrorWithDetails(422, "Validation failed", []map[string]string{
 ```json
 {
   "code": 404,
-  "error": "User not found"
+  "message": "User not found"
 }
 ```
 
-With details:
+With detail:
 
 ```json
 {
   "code": 422,
-  "error": "Validation failed",
-  "details": [
-    { "field": "email", "message": "must be a valid email" }
-  ]
+  "message": "Validation failed",
+  "detail": "field 'email' is required"
 }
 ```
 
 ## Error Mapping
 
-### MapError
+### MapError (method on App)
 
 ```go
-func (a *App) MapError(err error, code int, message string) *App
+func (app *App) MapError(target error, status int, message string) *App
 ```
 
 Maps a specific error value to an HTTP response.
@@ -75,28 +60,28 @@ var ErrNotFound = errors.New("not found")
 app.MapError(ErrNotFound, 404, "Resource not found")
 ```
 
-### MapErrorType
+### MapErrorType (package-level generic function)
 
 ```go
-func (a *App) MapErrorType(t reflect.Type, code int, message string) *App
+func MapErrorType[T error](app *App, statusCode int, message string)
 ```
 
 Maps all errors of a given type.
 
 ```go
-app.MapErrorType(reflect.TypeOf(&ValidationError{}), 422, "Validation failed")
+kruda.MapErrorType[*ValidationError](app, 422, "Validation failed")
 ```
 
-### MapErrorFunc
+### MapErrorFunc (package-level function)
 
 ```go
-func (a *App) MapErrorFunc(fn func(error) *KrudaError) *App
+func MapErrorFunc(app *App, target error, fn func(error) *KrudaError)
 ```
 
-Registers a custom mapping function. Return `nil` to pass to the next mapper.
+Registers a custom mapping function for a specific target error. Return `nil` to pass to the next mapper.
 
 ```go
-app.MapErrorFunc(func(err error) *kruda.KrudaError {
+kruda.MapErrorFunc(app, ErrDB, func(err error) *kruda.KrudaError {
     if errors.Is(err, sql.ErrNoRows) {
         return kruda.NewError(404, "Not found")
     }

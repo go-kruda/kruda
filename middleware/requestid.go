@@ -20,12 +20,11 @@ type RequestIDConfig struct {
 }
 
 // maxRequestIDLen is the maximum allowed length for an incoming request ID header.
-// M9: prevents abuse via excessively long or malformed request IDs.
 const maxRequestIDLen = 256
 
 // RequestID returns middleware that ensures every request has a unique ID.
 // If the incoming request already has an X-Request-ID header, it uses that value
-// after validation (M9: length check, printable ASCII only).
+// after validation (length check, printable ASCII only).
 // Otherwise, it generates a UUID v4 using crypto/rand.
 // The request ID is stored in the context via c.Set("request_id", id) and set
 // as a response header.

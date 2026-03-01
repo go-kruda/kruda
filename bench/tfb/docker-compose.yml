@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hello_world
+      POSTGRES_USER: benchmarkdbuser
+      POSTGRES_PASSWORD: benchmarkdbpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./create-postgres.sql:/docker-entrypoint-initdb.d/create.sql
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c work_mem=64MB
+        -c max_connections=2000
+        -c synchronous_commit=off
+        -c fsync=off
+        -c full_page_writes=off
+        -c log_min_messages=WARNING

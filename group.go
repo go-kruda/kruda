@@ -114,8 +114,7 @@ func (g *Group) Done() *App {
 	return g.app
 }
 
-// addRoute builds the full path and pre-built handler chain, then delegates
-// to the App's router for registration.
+// addRoute builds the full path and pre-built handler chain, then registers it.
 func (g *Group) addRoute(method, path string, handler HandlerFunc) {
 	fullPath := joinPath(g.prefix, path)
 	chain := buildChain(g.app.middleware, g.collectMiddleware(), handler)
@@ -123,10 +122,9 @@ func (g *Group) addRoute(method, path string, handler HandlerFunc) {
 }
 
 // collectMiddleware gathers middleware from the entire parent chain,
-// preserving registration order: outermost group first, innermost last.
+// outermost group first, innermost last.
 func (g *Group) collectMiddleware() []HandlerFunc {
 	if g.parent == nil {
-		// Top-level group — just return own middleware
 		return g.middleware
 	}
 	parentMW := g.parent.collectMiddleware()

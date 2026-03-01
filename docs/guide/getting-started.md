@@ -21,7 +21,7 @@ func main() {
     app := kruda.New()
 
     app.Get("/", func(c *kruda.Ctx) error {
-        return c.JSON(200, map[string]string{
+        return c.JSON(map[string]string{
             "message": "Hello, Kruda!",
         })
     })

@@ -1,6 +1,6 @@
 # Auto CRUD
 
-Kruda can generate a full set of CRUD endpoints from a service interface using `app.Resource()`.
+Kruda can generate a full set of CRUD endpoints from a service interface using the `Resource` package-level function.
 
 ## ResourceService Interface
 
@@ -8,13 +8,15 @@ Implement the `ResourceService[T, ID]` interface:
 
 ```go
 type ResourceService[T any, ID comparable] interface {
-    List() ([]T, error)
-    Get(id ID) (T, error)
-    Create(item T) (T, error)
-    Update(id ID, item T) (T, error)
-    Delete(id ID) error
+    List(ctx context.Context, page int, limit int) ([]T, int, error)
+    Create(ctx context.Context, item T) (T, error)
+    Get(ctx context.Context, id ID) (T, error)
+    Update(ctx context.Context, id ID, item T) (T, error)
+    Delete(ctx context.Context, id ID) error
 }
 ```
+
+Note: `List` returns items, total count, and error. It receives `page` and `limit` for pagination.
 
 ## Registration
 
@@ -31,36 +33,80 @@ type UserService struct {
     // your storage implementation
 }
 
-func (s *UserService) List() ([]User, error)                  { /* ... */ }
-func (s *UserService) Get(id string) (User, error)            { /* ... */ }
-func (s *UserService) Create(item User) (User, error)         { /* ... */ }
-func (s *UserService) Update(id string, item User) (User, error) { /* ... */ }
-func (s *UserService) Delete(id string) error                  { /* ... */ }
+func (s *UserService) List(ctx context.Context, page, limit int) ([]User, int, error) { /* ... */ }
+func (s *UserService) Get(ctx context.Context, id string) (User, error)               { /* ... */ }
+func (s *UserService) Create(ctx context.Context, item User) (User, error)            { /* ... */ }
+func (s *UserService) Update(ctx context.Context, id string, item User) (User, error) { /* ... */ }
+func (s *UserService) Delete(ctx context.Context, id string) error                    { /* ... */ }
 
 // Register — generates 5 routes automatically
-app.Resource("/users", &UserService{})
+kruda.Resource[User, string](app, "/users", &UserService{})
 ```
 
 This generates:
 
 | Method | Path | Handler |
 |--------|------|---------|
-| GET | `/users` | `List()` |
-| GET | `/users/:id` | `Get(id)` |
-| POST | `/users` | `Create(item)` |
-| PUT | `/users/:id` | `Update(id, item)` |
-| DELETE | `/users/:id` | `Delete(id)` |
+| GET | `/users` | `List(ctx, page, limit)` |
+| GET | `/users/:id` | `Get(ctx, id)` |
+| POST | `/users` | `Create(ctx, item)` |
+| PUT | `/users/:id` | `Update(ctx, id, item)` |
+| DELETE | `/users/:id` | `Delete(ctx, id)` |
+
+## Group Resource
+
+Register resources on a route group:
+
+```go
+func GroupResource[T any, ID comparable](g *Group, path string, svc ResourceService[T, ID], opts ...ResourceOption) *Group
+```
+
+```go
+api := app.Group("/api/v1")
+kruda.GroupResource[User, string](api, "/users", &UserService{})
+```
 
 ## Custom Options
 
 Customize the generated routes with `ResourceOption`:
 
 ```go
-app.Resource("/users", &UserService{},
+kruda.Resource[User, string](app, "/users", &UserService{},
     kruda.WithResourceMiddleware(authMiddleware),
-    kruda.WithResourceOnly("list", "get"), // only List and Get
+    kruda.WithResourceOnly("LIST", "GET"),
+    kruda.WithResourceIDParam("userId"),
 )
 ```
+
+### WithResourceMiddleware
+
+```go
+func WithResourceMiddleware(mw ...HandlerFunc) ResourceOption
+```
+
+### WithResourceOnly
+
+```go
+func WithResourceOnly(methods ...string) ResourceOption
+```
+
+Only generate specified actions (uppercased: `"LIST"`, `"GET"`, `"CREATE"`, `"UPDATE"`, `"DELETE"`).
+
+### WithResourceExcept
+
+```go
+func WithResourceExcept(methods ...string) ResourceOption
+```
+
+Generate all actions except the specified ones.
+
+### WithResourceIDParam
+
+```go
+func WithResourceIDParam(param string) ResourceOption
+```
+
+Customize the ID parameter name (default: `"id"`).
 
 ## Error Mapping Integration
 
@@ -72,41 +118,6 @@ var ErrUserNotFound = errors.New("user not found")
 app.MapError(ErrUserNotFound, 404, "User not found")
 
 // Now Get() returning ErrUserNotFound automatically responds with 404
-```
-
-## In-Memory Example
-
-```go
-type InMemoryUserService struct {
-    mu    sync.RWMutex
-    users map[string]User
-}
-
-func NewInMemoryUserService() *InMemoryUserService {
-    return &InMemoryUserService{users: make(map[string]User)}
-}
-
-func (s *InMemoryUserService) List() ([]User, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-    result := make([]User, 0, len(s.users))
-    for _, u := range s.users {
-        result = append(result, u)
-    }
-    return result, nil
-}
-
-func (s *InMemoryUserService) Get(id string) (User, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-    u, ok := s.users[id]
-    if !ok {
-        return User{}, ErrUserNotFound
-    }
-    return u, nil
-}
-
-// ... Create, Update, Delete implementations
 ```
 
 See [Resource API](/api/resource) for the full reference.

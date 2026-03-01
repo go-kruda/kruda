@@ -1,25 +1,27 @@
 package transport
 
 import (
+	"context"
+	"mime/multipart"
 	"testing"
 )
 
 func TestHandlerFunc_ServeKruda(t *testing.T) {
 	var capturedMethod string
 	var capturedPath string
-	
+
 	handler := HandlerFunc(func(w ResponseWriter, r Request) {
 		capturedMethod = r.Method()
 		capturedPath = r.Path()
 		w.WriteHeader(200)
 		w.Write([]byte("ok"))
 	})
-	
+
 	mockReq := &mockRequest{method: "GET", path: "/test"}
 	mockResp := &mockResponseWriter{}
-	
+
 	handler.ServeKruda(mockResp, mockReq)
-	
+
 	if capturedMethod != "GET" {
 		t.Errorf("expected GET, got %s", capturedMethod)
 	}
@@ -40,14 +42,17 @@ type mockRequest struct {
 	path   string
 }
 
-func (r *mockRequest) Method() string                { return r.method }
-func (r *mockRequest) Path() string                  { return r.path }
-func (r *mockRequest) Header(key string) string      { return "" }
-func (r *mockRequest) Body() ([]byte, error)         { return nil, nil }
-func (r *mockRequest) QueryParam(key string) string  { return "" }
-func (r *mockRequest) RemoteAddr() string            { return "127.0.0.1" }
-func (r *mockRequest) Cookie(name string) string     { return "" }
-func (r *mockRequest) RawRequest() any               { return nil }
+func (r *mockRequest) Method() string               { return r.method }
+func (r *mockRequest) Path() string                 { return r.path }
+func (r *mockRequest) Header(key string) string     { return "" }
+func (r *mockRequest) Body() ([]byte, error)        { return nil, nil }
+func (r *mockRequest) QueryParam(key string) string { return "" }
+func (r *mockRequest) RemoteAddr() string           { return "127.0.0.1" }
+func (r *mockRequest) Cookie(name string) string    { return "" }
+func (r *mockRequest) RawRequest() any              { return nil }
+func (r *mockRequest) Context() context.Context     { return context.Background() }
+
+func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) { return nil, nil }
 
 type mockResponseWriter struct {
 	statusCode int

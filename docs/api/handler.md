@@ -10,7 +10,7 @@ The base handler type. Every route handler and middleware is a `HandlerFunc`.
 
 ```go
 app.Get("/hello", func(c *kruda.Ctx) error {
-    return c.String(200, "Hello!")
+    return c.Text("Hello!")
 })
 ```
 
@@ -36,19 +36,23 @@ func MyMiddleware(c *kruda.Ctx) error {
 ```go
 type C[T any] struct {
     *Ctx
-    Input T
+    In T // parsed input from request
 }
 ```
 
-`C[T]` extends `Ctx` with a typed `Input` field. The request body, route parameters, and query parameters are automatically parsed and validated into `T` before the handler runs.
+`C[T]` extends `Ctx` with a typed `In` field. The request body, route parameters, and query parameters are automatically parsed and validated into `T` before the handler runs.
 
-## TypedHandler
+## Typed Handler Registration
+
+Package-level generic functions register typed handlers with pre-compiled binding and validation:
 
 ```go
-func TypedHandler[T any](handler func(c *C[T]) error) HandlerFunc
+func Get[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func Post[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func Put[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func Delete[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func Patch[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
 ```
-
-Wraps a typed handler function into a standard `HandlerFunc`. The type parameter `T` defines the request struct.
 
 ```go
 type CreateUserInput struct {
@@ -56,12 +60,59 @@ type CreateUserInput struct {
     Email string `json:"email" validate:"required,email"`
 }
 
-app.Post("/users", kruda.TypedHandler[CreateUserInput](func(c *kruda.C[CreateUserInput]) error {
-    input := c.Input
-    // input.Name and input.Email are parsed and validated
-    return c.JSON(201, map[string]string{"name": input.Name})
-}))
+type User struct {
+    ID    string `json:"id"`
+    Name  string `json:"name"`
+}
+
+kruda.Post[CreateUserInput, User](app, "/users", func(c *kruda.C[CreateUserInput]) (*User, error) {
+    return &User{ID: "1", Name: c.In.Name}, nil
+})
 ```
+
+### Short Handlers (no error return)
+
+For prototyping — panics are caught by Recovery middleware:
+
+```go
+func GetX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, opts ...RouteOption)
+func PostX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, opts ...RouteOption)
+func PutX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, opts ...RouteOption)
+func DeleteX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, opts ...RouteOption)
+func PatchX[In any, Out any](app *App, path string, handler func(*C[In]) *Out, opts ...RouteOption)
+```
+
+### Group Typed Handlers
+
+```go
+func GroupGet[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func GroupPost[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func GroupPut[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func GroupDelete[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+func GroupPatch[In any, Out any](g *Group, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
+```
+
+## RouteOption
+
+```go
+type RouteOption func(*routeConfig)
+```
+
+### WithDescription
+
+```go
+func WithDescription(desc string) RouteOption
+```
+
+Sets a route description (used by OpenAPI).
+
+### WithTags
+
+```go
+func WithTags(tags ...string) RouteOption
+```
+
+Sets route tags (used by OpenAPI).
 
 ## Struct Tag Binding
 

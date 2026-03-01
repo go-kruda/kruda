@@ -25,18 +25,6 @@ func (h *DBHealthChecker) Check(ctx context.Context) error {
 }
 ```
 
-```go
-type RedisHealthChecker struct {
-    client *redis.Client
-}
-
-func (h *RedisHealthChecker) Name() string { return "redis" }
-
-func (h *RedisHealthChecker) Check(ctx context.Context) error {
-    return h.client.Ping(ctx).Err()
-}
-```
-
 ## HealthHandler
 
 ```go
@@ -54,7 +42,7 @@ app.Get("/health", kruda.HealthHandler(
 
 ### Response Format
 
-All healthy:
+All healthy (HTTP 200):
 
 ```json
 {
@@ -66,9 +54,7 @@ All healthy:
 }
 ```
 
-HTTP 200
-
-One or more unhealthy:
+One or more unhealthy (HTTP 503):
 
 ```json
 {
@@ -78,24 +64,6 @@ One or more unhealthy:
     "redis": { "status": "unhealthy", "error": "connection refused" }
   }
 }
-```
-
-HTTP 503
-
-## DI Integration
-
-Register health checkers as DI services:
-
-```go
-kruda.Give(app, func() *DBHealthChecker {
-    db := kruda.Use[*sql.DB](app)
-    return &DBHealthChecker{db: db}
-})
-
-app.Get("/health", func(c *kruda.Ctx) error {
-    checker := kruda.Use[*DBHealthChecker](c)
-    return kruda.HealthHandler(checker)(c)
-})
 ```
 
 ## Example
@@ -110,8 +78,8 @@ import (
 
 type AppChecker struct{}
 
-func (c *AppChecker) Name() string                        { return "app" }
-func (c *AppChecker) Check(ctx context.Context) error     { return nil }
+func (c *AppChecker) Name() string                    { return "app" }
+func (c *AppChecker) Check(ctx context.Context) error { return nil }
 
 func main() {
     app := kruda.New()

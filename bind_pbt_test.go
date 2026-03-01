@@ -1,11 +1,5 @@
 package kruda
 
-// Validates: Requirements 1.1, 8.1
-//
-// Property: For any value of a supported Go type, selectConverter round-trips correctly.
-// That is, converting a value to its string representation and back via the converter
-// produces the original value.
-
 import (
 	"bytes"
 	"math"
@@ -157,17 +151,6 @@ func TestPropertySelectConverterBoolRoundTrip(t *testing.T) {
 		t.Errorf("bool converter round-trip failed: %v", err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase2b-extensions, Property 3: File Upload Binding Populates FileUpload Correctly
-//
-// For any multipart form request containing files with arbitrary names, sizes,
-// and content types, the binding pipeline should populate *FileUpload fields
-// with matching Name, Size, and ContentType values, and []*FileUpload fields
-// should contain all uploaded files for that field name.
-//
-// **Validates: R4.2, R4.3**
-// ---------------------------------------------------------------------------
 
 // safeFilename generates a safe filename from random bytes (alphanumeric + extension).
 func safeFilename(seed uint8) string {
@@ -354,16 +337,6 @@ func TestPropertyMultiFileUploadBindingPopulatesAll(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase2b-extensions, Property 4: Form Text Field Binding
-//
-// For any multipart form request containing text fields with arbitrary string
-// values, the binding pipeline should populate string fields tagged with `form`
-// with the exact submitted value.
-//
-// **Validates: R4.4**
-// ---------------------------------------------------------------------------
-
 func TestPropertyFormTextFieldBinding(t *testing.T) {
 	type TextInput struct {
 		Name  string `form:"name"`
@@ -431,17 +404,6 @@ func TestPropertyFormTextFieldBinding(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase2b-extensions, Property 5: Form Binding Priority Order
-//
-// For any struct with both form and param/query tagged fields, when the same
-// logical value is provided from multiple sources, path params should take
-// highest priority, then query params, then form values — matching the
-// pipeline order: defaults → form → query → param.
-//
-// **Validates: R4.8**
-// ---------------------------------------------------------------------------
-
 func TestPropertyFormBindingPriorityOrder(t *testing.T) {
 	// This struct has a "name" field bound to form, query, AND param.
 	// We test that param > query > form > default.
@@ -480,7 +442,7 @@ func TestPropertyFormBindingPriorityOrder(t *testing.T) {
 		c.reset(resp, mockReq)
 		c.method = "POST"
 		c.path = "/test"
-		c.params["name"] = paramStr
+		c.params.set("name", paramStr)
 
 		val, err := p.parse(c)
 		if err != nil {

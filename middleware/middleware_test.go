@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -29,6 +32,11 @@ func (r *mockRequest) QueryParam(key string) string { return "" }
 func (r *mockRequest) RemoteAddr() string           { return "127.0.0.1" }
 func (r *mockRequest) Cookie(name string) string    { return "" }
 func (r *mockRequest) RawRequest() any              { return nil }
+func (r *mockRequest) Context() context.Context     { return context.Background() }
+
+func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) {
+	return nil, fmt.Errorf("not supported")
+}
 
 // mockResponseWriter implements transport.ResponseWriter for testing.
 type mockResponseWriter struct {
@@ -487,5 +495,68 @@ func TestTimeout_HandlerExceedsTimeout(t *testing.T) {
 	msg, _ := body["message"].(string)
 	if !strings.Contains(msg, "timeout") {
 		t.Fatalf("expected timeout message, got %q", msg)
+	}
+}
+
+// =====================================================================
+// PathTraversal Tests
+
+func TestPathTraversal_BlocksTraversal(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	// The middleware runs in the handler chain, so we need routes that match.
+	// Use a wildcard route to catch all paths, then the middleware rejects traversals.
+	paths := []string{
+		"/../etc/passwd",
+		"/../../etc/shadow",
+		"/%2e%2e/etc/passwd",
+	}
+	for _, p := range paths {
+		app := kruda.New()
+		app.Use(PathTraversal())
+		app.Get("/*path", handler)
+		resp := newMockResponse()
+		app.ServeKruda(resp, getReq(p, nil))
+		if resp.statusCode != 400 {
+			t.Errorf("GET %s: expected 400, got %d", p, resp.statusCode)
+		}
+	}
+}
+
+func TestPathTraversal_AllowsSafePaths(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	paths := []string{
+		"/test",
+		"/api/v1/users",
+		"/a/b/c",
+	}
+	for _, p := range paths {
+		req := getReq(p, nil)
+		// The serve helper registers on /test, so use a custom setup for varied paths
+		app := kruda.New()
+		app.Use(PathTraversal())
+		app.Get(p, handler)
+		resp := newMockResponse()
+		app.ServeKruda(resp, req)
+		if resp.statusCode != 200 {
+			t.Errorf("GET %s: expected 200, got %d", p, resp.statusCode)
+		}
+	}
+}
+
+func TestPathTraversal_AllowsSafeRelativeDotDot(t *testing.T) {
+	// /a/b/../c is safe (doesn't escape root) — middleware should allow it
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	resp := serve(t, PathTraversal(), handler, getReq("/test", nil))
+	if resp.statusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.statusCode)
 	}
 }

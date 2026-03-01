@@ -24,13 +24,13 @@ Use `:name` for named parameters and `*name` for wildcard (catch-all) parameters
 // Named parameter — matches /users/123, /users/abc
 app.Get("/users/:id", func(c *kruda.Ctx) error {
     id := c.Param("id") // "123"
-    return c.JSON(200, map[string]string{"id": id})
+    return c.JSON(map[string]string{"id": id})
 })
 
 // Wildcard parameter — matches /files/path/to/file.txt
 app.Get("/files/*path", func(c *kruda.Ctx) error {
     path := c.Param("path") // "path/to/file.txt"
-    return c.JSON(200, map[string]string{"path": path})
+    return c.JSON(map[string]string{"path": path})
 })
 ```
 

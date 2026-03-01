@@ -59,7 +59,7 @@ Write middleware as a function that calls `c.Next()`:
 func AuthMiddleware(c *kruda.Ctx) error {
     token := c.Header("Authorization")
     if token == "" {
-        return c.JSON(401, map[string]string{"error": "unauthorized"})
+        return c.Status(401).JSON(map[string]string{"error": "unauthorized"})
     }
 
     // validate token...
@@ -107,7 +107,7 @@ Return early from middleware to skip the handler:
 ```go
 func RateLimiter(c *kruda.Ctx) error {
     if isRateLimited(c) {
-        return c.JSON(429, map[string]string{"error": "too many requests"})
+        return c.Status(429).JSON(map[string]string{"error": "too many requests"})
     }
     return c.Next()
 }

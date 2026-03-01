@@ -39,8 +39,8 @@ type CORSConfig struct {
 // CORS returns middleware that handles Cross-Origin Resource Sharing.
 // It supports both preflight (OPTIONS) and non-preflight requests.
 // Panics if AllowCredentials is true with AllowOrigins=["*"] per CORS spec.
-// M7 fix: adds Vary: Origin header when origin is not wildcard.
-// M8 fix: Expose-Headers only set on non-preflight responses.
+// Adds Vary: Origin header when origin is not wildcard.
+// Expose-Headers is only set on non-preflight responses.
 func CORS(config ...CORSConfig) kruda.HandlerFunc {
 	cfg := CORSConfig{
 		AllowOrigins: []string{"*"},
@@ -104,12 +104,11 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 			return c.Next()
 		}
 
-		// N3 fix: use AddHeader to append Vary: Origin without clobbering existing Vary values
 		if !allowAll {
 			c.AddHeader("Vary", "Origin")
 		}
 
-		// Preflight request: OPTIONS with Access-Control-Request-Method header.
+		// Preflight: OPTIONS with Access-Control-Request-Method header.
 		if c.Method() == "OPTIONS" && c.Header("Access-Control-Request-Method") != "" {
 			c.SetHeader("Access-Control-Allow-Origin", allowOrigin)
 			c.SetHeader("Access-Control-Allow-Methods", allowMethods)
@@ -118,7 +117,6 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 			if cfg.AllowCredentials {
 				c.SetHeader("Access-Control-Allow-Credentials", "true")
 			}
-			// M8 fix: do NOT set Expose-Headers on preflight (per CORS spec)
 			return c.NoContent()
 		}
 
@@ -127,7 +125,7 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 		if cfg.AllowCredentials {
 			c.SetHeader("Access-Control-Allow-Credentials", "true")
 		}
-		// M8: Expose-Headers only on actual (non-preflight) responses
+		// Expose-Headers only on actual (non-preflight) responses
 		if exposeHeaders != "" {
 			c.SetHeader("Access-Control-Expose-Headers", exposeHeaders)
 		}

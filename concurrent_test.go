@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------------------
-// Parallel tests
-// ---------------------------------------------------------------------------
-
 func TestParallel_AllSuccess(t *testing.T) {
 	var count atomic.Int32
 	err := Parallel(
@@ -96,10 +92,6 @@ func TestParallel_WaitsForAll(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Race tests
-// ---------------------------------------------------------------------------
-
 func TestRace_SingleTask(t *testing.T) {
 	ctx := context.Background()
 	val, err := Race(ctx, func(ctx context.Context) (any, error) {
@@ -176,10 +168,6 @@ func TestRace_ContextCancellation(t *testing.T) {
 		t.Errorf("val = %v, want nil", val)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Each tests
-// ---------------------------------------------------------------------------
 
 func TestEach_AllSuccess(t *testing.T) {
 	var sum atomic.Int32

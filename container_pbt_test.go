@@ -9,37 +9,26 @@ import (
 	"testing/quick"
 )
 
-// ---------------------------------------------------------------------------
-// PBT wrapper types — each test uses unique types to avoid type collisions
-// between tests (Give keys by reflect.Type).
-// ---------------------------------------------------------------------------
+// PBT wrapper types — each test needs a unique type because Give keys by reflect.Type.
 
-// pbtSingletonWrapper is used by Property 1 (singleton round-trip).
+// pbtSingletonWrapper wraps a value for singleton tests.
 type pbtSingletonWrapper struct{ Val int }
 
-// pbtTransientWrapper is used by Property 2 (transient distinct).
 type pbtTransientWrapper struct{ Val int }
 
-// pbtLazyWrapper is used by Property 3 (lazy singleton once).
 type pbtLazyWrapper struct{ Val int }
 
-// pbtNamedWrapper is used by Property 4 (named round-trip).
 type pbtNamedWrapper struct{ Val int }
 
-// pbtDupWrapper is used by Property 5 (duplicate rejected).
 type pbtDupWrapper struct{ Val int }
 
-// pbtConcSingletonWrapper is used by Property 6 (concurrent singleton).
 type pbtConcSingletonWrapper struct{ Val int }
 
-// pbtConcLazyWrapper is used by Property 7 (concurrent lazy).
 type pbtConcLazyWrapper struct{ Val int }
 
-// pbtConcTransientWrapper is used by Property 8 (concurrent transient).
 type pbtConcTransientWrapper struct{ Val int }
 
-// pbtLifecycleWrapper is used by Property 9 (lifecycle ordering).
-// Each instance tracks init/shutdown calls via shared slices.
+// pbtLifecycleWrapper tracks init/shutdown calls for ordering tests.
 type pbtLifecycleWrapper struct {
 	id      int
 	initLog *[]int
@@ -61,12 +50,6 @@ func (w *pbtLifecycleWrapper) OnShutdown(_ context.Context) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 1: Singleton Give/Use Round-Trip
-// For any int value, Give(&wrapper{val}) then Use returns same pointer.
-// **Validates: Requirements 1.2, 2.2**
-// ---------------------------------------------------------------------------
-
 func TestPropertySingletonRoundTrip(t *testing.T) {
 	f := func(val int) bool {
 		c := NewContainer()
@@ -85,12 +68,6 @@ func TestPropertySingletonRoundTrip(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 2: Transient Use Produces Distinct Instances
-// For any uint8 N (2-10), N calls to Use produce N distinct pointers.
-// **Validates: Requirements 1.4, 2.3**
-// ---------------------------------------------------------------------------
 
 func TestPropertyTransientDistinct(t *testing.T) {
 	f := func(n uint8) bool {
@@ -120,13 +97,6 @@ func TestPropertyTransientDistinct(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 3: Lazy Singleton Factory Invoked Exactly Once
-// For any uint8 N (1-10), N calls to Use invoke factory exactly once,
-// all return same pointer.
-// **Validates: Requirements 1.5, 2.4, 2.5**
-// ---------------------------------------------------------------------------
 
 func TestPropertyLazySingletonOnce(t *testing.T) {
 	f := func(n uint8) bool {
@@ -160,12 +130,6 @@ func TestPropertyLazySingletonOnce(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 4: Named Instance Round-Trip
-// For any string name, GiveNamed/UseNamed returns same pointer.
-// **Validates: Requirements 1.6, 2.7**
-// ---------------------------------------------------------------------------
-
 func TestPropertyNamedRoundTrip(t *testing.T) {
 	f := func(name string) bool {
 		if name == "" {
@@ -186,12 +150,6 @@ func TestPropertyNamedRoundTrip(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 5: Duplicate Registration Rejected
-// Second Give with same type returns non-nil error.
-// **Validates: Requirements 1.8**
-// ---------------------------------------------------------------------------
 
 func TestPropertyDuplicateRejected(t *testing.T) {
 	f := func(val1, val2 int) bool {
@@ -218,12 +176,6 @@ func TestPropertyDuplicateRejected(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 6: Concurrent Singleton Resolution Returns Same Instance
-// For any uint8 N (2-51) goroutines, all get same singleton pointer.
-// **Validates: Requirements 3.2**
-// ---------------------------------------------------------------------------
 
 func TestPropertyConcurrentSingletonSame(t *testing.T) {
 	f := func(n uint8) bool {
@@ -260,13 +212,6 @@ func TestPropertyConcurrentSingletonSame(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 7: Concurrent Lazy Singleton Factory Invoked Once
-// For any uint8 N (2-51) goroutines, lazy factory called exactly once,
-// all get same pointer.
-// **Validates: Requirements 3.3**
-// ---------------------------------------------------------------------------
 
 func TestPropertyConcurrentLazyOnce(t *testing.T) {
 	f := func(n uint8) bool {
@@ -313,12 +258,6 @@ func TestPropertyConcurrentLazyOnce(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 8: Concurrent Transient Resolution Produces Distinct Instances
-// For any uint8 N (2-20) goroutines, each gets distinct transient pointer.
-// **Validates: Requirements 3.4**
-// ---------------------------------------------------------------------------
-
 func TestPropertyConcurrentTransientDistinct(t *testing.T) {
 	f := func(n uint8) bool {
 		goroutines := int(n)%19 + 2 // 2-20
@@ -358,13 +297,6 @@ func TestPropertyConcurrentTransientDistinct(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 9: Lifecycle Hook Ordering
-// For any uint8 N (1-10) services, OnInit in registration order,
-// OnShutdown in reverse.
-// **Validates: Requirements 5.3, 5.4**
-// ---------------------------------------------------------------------------
 
 func TestPropertyLifecycleOrdering(t *testing.T) {
 	f := func(n uint8) bool {
@@ -428,15 +360,7 @@ func TestPropertyLifecycleOrdering(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 10: Module Installation Preserves Registration Order
-// For any sequence of modules M1, M2, ..., Mk installed via app.Module(),
-// services registered by M1 should appear before M2's services in the
-// container's initOrder. Within each module, registration order is preserved.
-// ---------------------------------------------------------------------------
-
-// pbtModuleService is a simple service type for module PBT testing.
-// Each instance carries an ID to verify ordering.
+// pbtModuleService carries an ID to verify ordering.
 type pbtModuleService struct {
 	ID int
 }

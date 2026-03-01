@@ -3,22 +3,29 @@ package transport
 import (
 	"context"
 	"mime/multipart"
+	"net"
 	"net/http"
 )
 
 // Transport defines the network layer interface.
-// Implementations can be net/http, Netpoll, or custom transports.
+// Implementations can be net/http, fasthttp, or custom transports.
 type Transport interface {
-	// ListenAndServe starts the server on the given address.
 	ListenAndServe(addr string, handler Handler) error
-
-	// Shutdown gracefully shuts down the server.
+	Serve(ln net.Listener, handler Handler) error
 	Shutdown(ctx context.Context) error
 }
 
 // Handler is the core request handler interface that transports call.
 type Handler interface {
 	ServeKruda(w ResponseWriter, r Request)
+}
+
+// FastHTTPHandler is an optional interface that Handler implementations can
+// satisfy to enable zero-allocation fasthttp serving. FastHTTPTransport
+// checks for this at startup and calls ServeFast directly, bypassing the
+// generic ServeKruda path (which allocates adapter objects per request).
+type FastHTTPHandler interface {
+	ServeFastHTTP(ctx interface{}) // accepts *fasthttp.RequestCtx as interface{} to avoid import cycle
 }
 
 // HandlerFunc is an adapter to allow use of ordinary functions as Handler.
@@ -38,7 +45,9 @@ type Request interface {
 	QueryParam(key string) string
 	RemoteAddr() string
 	Cookie(name string) string
-	RawRequest() any // access underlying *http.Request if needed
+	RawRequest() any // underlying *http.Request or *fasthttp.RequestCtx
+	Context() context.Context
+	MultipartForm(maxBytes int64) (*multipart.Form, error)
 }
 
 // ResponseWriter abstracts the HTTP response writer.
@@ -60,16 +69,6 @@ type HeaderMap interface {
 // can implement to provide direct access to the underlying http.Header for optimization.
 type DirectHeaderAccess interface {
 	DirectHeader() http.Header
-}
-
-// MultipartProvider is implemented by transports that support multipart forms.
-type MultipartProvider interface {
-	MultipartForm(maxBytes int64) (*multipart.Form, error)
-}
-
-// ContextProvider is implemented by transports that carry a request context.
-type ContextProvider interface {
-	Context() context.Context
 }
 
 // AllHeadersProvider is implemented by transports that can enumerate all headers.

@@ -5,11 +5,32 @@
 // It is compiled by default when CGO is enabled and the kruda_stdjson tag is not set.
 package json
 
-import "github.com/bytedance/sonic"
+import (
+	"bytes"
+
+	"github.com/bytedance/sonic"
+)
+
+// EncoderName identifies the active JSON encoder for diagnostics.
+const EncoderName = "sonic"
 
 // Marshal encodes v as JSON using Sonic (SIMD-accelerated).
 func Marshal(v any) ([]byte, error) {
 	return sonic.Marshal(v)
+}
+
+// MarshalToBuffer encodes v as JSON into the provided buffer using Sonic's
+// streaming encoder. This avoids the intermediate []byte allocation that
+// Marshal performs, enabling callers to reuse buffers via sync.Pool.
+func MarshalToBuffer(buf *bytes.Buffer, v any) error {
+	if err := sonic.ConfigDefault.NewEncoder(buf).Encode(v); err != nil {
+		return err
+	}
+	// Encoder.Encode appends a trailing '\n' — trim it for clean JSON output.
+	if b := buf.Bytes(); len(b) > 0 && b[len(b)-1] == '\n' {
+		buf.Truncate(buf.Len() - 1)
+	}
+	return nil
 }
 
 // Unmarshal decodes JSON data into v using Sonic.

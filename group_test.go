@@ -11,8 +11,6 @@ func testApp() *App {
 	}
 }
 
-// --- joinPath tests (Req 4.7) ---
-
 func TestJoinPath_BothNonEmpty(t *testing.T) {
 	tests := []struct {
 		prefix, path, want string
@@ -48,8 +46,6 @@ func TestJoinPath_SlashPath(t *testing.T) {
 		t.Errorf("joinPath(\"/api\", \"/\") = %q, want %q", got, "/api")
 	}
 }
-
-// --- Group creation (Req 4.1, 4.5) ---
 
 func TestGroup_TopLevel(t *testing.T) {
 	app := testApp()
@@ -91,15 +87,13 @@ func TestGroup_DeeplyNested(t *testing.T) {
 	}
 }
 
-// --- Route registration via Group (Req 4.2) ---
-
 func TestGroup_GetRegistersRoute(t *testing.T) {
 	app := testApp()
 	g := app.Group("/api")
 	g.Get("/users", dummyHandler())
 
-	params := make(map[string]string, 4)
-	if app.router.find("GET", "/api/users", params) == nil {
+	var params routeParams
+	if app.router.find("GET", "/api/users", &params) == nil {
 		t.Error("GET /api/users should be registered")
 	}
 }
@@ -115,11 +109,11 @@ func TestGroup_AllHTTPMethods(t *testing.T) {
 	g.Delete("/r", h)
 	g.Patch("/r", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH"}
 	for _, m := range methods {
-		clear(params)
-		if app.router.find(m, "/api/r", params) == nil {
+		params.reset()
+		if app.router.find(m, "/api/r", &params) == nil {
 			t.Errorf("%s /api/r should be registered", m)
 		}
 	}
@@ -130,13 +124,11 @@ func TestGroup_NestedRouteRegistration(t *testing.T) {
 	v1 := app.Group("/api").Group("/v1")
 	v1.Get("/users", dummyHandler())
 
-	params := make(map[string]string, 4)
-	if app.router.find("GET", "/api/v1/users", params) == nil {
+	var params routeParams
+	if app.router.find("GET", "/api/v1/users", &params) == nil {
 		t.Error("GET /api/v1/users should be registered via nested group")
 	}
 }
-
-// --- Scoped middleware (Req 4.3) ---
 
 func TestGroup_ScopedMiddleware(t *testing.T) {
 	app := testApp()
@@ -149,8 +141,8 @@ func TestGroup_ScopedMiddleware(t *testing.T) {
 	g.Use(mw)
 	g.Get("/test", handler)
 
-	params := make(map[string]string, 4)
-	chain := app.router.find("GET", "/api/test", params)
+	var params routeParams
+	chain := app.router.find("GET", "/api/test", &params)
 	if chain == nil {
 		t.Fatal("GET /api/test should be registered")
 	}
@@ -180,9 +172,9 @@ func TestGroup_MiddlewareNotAppliedToOtherGroups(t *testing.T) {
 	other := app.Group("/other")
 	other.Get("/open", h)
 
-	params := make(map[string]string, 4)
-	guardedChain := app.router.find("GET", "/api/guarded", params)
-	openChain := app.router.find("GET", "/other/open", params)
+	var params routeParams
+	guardedChain := app.router.find("GET", "/api/guarded", &params)
+	openChain := app.router.find("GET", "/other/open", &params)
 
 	if len(guardedChain) != 2 {
 		t.Errorf("/api/guarded chain length = %d, want 2", len(guardedChain))
@@ -191,8 +183,6 @@ func TestGroup_MiddlewareNotAppliedToOtherGroups(t *testing.T) {
 		t.Errorf("/other/open chain length = %d, want 1 (no group mw)", len(openChain))
 	}
 }
-
-// --- Guard alias (Req 4.4) ---
 
 func TestGroup_GuardIsAliasForUse(t *testing.T) {
 	app := testApp()
@@ -204,8 +194,8 @@ func TestGroup_GuardIsAliasForUse(t *testing.T) {
 	g := app.Group("/admin").Guard(auth)
 	g.Get("/dashboard", handler)
 
-	params := make(map[string]string, 4)
-	chain := app.router.find("GET", "/admin/dashboard", params)
+	var params routeParams
+	chain := app.router.find("GET", "/admin/dashboard", &params)
 	if chain == nil {
 		t.Fatal("GET /admin/dashboard should be registered")
 	}
@@ -219,8 +209,6 @@ func TestGroup_GuardIsAliasForUse(t *testing.T) {
 	}
 	assertOrder(t, order, []string{"auth", "handler"})
 }
-
-// --- Nested group middleware inheritance (Req 4.3, 4.5) ---
 
 func TestGroup_NestedMiddlewareChain(t *testing.T) {
 	app := testApp()
@@ -237,8 +225,8 @@ func TestGroup_NestedMiddlewareChain(t *testing.T) {
 	inner.Use(innerMW)
 	inner.Get("/users", handler)
 
-	params := make(map[string]string, 4)
-	chain := app.router.find("GET", "/api/v1/users", params)
+	var params routeParams
+	chain := app.router.find("GET", "/api/v1/users", &params)
 	if chain == nil {
 		t.Fatal("GET /api/v1/users should be registered")
 	}
@@ -253,8 +241,6 @@ func TestGroup_NestedMiddlewareChain(t *testing.T) {
 	assertOrder(t, order, []string{"outer", "inner", "handler"})
 }
 
-// --- Global + group middleware ordering ---
-
 func TestGroup_GlobalPlusGroupMiddleware(t *testing.T) {
 	app := testApp()
 	app.middleware = []HandlerFunc{
@@ -268,8 +254,8 @@ func TestGroup_GlobalPlusGroupMiddleware(t *testing.T) {
 	g.Use(groupMW)
 	g.Get("/test", h)
 
-	params := make(map[string]string, 4)
-	chain := app.router.find("GET", "/api/test", params)
+	var params routeParams
+	chain := app.router.find("GET", "/api/test", &params)
 	if chain == nil {
 		t.Fatal("GET /api/test should be registered")
 	}
@@ -278,8 +264,6 @@ func TestGroup_GlobalPlusGroupMiddleware(t *testing.T) {
 		t.Fatalf("chain length = %d, want 3 (global + group + handler)", len(chain))
 	}
 }
-
-// --- Done() chaining (Req 4.6) ---
 
 func TestGroup_DoneReturnsApp(t *testing.T) {
 	app := testApp()
@@ -299,16 +283,14 @@ func TestGroup_DoneChaining(t *testing.T) {
 		Post("/users", dummyHandler()).
 		Done()
 
-	params := make(map[string]string, 4)
-	if app.router.find("GET", "/api/users", params) == nil {
+	var params routeParams
+	if app.router.find("GET", "/api/users", &params) == nil {
 		t.Error("GET /api/users should be registered via chaining")
 	}
-	if app.router.find("POST", "/api/users", params) == nil {
+	if app.router.find("POST", "/api/users", &params) == nil {
 		t.Error("POST /api/users should be registered via chaining")
 	}
 }
-
-// --- Method chaining on Group ---
 
 func TestGroup_UseReturnsGroup(t *testing.T) {
 	app := testApp()
@@ -340,8 +322,6 @@ func TestGroup_RouteMethodsReturnGroup(t *testing.T) {
 		t.Error("Patch() should return group")
 	}
 }
-
-// --- collectMiddleware ---
 
 func TestCollectMiddleware_NoParent(t *testing.T) {
 	app := testApp()
@@ -381,15 +361,13 @@ func TestCollectMiddleware_EmptyGroups(t *testing.T) {
 	}
 }
 
-// --- Options, Head, All methods ---
-
 func TestGroup_Options(t *testing.T) {
 	app := testApp()
 	g := app.Group("/api")
 	g.Options("/cors", dummyHandler())
 
-	params := make(map[string]string, 4)
-	if app.router.find("OPTIONS", "/api/cors", params) == nil {
+	var params routeParams
+	if app.router.find("OPTIONS", "/api/cors", &params) == nil {
 		t.Error("OPTIONS /api/cors should be registered")
 	}
 }
@@ -399,8 +377,8 @@ func TestGroup_Head(t *testing.T) {
 	g := app.Group("/api")
 	g.Head("/ping", dummyHandler())
 
-	params := make(map[string]string, 4)
-	if app.router.find("HEAD", "/api/ping", params) == nil {
+	var params routeParams
+	if app.router.find("HEAD", "/api/ping", &params) == nil {
 		t.Error("HEAD /api/ping should be registered")
 	}
 }
@@ -410,10 +388,10 @@ func TestGroup_All(t *testing.T) {
 	g := app.Group("/api")
 	g.All("/any", dummyHandler())
 
-	params := make(map[string]string, 4)
+	var params routeParams
 	for _, method := range standardMethods {
-		clear(params)
-		if app.router.find(method, "/api/any", params) == nil {
+		params.reset()
+		if app.router.find(method, "/api/any", &params) == nil {
 			t.Errorf("%s /api/any should be registered via All()", method)
 		}
 	}

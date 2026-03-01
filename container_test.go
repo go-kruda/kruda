@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Test helpers — types used across multiple tests
-// ---------------------------------------------------------------------------
-
 type testService struct {
 	Name string
 }
@@ -61,10 +57,6 @@ type lifecycleA struct{ lifecycleService }
 type lifecycleB struct{ lifecycleService }
 type lifecycleC struct{ lifecycleService }
 
-// ---------------------------------------------------------------------------
-// 1. TestContainerGiveAndUse — singleton round-trip, pointer equality
-// ---------------------------------------------------------------------------
-
 func TestContainerGiveAndUse(t *testing.T) {
 	c := NewContainer()
 	svc := &testService{Name: "hello"}
@@ -85,10 +77,6 @@ func TestContainerGiveAndUse(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 2. TestContainerGiveAs — register by interface, resolve by interface type
-// ---------------------------------------------------------------------------
-
 func TestContainerGiveAs(t *testing.T) {
 	c := NewContainer()
 	impl := &testImpl{msg: "pong"}
@@ -105,10 +93,6 @@ func TestContainerGiveAs(t *testing.T) {
 		t.Fatalf("expected pong, got %s", got.Ping())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 3. TestContainerGiveTransient — different instances on each resolve
-// ---------------------------------------------------------------------------
 
 func TestContainerGiveTransient(t *testing.T) {
 	c := NewContainer()
@@ -139,10 +123,6 @@ func TestContainerGiveTransient(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 4. TestContainerGiveLazy — same instance, factory called once
-// ---------------------------------------------------------------------------
-
 func TestContainerGiveLazy(t *testing.T) {
 	c := NewContainer()
 	var callCount atomic.Int64
@@ -171,10 +151,6 @@ func TestContainerGiveLazy(t *testing.T) {
 		t.Fatalf("factory should be called once, got %d", callCount.Load())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 5. TestContainerGiveLazyRetry — factory fails first, succeeds second (R2.8)
-// ---------------------------------------------------------------------------
 
 func TestContainerGiveLazyRetry(t *testing.T) {
 	c := NewContainer()
@@ -222,10 +198,6 @@ func TestContainerGiveLazyRetry(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 6. TestContainerGiveNamed — register and resolve by name
-// ---------------------------------------------------------------------------
-
 func TestContainerGiveNamed(t *testing.T) {
 	c := NewContainer()
 	writeDB := &testService{Name: "write-db"}
@@ -255,10 +227,6 @@ func TestContainerGiveNamed(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 7. TestContainerGiveNil — error on nil registration
-// ---------------------------------------------------------------------------
-
 func TestContainerGiveNil(t *testing.T) {
 	c := NewContainer()
 
@@ -280,10 +248,6 @@ func TestContainerGiveNil(t *testing.T) {
 		t.Fatal("GiveAs(nil) should return error")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 8. TestContainerGiveDuplicate — error on duplicate type registration
-// ---------------------------------------------------------------------------
 
 func TestContainerGiveDuplicate(t *testing.T) {
 	c := NewContainer()
@@ -321,10 +285,6 @@ func TestContainerGiveDuplicate(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 9. TestContainerUseNotFound — error on unregistered type
-// ---------------------------------------------------------------------------
-
 func TestContainerUseNotFound(t *testing.T) {
 	c := NewContainer()
 
@@ -344,10 +304,6 @@ func TestContainerUseNotFound(t *testing.T) {
 		t.Fatalf("error should mention no named instance, got: %v", err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 10. TestContainerCircularDependency — cycle detection with chain message
-// ---------------------------------------------------------------------------
 
 func TestContainerCircularDependency(t *testing.T) {
 	c := NewContainer()
@@ -390,10 +346,6 @@ func TestContainerCircularDependency(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 11. TestContainerLifecycleStart — OnInit called in registration order
-// ---------------------------------------------------------------------------
-
 func TestContainerLifecycleStart(t *testing.T) {
 	c := NewContainer()
 	var initLog []string
@@ -421,10 +373,6 @@ func TestContainerLifecycleStart(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 12. TestContainerLifecycleStartFailure — cleanup on OnInit failure
-// ---------------------------------------------------------------------------
 
 func TestContainerLifecycleStartFailure(t *testing.T) {
 	c := NewContainer()
@@ -458,10 +406,6 @@ func TestContainerLifecycleStartFailure(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// 13. TestContainerLifecycleShutdown — OnShutdown in reverse order
-// ---------------------------------------------------------------------------
-
 func TestContainerLifecycleShutdown(t *testing.T) {
 	c := NewContainer()
 	var shutLog []string
@@ -488,10 +432,6 @@ func TestContainerLifecycleShutdown(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 14. TestContainerConcurrentUse — concurrent singleton resolution (race detector)
-// ---------------------------------------------------------------------------
 
 func TestContainerConcurrentUse(t *testing.T) {
 	c := NewContainer()
@@ -523,10 +463,6 @@ func TestContainerConcurrentUse(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// 15. TestContainerUseNamedTypeMismatch — error when type doesn't match
-// ---------------------------------------------------------------------------
 
 func TestContainerUseNamedTypeMismatch(t *testing.T) {
 	c := NewContainer()

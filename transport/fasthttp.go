@@ -4,7 +4,9 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"mime/multipart"
+	"net"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -31,33 +33,55 @@ func NewFastHTTP(cfg FastHTTPConfig) *FastHTTPTransport {
 	return &FastHTTPTransport{config: cfg}
 }
 
-// ListenAndServe starts the fasthttp server.
-func (t *FastHTTPTransport) ListenAndServe(addr string, handler Handler) error {
-	t.server = &fasthttp.Server{
-		Handler: func(ctx *fasthttp.RequestCtx) {
+// newServer creates and configures a fasthttp.Server with the transport's config.
+func (t *FastHTTPTransport) newServer(handler Handler) *fasthttp.Server {
+	var fhHandler fasthttp.RequestHandler
+
+	// Fast path: if handler implements FastHTTPHandler, call ServeFast directly
+	// bypassing adapter allocation (2 allocs/req saved).
+	if fh, ok := handler.(FastHTTPHandler); ok {
+		fhHandler = func(ctx *fasthttp.RequestCtx) {
+			fh.ServeFastHTTP(ctx)
+		}
+	} else {
+		fhHandler = func(ctx *fasthttp.RequestCtx) {
 			req := &fasthttpRequest{ctx: ctx, trustProxy: t.config.TrustProxy}
 			resp := &fasthttpResponseWriter{ctx: ctx}
 			handler.ServeKruda(resp, req)
-		},
+		}
 	}
+
+	s := &fasthttp.Server{Handler: fhHandler}
 
 	if t.config.ReadTimeout > 0 {
-		t.server.ReadTimeout = t.config.ReadTimeout
+		s.ReadTimeout = t.config.ReadTimeout
 	}
 	if t.config.WriteTimeout > 0 {
-		t.server.WriteTimeout = t.config.WriteTimeout
+		s.WriteTimeout = t.config.WriteTimeout
 	}
 	if t.config.IdleTimeout > 0 {
-		t.server.IdleTimeout = t.config.IdleTimeout
+		s.IdleTimeout = t.config.IdleTimeout
 	}
 	if t.config.MaxBodySize > 0 {
-		t.server.MaxRequestBodySize = t.config.MaxBodySize
+		s.MaxRequestBodySize = t.config.MaxBodySize
 	}
 	if t.config.Concurrency > 0 {
-		t.server.Concurrency = t.config.Concurrency
+		s.Concurrency = t.config.Concurrency
 	}
 
+	return s
+}
+
+// ListenAndServe starts the fasthttp server.
+func (t *FastHTTPTransport) ListenAndServe(addr string, handler Handler) error {
+	t.server = t.newServer(handler)
 	return t.server.ListenAndServe(addr)
+}
+
+// Serve starts the fasthttp server on an existing listener.
+func (t *FastHTTPTransport) Serve(ln net.Listener, handler Handler) error {
+	t.server = t.newServer(handler)
+	return t.server.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the server.
@@ -67,8 +91,6 @@ func (t *FastHTTPTransport) Shutdown(ctx context.Context) error {
 	}
 	return t.server.ShutdownWithContext(ctx)
 }
-
-// --- Request implementation ---
 
 type fasthttpRequest struct {
 	ctx        *fasthttp.RequestCtx
@@ -125,15 +147,17 @@ func (r *fasthttpRequest) RawRequest() any {
 }
 
 func (r *fasthttpRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
-	mr, err := r.ctx.Request.MultipartForm()
-	if err != nil {
-		return nil, err
+	if maxBytes > 0 {
+		cl := int64(r.ctx.Request.Header.ContentLength())
+		if cl > maxBytes {
+			return nil, fmt.Errorf("multipart: request body too large (%d > %d)", cl, maxBytes)
+		}
 	}
-	return mr, nil
+	return r.ctx.Request.MultipartForm()
 }
 
 func (r *fasthttpRequest) Context() context.Context {
-	return r.ctx // *fasthttp.RequestCtx implements context.Context
+	return r.ctx
 }
 
 func (r *fasthttpRequest) AllHeaders() map[string]string {
@@ -152,8 +176,6 @@ func (r *fasthttpRequest) AllQuery() map[string]string {
 	return m
 }
 
-// --- ResponseWriter implementation ---
-
 type fasthttpResponseWriter struct {
 	ctx *fasthttp.RequestCtx
 }
@@ -171,24 +193,11 @@ func (w *fasthttpResponseWriter) Write(data []byte) (int, error) {
 	return len(data), err
 }
 
-// --- HeaderMap implementation ---
-
 type fasthttpHeaderMap struct {
 	ctx *fasthttp.RequestCtx
 }
 
-func (m *fasthttpHeaderMap) Set(key, value string) {
-	m.ctx.Response.Header.Set(key, value)
-}
-
-func (m *fasthttpHeaderMap) Add(key, value string) {
-	m.ctx.Response.Header.Add(key, value)
-}
-
-func (m *fasthttpHeaderMap) Get(key string) string {
-	return string(m.ctx.Response.Header.Peek(key))
-}
-
-func (m *fasthttpHeaderMap) Del(key string) {
-	m.ctx.Response.Header.Del(key)
-}
+func (m *fasthttpHeaderMap) Set(key, value string) { m.ctx.Response.Header.Set(key, value) }
+func (m *fasthttpHeaderMap) Add(key, value string) { m.ctx.Response.Header.Add(key, value) }
+func (m *fasthttpHeaderMap) Get(key string) string { return string(m.ctx.Response.Header.Peek(key)) }
+func (m *fasthttpHeaderMap) Del(key string)        { m.ctx.Response.Header.Del(key) }

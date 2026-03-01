@@ -65,7 +65,7 @@ type sourceCache struct {
 }
 
 var (
-	sourceCacheMu sync.Mutex
+	sourceCacheMu  sync.Mutex
 	sourceCacheMap = make(map[string]sourceCache)
 )
 
@@ -74,9 +74,7 @@ var (
 var devErrorTmpl = template.Must(template.New("devError").Parse(devErrorHTML))
 
 // renderDevErrorPage renders a rich HTML error page in development mode.
-// Returns nil immediately if DevMode is false (zero overhead in production).
-// Returns a non-nil error only if the page was successfully rendered (signals
-// to the caller that the response has been written).
+// Returns nil immediately if DevMode is false — zero overhead in production.
 func renderDevErrorPage(c *Ctx, err error, statusCode int) error {
 	// Gate: never render in production — zero overhead
 	if !c.app.config.DevMode {
@@ -91,19 +89,15 @@ func renderDevErrorPage(c *Ctx, err error, statusCode int) error {
 		RequestPath:   c.Path(),
 	}
 
-	// 1. Parse stack trace
 	data.StackTrace = captureStackTrace()
 
-	// 2. Read source code ±10 lines around first frame (best-effort)
 	if len(data.StackTrace) > 0 {
 		data.SourceCode = readSourceContext(data.StackTrace[0].File, data.StackTrace[0].Line, 10)
 	}
 
-	// 3. Collect request details
 	data.RequestHeaders = collectRequestHeaders(c)
 	data.QueryParams = collectQueryParams(c)
 
-	// 4. Skip body for multipart/form-data; truncate at 1KB to avoid large payloads in error page
 	if !strings.Contains(c.Header("Content-Type"), "multipart/form-data") {
 		body := c.BodyString()
 		if len(body) > 1024 {
@@ -112,16 +106,10 @@ func renderDevErrorPage(c *Ctx, err error, statusCode int) error {
 		data.RequestBody = body
 	}
 
-	// 5. Collect available routes
 	data.AvailableRoutes = collectDevRoutes(c.app)
-
-	// 6. Filter environment variables
 	data.EnvVars = filterEnvVars()
-
-	// 7. Generate suggestions
 	data.Suggestions = generateSuggestions(err, statusCode, c)
 
-	// 8. Render HTML
 	var buf bytes.Buffer
 	if tmplErr := devErrorTmpl.Execute(&buf, data); tmplErr != nil {
 		// Fallback: plain text if template fails
@@ -364,7 +352,7 @@ func isSensitiveEnvKey(key string) bool {
 }
 
 // generateSuggestions produces helpful hints based on error type and status code.
-func generateSuggestions(err error, statusCode int, c *Ctx) []string {
+func generateSuggestions(_ error, statusCode int, c *Ctx) []string {
 	var suggestions []string
 	switch statusCode {
 	case 404:

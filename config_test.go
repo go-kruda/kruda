@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -182,5 +183,102 @@ func TestWithTLS_DefaultEmpty(t *testing.T) {
 	}
 	if cfg.TLSKeyFile != "" {
 		t.Errorf("default TLSKeyFile should be empty, got %q", cfg.TLSKeyFile)
+	}
+}
+
+func TestWithTurbo_GoMaxProcs(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfg        TurboConfig
+		wantTurbo  bool
+		wantGmax   int
+		wantProcs  int
+		wantCPUPct float64
+	}{
+		{
+			name:      "default GoMaxProcs",
+			cfg:       TurboConfig{},
+			wantTurbo: true,
+			wantGmax:  0,
+		},
+		{
+			name:      "GoMaxProcs=2",
+			cfg:       TurboConfig{GoMaxProcs: 2},
+			wantTurbo: true,
+			wantGmax:  2,
+		},
+		{
+			name:      "GoMaxProcs=2 with explicit Processes",
+			cfg:       TurboConfig{GoMaxProcs: 2, Processes: 4},
+			wantTurbo: true,
+			wantGmax:  2,
+			wantProcs: 4,
+		},
+		{
+			name:       "GoMaxProcs=1 with CPUPercent",
+			cfg:        TurboConfig{GoMaxProcs: 1, CPUPercent: 50},
+			wantTurbo:  true,
+			wantGmax:   1,
+			wantCPUPct: 50,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := &App{config: defaultConfig()}
+			opt := WithTurbo(tt.cfg)
+			opt(app)
+
+			if app.config.Turbo != tt.wantTurbo {
+				t.Errorf("Turbo = %v, want %v", app.config.Turbo, tt.wantTurbo)
+			}
+			if app.config.TurboConfig.GoMaxProcs != tt.wantGmax {
+				t.Errorf("GoMaxProcs = %d, want %d", app.config.TurboConfig.GoMaxProcs, tt.wantGmax)
+			}
+			if tt.wantProcs > 0 && app.config.TurboConfig.Processes != tt.wantProcs {
+				t.Errorf("Processes = %d, want %d", app.config.TurboConfig.Processes, tt.wantProcs)
+			}
+			if tt.wantCPUPct > 0 && app.config.TurboConfig.CPUPercent != tt.wantCPUPct {
+				t.Errorf("CPUPercent = %f, want %f", app.config.TurboConfig.CPUPercent, tt.wantCPUPct)
+			}
+		})
+	}
+}
+
+func TestResolveCPUs_WithGoMaxProcs(t *testing.T) {
+	// resolveCPUs should return at least 1
+	n := resolveCPUs(0, 0)
+	if n < 1 {
+		t.Errorf("resolveCPUs(0, 0) = %d, want >= 1", n)
+	}
+
+	// Explicit processes override
+	n = resolveCPUs(4, 0)
+	if n != 4 {
+		t.Errorf("resolveCPUs(4, 0) = %d, want 4", n)
+	}
+
+	// CPUPercent on small machines still returns >= 1
+	n = resolveCPUs(0, 1)
+	if n < 1 {
+		t.Errorf("resolveCPUs(0, 1) = %d, want >= 1", n)
+	}
+}
+
+func TestSetupChild_ReadsEnvGoMaxProcs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("turbo mode (IsChild/IsSupervisor/ChildID) only supported on Linux")
+	}
+	os.Setenv("KRUDA_CHILD_ID", "0")
+	defer os.Unsetenv("KRUDA_CHILD_ID")
+
+	if !IsChild() {
+		t.Error("expected IsChild() = true after setting KRUDA_CHILD_ID")
+	}
+	if IsSupervisor() {
+		t.Error("expected IsSupervisor() = false after setting KRUDA_CHILD_ID")
+	}
+	if ChildID() != 0 {
+		t.Errorf("ChildID() = %d, want 0", ChildID())
 	}
 }

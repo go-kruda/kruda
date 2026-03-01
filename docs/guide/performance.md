@@ -4,19 +4,14 @@ Kruda is designed for high performance with zero-allocation hot paths, pooled co
 
 ## Transport Selection
 
-Kruda supports two transports:
+Kruda defaults to **fasthttp** for maximum performance. Use `NetHTTP()` when you need HTTP/2 or TLS.
 
-| Transport | Platform | Best For |
-|-----------|----------|----------|
-| Netpoll | Linux only | Maximum throughput, low latency |
-| net/http | All platforms | Compatibility, HTTP/2, TLS |
+| Transport | Option | Best For |
+|-----------|--------|----------|
+| fasthttp | `kruda.New()` (default) | Maximum throughput, low latency |
+| net/http | `kruda.New(kruda.NetHTTP())` | HTTP/2, TLS, Windows |
 
-Auto-selection logic:
-1. Linux + Netpoll available → Netpoll
-2. Windows/macOS → net/http
-3. Explicit config overrides auto-selection
-
-Netpoll uses Linux epoll for non-blocking I/O, providing significantly higher throughput for high-concurrency workloads.
+Auto-fallback: TLS config or Windows automatically selects net/http even without `NetHTTP()`.
 
 ## Context Pool Tuning
 
@@ -66,13 +61,7 @@ Route registration order doesn't affect lookup performance.
 | Sonic | Yes | ~2-3x faster than encoding/json (SIMD) |
 | encoding/json | No | Standard Go performance |
 
-Sonic is used by default when CGO is available. Falls back to `encoding/json` transparently.
-
-Force stdlib JSON:
-
-```bash
-go build -tags kruda_stdjson ./...
-```
+Sonic is used automatically via build tags. Falls back to `encoding/json` transparently.
 
 ## Zero-Allocation Hot Path
 
@@ -110,9 +99,84 @@ go test -bench=. -benchmem -count=5 ./... > new.txt
 benchstat bench/baseline.txt new.txt
 ```
 
+## Profile-Guided Optimization (PGO)
+
+Go 1.21+ supports PGO — the compiler uses a CPU profile of your app to make better inlining, devirtualization, and layout decisions. This gives **2-7% free performance** with zero code changes.
+
+### Quick Start
+
+```bash
+# Install the CLI (if not already)
+go install github.com/go-kruda/kruda/cmd/kruda@latest
+
+# Generate a PGO profile (auto-load mode)
+kruda pgo --auto --duration 30
+
+# Or interactive mode: you provide the load
+kruda pgo --duration 60
+```
+
+This creates `default.pgo` in your main package directory. Go auto-detects it on the next `go build`.
+
+### How It Works
+
+1. **Profile** — Run your app under realistic load while collecting a CPU profile
+2. **Build** — Go reads `default.pgo` and optimizes hot code paths
+3. **Deploy** — Your binary is 2-7% faster with no code changes
+
+### Setup
+
+Add pprof to your main.go:
+
+```go
+import (
+    "net/http"
+    _ "net/http/pprof"
+)
+
+func main() {
+    // Start pprof server on a separate port
+    go http.ListenAndServe(":6060", nil)
+
+    app := kruda.New()
+    // ... your routes
+    app.Listen(":3000")
+}
+```
+
+### CLI Commands
+
+```bash
+kruda pgo                          # Interactive: you generate load manually
+kruda pgo --auto                   # Auto: uses bombardier to generate load
+kruda pgo --auto -d 60             # Auto with 60s profiling duration
+kruda pgo --auto --endpoints /,/users/1,/api/health  # Specific endpoints
+kruda pgo --auto -c 200            # 200 bombardier connections
+kruda pgo -o ./profiles/v2.pgo     # Custom output path
+
+kruda pgo info                     # Check if PGO is active
+kruda pgo strip                    # Disable PGO (backs up the profile)
+```
+
+### Best Practices
+
+1. **Representative load** — Profile under realistic traffic patterns, not just `/`
+2. **Re-profile after major changes** — Update `default.pgo` when your hot paths change significantly
+3. **Commit to repo** — `default.pgo` should be in version control so CI/CD builds are optimized
+4. **Use Go 1.26+** — Green Tea GC + improved PGO gives the best results
+5. **Combine with Sonic** — PGO + Sonic JSON gives maximum throughput
+
+### Verify PGO is Active
+
+```bash
+go build -v ./... 2>&1 | grep -i pgo
+```
+
+You should see your package listed as using PGO.
+
 ## Production Tips
 
-1. Use Netpoll on Linux for maximum throughput
+1. Use fasthttp on Linux/macOS for maximum throughput
 2. Set appropriate timeouts to prevent resource exhaustion:
    ```go
    kruda.New(
@@ -124,3 +188,4 @@ benchstat bench/baseline.txt new.txt
 3. Place rate limiting and auth middleware early in the chain
 4. Use `kruda_stdjson` build tag if CGO is problematic in your environment
 5. Disable dev mode in production (`WithDevMode(false)` — the default)
+6. Enable PGO for 2-7% free performance (see above)

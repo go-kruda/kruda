@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Mock flusher for SSE tests
-// ---------------------------------------------------------------------------
-
 type mockFlusherWriter struct {
 	mockResponseWriter
 	flushCount int
@@ -32,10 +28,6 @@ func newSSECtx() (*Ctx, *mockFlusherWriter) {
 	c.reset(fw, &mockRequest{method: "GET", path: "/events"})
 	return c, fw
 }
-
-// ---------------------------------------------------------------------------
-// Task 7.7: SSEStream.Event formatting
-// ---------------------------------------------------------------------------
 
 func TestSSEStream_Event(t *testing.T) {
 	var buf bytes.Buffer
@@ -133,10 +125,6 @@ func TestSSEStream_Event_Object(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 7.7: SSEStream.Data formatting
-// ---------------------------------------------------------------------------
-
 func TestSSEStream_Data(t *testing.T) {
 	var buf bytes.Buffer
 	flushCount := 0
@@ -161,10 +149,6 @@ func TestSSEStream_Data(t *testing.T) {
 		t.Errorf("flush count = %d, want 1", flushCount)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 7.7: SSEStream.Comment formatting
-// ---------------------------------------------------------------------------
 
 func TestSSEStream_Comment(t *testing.T) {
 	var buf bytes.Buffer
@@ -191,10 +175,6 @@ func TestSSEStream_Comment(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 7.7: SSEStream.Retry formatting
-// ---------------------------------------------------------------------------
-
 func TestSSEStream_Retry(t *testing.T) {
 	var buf bytes.Buffer
 	flushCount := 0
@@ -219,10 +199,6 @@ func TestSSEStream_Retry(t *testing.T) {
 		t.Errorf("flush count = %d, want 1", flushCount)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 7.7: Context cancellation
-// ---------------------------------------------------------------------------
 
 func TestSSEStream_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -254,10 +230,6 @@ func TestSSEStream_ContextCancelled(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 7.7: Encode error
-// ---------------------------------------------------------------------------
-
 func TestSSEStream_EncodeError(t *testing.T) {
 	var buf bytes.Buffer
 	flushCount := 0
@@ -284,10 +256,6 @@ func TestSSEStream_EncodeError(t *testing.T) {
 		t.Fatal("expected encode error for Data")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 7.7: c.SSE() integration — headers and flusher
-// ---------------------------------------------------------------------------
 
 func TestCtx_SSE_SetsHeaders(t *testing.T) {
 	c, fw := newSSECtx()
@@ -384,10 +352,6 @@ func TestCtx_SSE_MultipleEvents(t *testing.T) {
 		t.Errorf("flush count = %d, want >= 4", fw.flushCount)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Helper: mockFlush for standalone SSEStream tests
-// ---------------------------------------------------------------------------
 
 type mockFlush struct {
 	count *int

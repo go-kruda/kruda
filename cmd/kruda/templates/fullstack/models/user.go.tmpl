@@ -1,0 +1,14 @@
+package models
+
+// User represents a user entity.
+type User struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// CreateUserInput is the input for creating or updating a user.
+type CreateUserInput struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}

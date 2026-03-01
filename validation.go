@@ -84,8 +84,6 @@ func (v *Validator) Messages(overrides map[string]string) *Validator {
 	return v
 }
 
-// --- Pre-compiled validator chain ---
-
 // fieldValidator is pre-compiled at registration time.
 type fieldValidator struct {
 	index     int         // struct field index
@@ -201,8 +199,6 @@ func formatMessage(messages map[string]string, rule, field, param string) string
 	return msg
 }
 
-// --- Built-in rules ---
-
 func builtinRules() map[string]ValidatorFunc {
 	return map[string]ValidatorFunc{
 		"required":   validateRequired,
@@ -253,9 +249,6 @@ func defaultMessages() map[string]string {
 	}
 }
 
-// --- Rule implementations ---
-
-// validateRequired checks that a value is not zero.
 func validateRequired(value any, _ string) bool {
 	if value == nil {
 		return false
@@ -273,7 +266,6 @@ func validateRequired(value any, _ string) bool {
 	}
 }
 
-// validateMin checks minimum value (numeric) or length (string/slice).
 func validateMin(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -302,7 +294,6 @@ func validateMin(value any, param string) bool {
 	return false
 }
 
-// validateMax checks maximum value (numeric) or length (string/slice).
 func validateMax(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -330,7 +321,6 @@ func validateMax(value any, param string) bool {
 	return false
 }
 
-// validateEmail checks for a valid email format using net/mail.
 func validateEmail(value any, _ string) bool {
 	s, ok := value.(string)
 	if !ok || s == "" {
@@ -340,7 +330,6 @@ func validateEmail(value any, _ string) bool {
 	return err == nil
 }
 
-// validateURL checks for a valid URL format using net/url.
 func validateURL(value any, _ string) bool {
 	s, ok := value.(string)
 	if !ok || s == "" {
@@ -350,7 +339,6 @@ func validateURL(value any, _ string) bool {
 	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
-// validateOneOf checks if value is one of the space-separated options.
 func validateOneOf(value any, param string) bool {
 	s := fmt.Sprintf("%v", value)
 	for _, opt := range strings.Fields(param) {
@@ -361,7 +349,7 @@ func validateOneOf(value any, param string) bool {
 	return false
 }
 
-// validateLen checks exact length (string) or exact value count (slice/map).
+// validateLen checks exact length (string/slice/map).
 func validateLen(value any, param string) bool {
 	n, err := strconv.Atoi(param)
 	if err != nil {
@@ -375,7 +363,6 @@ func validateLen(value any, param string) bool {
 	return false
 }
 
-// validateGT checks greater than (numeric).
 func validateGT(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -401,7 +388,6 @@ func validateGT(value any, param string) bool {
 	return false
 }
 
-// validateGTE checks greater than or equal (numeric).
 func validateGTE(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -427,7 +413,6 @@ func validateGTE(value any, param string) bool {
 	return false
 }
 
-// validateLT checks less than (numeric).
 func validateLT(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -453,7 +438,6 @@ func validateLT(value any, param string) bool {
 	return false
 }
 
-// validateLTE checks less than or equal (numeric).
 func validateLTE(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
 	if err != nil {
@@ -500,7 +484,6 @@ func validateUUID(value any, _ string) bool {
 	return true
 }
 
-// validateAlpha checks that string contains only letters.
 func validateAlpha(value any, _ string) bool {
 	s, ok := value.(string)
 	if !ok || s == "" {
@@ -514,7 +497,6 @@ func validateAlpha(value any, _ string) bool {
 	return true
 }
 
-// validateAlphanum checks that string contains only letters and digits.
 func validateAlphanum(value any, _ string) bool {
 	s, ok := value.(string)
 	if !ok || s == "" {
@@ -549,7 +531,6 @@ func validateNumeric(value any, _ string) bool {
 	return true
 }
 
-// validateContains checks that string contains the given substring.
 func validateContains(value any, param string) bool {
 	s, ok := value.(string)
 	if !ok {
@@ -558,7 +539,6 @@ func validateContains(value any, param string) bool {
 	return strings.Contains(s, param)
 }
 
-// validateStartsWith checks that string starts with the given prefix.
 func validateStartsWith(value any, param string) bool {
 	s, ok := value.(string)
 	if !ok {
@@ -567,7 +547,6 @@ func validateStartsWith(value any, param string) bool {
 	return strings.HasPrefix(s, param)
 }
 
-// validateEndsWith checks that string ends with the given suffix.
 func validateEndsWith(value any, param string) bool {
 	s, ok := value.(string)
 	if !ok {

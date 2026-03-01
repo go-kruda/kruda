@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Req 1.1, 1.2: Static routes — separate tree per method, radix insertion
-// ---------------------------------------------------------------------------
-
 func TestStaticRoutesDifferentDepths(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
@@ -19,7 +15,7 @@ func TestStaticRoutesDifferentDepths(t *testing.T) {
 	r.addRoute("GET", "/a/b/c", h)
 	r.addRoute("GET", "/x/y/z/w", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	tests := []struct {
 		path  string
@@ -34,8 +30,8 @@ func TestStaticRoutesDifferentDepths(t *testing.T) {
 		{"/b", false},
 	}
 	for _, tt := range tests {
-		clear(params)
-		got := r.find("GET", tt.path, params)
+		params.reset()
+		got := r.find("GET", tt.path, &params)
 		if tt.match && got == nil {
 			t.Errorf("GET %s should match", tt.path)
 		}
@@ -56,7 +52,7 @@ func TestStaticRoutesCommonPrefixes(t *testing.T) {
 	r.addRoute("GET", "/api/posts/recent", h)
 	r.addRoute("GET", "/app/dashboard", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	tests := []struct {
 		path  string
@@ -72,8 +68,8 @@ func TestStaticRoutesCommonPrefixes(t *testing.T) {
 		{"/app", false},
 	}
 	for _, tt := range tests {
-		clear(params)
-		got := r.find("GET", tt.path, params)
+		params.reset()
+		got := r.find("GET", tt.path, &params)
 		if tt.match && got == nil {
 			t.Errorf("GET %s should match", tt.path)
 		}
@@ -91,19 +87,19 @@ func TestStaticRouteSeparateTreePerMethod(t *testing.T) {
 	r.addRoute("POST", "/data", h)
 	r.addRoute("PUT", "/data", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Each method should find its own route
 	for _, method := range []string{"GET", "POST", "PUT"} {
-		clear(params)
-		if r.find(method, "/data", params) == nil {
+		params.reset()
+		if r.find(method, "/data", &params) == nil {
 			t.Errorf("%s /data should match", method)
 		}
 	}
 	// Methods not registered should not match
 	for _, method := range []string{"DELETE", "PATCH", "OPTIONS", "HEAD"} {
-		clear(params)
-		if r.find(method, "/data", params) != nil {
+		params.reset()
+		if r.find(method, "/data", &params) != nil {
 			t.Errorf("%s /data should NOT match", method)
 		}
 	}
@@ -117,11 +113,11 @@ func TestStaticPriorityOverParam(t *testing.T) {
 	r.addRoute("GET", "/users/admin", hStatic)
 	r.addRoute("GET", "/users/:id", hParam)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Static route should be found for exact match
-	clear(params)
-	got := r.find("GET", "/users/admin", params)
+	params.reset()
+	got := r.find("GET", "/users/admin", &params)
 	if got == nil {
 		t.Fatal("GET /users/admin should match")
 	}
@@ -131,26 +127,22 @@ func TestStaticPriorityOverParam(t *testing.T) {
 	}
 
 	// Param route should match other values
-	clear(params)
-	got = r.find("GET", "/users/42", params)
+	params.reset()
+	got = r.find("GET", "/users/42", &params)
 	if got == nil {
 		t.Fatal("GET /users/42 should match param route")
 	}
-	if params["id"] != "42" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "42")
+	if params.get("id") != "42" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "42")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.3, 1.4: Parameterized routes — single and multi-param
-// ---------------------------------------------------------------------------
 
 func TestParamSingle(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:id", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	tests := []struct {
 		path    string
@@ -164,8 +156,8 @@ func TestParamSingle(t *testing.T) {
 		{"/users/123/extra", "", true}, // no route for extra segment
 	}
 	for _, tt := range tests {
-		clear(params)
-		got := r.find("GET", tt.path, params)
+		params.reset()
+		got := r.find("GET", tt.path, &params)
 		if tt.wantNil {
 			if got != nil {
 				t.Errorf("GET %s should NOT match", tt.path)
@@ -176,8 +168,8 @@ func TestParamSingle(t *testing.T) {
 			t.Errorf("GET %s should match", tt.path)
 			continue
 		}
-		if params["id"] != tt.wantID {
-			t.Errorf("GET %s: params[id] = %q, want %q", tt.path, params["id"], tt.wantID)
+		if params.get("id") != tt.wantID {
+			t.Errorf("GET %s: params.get(id) = %q, want %q", tt.path, params.get("id"), tt.wantID)
 		}
 	}
 }
@@ -187,31 +179,31 @@ func TestParamMulti(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:uid/posts/:pid", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/users/10/posts/20", params)
+	params.reset()
+	got := r.find("GET", "/users/10/posts/20", &params)
 	if got == nil {
 		t.Fatal("GET /users/10/posts/20 should match")
 	}
-	if params["uid"] != "10" {
-		t.Errorf("params[uid] = %q, want %q", params["uid"], "10")
+	if params.get("uid") != "10" {
+		t.Errorf("params.get(uid) = %q, want %q", params.get("uid"), "10")
 	}
-	if params["pid"] != "20" {
-		t.Errorf("params[pid] = %q, want %q", params["pid"], "20")
+	if params.get("pid") != "20" {
+		t.Errorf("params.get(pid) = %q, want %q", params.get("pid"), "20")
 	}
 
 	// Different values
-	clear(params)
-	got = r.find("GET", "/users/alice/posts/draft-1", params)
+	params.reset()
+	got = r.find("GET", "/users/alice/posts/draft-1", &params)
 	if got == nil {
 		t.Fatal("GET /users/alice/posts/draft-1 should match")
 	}
-	if params["uid"] != "alice" {
-		t.Errorf("params[uid] = %q, want %q", params["uid"], "alice")
+	if params.get("uid") != "alice" {
+		t.Errorf("params.get(uid) = %q, want %q", params.get("uid"), "alice")
 	}
-	if params["pid"] != "draft-1" {
-		t.Errorf("params[pid] = %q, want %q", params["pid"], "draft-1")
+	if params.get("pid") != "draft-1" {
+		t.Errorf("params.get(pid) = %q, want %q", params.get("pid"), "draft-1")
 	}
 }
 
@@ -220,7 +212,7 @@ func TestParamSpecialChars(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/items/:slug", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	tests := []struct {
 		path     string
@@ -233,28 +225,24 @@ func TestParamSpecialChars(t *testing.T) {
 		{"/items/@user", "@user"},
 	}
 	for _, tt := range tests {
-		clear(params)
-		got := r.find("GET", tt.path, params)
+		params.reset()
+		got := r.find("GET", tt.path, &params)
 		if got == nil {
 			t.Errorf("GET %s should match", tt.path)
 			continue
 		}
-		if params["slug"] != tt.wantSlug {
-			t.Errorf("GET %s: params[slug] = %q, want %q", tt.path, params["slug"], tt.wantSlug)
+		if params.get("slug") != tt.wantSlug {
+			t.Errorf("GET %s: params.get(slug) = %q, want %q", tt.path, params.get("slug"), tt.wantSlug)
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.5: Wildcard routes
-// ---------------------------------------------------------------------------
 
 func TestWildcardBasic(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/files/*filepath", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	tests := []struct {
 		path         string
@@ -265,14 +253,14 @@ func TestWildcardBasic(t *testing.T) {
 		{"/files/a/b/c/d/e.js", "a/b/c/d/e.js"},
 	}
 	for _, tt := range tests {
-		clear(params)
-		got := r.find("GET", tt.path, params)
+		params.reset()
+		got := r.find("GET", tt.path, &params)
 		if got == nil {
 			t.Errorf("GET %s should match wildcard", tt.path)
 			continue
 		}
-		if params["filepath"] != tt.wantFilepath {
-			t.Errorf("GET %s: params[filepath] = %q, want %q", tt.path, params["filepath"], tt.wantFilepath)
+		if params.get("filepath") != tt.wantFilepath {
+			t.Errorf("GET %s: params.get(filepath) = %q, want %q", tt.path, params.get("filepath"), tt.wantFilepath)
 		}
 	}
 }
@@ -282,15 +270,15 @@ func TestWildcardSingleSegment(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/download/*file", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/download/report.pdf", params)
+	params.reset()
+	got := r.find("GET", "/download/report.pdf", &params)
 	if got == nil {
 		t.Fatal("GET /download/report.pdf should match")
 	}
-	if params["file"] != "report.pdf" {
-		t.Errorf("params[file] = %q, want %q", params["file"], "report.pdf")
+	if params.get("file") != "report.pdf" {
+		t.Errorf("params.get(file) = %q, want %q", params.get("file"), "report.pdf")
 	}
 }
 
@@ -299,48 +287,44 @@ func TestWildcardDeepNested(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/assets/*path", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/assets/js/vendor/lodash/lodash.min.js", params)
+	params.reset()
+	got := r.find("GET", "/assets/js/vendor/lodash/lodash.min.js", &params)
 	if got == nil {
 		t.Fatal("deep nested wildcard should match")
 	}
-	if params["path"] != "js/vendor/lodash/lodash.min.js" {
-		t.Errorf("params[path] = %q, want %q", params["path"], "js/vendor/lodash/lodash.min.js")
+	if params.get("path") != "js/vendor/lodash/lodash.min.js" {
+		t.Errorf("params.get(path) = %q, want %q", params.get("path"), "js/vendor/lodash/lodash.min.js")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.6: Regex constraint
-// ---------------------------------------------------------------------------
 
 func TestRegexConstraintNumeric(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:id<[0-9]+>", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Matching: numeric
-	clear(params)
-	got := r.find("GET", "/users/456", params)
+	params.reset()
+	got := r.find("GET", "/users/456", &params)
 	if got == nil {
 		t.Fatal("GET /users/456 should match numeric regex")
 	}
-	if params["id"] != "456" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "456")
+	if params.get("id") != "456" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "456")
 	}
 
 	// Non-matching: alpha
-	clear(params)
-	if r.find("GET", "/users/abc", params) != nil {
+	params.reset()
+	if r.find("GET", "/users/abc", &params) != nil {
 		t.Error("GET /users/abc should NOT match numeric regex")
 	}
 
 	// Non-matching: mixed
-	clear(params)
-	if r.find("GET", "/users/12ab", params) != nil {
+	params.reset()
+	if r.find("GET", "/users/12ab", &params) != nil {
 		t.Error("GET /users/12ab should NOT match numeric regex")
 	}
 }
@@ -350,20 +334,20 @@ func TestRegexConstraintAlpha(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/tags/:name<[a-z]+>", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if r.find("GET", "/tags/golang", params) == nil {
+	params.reset()
+	if r.find("GET", "/tags/golang", &params) == nil {
 		t.Error("GET /tags/golang should match alpha regex")
 	}
 
-	clear(params)
-	if r.find("GET", "/tags/123", params) != nil {
+	params.reset()
+	if r.find("GET", "/tags/123", &params) != nil {
 		t.Error("GET /tags/123 should NOT match alpha regex")
 	}
 
-	clear(params)
-	if r.find("GET", "/tags/Go", params) != nil {
+	params.reset()
+	if r.find("GET", "/tags/Go", &params) != nil {
 		t.Error("GET /tags/Go should NOT match lowercase-only alpha regex")
 	}
 }
@@ -373,37 +357,33 @@ func TestRegexConstraintUUID(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/orders/:id<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if r.find("GET", "/orders/550e8400-e29b-41d4-a716-446655440000", params) == nil {
+	params.reset()
+	if r.find("GET", "/orders/550e8400-e29b-41d4-a716-446655440000", &params) == nil {
 		t.Error("valid UUID should match")
 	}
 
-	clear(params)
-	if r.find("GET", "/orders/not-a-uuid", params) != nil {
+	params.reset()
+	if r.find("GET", "/orders/not-a-uuid", &params) != nil {
 		t.Error("invalid UUID should NOT match")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.7: Optional param
-// ---------------------------------------------------------------------------
 
 func TestOptionalParamWithValue(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:id?", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/users/123", params)
+	params.reset()
+	got := r.find("GET", "/users/123", &params)
 	if got == nil {
 		t.Fatal("GET /users/123 should match optional param")
 	}
-	if params["id"] != "123" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "123")
+	if params.get("id") != "123" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "123")
 	}
 }
 
@@ -412,18 +392,14 @@ func TestOptionalParamWithoutValue(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:id?", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/users", params)
+	params.reset()
+	got := r.find("GET", "/users", &params)
 	if got == nil {
 		t.Fatal("GET /users should match optional param (without value)")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.8: Zero-allocation find — populates pre-allocated params map
-// ---------------------------------------------------------------------------
 
 func TestFindPopulatesPreAllocatedParams(t *testing.T) {
 	r := newRouter()
@@ -431,37 +407,33 @@ func TestFindPopulatesPreAllocatedParams(t *testing.T) {
 	r.addRoute("GET", "/users/:id/posts/:postId", h)
 
 	// Pre-allocate params map (simulating Ctx behavior)
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	got := r.find("GET", "/users/42/posts/99", params)
+	params.reset()
+	got := r.find("GET", "/users/42/posts/99", &params)
 	if got == nil {
 		t.Fatal("should match")
 	}
-	if params["id"] != "42" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "42")
+	if params.get("id") != "42" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "42")
 	}
-	if params["postId"] != "99" {
-		t.Errorf("params[postId] = %q, want %q", params["postId"], "99")
+	if params.get("postId") != "99" {
+		t.Errorf("params.get(postId) = %q, want %q", params.get("postId"), "99")
 	}
 
 	// Reuse same map after clear (zero-alloc pattern)
-	clear(params)
-	got = r.find("GET", "/users/7/posts/8", params)
+	params.reset()
+	got = r.find("GET", "/users/7/posts/8", &params)
 	if got == nil {
 		t.Fatal("should match on reuse")
 	}
-	if params["id"] != "7" {
-		t.Errorf("reuse: params[id] = %q, want %q", params["id"], "7")
+	if params.get("id") != "7" {
+		t.Errorf("reuse: params.get(id) = %q, want %q", params.get("id"), "7")
 	}
-	if params["postId"] != "8" {
-		t.Errorf("reuse: params[postId] = %q, want %q", params["postId"], "8")
+	if params.get("postId") != "8" {
+		t.Errorf("reuse: params.get(postId) = %q, want %q", params.get("postId"), "8")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.9: Indices O(1) lookup — multiple children with different first bytes
-// ---------------------------------------------------------------------------
 
 func TestIndicesLookup(t *testing.T) {
 	r := newRouter()
@@ -473,25 +445,21 @@ func TestIndicesLookup(t *testing.T) {
 	r.addRoute("GET", "/gamma", h)
 	r.addRoute("GET", "/delta", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	for _, path := range []string{"/alpha", "/beta", "/gamma", "/delta"} {
-		clear(params)
-		if r.find("GET", path, params) == nil {
+		params.reset()
+		if r.find("GET", path, &params) == nil {
 			t.Errorf("GET %s should match via indices lookup", path)
 		}
 	}
 
 	// Non-existent first byte
-	clear(params)
-	if r.find("GET", "/zeta", params) != nil {
+	params.reset()
+	if r.find("GET", "/zeta", &params) != nil {
 		t.Error("GET /zeta should NOT match")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.10: Duplicate route panic
-// ---------------------------------------------------------------------------
 
 func TestDuplicateStaticRoutePanics(t *testing.T) {
 	r := newRouter()
@@ -530,10 +498,6 @@ func TestDuplicateDifferentMethodsNoPanic(t *testing.T) {
 	// If we reach here, no panic occurred — test passes
 }
 
-// ---------------------------------------------------------------------------
-// Req 1.11: Compile freeze
-// ---------------------------------------------------------------------------
-
 func TestCompileFreezesPreventsAdd(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
@@ -554,31 +518,27 @@ func TestCompileDoesNotAffectFind(t *testing.T) {
 	r.addRoute("GET", "/test", h)
 	r.Compile()
 
-	params := make(map[string]string, 4)
-	if r.find("GET", "/test", params) == nil {
+	var params routeParams
+	if r.find("GET", "/test", &params) == nil {
 		t.Error("find should still work after Compile()")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 1.12: 405 Method Not Allowed
-// ---------------------------------------------------------------------------
 
 func TestMethodNotAllowed_SingleMethod(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/resource", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// DELETE should not find a handler
-	clear(params)
-	if r.find("DELETE", "/resource", params) != nil {
+	params.reset()
+	if r.find("DELETE", "/resource", &params) != nil {
 		t.Error("DELETE /resource should not match")
 	}
 
 	// findAllowedMethods should return "GET"
-	clear(params)
+	params.reset()
 	allowed := r.findAllowedMethods("/resource")
 	if !containsMethod(allowed, "GET") {
 		t.Errorf("allowed = %q, want to contain GET", allowed)
@@ -592,16 +552,16 @@ func TestMethodNotAllowed_MultipleMethods(t *testing.T) {
 	r.addRoute("POST", "/items", h)
 	r.addRoute("PUT", "/items", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// DELETE should not find a handler
-	clear(params)
-	if r.find("DELETE", "/items", params) != nil {
+	params.reset()
+	if r.find("DELETE", "/items", &params) != nil {
 		t.Error("DELETE /items should not match")
 	}
 
 	// findAllowedMethods should list all registered methods
-	clear(params)
+	params.reset()
 	allowed := r.findAllowedMethods("/items")
 	for _, m := range []string{"GET", "POST", "PUT"} {
 		if !containsMethod(allowed, m) {
@@ -615,41 +575,37 @@ func TestMethodNotAllowed_ParamRoute(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users/:id", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// POST /users/42 should not match
-	clear(params)
-	if r.find("POST", "/users/42", params) != nil {
+	params.reset()
+	if r.find("POST", "/users/42", &params) != nil {
 		t.Error("POST /users/42 should not match")
 	}
 
 	// findAllowedMethods should return GET
-	clear(params)
+	params.reset()
 	allowed := r.findAllowedMethods("/users/42")
 	if !containsMethod(allowed, "GET") {
 		t.Errorf("allowed = %q, want to contain GET", allowed)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 1.13: 404 Not Found
-// ---------------------------------------------------------------------------
-
 func TestNotFound_UnknownPath(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/known", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Completely unknown path
-	clear(params)
-	if r.find("GET", "/unknown/path", params) != nil {
+	params.reset()
+	if r.find("GET", "/unknown/path", &params) != nil {
 		t.Error("GET /unknown/path should return nil")
 	}
 
 	// findAllowedMethods should return empty
-	clear(params)
+	params.reset()
 	allowed := r.findAllowedMethods("/unknown/path")
 	if allowed != "" {
 		t.Errorf("findAllowedMethods for unknown path = %q, want empty", allowed)
@@ -658,34 +614,30 @@ func TestNotFound_UnknownPath(t *testing.T) {
 
 func TestNotFound_EmptyRouter(t *testing.T) {
 	r := newRouter()
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if r.find("GET", "/anything", params) != nil {
+	params.reset()
+	if r.find("GET", "/anything", &params) != nil {
 		t.Error("empty router should return nil for any path")
 	}
 
-	clear(params)
+	params.reset()
 	allowed := r.findAllowedMethods("/anything")
 	if allowed != "" {
 		t.Errorf("empty router findAllowedMethods = %q, want empty", allowed)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Edge cases
-// ---------------------------------------------------------------------------
-
 func TestEdge_TrailingSlash(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Exact match without trailing slash
-	clear(params)
-	if r.find("GET", "/users", params) == nil {
+	params.reset()
+	if r.find("GET", "/users", &params) == nil {
 		t.Error("GET /users should match")
 	}
 }
@@ -696,13 +648,13 @@ func TestEdge_EmptyParamsMap(t *testing.T) {
 	r.addRoute("GET", "/static", h)
 
 	// Empty params map should work for static routes
-	params := make(map[string]string, 4)
-	clear(params)
-	if r.find("GET", "/static", params) == nil {
+	var params routeParams
+	params.reset()
+	if r.find("GET", "/static", &params) == nil {
 		t.Error("static route should match with empty params map")
 	}
-	if len(params) != 0 {
-		t.Errorf("static route should not populate params, got %v", params)
+	if params.count != 0 {
+		t.Errorf("static route should not populate params, got %d entries", params.count)
 	}
 }
 
@@ -711,15 +663,15 @@ func TestEdge_ManySegments(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/a/b/c/d/e/f/g", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if r.find("GET", "/a/b/c/d/e/f/g", params) == nil {
+	params.reset()
+	if r.find("GET", "/a/b/c/d/e/f/g", &params) == nil {
 		t.Error("deep static route should match")
 	}
 
-	clear(params)
-	if r.find("GET", "/a/b/c/d/e/f", params) != nil {
+	params.reset()
+	if r.find("GET", "/a/b/c/d/e/f", &params) != nil {
 		t.Error("partial deep path should NOT match")
 	}
 }
@@ -732,23 +684,23 @@ func TestEdge_ParamAfterStaticAtSameLevel(t *testing.T) {
 	r.addRoute("GET", "/items/new", hStatic)
 	r.addRoute("GET", "/items/:id", hParam)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// "new" should match static
-	clear(params)
-	got := r.find("GET", "/items/new", params)
+	params.reset()
+	got := r.find("GET", "/items/new", &params)
 	if got == nil {
 		t.Fatal("GET /items/new should match")
 	}
 
 	// "42" should match param
-	clear(params)
-	got = r.find("GET", "/items/42", params)
+	params.reset()
+	got = r.find("GET", "/items/42", &params)
 	if got == nil {
 		t.Fatal("GET /items/42 should match param")
 	}
-	if params["id"] != "42" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "42")
+	if params.get("id") != "42" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "42")
 	}
 }
 
@@ -763,10 +715,6 @@ func TestEdge_PathMustStartWithSlash(t *testing.T) {
 	}()
 	r.addRoute("GET", "noslash", h)
 }
-
-// ---------------------------------------------------------------------------
-// Table-driven comprehensive test
-// ---------------------------------------------------------------------------
 
 func TestRouterTableDriven(t *testing.T) {
 	r := newRouter()
@@ -822,10 +770,10 @@ func TestRouterTableDriven(t *testing.T) {
 		{"DELETE", "/api/v1/users", false, nil},
 	}
 
-	params := make(map[string]string, 4)
+	var params routeParams
 	for _, tt := range tests {
-		clear(params)
-		got := r.find(tt.method, tt.path, params)
+		params.reset()
+		got := r.find(tt.method, tt.path, &params)
 		if tt.wantMatch && got == nil {
 			t.Errorf("%s %s: want match, got nil", tt.method, tt.path)
 			continue
@@ -836,18 +784,13 @@ func TestRouterTableDriven(t *testing.T) {
 		}
 		if tt.wantParams != nil {
 			for k, v := range tt.wantParams {
-				if params[k] != v {
-					t.Errorf("%s %s: params[%s] = %q, want %q", tt.method, tt.path, k, params[k], v)
+				if params.get(k) != v {
+					t.Errorf("%s %s: params.get(%s) = %q, want %q", tt.method, tt.path, k, params.get(k), v)
 				}
 			}
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 2.6: findAllowedMethods cache — P3-006 fix
-// Tests: cache hit (static), cache miss (dynamic), zero alloc (static)
-// ---------------------------------------------------------------------------
 
 func TestAllowedMethodsCache_StaticHit(t *testing.T) {
 	r := newRouter()
@@ -1048,12 +991,6 @@ func TestCollectStaticPaths_ExcludesParamAndWildcard(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 3: Router AOT optimization — P3-003
-// Tests: hits tracking, sort order, flatten, indices rebuilt, compiled flag,
-// route matching correctness after optimization
-// ---------------------------------------------------------------------------
-
 func TestOptimizeTree_SortByHitsDescending(t *testing.T) {
 	r := newRouter()
 	h := []HandlerFunc{dummyHandler()}
@@ -1062,20 +999,20 @@ func TestOptimizeTree_SortByHitsDescending(t *testing.T) {
 	r.addRoute("GET", "/beta", h)
 	r.addRoute("GET", "/gamma", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Simulate traffic: gamma most popular, then alpha, then beta
 	for i := 0; i < 100; i++ {
-		clear(params)
-		r.find("GET", "/gamma", params)
+		params.reset()
+		r.find("GET", "/gamma", &params)
 	}
 	for i := 0; i < 50; i++ {
-		clear(params)
-		r.find("GET", "/alpha", params)
+		params.reset()
+		r.find("GET", "/alpha", &params)
 	}
 	for i := 0; i < 10; i++ {
-		clear(params)
-		r.find("GET", "/beta", params)
+		params.reset()
+		r.find("GET", "/beta", &params)
 	}
 
 	r.Compile()
@@ -1102,16 +1039,16 @@ func TestOptimizeTree_StaticsBeforeParams(t *testing.T) {
 	r.addRoute("GET", "/users/:id", h)
 	r.addRoute("GET", "/users/admin", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Give param child more hits than static
 	for i := 0; i < 100; i++ {
-		clear(params)
-		r.find("GET", "/users/42", params)
+		params.reset()
+		r.find("GET", "/users/42", &params)
 	}
 	for i := 0; i < 10; i++ {
-		clear(params)
-		r.find("GET", "/users/admin", params)
+		params.reset()
+		r.find("GET", "/users/admin", &params)
 	}
 
 	r.Compile()
@@ -1148,12 +1085,12 @@ func TestOptimizeTree_WildcardsLast(t *testing.T) {
 	r.addRoute("GET", "/files/:name", h)
 	r.addRoute("GET", "/files/*filepath", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Give wildcard lots of hits
 	for i := 0; i < 200; i++ {
-		clear(params)
-		r.find("GET", "/files/a/b/c", params)
+		params.reset()
+		r.find("GET", "/files/a/b/c", &params)
 	}
 
 	r.Compile()
@@ -1186,12 +1123,12 @@ func TestOptimizeTree_IndicesRebuilt(t *testing.T) {
 	r.addRoute("GET", "/beta", h)
 	r.addRoute("GET", "/gamma", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Make gamma most popular to force reorder
 	for i := 0; i < 100; i++ {
-		clear(params)
-		r.find("GET", "/gamma", params)
+		params.reset()
+		r.find("GET", "/gamma", &params)
 	}
 
 	r.Compile()
@@ -1363,20 +1300,20 @@ func TestCompile_RoutesStillMatchAfterOptimization(t *testing.T) {
 	r.addRoute("GET", "/static/*filepath", h)
 	r.addRoute("DELETE", "/api/v1/users/:id", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Simulate traffic to create varied hit counts
 	for i := 0; i < 50; i++ {
-		clear(params)
-		r.find("GET", "/health", params)
+		params.reset()
+		r.find("GET", "/health", &params)
 	}
 	for i := 0; i < 100; i++ {
-		clear(params)
-		r.find("GET", "/api/v1/users", params)
+		params.reset()
+		r.find("GET", "/api/v1/users", &params)
 	}
 	for i := 0; i < 30; i++ {
-		clear(params)
-		r.find("GET", "/api/v1/users/42", params)
+		params.reset()
+		r.find("GET", "/api/v1/users/42", &params)
 	}
 
 	r.Compile()
@@ -1402,8 +1339,8 @@ func TestCompile_RoutesStillMatchAfterOptimization(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		clear(params)
-		got := r.find(tt.method, tt.path, params)
+		params.reset()
+		got := r.find(tt.method, tt.path, &params)
 		if tt.wantMatch && got == nil {
 			t.Errorf("after Compile: %s %s should match", tt.method, tt.path)
 			continue
@@ -1413,8 +1350,8 @@ func TestCompile_RoutesStillMatchAfterOptimization(t *testing.T) {
 			continue
 		}
 		for k, v := range tt.wantParams {
-			if params[k] != v {
-				t.Errorf("after Compile: %s %s params[%s]=%q, want %q", tt.method, tt.path, k, params[k], v)
+			if params.get(k) != v {
+				t.Errorf("after Compile: %s %s params.get(%s)=%q, want %q", tt.method, tt.path, k, params.get(k), v)
 			}
 		}
 	}
@@ -1441,7 +1378,7 @@ func TestHits_IncrementBeforeCompile(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Find the "users" node before any hits
 	root := r.trees["GET"]
@@ -1460,8 +1397,8 @@ func TestHits_IncrementBeforeCompile(t *testing.T) {
 
 	// Call find 5 times
 	for i := 0; i < 5; i++ {
-		clear(params)
-		r.find("GET", "/users", params)
+		params.reset()
+		r.find("GET", "/users", &params)
 	}
 
 	if usersNode.hits != initialHits+5 {
@@ -1474,12 +1411,12 @@ func TestHits_NoIncrementAfterCompile(t *testing.T) {
 	h := []HandlerFunc{dummyHandler()}
 	r.addRoute("GET", "/users", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Generate some hits before compile
 	for i := 0; i < 5; i++ {
-		clear(params)
-		r.find("GET", "/users", params)
+		params.reset()
+		r.find("GET", "/users", &params)
 	}
 
 	r.Compile()
@@ -1504,12 +1441,360 @@ func TestHits_NoIncrementAfterCompile(t *testing.T) {
 
 	// Call find 10 more times after Compile
 	for i := 0; i < 10; i++ {
-		clear(params)
-		r.find("GET", "/users", params)
+		params.reset()
+		r.find("GET", "/users", &params)
 	}
 
 	if usersNode.hits != hitsAfterCompile {
 		t.Errorf("hits changed after Compile: was %d, now %d (should not increment after Compile)",
 			hitsAfterCompile, usersNode.hits)
+	}
+}
+
+func TestStaticRouteMap_CompileBuildsMap(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/", h)
+	r.addRoute("GET", "/users", h)
+	r.addRoute("GET", "/users/profile", h)
+	r.addRoute("POST", "/users", h)
+	r.addRoute("GET", "/users/:id", h)
+	r.addRoute("GET", "/files/*filepath", h)
+
+	r.Compile()
+
+	// Static routes must be present.
+	for _, tc := range []struct{ method, path string }{
+		{"GET", "/"},
+		{"GET", "/users"},
+		{"GET", "/users/profile"},
+		{"POST", "/users"},
+	} {
+		routes := r.staticRoutes[methodIndex(tc.method)]
+		if routes == nil {
+			t.Errorf("staticRoutes[%q] missing after Compile", tc.method)
+			continue
+		}
+		if _, ok := routes[tc.path]; !ok {
+			t.Errorf("staticRoutes[%q][%q] missing after Compile", tc.method, tc.path)
+		}
+	}
+
+	// Param and wildcard routes must NOT be in the static map.
+	getRoutes := r.staticRoutes[methodIndex("GET")]
+	for _, badPath := range []string{"/users/:id", "/files/*filepath", "/files/"} {
+		if _, ok := getRoutes[badPath]; ok {
+			t.Errorf("staticRoutes[GET][%q] should not be in static map", badPath)
+		}
+	}
+}
+
+// TestStaticRouteMap_LookupHitsMap verifies that find() returns handlers via
+// the static map for fully-static paths after Compile().
+func TestStaticRouteMap_LookupHitsMap(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/", h)
+	r.addRoute("GET", "/ping", h)
+	r.addRoute("GET", "/api/v1/health", h)
+	r.Compile()
+
+	var params routeParams
+
+	for _, path := range []string{"/", "/ping", "/api/v1/health"} {
+		params.reset()
+		got := r.find("GET", path, &params)
+		if got == nil {
+			t.Errorf("find(GET, %q) returned nil — expected handlers from static map", path)
+		}
+	}
+}
+
+// TestStaticRouteMap_ParamRouteFallsBackToTree verifies that param routes are
+// not in the static map and still resolve correctly via tree traversal.
+func TestStaticRouteMap_ParamRouteFallsBackToTree(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/users/:id", h)
+	r.addRoute("GET", "/users/:id/posts", h)
+	r.Compile()
+
+	var params routeParams
+
+	tests := []struct {
+		path      string
+		wantParam string
+		wantValue string
+	}{
+		{"/users/42", "id", "42"},
+		{"/users/abc/posts", "id", "abc"},
+	}
+	for _, tt := range tests {
+		params.reset()
+		got := r.find("GET", tt.path, &params)
+		if got == nil {
+			t.Errorf("find(GET, %q) returned nil — param route should fall back to tree", tt.path)
+			continue
+		}
+		if params.get(tt.wantParam) != tt.wantValue {
+			t.Errorf("find(GET, %q): param[%q] = %q, want %q",
+				tt.path, tt.wantParam, params.get(tt.wantParam), tt.wantValue)
+		}
+	}
+}
+
+// TestStaticRouteMap_WildcardNotInMap verifies that wildcard routes are absent
+// from staticRoutes and still resolve via tree traversal.
+func TestStaticRouteMap_WildcardNotInMap(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/files/*filepath", h)
+	r.Compile()
+
+	// Wildcard route must not appear in the static map.
+	routes := r.staticRoutes[methodIndex("GET")]
+	if routes != nil {
+		if _, found := routes["/files/*filepath"]; found {
+			t.Error("wildcard route should not be in staticRoutes")
+		}
+	}
+
+	// But it must still resolve via tree traversal.
+	var params routeParams
+	got := r.find("GET", "/files/some/deep/path.txt", &params)
+	if got == nil {
+		t.Error("find(GET, /files/some/deep/path.txt) should resolve via tree")
+	}
+}
+
+// TestStaticRouteMap_MissedStaticFallsBackToTree verifies that a path not in
+// the static map falls back to the tree and returns nil when unregistered.
+func TestStaticRouteMap_MissedStaticFallsBackToTree(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/known", h)
+	r.Compile()
+
+	var params routeParams
+	got := r.find("GET", "/unknown", &params)
+	if got != nil {
+		t.Error("find(GET, /unknown) should return nil for unregistered path")
+	}
+}
+
+// TestStaticRouteMap_NotBuiltBeforeCompile verifies that staticRoutes is nil
+// before Compile() is called.
+func TestStaticRouteMap_NotBuiltBeforeCompile(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/hello", h)
+
+	// Before Compile, staticRoutes entries must be nil — fast path must not fire.
+	if r.staticRoutes[methodIndex("GET")] != nil {
+		t.Error("staticRoutes[GET] should be nil before Compile()")
+	}
+
+	// find() must still work via tree traversal before Compile.
+	var params routeParams
+	got := r.find("GET", "/hello", &params)
+	if got == nil {
+		t.Error("find(GET, /hello) should work via tree before Compile()")
+	}
+}
+
+// TestStaticRouteMap_MultipleMethodsSeparateMaps verifies that each HTTP method
+// gets its own inner map in staticRoutes.
+func TestStaticRouteMap_MultipleMethodsSeparateMaps(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/items", h)
+	r.addRoute("POST", "/items", h)
+	r.addRoute("DELETE", "/items", h)
+	r.Compile()
+
+	for _, method := range []string{"GET", "POST", "DELETE"} {
+		routes := r.staticRoutes[methodIndex(method)]
+		if routes == nil {
+			t.Errorf("staticRoutes[%q] missing", method)
+			continue
+		}
+		if _, ok := routes["/items"]; !ok {
+			t.Errorf("staticRoutes[%q][/items] missing", method)
+		}
+	}
+
+	patchRoutes := r.staticRoutes[methodIndex("PATCH")]
+	if patchRoutes != nil {
+		if len(patchRoutes) > 0 {
+			t.Error("staticRoutes[PATCH] should be empty (no routes registered)")
+		}
+	}
+}
+
+func TestMethodIndex_StandardMethods(t *testing.T) {
+	tests := []struct {
+		method string
+		want   int
+	}{
+		{"GET", mGET},
+		{"POST", mPOST},
+		{"PUT", mPUT},
+		{"DELETE", mDELETE},
+		{"PATCH", mPATCH},
+		{"OPTIONS", mOPTIONS},
+		{"HEAD", mHEAD},
+	}
+	for _, tt := range tests {
+		got := methodIndex(tt.method)
+		if got != tt.want {
+			t.Errorf("methodIndex(%q) = %d, want %d", tt.method, got, tt.want)
+		}
+	}
+}
+
+// TestMethodIndex_UnknownMethods verifies methodIndex returns -1 for
+// custom/unknown methods so they fall back to the map.
+func TestMethodIndex_UnknownMethods(t *testing.T) {
+	unknowns := []string{"CUSTOM", "PROPFIND", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "TRACE", "CONNECT", ""}
+	for _, m := range unknowns {
+		if got := methodIndex(m); got != -1 {
+			t.Errorf("methodIndex(%q) = %d, want -1", m, got)
+		}
+	}
+}
+
+// TestMethodIndex_AllIndicesUnique verifies that all standard method constants
+// are distinct and within [0, mCOUNT).
+func TestMethodIndex_AllIndicesUnique(t *testing.T) {
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+	seen := make(map[int]string, mCOUNT)
+	for _, m := range methods {
+		idx := methodIndex(m)
+		if idx < 0 || idx >= mCOUNT {
+			t.Errorf("methodIndex(%q) = %d out of range [0, %d)", m, idx, mCOUNT)
+			continue
+		}
+		if prev, dup := seen[idx]; dup {
+			t.Errorf("methodIndex(%q) = %d collides with %q", m, idx, prev)
+		}
+		seen[idx] = m
+	}
+	if len(seen) != len(methods) {
+		t.Errorf("expected %d unique indices, got %d", len(methods), len(seen))
+	}
+}
+
+// TestMethodArray_PopulatedByNewRouter verifies that newRouter() populates
+// methodTrees for all standard methods pointing to the same node as trees map.
+func TestMethodArray_PopulatedByNewRouter(t *testing.T) {
+	r := newRouter()
+	for _, m := range standardMethods {
+		idx := methodIndex(m)
+		if idx < 0 {
+			t.Errorf("standardMethod %q has no array index", m)
+			continue
+		}
+		if r.methodTrees[idx] == nil {
+			t.Errorf("methodTrees[%d] (%s) is nil after newRouter()", idx, m)
+			continue
+		}
+		// Must be the SAME pointer as trees map — not a copy.
+		if r.methodTrees[idx] != r.trees[m] {
+			t.Errorf("methodTrees[%d] (%s) != trees[%q]: must be same node", idx, m, m)
+		}
+	}
+}
+
+// TestMethodArray_StandardMethodsUseArray verifies that standard HTTP methods
+// are routed through the array (find returns correct handlers).
+func TestMethodArray_StandardMethodsUseArray(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	var params routeParams
+
+	for _, m := range standardMethods {
+		r.addRoute(m, "/ping", h)
+	}
+	r.Compile()
+
+	for _, m := range standardMethods {
+		params.reset()
+		got := r.find(m, "/ping", &params)
+		if got == nil {
+			t.Errorf("find(%q, /ping) returned nil — array lookup failed", m)
+		}
+	}
+}
+
+// TestMethodArray_CustomMethodFallsBackToMap verifies that custom methods
+// (not in the standard list) still work via the trees map fallback.
+func TestMethodArray_CustomMethodFallsBackToMap(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	var params routeParams
+
+	customMethods := []string{"CUSTOM", "PROPFIND", "MKCOL"}
+	for _, m := range customMethods {
+		r.addRoute(m, "/resource", h)
+	}
+	r.Compile()
+
+	for _, m := range customMethods {
+		// methodIndex must return -1 for these
+		if idx := methodIndex(m); idx != -1 {
+			t.Errorf("methodIndex(%q) = %d, want -1 (custom method)", m, idx)
+		}
+		params.reset()
+		got := r.find(m, "/resource", &params)
+		if got == nil {
+			t.Errorf("find(%q, /resource) returned nil — map fallback failed", m)
+		}
+	}
+}
+
+// TestMethodArray_AddRouteSyncsArrayAndMap verifies that addRoute() keeps
+// methodTrees and trees pointing to the same node after adding routes.
+func TestMethodArray_AddRouteSyncsArrayAndMap(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/a", h)
+	r.addRoute("POST", "/b", h)
+
+	// After addRoute, array and map must still point to the same root node.
+	for _, m := range []string{"GET", "POST"} {
+		idx := methodIndex(m)
+		if r.methodTrees[idx] != r.trees[m] {
+			t.Errorf("after addRoute(%q), methodTrees[%d] != trees[%q]", m, idx, m)
+		}
+	}
+}
+
+// TestMethodArray_UnknownMethodReturnsNil verifies that find() returns nil
+// for a completely unknown method with no registered routes.
+func TestMethodArray_UnknownMethodReturnsNil(t *testing.T) {
+	r := newRouter()
+	r.Compile()
+	var params routeParams
+
+	got := r.find("UNKNOWN", "/anything", &params)
+	if got != nil {
+		t.Error("find(UNKNOWN, /anything) should return nil for unregistered custom method")
+	}
+}
+
+// TestMethodArray_mCOUNT verifies the mCOUNT constant equals 7 (number of standard methods).
+func TestMethodArray_mCOUNT(t *testing.T) {
+	if mCOUNT != 7 {
+		t.Errorf("mCOUNT = %d, want 7", mCOUNT)
+	}
+	if len(standardMethods) != mCOUNT {
+		t.Errorf("len(standardMethods) = %d, want mCOUNT=%d", len(standardMethods), mCOUNT)
 	}
 }

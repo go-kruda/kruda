@@ -29,17 +29,13 @@ func NewTestClient(app *App) *TestClient {
 	}
 }
 
-// WithHeader sets a one-shot header for the next request only.
-// The header is automatically cleared after Send() is called.
-// For per-request headers, use Request().Header() instead.
+// WithHeader sets a default header for all requests from this client.
 func (tc *TestClient) WithHeader(key, value string) *TestClient {
 	tc.headers[key] = value
 	return tc
 }
 
-// WithCookie sets a one-shot cookie for the next request only.
-// The cookie is automatically cleared after Send() is called.
-// For per-request cookies, use Request().Cookie() instead.
+// WithCookie sets a default cookie for all requests from this client.
 func (tc *TestClient) WithCookie(name, value string) *TestClient {
 	tc.cookies[name] = value
 	return tc
@@ -144,7 +140,6 @@ func (tr *TestRequest) ContentType(ct string) *TestRequest {
 
 // Send executes the test request and returns the response.
 func (tr *TestRequest) Send() (*TestResponse, error) {
-	// Build body
 	var bodyReader *bytes.Reader
 	switch v := tr.body.(type) {
 	case nil:
@@ -164,7 +159,6 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		}
 	}
 
-	// Build URL with query params
 	targetURL := tr.path
 	if len(tr.query) > 0 {
 		vals := url.Values{}
@@ -178,13 +172,12 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		}
 	}
 
-	// Create request
 	req, err := http.NewRequest(tr.method, targetURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("kruda: test client: failed to create request: %w", err)
 	}
 
-	// Apply client-level headers first, then request-level (request overrides)
+	// Client-level headers first, request-level overrides
 	for k, v := range tr.client.headers {
 		req.Header.Set(k, v)
 	}
@@ -192,7 +185,6 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		req.Header.Set(k, v)
 	}
 
-	// Apply cookies: client-level first, then request-level
 	for name, value := range tr.client.cookies {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}
@@ -200,19 +192,16 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}
 
-	// Set Content-Type if specified
 	if tr.contentType != "" {
 		req.Header.Set("Content-Type", tr.contentType)
 	}
 
-	// Execute via httptest recorder
 	w := httptest.NewRecorder()
 	tr.client.app.ServeKruda(
 		transport.NewNetHTTPResponseWriter(w),
 		transport.NewNetHTTPRequestWithLimit(req, tr.client.app.config.BodyLimit),
 	)
 
-	// Clear client headers/cookies after use
 	tr.client.headers = make(map[string]string)
 	tr.client.cookies = make(map[string]string)
 

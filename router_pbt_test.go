@@ -6,7 +6,7 @@ package kruda
 // returns the registered handler chain, and find returns nil for unregistered paths.
 //
 // Property 2: For any registered param route `/x/:name`, find returns handler
-// and params["name"] equals the path segment.
+// and params.get("name") equals the path segment.
 
 import (
 	"math/rand"
@@ -46,7 +46,7 @@ func TestRouterStaticFindProperty(t *testing.T) {
 
 	for i := 0; i < iterations; i++ {
 		r := newRouter()
-		params := make(map[string]string, 4)
+		var params routeParams
 
 		// Generate 1–10 unique static paths
 		numRoutes := 1 + rng.Intn(10)
@@ -63,8 +63,8 @@ func TestRouterStaticFindProperty(t *testing.T) {
 
 		// Every registered path must be found
 		for path := range registered {
-			clear(params)
-			if got := r.find("GET", path, params); got == nil {
+			params.reset()
+			if got := r.find("GET", path, &params); got == nil {
 				t.Fatalf("iter %d: find(GET, %q) returned nil, want non-nil", i, path)
 			}
 		}
@@ -75,8 +75,8 @@ func TestRouterStaticFindProperty(t *testing.T) {
 			if registered[unregistered] {
 				continue // skip if it happens to collide
 			}
-			clear(params)
-			if got := r.find("GET", unregistered, params); got != nil {
+			params.reset()
+			if got := r.find("GET", unregistered, &params); got != nil {
 				t.Fatalf("iter %d: find(GET, %q) returned non-nil for unregistered path", i, unregistered)
 			}
 		}
@@ -84,7 +84,7 @@ func TestRouterStaticFindProperty(t *testing.T) {
 }
 
 // TestRouterParamFindProperty verifies that for any registered param route
-// `/prefix/:paramName`, find returns the handler and params[paramName] equals
+// `/prefix/:paramName`, find returns the handler and params.get(paramName) equals
 // the actual path segment value.
 func TestRouterParamFindProperty(t *testing.T) {
 	const iterations = 500
@@ -92,7 +92,7 @@ func TestRouterParamFindProperty(t *testing.T) {
 
 	for i := 0; i < iterations; i++ {
 		r := newRouter()
-		params := make(map[string]string, 4)
+		var params routeParams
 
 		// Generate a random prefix and param name
 		prefix := "/" + randomAlphaSegment(rng, 1, 6)
@@ -106,14 +106,14 @@ func TestRouterParamFindProperty(t *testing.T) {
 		value := randomAlphaSegment(rng, 1, 10)
 		requestPath := prefix + "/" + value
 
-		clear(params)
-		got := r.find("GET", requestPath, params)
+		params.reset()
+		got := r.find("GET", requestPath, &params)
 		if got == nil {
 			t.Fatalf("iter %d: find(GET, %q) returned nil for pattern %q", i, requestPath, pattern)
 		}
-		if params[paramName] != value {
-			t.Fatalf("iter %d: params[%q] = %q, want %q (pattern=%q path=%q)",
-				i, paramName, params[paramName], value, pattern, requestPath)
+		if params.get(paramName) != value {
+			t.Fatalf("iter %d: params.get(%q) = %q, want %q (pattern=%q path=%q)",
+				i, paramName, params.get(paramName), value, pattern, requestPath)
 		}
 	}
 }
@@ -132,7 +132,7 @@ func TestPropertyAOTOptimizationPreservesRouteMatching(t *testing.T) {
 
 	for iter := 0; iter < iterations; iter++ {
 		r := newRouter()
-		params := make(map[string]string, 4)
+		var params routeParams
 
 		// Generate 2-15 unique routes (mix of static, param, wildcard)
 		numRoutes := 2 + rng.Intn(14)
@@ -171,7 +171,7 @@ func TestPropertyAOTOptimizationPreservesRouteMatching(t *testing.T) {
 			method    string
 			path      string
 			wantMatch bool
-			wantParam map[string]string
+			wantParam routeParams
 		}
 		var tests []testCase
 
@@ -199,15 +199,15 @@ func TestPropertyAOTOptimizationPreservesRouteMatching(t *testing.T) {
 		// Record results BEFORE Compile
 		type result struct {
 			matched bool
-			params  map[string]string
+			params  routeParams
 		}
 		beforeResults := make([]result, len(tests))
 		for i, tc := range tests {
-			clear(params)
-			got := r.find(tc.method, tc.path, params)
+			params.reset()
+			got := r.find(tc.method, tc.path, &params)
 			beforeResults[i] = result{
 				matched: got != nil,
-				params:  copyMap(params),
+				params:  params, // copy by value (fixed-size array)
 			}
 		}
 
@@ -216,8 +216,8 @@ func TestPropertyAOTOptimizationPreservesRouteMatching(t *testing.T) {
 
 		// Verify results AFTER Compile match BEFORE
 		for i, tc := range tests {
-			clear(params)
-			got := r.find(tc.method, tc.path, params)
+			params.reset()
+			got := r.find(tc.method, tc.path, &params)
 			afterMatched := got != nil
 
 			if afterMatched != beforeResults[i].matched {
@@ -226,10 +226,12 @@ func TestPropertyAOTOptimizationPreservesRouteMatching(t *testing.T) {
 			}
 
 			if afterMatched {
-				for k, v := range beforeResults[i].params {
-					if params[k] != v {
-						t.Fatalf("iter %d: %s %s params[%s] changed after Compile: before=%q after=%q",
-							iter, tc.method, tc.path, k, v, params[k])
+				bp := &beforeResults[i].params
+				for j := 0; j < bp.count; j++ {
+					k, v := bp.items[j].Key, bp.items[j].Value
+					if params.get(k) != v {
+						t.Fatalf("iter %d: %s %s params.get(%s) changed after Compile: before=%q after=%q",
+							iter, tc.method, tc.path, k, v, params.get(k))
 					}
 				}
 			}
@@ -260,8 +262,8 @@ func randomMixedPath(rng *rand.Rand) string {
 
 // buildRequestPath converts a route pattern into a concrete request path,
 // replacing :param with random values and *wildcard with random paths.
-func buildRequestPath(rng *rand.Rand, pattern string) (string, map[string]string) {
-	params := make(map[string]string)
+func buildRequestPath(rng *rand.Rand, pattern string) (string, routeParams) {
+	var params routeParams
 	parts := splitPathParts(pattern)
 	result := ""
 	for _, part := range parts {
@@ -271,7 +273,7 @@ func buildRequestPath(rng *rand.Rand, pattern string) (string, map[string]string
 		if part[0] == '*' {
 			// Wildcard — generate a random multi-segment value
 			val := randomAlphaSegment(rng, 1, 4) + "/" + randomAlphaSegment(rng, 1, 4)
-			params[part[1:]] = val
+			params.set(part[1:], val)
 			result += "/" + val
 			break
 		}
@@ -285,7 +287,7 @@ func buildRequestPath(rng *rand.Rand, pattern string) (string, map[string]string
 				name = name[:len(name)-1]
 			}
 			val := randomAlphaSegment(rng, 1, 6)
-			params[name] = val
+			params.set(name, val)
 			result += "/" + val
 		} else {
 			result += "/" + part

@@ -1,7 +1,7 @@
 package kruda
 
 import (
-	"fmt"
+	"bytes"
 	"log/slog"
 	"os"
 	"runtime"
@@ -15,58 +15,50 @@ import (
 
 // Config holds the server configuration.
 type Config struct {
-	// Server timeouts
 	ReadTimeout  time.Duration // default: 30s
 	WriteTimeout time.Duration // default: 30s
 	IdleTimeout  time.Duration // default: 120s
 
-	// Limits
-	BodyLimit   int // default: 4MB (4 * 1024 * 1024)
-	HeaderLimit int // default: 8KB (8 * 1024)
+	BodyLimit   int // default: 4MB
+	HeaderLimit int // default: 8KB
 
-	// Shutdown
 	ShutdownTimeout time.Duration // default: 10s
 
-	// Transport
-	Transport     transport.Transport // default: net/http (Phase 1), Netpoll (Phase 3)
-	TransportName string              // "auto", "netpoll", "nethttp" — default: "auto"
-	TLSCertFile   string              // TLS certificate file path
-	TLSKeyFile    string              // TLS key file path
-	HTTP3         bool                // enable HTTP/3 dual-stack (QUIC + TCP)
+	Transport     transport.Transport
+	TransportName string // "fasthttp" (default), "nethttp"
+	TLSCertFile   string
+	TLSKeyFile    string
+	HTTP3         bool
 
-	// Proxy trust (C6 fix: default false — only trust X-Forwarded-For/X-Real-IP when true)
+	// TrustProxy enables trusting X-Forwarded-For/X-Real-IP headers. Default: false.
 	TrustProxy bool
 
-	// JSON engine
-	JSONEncoder func(v any) ([]byte, error)    // default: encoding/json
-	JSONDecoder func(data []byte, v any) error // default: encoding/json
+	JSONEncoder func(v any) ([]byte, error)
+	JSONDecoder func(data []byte, v any) error
 
-	// Security (all enabled by default)
-	Security SecurityConfig
+	// JSONStreamEncoder encodes v as JSON into the provided buffer.
+	// When non-nil, c.JSON() uses this with a sync.Pool'd bytes.Buffer
+	// instead of JSONEncoder, eliminating one allocation per response.
+	// Set automatically when using the default encoder; cleared by WithJSONEncoder.
+	JSONStreamEncoder func(buf *bytes.Buffer, v any) error
 
-	// SecurityHeaders controls whether default security headers are set on all responses.
-	// Default: true. Set to false via WithSecurityHeaders(false) to disable.
+	Security        SecurityConfig
 	SecurityHeaders bool
+	PathTraversal   bool
+	DevMode         bool
+	devModeSet      bool
 
-	// DevMode enables development features (dev error page, relaxed security headers).
-	// Default: false (production mode). Auto-detected via KRUDA_ENV=development.
-	DevMode bool
-
-	// devModeSet tracks whether DevMode was explicitly set via WithDevMode.
-	devModeSet bool
-
-	// Logging
-	Logger *slog.Logger // default: slog.Default()
-
-	// Error handler — receives *KrudaError with HTTP status code and message.
-	// Use ke.Unwrap() to access the original error if needed.
+	Logger       *slog.Logger
 	ErrorHandler func(c *Ctx, err *KrudaError)
+	Validator    *Validator
 
-	// Validator holds the validation engine. nil = no validation (zero overhead).
-	// Set via WithValidator() option or lazy-created via app.Validator().
-	Validator *Validator
+	// Turbo enables SO_REUSEPORT prefork mode (Linux only).
+	// Forks runtime.NumCPU() child processes, each with GOMAXPROCS(1) and its own listener.
+	Turbo bool
 
-	// OpenAPI configuration (zero value = disabled, zero overhead)
+	// TurboConfig controls CPU usage in turbo mode.
+	TurboConfig TurboConfig
+
 	openAPIInfo openAPIInfo
 	openAPIPath string
 	openAPITags []openAPITagDef
@@ -92,10 +84,11 @@ func defaultConfig() Config {
 		BodyLimit:       4 * 1024 * 1024, // 4MB
 		HeaderLimit:     8 * 1024,        // 8KB
 		ShutdownTimeout: 10 * time.Second,
-		JSONEncoder:     krudajson.Marshal,
-		JSONDecoder:     krudajson.Unmarshal,
+		JSONEncoder:       krudajson.Marshal,
+		JSONDecoder:       krudajson.Unmarshal,
+		JSONStreamEncoder: krudajson.MarshalToBuffer,
 		Logger:          slog.Default(),
-		SecurityHeaders: true,
+		SecurityHeaders: false,
 		Security: SecurityConfig{
 			XSSProtection:      "0",
 			ContentTypeNosniff: "nosniff",
@@ -129,9 +122,7 @@ func WithBodyLimit(limit int) Option {
 }
 
 // WithMaxBodySize sets the maximum request body size in bytes.
-// Alias for WithBodyLimit — provided for R4 (DoS Protection) compliance.
-// When a request body exceeds this limit, the framework responds with HTTP 413.
-// Default: 4MB (4 * 1024 * 1024). Set to 0 to disable the limit.
+// Alias for WithBodyLimit. When a request body exceeds this limit, the framework responds with HTTP 413.
 func WithMaxBodySize(size int) Option {
 	return WithBodyLimit(size)
 }
@@ -147,12 +138,27 @@ func WithDevMode(enabled bool) Option {
 	}
 }
 
-// WithSecurityHeaders enables or disables default security headers on all responses.
-// When false, no security headers (X-Content-Type-Options, X-Frame-Options,
-// X-XSS-Protection, Referrer-Policy) are set automatically.
-// Default: true.
-func WithSecurityHeaders(enabled bool) Option {
-	return func(a *App) { a.config.SecurityHeaders = enabled }
+// WithSecurity enables all security features: security headers and path traversal prevention.
+// Equivalent to using both WithSecureHeaders() and WithPathTraversal().
+// Recommended for production deployments.
+func WithSecurity() Option {
+	return func(a *App) {
+		a.config.SecurityHeaders = true
+		a.config.PathTraversal = true
+	}
+}
+
+// WithSecureHeaders enables default security headers on all responses.
+// Headers include X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
+// and Referrer-Policy.
+func WithSecureHeaders() Option {
+	return func(a *App) { a.config.SecurityHeaders = true }
+}
+
+// WithPathTraversal enables path traversal prevention.
+// Requests with path traversal patterns (../, encoded dots) are rejected.
+func WithPathTraversal() Option {
+	return func(a *App) { a.config.PathTraversal = true }
 }
 
 // WithLegacySecurityHeaders restores Phase 1-4 security header defaults
@@ -163,6 +169,7 @@ func WithSecurityHeaders(enabled bool) Option {
 //   - X-Content-Type-Options: "nosniff" (unchanged)
 func WithLegacySecurityHeaders() Option {
 	return func(a *App) {
+		a.config.SecurityHeaders = true
 		a.config.Security = SecurityConfig{
 			XSSProtection:      "1; mode=block",
 			ContentTypeNosniff: "nosniff",
@@ -177,10 +184,59 @@ func WithTransport(t transport.Transport) Option {
 	return func(a *App) { a.config.Transport = t }
 }
 
-// WithTransportName selects a transport by name: "auto", "netpoll", "nethttp".
-// Use WithTransport() instead to provide a custom transport instance directly.
-func WithTransportName(name string) Option {
-	return func(a *App) { a.config.TransportName = name }
+// FastHTTP selects the fasthttp transport for maximum performance.
+// This is the default transport — calling FastHTTP() is optional but explicit.
+func FastHTTP() Option {
+	return func(a *App) { a.config.TransportName = "fasthttp" }
+}
+
+// NetHTTP selects the net/http transport for HTTP/2, TLS, and Windows compatibility.
+// Use this when you need HTTP/2 auto-negotiation, TLS, or are running on Windows.
+func NetHTTP() Option {
+	return func(a *App) { a.config.TransportName = "nethttp" }
+}
+
+// Wing selects the Wing transport for maximum performance.
+// Wing uses io_uring on Linux and kqueue on macOS for async I/O
+// without goroutine-per-connection overhead — 2x+ faster than fasthttp.
+// On unsupported platforms (Windows), falls back to fasthttp automatically.
+func Wing() Option {
+	return func(a *App) { a.config.TransportName = "wing" }
+}
+
+// TurboConfig controls CPU usage for turbo (prefork) mode.
+type TurboConfig struct {
+	// Processes sets the exact number of child processes to fork.
+	// Overrides CPUPercent if set. 0 = auto.
+	Processes int
+
+	// CPUPercent limits CPU usage as a percentage (1–99).
+	// e.g. 50 on an 8-core machine = 4 processes.
+	// Ignored if Processes > 0. 0 = use all available CPUs.
+	CPUPercent float64
+
+	// GoMaxProcs sets GOMAXPROCS per child process.
+	// Default (0) = 1, which is optimal for CPU-bound workloads.
+	// Set to 2 for mixed CPU+DB workloads — allows goroutine scheduling
+	// during I/O wait without the overhead of full GOMAXPROCS=NumCPU.
+	// When using GoMaxProcs > 1, reduce Processes accordingly to keep
+	// total parallelism = Processes × GoMaxProcs ≈ NumCPU.
+	GoMaxProcs int
+}
+
+// WithTurbo enables SO_REUSEPORT prefork mode with optional CPU control.
+// On non-Linux platforms turbo is silently skipped — single-process mode is used instead.
+//
+// Examples:
+//
+//	kruda.WithTurbo(kruda.TurboConfig{})                  // auto: use all CPUs
+//	kruda.WithTurbo(kruda.TurboConfig{CPUPercent: 50})    // use 50% of CPUs
+//	kruda.WithTurbo(kruda.TurboConfig{Processes: 4})      // exactly 4 processes
+func WithTurbo(cfg TurboConfig) Option {
+	return func(a *App) {
+		a.config.Turbo = true
+		a.config.TurboConfig = cfg
+	}
 }
 
 // WithLogger sets a custom logger.
@@ -194,8 +250,20 @@ func WithErrorHandler(h func(c *Ctx, err *KrudaError)) Option {
 }
 
 // WithJSONEncoder sets a custom JSON encoder.
+// This disables the default streaming buffer pool optimization.
+// To re-enable pooling with a custom encoder, also call WithJSONStreamEncoder.
 func WithJSONEncoder(enc func(v any) ([]byte, error)) Option {
-	return func(a *App) { a.config.JSONEncoder = enc }
+	return func(a *App) {
+		a.config.JSONEncoder = enc
+		a.config.JSONStreamEncoder = nil // custom encoder — disable stream path
+	}
+}
+
+// WithJSONStreamEncoder sets a streaming JSON encoder that writes into a
+// provided bytes.Buffer. When set, c.JSON() uses a sync.Pool'd buffer with
+// this encoder instead of JSONEncoder, avoiding one allocation per response.
+func WithJSONStreamEncoder(enc func(buf *bytes.Buffer, v any) error) Option {
+	return func(a *App) { a.config.JSONStreamEncoder = enc }
 }
 
 // WithJSONDecoder sets a custom JSON decoder.
@@ -215,7 +283,6 @@ func WithTrustProxy(trust bool) Option {
 }
 
 // WithTLS configures TLS for HTTPS and HTTP/2 auto-negotiation.
-// When used with Netpoll transport, automatically falls back to net/http.
 func WithTLS(certFile, keyFile string) Option {
 	return func(a *App) {
 		a.config.TLSCertFile = certFile
@@ -278,10 +345,7 @@ func applyEnvConfig(prefix string, cfg *Config) {
 // parseSize parses a human-readable size string into bytes.
 // Supported suffixes: KB, MB, GB (case insensitive).
 // Plain number strings are treated as bytes.
-//
-// F5 limitations (by design, sufficient for Phase 1):
-//   - Decimal values not supported ("1.5MB" → error). Use "1536KB" instead.
-//   - "B" suffix not recognized. Plain numbers are already treated as bytes.
+// Decimal values are not supported ("1.5MB" → error, use "1536KB" instead).
 func parseSize(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	upper := strings.ToUpper(s)
@@ -353,8 +417,8 @@ func WithOpenAPITag(name, description string) Option {
 }
 
 // selectTransport chooses the transport based on config, env, and OS.
-// Priority: explicit WithTransport() (cfg.Transport != nil) > WithTransportName() > KRUDA_TRANSPORT env > auto-detect.
-// Netpoll is the default on Linux/macOS; TLS or Windows forces net/http.
+// Priority: explicit WithTransport() > FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default (fasthttp).
+// Default is fasthttp for maximum performance. TLS or Windows auto-falls back to net/http.
 func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {
@@ -362,11 +426,11 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	}
 
 	name := cfg.TransportName
-	if name == "" || name == "auto" {
+	if name == "" {
 		if env := os.Getenv("KRUDA_TRANSPORT"); env != "" {
 			name = env
 		} else {
-			name = "auto"
+			name = "fasthttp" // default: fasthttp for maximum performance
 		}
 	}
 
@@ -383,58 +447,26 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 
 	switch name {
 	case "nethttp":
-		logger.Info("transport selected", "name", "nethttp")
+		logger.Debug("transport selected", "name", "nethttp")
 		return transport.NewNetHTTP(netHTTPCfg)
-	case "fasthttp":
-		return newFastHTTPTransport(cfg, logger)
-	case "netpoll":
-		// Netpoll doesn't support TLS — fall back to net/http for HTTP/2 via crypto/tls.
+	case "wing":
+		// TLS → force net/http for HTTP/2.
 		if cfg.TLSCertFile != "" {
-			logger.Warn("netpoll does not support TLS, falling back to nethttp")
+			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
-		netpollCfg := transport.NetpollConfig{
-			ReadTimeout:    cfg.ReadTimeout,
-			WriteTimeout:   cfg.WriteTimeout,
-			IdleTimeout:    cfg.IdleTimeout,
-			MaxBodySize:    cfg.BodyLimit,
-			MaxHeaderBytes: cfg.HeaderLimit,
-			TrustProxy:     cfg.TrustProxy,
-		}
-		np, err := transport.NewNetpoll(netpollCfg)
-		if err != nil {
-			logger.Warn("netpoll transport unavailable, falling back to nethttp", "error", err)
-			return transport.NewNetHTTP(netHTTPCfg)
-		}
-		logger.Info("transport selected", "name", "netpoll")
-		return np
-	default: // "auto"
-		// TLS → use net/http for HTTP/2 auto-negotiation.
+		return newWingTransport(cfg, logger)
+	default: // "fasthttp" or any other value
+		// TLS → force net/http for HTTP/2 auto-negotiation.
 		if cfg.TLSCertFile != "" {
-			logger.Info("transport selected", "name", "nethttp", "reason", "tls")
+			logger.Debug("transport selected", "name", "nethttp", "reason", "tls")
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
-		// Windows → use net/http (fasthttp has build tag !windows).
+		// Windows → force net/http (fasthttp has build tag !windows).
 		if runtime.GOOS == "windows" {
-			logger.Info("transport selected", "name", "nethttp", "reason", "windows")
+			logger.Debug("transport selected", "name", "nethttp", "reason", "windows")
 			return transport.NewNetHTTP(netHTTPCfg)
 		}
-		// Linux/macOS → try fasthttp first, then netpoll, fall back to net/http on error.
 		return newFastHTTPTransport(cfg, logger)
-	}
-}
-
-// altSvcMiddleware injects the Alt-Svc header on HTTP/2 responses
-// to advertise HTTP/3 availability. Auto-registered when WithHTTP3() is configured.
-// Accepts either a bare port ("3000") or a full address (":3000", "0.0.0.0:3000").
-func altSvcMiddleware(addr string) HandlerFunc {
-	port := addr
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		port = addr[i+1:]
-	}
-	altSvc := fmt.Sprintf(`h3=":%s"; ma=86400`, port)
-	return func(c *Ctx) error {
-		c.SetHeader("Alt-Svc", altSvc)
-		return c.Next()
 	}
 }

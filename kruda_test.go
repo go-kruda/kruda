@@ -1,8 +1,11 @@
 package kruda
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"mime/multipart"
 	"strings"
 	"sync"
 	"testing"
@@ -10,10 +13,6 @@ import (
 
 	"github.com/go-kruda/kruda/transport"
 )
-
-// ---------------------------------------------------------------------------
-// Mock transport types for App core tests
-// ---------------------------------------------------------------------------
 
 // mockRequest implements transport.Request.
 type mockRequest struct {
@@ -37,6 +36,11 @@ func (r *mockRequest) QueryParam(key string) string {
 func (r *mockRequest) RemoteAddr() string        { return "127.0.0.1" }
 func (r *mockRequest) Cookie(name string) string { return "" }
 func (r *mockRequest) RawRequest() any           { return nil }
+func (r *mockRequest) Context() context.Context  { return context.Background() }
+
+func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) {
+	return nil, fmt.Errorf("not supported")
+}
 
 // mockResponseWriter implements transport.ResponseWriter.
 type mockResponseWriter struct {
@@ -71,10 +75,6 @@ func (m *mockHeaderMap) Add(key, value string) {
 	}
 }
 func (m *mockHeaderMap) Del(key string) { delete(m.h, key) }
-
-// ---------------------------------------------------------------------------
-// Req 5.1, 5.2: New() defaults and functional options
-// ---------------------------------------------------------------------------
 
 func TestNew_Defaults(t *testing.T) {
 	app := New()
@@ -141,10 +141,6 @@ func TestNew_WithOptions(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.6: Route registration methods
-// ---------------------------------------------------------------------------
-
 func TestApp_RouteRegistration(t *testing.T) {
 	app := New()
 	h := func(c *Ctx) error { return nil }
@@ -155,7 +151,7 @@ func TestApp_RouteRegistration(t *testing.T) {
 	app.Delete("/delete", h)
 	app.Patch("/patch", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 	methods := map[string]string{
 		"GET":    "/get",
 		"POST":   "/post",
@@ -164,16 +160,12 @@ func TestApp_RouteRegistration(t *testing.T) {
 		"PATCH":  "/patch",
 	}
 	for method, path := range methods {
-		clear(params)
-		if app.router.find(method, path, params) == nil {
+		params.reset()
+		if app.router.find(method, path, &params) == nil {
 			t.Errorf("%s %s should be registered", method, path)
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 5.7: Use() appends global middleware
-// ---------------------------------------------------------------------------
 
 func TestApp_Use(t *testing.T) {
 	app := New()
@@ -187,10 +179,6 @@ func TestApp_Use(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.6: Method chaining — route methods return *App
-// ---------------------------------------------------------------------------
-
 func TestApp_MethodChaining(t *testing.T) {
 	app := New()
 	h := func(c *Ctx) error { return nil }
@@ -200,10 +188,6 @@ func TestApp_MethodChaining(t *testing.T) {
 		t.Error("chained route methods should return the same *App")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 5.4, 5.5: ServeKruda — success path
-// ---------------------------------------------------------------------------
 
 func TestApp_ServeKruda_Success(t *testing.T) {
 	app := New()
@@ -226,7 +210,6 @@ func TestApp_ServeKruda_Success(t *testing.T) {
 	if resp.statusCode != 200 {
 		t.Errorf("status = %d, want 200", resp.statusCode)
 	}
-	// Verify JSON body
 	var body map[string]any
 	if err := json.Unmarshal(resp.body, &body); err != nil {
 		t.Fatalf("invalid JSON response: %v", err)
@@ -235,10 +218,6 @@ func TestApp_ServeKruda_Success(t *testing.T) {
 		t.Errorf("body[msg] = %v, want ok", body["msg"])
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 5.5: ServeKruda — 404 Not Found
-// ---------------------------------------------------------------------------
 
 func TestApp_ServeKruda_404(t *testing.T) {
 	app := New()
@@ -263,10 +242,6 @@ func TestApp_ServeKruda_404(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.5: ServeKruda — 405 Method Not Allowed
-// ---------------------------------------------------------------------------
-
 func TestApp_ServeKruda_405(t *testing.T) {
 	app := New()
 	app.Get("/resource", func(c *Ctx) error { return c.Text("ok") })
@@ -281,7 +256,6 @@ func TestApp_ServeKruda_405(t *testing.T) {
 		t.Errorf("status = %d, want 405", resp.statusCode)
 	}
 
-	// Verify Allow header is set
 	allow := resp.headers.h["Allow"]
 	if !strings.Contains(allow, "GET") {
 		t.Errorf("Allow header = %q, want to contain GET", allow)
@@ -296,14 +270,9 @@ func TestApp_ServeKruda_405(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.12: handleError — error handling produces correct JSON
-// ---------------------------------------------------------------------------
-
 func TestApp_HandleError(t *testing.T) {
 	app := New()
 
-	// Register a route that returns a KrudaError
 	app.Get("/fail", func(c *Ctx) error {
 		return BadRequest("invalid input")
 	})
@@ -330,10 +299,6 @@ func TestApp_HandleError(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.10: OnShutdown registers hooks
-// ---------------------------------------------------------------------------
-
 func TestApp_OnShutdown(t *testing.T) {
 	app := New()
 
@@ -345,7 +310,6 @@ func TestApp_OnShutdown(t *testing.T) {
 		t.Fatalf("OnShutdown hooks = %d, want 2", len(app.hooks.OnShutdown))
 	}
 
-	// Execute hooks to verify they work
 	for _, fn := range app.hooks.OnShutdown {
 		fn()
 	}
@@ -354,26 +318,18 @@ func TestApp_OnShutdown(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Req 5.6: All() registers on all standard methods
-// ---------------------------------------------------------------------------
-
 func TestApp_All(t *testing.T) {
 	app := New()
 	app.All("/any", func(c *Ctx) error { return nil })
 
-	params := make(map[string]string, 4)
+	var params routeParams
 	for _, method := range standardMethods {
-		clear(params)
-		if app.router.find(method, "/any", params) == nil {
+		params.reset()
+		if app.router.find(method, "/any", &params) == nil {
 			t.Errorf("%s /any should be registered via All()", method)
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Req 5.5, 5.7: ServeKruda with global middleware — execution order
-// ---------------------------------------------------------------------------
 
 func TestApp_ServeKruda_WithMiddleware(t *testing.T) {
 	app := New()
@@ -413,11 +369,6 @@ func TestApp_ServeKruda_WithMiddleware(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 17.1: Typed POST with validation errors via ServeKruda — 422 structured JSON
-// Requirements: R5.1, R5.2
-// ---------------------------------------------------------------------------
 
 func TestIntegration_TypedPOST_ValidationError_422(t *testing.T) {
 	type CreateUserReq struct {
@@ -490,11 +441,6 @@ func TestIntegration_TypedPOST_ValidationError_422(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 17.2: Typed GET with query params via ServeKruda — correct binding
-// Requirements: R7.4
-// ---------------------------------------------------------------------------
-
 func TestIntegration_TypedGET_QueryParams(t *testing.T) {
 	type ListReq struct {
 		Page  int    `query:"page" default:"1"`
@@ -551,11 +497,6 @@ func TestIntegration_TypedGET_QueryParams(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 17.3: OnError hooks fire for validation errors
-// Requirements: R5.5
-// ---------------------------------------------------------------------------
-
 func TestIntegration_OnError_FiresForValidationErrors(t *testing.T) {
 	type Req struct {
 		Name string `json:"name" validate:"required"`
@@ -611,11 +552,6 @@ func TestIntegration_OnError_FiresForValidationErrors(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 17.4: Custom ErrorHandler receives ValidationError
-// Requirements: R5.3
-// ---------------------------------------------------------------------------
-
 func TestIntegration_CustomErrorHandler_ReceivesValidationError(t *testing.T) {
 	type Req struct {
 		Email string `json:"email" validate:"required,email"`
@@ -629,7 +565,6 @@ func TestIntegration_CustomErrorHandler_ReceivesValidationError(t *testing.T) {
 	app := New(
 		WithValidator(NewValidator()),
 		WithErrorHandler(func(c *Ctx, ke *KrudaError) {
-			// R5.3: custom handler receives *KrudaError wrapping *ValidationError
 			var ve *ValidationError
 			if errors.As(ke, &ve) {
 				receivedVE = ve
@@ -679,11 +614,6 @@ func TestIntegration_CustomErrorHandler_ReceivesValidationError(t *testing.T) {
 		t.Error("expected custom=true in response from custom error handler")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 13.2: SSE endpoint streaming integration test
-// Requirements: R7.1-R7.3
-// ---------------------------------------------------------------------------
 
 // mockFlusherResponse implements transport.ResponseWriter + http.Flusher
 type mockFlusherResponse struct {
@@ -759,11 +689,6 @@ func TestIntegration_SSE_Streaming(t *testing.T) {
 		t.Errorf("flush count = %d, want >= 3", resp.flushCount)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 13.3: OpenAPI spec served at configured path
-// Requirements: R10.3, R10.5
-// ---------------------------------------------------------------------------
 
 func TestIntegration_OpenAPI_ServedAtPath(t *testing.T) {
 	type ItemReq struct {
@@ -849,10 +774,6 @@ func TestIntegration_OpenAPI_ServedAtPath(t *testing.T) {
 		t.Error("POST /items should have 422 response (has validation)")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Ctx.Query() delegation tests (R5.5 — delegates to transport, no separate cache)
-// ---------------------------------------------------------------------------
 
 func TestCtxQuery_DelegatesToTransport(t *testing.T) {
 	app := New()

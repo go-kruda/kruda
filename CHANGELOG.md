@@ -3,6 +3,18 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] — TechEmpower Domination
+
+### Added
+- `Ctx.SetBody([]byte) *Ctx` — lazy-send response body (zero-copy, chainable)
+- `Ctx.SendBytes([]byte) error` — eager-send response body (immediate flush, terminal)
+- `Ctx.SetContentType(string) *Ctx` — set Content-Type header (chainable)
+- Turbo Mode (`WithTurbo`) — SO_REUSEPORT prefork with per-core child processes (Linux only)
+- TechEmpower Framework Benchmarks submission (`frameworks/Go/kruda/`)
+
+### Removed
+- Legacy TFB code (`cmd/techempower/`, `techempower/`, root `Dockerfile.techempower`, root `benchmark_config.json`)
+
 ## [Unreleased] — Phase 5: Production Ready
 
 ### Added
@@ -52,9 +64,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.0] — Phase 3: Performance
 
 ### Added
-- Netpoll transport (`transport/netpoll.go`) with epoll-based I/O
-- Transport auto-selection: Netpoll on Linux/macOS, net/http on Windows
-- `WithTransport`, `WithTransportName` config options
+- fasthttp transport for maximum throughput (now the default)
+- `FastHTTP()` and `NetHTTP()` transport options
+- Transport auto-fallback: TLS or Windows → net/http
+- `WithTransport(transport.Transport)` for custom transport implementations
 - HTTP/2 support via net/http TLS
 - HTTP/3 (QUIC) config with `WithHTTP3(cert, key)` and Alt-Svc header
 - Benchmark suite in `bench/` comparing Kruda, Gin, Fiber, Echo

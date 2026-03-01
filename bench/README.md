@@ -180,6 +180,58 @@ Results are comparable to [bun-http-framework-benchmark](https://github.com/Salt
 - **JSON is the real benchmark:** Plaintext measures HTTP parsing speed. JSON POST measures what API servers actually do — parse request bodies and serialize responses. Kruda wins this 50-230% depending on core count.
 - **Latency:** Kruda consistently delivers ~50% lower latency across all tests and configurations.
 
+## Wing Transport Benchmark (io_uring / kqueue)
+
+Wing is Kruda's custom transport using io_uring (Linux) and kqueue (macOS) — zero external dependencies.
+
+### Linux (Intel i5-13500, 8 cores, 256 connections, 10s, wrk)
+
+| Framework | Plaintext RPS | JSON RPS |
+|-----------|-------------:|----------:|
+| **Kruda + Wing (io_uring)** | **521,318** | **496,586** |
+| Fiber Prefork (8 workers) | 268,222 | 244,058 |
+| Kruda + fasthttp | 231,460 | 219,445 |
+| Fiber | 229,421 | 213,405* |
+
+*\* Fiber JSON returned non-2xx (route mismatch in bench setup)*
+
+**Wing vs Fiber Prefork: 1.94x plaintext, 2.03x JSON**
+**Wing vs fasthttp: 2.25x plaintext, 2.26x JSON**
+
+### macOS (Apple M3, 8 cores, 100 connections, 10s, wrk)
+
+| Framework | Plaintext RPS | JSON RPS |
+|-----------|-------------:|----------:|
+| **Kruda + Wing (kqueue)** | **263,485** | **267,938** |
+| Kruda + fasthttp | 207,751 | 213,632 |
+
+**Wing (kqueue) vs fasthttp: 1.27x plaintext, 1.25x JSON**
+
+### Micro Benchmarks (go test -bench)
+
+| Benchmark | M3 (ns/op) | i5-13500 (ns/op) | Allocs |
+|-----------|-----------|-------------------|--------|
+| ParseGET | 152 | 170 | 5 allocs, 136 B |
+| ParsePOST | 195 | 237 | 5 allocs, 176 B |
+| ResponseBuild (zero-copy) | 100 | 140 | 4 allocs, 360 B |
+| ResponseBuildCopy | 42 | 58 | 1 alloc, 112 B |
+| FullCycle (parse→respond) | 262 | 284 | 8 allocs, 304 B |
+| HandlerInline (full path) | 283 | 283 | 8 allocs, 304 B |
+
+*Full request→response cycle: ~280ns, 8 allocations*
+
+### How to Run
+
+```bash
+# Micro benchmarks
+cd transport/wing && go test -bench=. -benchmem -count=3 ./...
+
+# wrk benchmark (build servers, then use wrk)
+# See bench/transport-compare/ for standalone bench servers
+```
+
+*Tested: 2026-03-01, Go 1.26, wrk 4.2.0*
+
 ## Notes
 
 - This is a separate Go module (`bench/go.mod`) — it does not affect the root Kruda module

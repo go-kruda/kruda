@@ -31,6 +31,8 @@ vendor/
 CLAUDE.md
 .kiro/
 .claude/
+.plan
+KIRO_*.md
 
 # Build output (root-level compiled binaries from examples)
 /auth

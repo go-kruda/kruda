@@ -44,6 +44,7 @@ CLAUDE.md
 /testing
 /typed-handlers
 /kruda
+cmd/kruda/kruda
 
 # Bench artifacts
 bench/*.txt
@@ -59,6 +60,12 @@ bench/gin_test.go
 bench/fiber_test.go
 bench/echo_test.go
 bench/run_cross_bench.sh
+
+# Cross-runtime benchmark artifacts
+bench/cross-runtime/elysia/node_modules/
+bench/cross-runtime/elysia/bun.lock
+bench/cross-runtime/fiber/fiber-bench
+bench/cross-runtime/kruda/kruda-bench
 
 # Node.js / Bun
 node_modules/

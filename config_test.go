@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -265,9 +266,9 @@ func TestResolveCPUs_WithGoMaxProcs(t *testing.T) {
 }
 
 func TestSetupChild_ReadsEnvGoMaxProcs(t *testing.T) {
-	// This test verifies that SetupChild reads KRUDA_GOMAXPROCS env var.
-	// We can't call SetupChild directly (it mutates GOMAXPROCS globally),
-	// but we can verify the env key constant is correct.
+	if runtime.GOOS != "linux" {
+		t.Skip("turbo mode (IsChild/IsSupervisor/ChildID) only supported on Linux")
+	}
 	os.Setenv("KRUDA_CHILD_ID", "0")
 	defer os.Unsetenv("KRUDA_CHILD_ID")
 

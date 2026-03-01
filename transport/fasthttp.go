@@ -35,13 +35,23 @@ func NewFastHTTP(cfg FastHTTPConfig) *FastHTTPTransport {
 
 // newServer creates and configures a fasthttp.Server with the transport's config.
 func (t *FastHTTPTransport) newServer(handler Handler) *fasthttp.Server {
-	s := &fasthttp.Server{
-		Handler: func(ctx *fasthttp.RequestCtx) {
+	var fhHandler fasthttp.RequestHandler
+
+	// Fast path: if handler implements FastHTTPHandler, call ServeFast directly
+	// bypassing adapter allocation (2 allocs/req saved).
+	if fh, ok := handler.(FastHTTPHandler); ok {
+		fhHandler = func(ctx *fasthttp.RequestCtx) {
+			fh.ServeFastHTTP(ctx)
+		}
+	} else {
+		fhHandler = func(ctx *fasthttp.RequestCtx) {
 			req := &fasthttpRequest{ctx: ctx, trustProxy: t.config.TrustProxy}
 			resp := &fasthttpResponseWriter{ctx: ctx}
 			handler.ServeKruda(resp, req)
-		},
+		}
 	}
+
+	s := &fasthttp.Server{Handler: fhHandler}
 
 	if t.config.ReadTimeout > 0 {
 		s.ReadTimeout = t.config.ReadTimeout

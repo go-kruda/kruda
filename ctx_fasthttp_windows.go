@@ -6,6 +6,7 @@ package kruda
 type ctxFastHTTPFields struct{}
 
 func (c *Ctx) tryFastHTTPText(_ string) bool                        { return false }
+func (c *Ctx) tryFastHTTPJSONDirect(_ any) bool                     { return false }
 func (c *Ctx) tryFastHTTPJSON(_ []byte) bool                        { return false }
 func (c *Ctx) trySendBytesFastHTTP(_ []byte) bool                   { return false }
 func (c *Ctx) trySendFastHTTP() bool                                { return false }

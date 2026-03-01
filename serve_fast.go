@@ -4,6 +4,7 @@ package kruda
 
 import (
 	"context"
+	"fmt"
 	"mime/multipart"
 	"unsafe"
 
@@ -43,13 +44,20 @@ func internMethod(b []byte) string {
 			return methodStringHEAD
 		}
 	case 5:
-		return methodStringPATCH
+		if b[0] == 'P' {
+			return methodStringPATCH
+		}
 	case 6:
 		return methodStringDELETE
 	case 7:
 		return methodStringOPTIONS
 	}
 	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+// ServeFastHTTP implements transport.FastHTTPHandler for zero-allocation fasthttp serving.
+func (app *App) ServeFastHTTP(ctx interface{}) {
+	app.ServeFast(ctx.(*fasthttp.RequestCtx))
 }
 
 // ServeFast handles a fasthttp request directly, bypassing transport selection.
@@ -269,6 +277,11 @@ func (r *fhReqAdapter) RawRequest() any              { return r.ctx }
 func (r *fhReqAdapter) Context() context.Context     { return r.ctx }
 
 func (r *fhReqAdapter) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if maxBytes > 0 {
+		if cl := int64(r.ctx.Request.Header.ContentLength()); cl > maxBytes {
+			return nil, fmt.Errorf("multipart: request body too large (%d > %d)", cl, maxBytes)
+		}
+	}
 	return r.ctx.Request.MultipartForm()
 }
 
@@ -303,8 +316,37 @@ func (c *Ctx) tryFastHTTPText(s string) bool {
 	return false
 }
 
+// tryFastHTTPJSONDirect encodes v as JSON and writes it to the fasthttp response with zero-copy.
+// Uses sonic.Marshal (allocates []byte) + SetBodyRaw (references without memcpy).
+// This eliminates two sources of overhead vs the pooled-buffer path:
+//   - jsonBufPool.Get/Put → pool contention at high concurrency
+//   - SetBody memcpy → unnecessary copy into fasthttp's buffer
+//
+// Safety: fasthttp handlers are synchronous. The data slice lives from Marshal
+// through response write (same goroutine), so SetBodyRaw is safe.
+// After fasthttp writes the response, the slice becomes eligible for GC.
+func (c *Ctx) tryFastHTTPJSONDirect(v any) bool {
+	if c.embeddedFHResp.ctx == nil {
+		return false
+	}
+	enc := c.app.config.JSONEncoder
+	if enc == nil {
+		return false
+	}
+	data, err := enc(v)
+	if err != nil {
+		return false
+	}
+	c.responded = true
+	ctx := c.embeddedFHResp.ctx
+	ctx.SetStatusCode(c.status)
+	ctx.Response.Header.SetContentTypeBytes(jsonContentType)
+	ctx.Response.SetBodyRaw(data) // zero-copy: reference only, no memcpy
+	return true
+}
+
 // tryFastHTTPJSON attempts to send a JSON response directly via fasthttp without transport interface.
-// This bypasses sendBytes() pool-copy overhead and writes directly to fasthttp's response buffer.
+// Used by jsonSend() when data is already marshaled (e.g. custom encoder path).
 // Returns true if successful (fasthttp context available), false otherwise.
 func (c *Ctx) tryFastHTTPJSON(data []byte) bool {
 	if c.embeddedFHResp.ctx != nil {

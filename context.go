@@ -445,14 +445,24 @@ func (c *Ctx) Responded() bool {
 }
 
 // JSON sends a JSON response using the configured JSON encoder.
-// When the streaming encoder is available (default), marshals into a pooled
-// bytes.Buffer to avoid allocating a fresh []byte per request.
+// On the fasthttp path, uses SetBodyRaw for zero-copy response writing:
+// sonic.Marshal allocates a []byte, SetBodyRaw references it (no memcpy),
+// and fasthttp writes it to the TCP socket before GC reclaims it.
+// This eliminates jsonBufPool contention under high concurrency.
+// On net/http or non-default encoder paths, falls back to pooled buffer or direct marshal.
 func (c *Ctx) JSON(v any) error {
 	if c.responded {
 		return ErrAlreadyResponded
 	}
 
-	// Fast path: stream into pooled buffer (default — avoids Marshal allocation)
+	// Ultra-fast path: fasthttp + default encoder → zero-copy via SetBodyRaw.
+	// Eliminates jsonBufPool Get/Put (pool contention) and SetBody memcpy.
+	// Safe because fasthttp handler is synchronous — data lives until response is written.
+	if c.tryFastHTTPJSONDirect(v) {
+		return nil
+	}
+
+	// Fast path: stream into pooled buffer (net/http transport)
 	if enc := c.app.config.JSONStreamEncoder; enc != nil {
 		return c.jsonPooled(v, enc)
 	}

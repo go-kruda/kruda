@@ -20,6 +20,14 @@ type Handler interface {
 	ServeKruda(w ResponseWriter, r Request)
 }
 
+// FastHTTPHandler is an optional interface that Handler implementations can
+// satisfy to enable zero-allocation fasthttp serving. FastHTTPTransport
+// checks for this at startup and calls ServeFast directly, bypassing the
+// generic ServeKruda path (which allocates adapter objects per request).
+type FastHTTPHandler interface {
+	ServeFastHTTP(ctx interface{}) // accepts *fasthttp.RequestCtx as interface{} to avoid import cycle
+}
+
 // HandlerFunc is an adapter to allow use of ordinary functions as Handler.
 type HandlerFunc func(w ResponseWriter, r Request)
 

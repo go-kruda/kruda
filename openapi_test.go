@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Test types for OpenAPI schema generation
-// ---------------------------------------------------------------------------
-
 type oaSimple struct {
 	Name   string  `json:"name"`
 	Age    int     `json:"age"`
@@ -50,10 +46,6 @@ type oaOut struct {
 	ID      string `json:"id"`
 	Message string `json:"message"`
 }
-
-// ---------------------------------------------------------------------------
-// Task 11.12: Schema generation tests
-// ---------------------------------------------------------------------------
 
 func TestGenerateSchema_Primitives(t *testing.T) {
 	components := make(map[string]*schemaRef)
@@ -248,10 +240,6 @@ func TestGenerateSchema_PrimitiveTypes(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Path conversion tests
-// ---------------------------------------------------------------------------
-
 func TestConvertPath(t *testing.T) {
 	tests := []struct {
 		input string
@@ -279,10 +267,6 @@ func TestConvertPath(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Spec builder tests
-// ---------------------------------------------------------------------------
 
 func TestBuildOpenAPISpec_Basic(t *testing.T) {
 	app := New(
@@ -422,10 +406,6 @@ func TestBuildOpenAPISpec_NoConfig_Empty(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Config option tests
-// ---------------------------------------------------------------------------
-
 func TestWithOpenAPIInfo(t *testing.T) {
 	app := New(WithOpenAPIInfo("My API", "2.0.0", "Description"))
 
@@ -470,10 +450,6 @@ func TestWithOpenAPITag(t *testing.T) {
 		t.Errorf("tag[1] name = %q, want posts", app.config.openAPITags[1].Name)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// buildOperation tests
-// ---------------------------------------------------------------------------
 
 func TestBuildOperation_QueryParams(t *testing.T) {
 	type queryIn struct {
@@ -547,10 +523,6 @@ func TestBuildOperation_FormBody(t *testing.T) {
 		t.Error("expected multipart/form-data content type")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// containsRule tests
-// ---------------------------------------------------------------------------
 
 func TestContainsRule(t *testing.T) {
 	tests := []struct {

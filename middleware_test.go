@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// --- buildChain unit tests ---
-
 func TestBuildChain_EmptyGlobalAndGroup(t *testing.T) {
 	handler := func(c *Ctx) error { return nil }
 	chain := buildChain(nil, nil, handler)
@@ -82,8 +80,6 @@ func TestBuildChain_CapacityIsExact(t *testing.T) {
 	}
 }
 
-// --- c.Next() progression tests ---
-
 func TestNext_ProgressesThroughChain(t *testing.T) {
 	var visited []int
 
@@ -112,8 +108,6 @@ func TestNext_BeyondChainReturnsNil(t *testing.T) {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
-
-// --- Short-circuit on error tests ---
 
 func TestShortCircuit_ErrorSkipsRemainingHandlers(t *testing.T) {
 	var visited []string
@@ -147,8 +141,6 @@ func TestShortCircuit_MiddlewareCanChooseNotToCallNext(t *testing.T) {
 
 	auth := func(c *Ctx) error {
 		visited = append(visited, "auth")
-		// Simulate auth check — does NOT call Next, does NOT return error
-		// (e.g. already responded). In real usage this would write a response.
 		return nil
 	}
 	h := func(c *Ctx) error {
@@ -162,15 +154,11 @@ func TestShortCircuit_MiddlewareCanChooseNotToCallNext(t *testing.T) {
 	if err := chain[0](ctx); err != nil {
 		t.Fatal(err)
 	}
-	// handler should not have been called because auth didn't call Next()
 	assertOrder(t, visited, []string{"auth"})
 }
 
-// --- MiddlewareFunc alias test ---
-
 func TestMiddlewareFuncIsAliasForHandlerFunc(t *testing.T) {
 	// MiddlewareFunc = HandlerFunc means they are the same type.
-	// This test verifies that a MiddlewareFunc can be used wherever a HandlerFunc is expected.
 	var mw MiddlewareFunc = func(c *Ctx) error { return c.Next() }
 	var hf HandlerFunc = mw // assignment must compile without conversion
 
@@ -179,8 +167,6 @@ func TestMiddlewareFuncIsAliasForHandlerFunc(t *testing.T) {
 		t.Fatalf("expected 2, got %d", len(chain))
 	}
 }
-
-// --- helpers ---
 
 // minimalCtx creates a bare Ctx with the given handler chain for testing.
 // It does not require a full App — only the fields used by Next() are set.

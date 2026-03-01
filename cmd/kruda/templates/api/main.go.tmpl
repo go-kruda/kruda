@@ -1,0 +1,26 @@
+package main
+
+import (
+	"log"
+
+	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/middleware"
+
+	"{{.ModuleName}}/handlers"
+	"{{.ModuleName}}/routes"
+)
+
+func main() {
+	app := kruda.New()
+
+	// Global middleware
+	app.Use(middleware.Logger())
+	app.Use(middleware.Recovery())
+	app.Use(middleware.RequestID())
+
+	// Register routes
+	routes.Register(app, handlers.NewUserHandler())
+
+	log.Println("Starting {{.ProjectName}} on :3000")
+	app.Listen(":3000")
+}

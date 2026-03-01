@@ -1,0 +1,20 @@
+package routes
+
+import (
+	"github.com/go-kruda/kruda"
+
+	"{{.ModuleName}}/handlers"
+)
+
+// Register sets up all application routes.
+func Register(app *kruda.App, userHandler *handlers.UserHandler) {
+	api := app.Group("/api")
+
+	// User routes
+	users := api.Group("/users")
+	users.Get("/", userHandler.List)
+	users.Get("/:id", userHandler.GetByID)
+	users.Post("/", userHandler.Create)
+	users.Put("/:id", userHandler.Update)
+	users.Delete("/:id", userHandler.Delete)
+}

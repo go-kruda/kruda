@@ -70,14 +70,6 @@ func transportFactories() []struct {
 				MaxBodySize:  1024,
 			})
 		}},
-		{"netpoll", func() Transport {
-			tr, _ := NewNetpoll(NetpollConfig{
-				ReadTimeout:  5 * time.Second,
-				WriteTimeout: 5 * time.Second,
-				MaxBodySize:  1024,
-			})
-			return tr
-		}},
 	}
 }
 

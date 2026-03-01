@@ -8,21 +8,15 @@ import (
 	"testing"
 )
 
-// ===========================================================================
-// Test 1: TestIntegrationFullRequestLifecycle
-// ===========================================================================
-
 func TestIntegrationFullRequestLifecycle(t *testing.T) {
 	app := New()
 
-	// Middleware that sets a response header and a local value
 	app.Use(func(c *Ctx) error {
 		c.SetHeader("X-Request-Traced", "true")
 		c.Set("traced", "true")
 		return c.Next()
 	})
 
-	// GET /api/users/:id — returns JSON with id and traced value from locals
 	app.Get("/api/users/:id", func(c *Ctx) error {
 		traced, _ := c.Get("traced").(string)
 		return c.JSON(Map{
@@ -31,7 +25,6 @@ func TestIntegrationFullRequestLifecycle(t *testing.T) {
 		})
 	})
 
-	// POST /api/users — binds JSON body and echoes back
 	type createUserReq struct {
 		Name  string `json:"name"`
 		Email string `json:"email"`
@@ -47,7 +40,6 @@ func TestIntegrationFullRequestLifecycle(t *testing.T) {
 	app.Compile()
 	tc := NewTestClient(app)
 
-	// --- GET /api/users/42 ---
 	t.Run("GET with param and middleware", func(t *testing.T) {
 		resp, err := tc.Get("/api/users/42")
 		if err != nil {
@@ -71,7 +63,6 @@ func TestIntegrationFullRequestLifecycle(t *testing.T) {
 		}
 	})
 
-	// --- POST /api/users with JSON body ---
 	t.Run("POST with JSON body binding", func(t *testing.T) {
 		resp, err := tc.Post("/api/users", map[string]string{
 			"name":  "Alice",
@@ -96,20 +87,13 @@ func TestIntegrationFullRequestLifecycle(t *testing.T) {
 	})
 }
 
-// ===========================================================================
-// Test 2: TestIntegrationDIResourceErrorMapping
-// ===========================================================================
-
-// Sentinel error for user not found
 var errIntegrationUserNotFound = errors.New("user not found")
 
-// integrationUser is the model for the resource test.
 type integrationUser struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// inMemoryUserService implements ResourceService[integrationUser, string].
 type inMemoryUserService struct {
 	mu    sync.Mutex
 	store map[string]integrationUser
@@ -135,7 +119,6 @@ func (s *inMemoryUserService) Create(_ context.Context, item integrationUser) (i
 	defer s.mu.Unlock()
 	s.seq++
 	item.ID = strings.Repeat("0", 3-len(string(rune('0'+s.seq)))) + string(rune('0'+s.seq))
-	// Simple sequential ID
 	item.ID = "u" + strings.TrimLeft(item.ID, "0")
 	s.store[item.ID] = item
 	return item, nil
@@ -186,7 +169,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 	app.Compile()
 	tc := NewTestClient(app)
 
-	// --- POST /users (create) ---
 	var createdID string
 	t.Run("Create user", func(t *testing.T) {
 		resp, err := tc.Post("/users", map[string]string{"name": "Bob"})
@@ -209,7 +191,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 		createdID = body.ID
 	})
 
-	// --- GET /users/:id (get) ---
 	t.Run("Get user by ID", func(t *testing.T) {
 		resp, err := tc.Get("/users/" + createdID)
 		if err != nil {
@@ -227,7 +208,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 		}
 	})
 
-	// --- GET /users (list) ---
 	t.Run("List users", func(t *testing.T) {
 		resp, err := tc.Get("/users")
 		if err != nil {
@@ -246,7 +226,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 		}
 	})
 
-	// --- DELETE /users/:id ---
 	t.Run("Delete user", func(t *testing.T) {
 		resp, err := tc.Delete("/users/" + createdID)
 		if err != nil {
@@ -257,7 +236,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 		}
 	})
 
-	// --- GET /users/:id after delete → 404 via error mapping ---
 	t.Run("Get deleted user returns 404", func(t *testing.T) {
 		resp, err := tc.Get("/users/" + createdID)
 		if err != nil {
@@ -276,10 +254,6 @@ func TestIntegrationDIResourceErrorMapping(t *testing.T) {
 	})
 }
 
-// ===========================================================================
-// Test 3: TestIntegrationGracefulShutdown
-// ===========================================================================
-
 func TestIntegrationGracefulShutdown(t *testing.T) {
 	hookCalled := false
 
@@ -295,10 +269,6 @@ func TestIntegrationGracefulShutdown(t *testing.T) {
 		t.Fatal("expected OnShutdown hook to be called")
 	}
 }
-
-// ===========================================================================
-// Test 4: TestIntegrationMiddlewareChain
-// ===========================================================================
 
 func TestIntegrationMiddlewareChain(t *testing.T) {
 	app := New()
@@ -338,11 +308,6 @@ func TestIntegrationMiddlewareChain(t *testing.T) {
 	}
 }
 
-// ===========================================================================
-// Test 5: TestIntegrationTypedHandlerWithDI
-// ===========================================================================
-
-// greetingService is a simple DI service for the typed handler test.
 type greetingService struct {
 	prefix string
 }
@@ -351,12 +316,10 @@ func (s *greetingService) Greet(name string) string {
 	return s.prefix + ", " + name + "!"
 }
 
-// getGreetingInput is the typed input for the greeting handler.
 type getGreetingInput struct {
 	Name string `param:"name"`
 }
 
-// greetingOutput is the typed output for the greeting handler.
 type greetingOutput struct {
 	Greeting string `json:"greeting"`
 }
@@ -397,16 +360,10 @@ func TestIntegrationTypedHandlerWithDI(t *testing.T) {
 	}
 }
 
-// ===========================================================================
-// Test 6: TestIntegrationHealthCheckWithServices
-// ===========================================================================
-
-// integrationHealthyService implements HealthChecker and always returns ok.
 type integrationHealthyService struct{}
 
 func (s *integrationHealthyService) Check(_ context.Context) error { return nil }
 
-// integrationUnhealthyService implements HealthChecker and always returns an error.
 type integrationUnhealthyService struct{}
 
 func (s *integrationUnhealthyService) Check(_ context.Context) error {

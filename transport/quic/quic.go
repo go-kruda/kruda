@@ -1,6 +1,6 @@
 // Package quic provides an HTTP/3 transport for Kruda using the QUIC protocol.
 // This is a separate Go module to avoid pulling the quic-go dependency
-// for users who only need net/http or Netpoll transports.
+// for users who only need net/http or fasthttp transports.
 package quic
 
 import (
@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -23,7 +24,6 @@ type QUICTransport struct {
 	server    *http3.Server
 	tlsConfig *tls.Config
 	config    Config
-	handler   transport.Handler
 }
 
 // Config holds HTTP/3 transport configuration.
@@ -50,9 +50,24 @@ func New(cfg Config) (*QUICTransport, error) {
 // ListenAndServe starts the HTTP/3 server on the given UDP address.
 func (t *QUICTransport) ListenAndServe(addr string, handler transport.Handler) error {
 	t.mu.Lock()
-	t.handler = handler
 	t.server = &http3.Server{
 		Addr:      addr,
+		TLSConfig: t.tlsConfig,
+		Handler:   &quicAdapter{handler: handler, maxBody: t.config.MaxBodySize},
+	}
+	srv := t.server
+	t.mu.Unlock()
+
+	return srv.ListenAndServe()
+}
+
+// Serve starts the HTTP/3 server using the address from an existing listener.
+// Note: QUIC operates over UDP — this uses the listener's address with
+// ListenAndServe internally. For pure QUIC, prefer ListenAndServe directly.
+func (t *QUICTransport) Serve(ln net.Listener, handler transport.Handler) error {
+	t.mu.Lock()
+	t.server = &http3.Server{
+		Addr:      ln.Addr().String(),
 		TLSConfig: t.tlsConfig,
 		Handler:   &quicAdapter{handler: handler, maxBody: t.config.MaxBodySize},
 	}
@@ -74,10 +89,7 @@ func (t *QUICTransport) Shutdown(ctx context.Context) error {
 	return srv.Shutdown(ctx)
 }
 
-// quicAdapter bridges net/http.Handler to transport.Handler.
-// quic-go's http3.Server uses the standard net/http.Handler interface,
-// so we create local wrappers that implement transport.Request and
-// transport.ResponseWriter by delegating to *http.Request and http.ResponseWriter.
+// quicAdapter bridges http3.Server's net/http.Handler to transport.Handler.
 type quicAdapter struct {
 	handler transport.Handler
 	maxBody int
@@ -89,9 +101,8 @@ func (a *quicAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.handler.ServeKruda(resp, req)
 }
 
-// --- Request wrapper ---
+// --- Request implementation ---
 
-// quicRequest implements transport.Request by delegating to *http.Request.
 type quicRequest struct {
 	r         *http.Request
 	maxBody   int
@@ -137,7 +148,7 @@ func (r *quicRequest) Body() ([]byte, error) {
 		return nil, err
 	}
 	if r.maxBody > 0 && len(data) > r.maxBody {
-		r.bodyErr = fmt.Errorf("request body too large")
+		r.bodyErr = transport.ErrBodyTooLarge
 		return nil, r.bodyErr
 	}
 	r.body = data
@@ -154,7 +165,7 @@ func (r *quicRequest) QueryParam(key string) string {
 
 func (r *quicRequest) RemoteAddr() string {
 	addr := r.r.RemoteAddr
-	// Strip port for consistent bare-IP format (matches nethttp/netpoll behavior).
+	// Strip port for consistent bare-IP format (matches nethttp behavior).
 	if host, _, err := net.SplitHostPort(addr); err == nil {
 		return host
 	}
@@ -171,9 +182,17 @@ func (r *quicRequest) Cookie(name string) string {
 
 func (r *quicRequest) RawRequest() any { return r.r }
 
-// --- ResponseWriter wrapper ---
+func (r *quicRequest) Context() context.Context { return r.r.Context() }
 
-// quicResponseWriter implements transport.ResponseWriter by delegating to http.ResponseWriter.
+func (r *quicRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if err := r.r.ParseMultipartForm(maxBytes); err != nil {
+		return nil, err
+	}
+	return r.r.MultipartForm, nil
+}
+
+// --- ResponseWriter implementation ---
+
 type quicResponseWriter struct {
 	w          http.ResponseWriter
 	statusCode int
@@ -201,9 +220,8 @@ func (w *quicResponseWriter) Write(data []byte) (int, error) {
 	return w.w.Write(data)
 }
 
-// --- HeaderMap wrapper ---
+// --- HeaderMap implementation ---
 
-// quicHeaderMap implements transport.HeaderMap by delegating to http.Header.
 type quicHeaderMap struct {
 	h http.Header
 }

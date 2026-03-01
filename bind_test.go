@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Enhanced mock for binding tests — supports query params
-// ---------------------------------------------------------------------------
-
 type bindMockRequest struct {
 	mockRequest
 	queryParams map[string]string
@@ -39,14 +35,10 @@ func bindCtx(method, path string, params map[string]string, query map[string]str
 	c.method = method
 	c.path = path
 	for k, v := range params {
-		c.params[k] = v
+		c.params.set(k, v)
 	}
 	return c
 }
-
-// ---------------------------------------------------------------------------
-// Task 14.1: selectConverter tests for all 14 types
-// ---------------------------------------------------------------------------
 
 func TestSelectConverter_String(t *testing.T) {
 	conv := selectConverter(reflect.TypeOf(""))
@@ -167,10 +159,6 @@ func TestSelectConverter_UnsupportedTypePanics(t *testing.T) {
 	selectConverter(reflect.TypeOf(struct{}{}))
 }
 
-// ---------------------------------------------------------------------------
-// Task 14.2: buildInputParser tests
-// ---------------------------------------------------------------------------
-
 func TestBuildInputParser_MixedTags(t *testing.T) {
 	type Input struct {
 		ID   string `param:"id"`
@@ -245,10 +233,6 @@ func TestBuildInputParser_NoTags(t *testing.T) {
 		t.Error("no fields should be parsed")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 14.3: parse pipeline tests
-// ---------------------------------------------------------------------------
 
 func TestParse_BodyOnly(t *testing.T) {
 	type Input struct {
@@ -491,10 +475,6 @@ func TestHasBody(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 4.5: Form tag detection + multipart parsing tests
-// ---------------------------------------------------------------------------
-
 // multipartMockRequest wraps a real *http.Request so RawRequest() returns it.
 type multipartMockRequest struct {
 	mockRequest
@@ -578,7 +558,7 @@ func multipartCtx(t *testing.T, fields map[string]string, files map[string][]fil
 	c.method = "POST"
 	c.path = "/upload"
 	for k, v := range params {
-		c.params[k] = v
+		c.params.set(k, v)
 	}
 	return c
 }

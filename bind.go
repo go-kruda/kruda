@@ -4,43 +4,40 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-
-	"github.com/go-kruda/kruda/transport"
 )
 
 // inputParser is pre-compiled at route registration time.
-// It holds all metadata needed to parse a request into type T
-// without runtime reflection.
+// Holds all metadata needed to parse a request into type T without runtime reflection.
 type inputParser struct {
-	newFunc     func() reflect.Value // creates new *T
-	paramFields []fieldParser        // fields with `param:"name"` tag
-	queryFields []fieldParser        // fields with `query:"name"` tag
-	hasBody     bool                 // true if any field has `json:"name"` tag
-	defaults    []fieldDefault       // fields with `default:"value"` tag
-	hasForm     bool                 // true if any field has `form:"name"` tag
-	formFields  []formField          // fields with `form:"name"` tag
+	newFunc     func() reflect.Value
+	paramFields []fieldParser
+	queryFields []fieldParser
+	hasBody     bool
+	defaults    []fieldDefault
+	hasForm     bool
+	formFields  []formField
 }
 
 // formField holds pre-compiled metadata for a multipart form field.
 type formField struct {
-	index    int    // struct field index
-	tag      string // form field name
-	isFile   bool   // true if field type is *FileUpload
-	isMulti  bool   // true if field type is []*FileUpload
-	isString bool   // true if field type is string (text form field)
+	index    int
+	tag      string
+	isFile   bool // true if field type is *FileUpload
+	isMulti  bool // true if field type is []*FileUpload
+	isString bool // true if field type is string
 }
 
 // fieldParser holds pre-compiled metadata for a single struct field.
 type fieldParser struct {
-	index     int                                 // struct field index
-	tag       string                              // tag value (param name, query name)
-	converter func(string) (reflect.Value, error) // pre-selected string→type converter
+	index     int
+	tag       string
+	converter func(string) (reflect.Value, error)
 }
 
 // fieldDefault holds a pre-parsed default value for a field.
 type fieldDefault struct {
-	index int           // struct field index
-	value reflect.Value // pre-converted default value
+	index int
+	value reflect.Value
 }
 
 // buildInputParser reflects on type T once and builds the parser.
@@ -165,16 +162,13 @@ func selectConverter(t reflect.Type) func(string) (reflect.Value, error) {
 // parse executes the binding pipeline at request time.
 // Uses only pre-compiled data — no reflection on types.
 func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
-	// 1. Create new T
-	ptr := p.newFunc() // reflect.New(T) → *T
-	v := ptr.Elem()    // T (addressable)
+	ptr := p.newFunc()
+	v := ptr.Elem()
 
-	// 2. Set defaults
 	for _, d := range p.defaults {
 		v.Field(d.index).Set(d.value)
 	}
 
-	// 3. Parse form OR JSON body (mutually exclusive)
 	if p.hasForm {
 		if err := p.parseMultipart(c, v); err != nil {
 			return reflect.Value{}, err
@@ -195,11 +189,10 @@ func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
 		}
 	}
 
-	// 4. Parse query params (overwrites body values)
 	for _, qf := range p.queryFields {
 		raw := c.Query(qf.tag)
 		if raw == "" {
-			continue // keep default or body value
+			continue
 		}
 		val, err := qf.converter(raw)
 		if err != nil {
@@ -210,7 +203,6 @@ func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
 		v.Field(qf.index).Set(val)
 	}
 
-	// 5. Parse path params (highest priority, overwrites everything)
 	for _, pf := range p.paramFields {
 		raw := c.Param(pf.tag)
 		if raw == "" {
@@ -235,15 +227,12 @@ func hasBody(method string) bool {
 
 // parseMultipart parses multipart/form-data and populates form fields.
 func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
-	mp, ok := c.request.(transport.MultipartProvider)
-	if !ok {
-		return BadRequest("multipart upload not supported by current transport")
-	}
 	maxBytes := int64(c.app.config.BodyLimit)
-	form, err := mp.MultipartForm(maxBytes)
+	form, err := c.request.MultipartForm(maxBytes)
 	if err != nil {
 		return BadRequest("failed to parse multipart form")
 	}
+	c.dirty |= dirtyMultipart
 	c.multipartForm = form
 
 	for _, ff := range p.formFields {
@@ -290,23 +279,4 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 	}
 
 	return nil
-}
-
-//nolint:unused // referenced by typed handler registration
-func bindInput[T any](c *Ctx) (T, error) {
-	var v T
-	body, err := c.BodyBytes()
-	if err != nil {
-		if isBodyTooLarge(err) {
-			return v, NewError(413, "request entity too large", err)
-		}
-		return v, BadRequest("failed to read request body")
-	}
-	if len(body) == 0 {
-		return v, BadRequest("empty request body")
-	}
-	if err := c.app.config.JSONDecoder(body, &v); err != nil {
-		return v, BadRequest("invalid request body")
-	}
-	return v, nil
 }

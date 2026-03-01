@@ -1,14 +1,12 @@
 package kruda
 
 import (
+	"context"
+	"mime/multipart"
 	"testing"
 
 	"github.com/go-kruda/kruda/transport"
 )
-
-// ---------------------------------------------------------------------------
-// Benchmark helpers
-// ---------------------------------------------------------------------------
 
 // benchRequest is a minimal transport.Request for benchmarks (zero alloc).
 type benchRequest struct {
@@ -24,6 +22,9 @@ func (r *benchRequest) QueryParam(string) string { return "" }
 func (r *benchRequest) RemoteAddr() string       { return "127.0.0.1" }
 func (r *benchRequest) Cookie(string) string     { return "" }
 func (r *benchRequest) RawRequest() any          { return nil }
+func (r *benchRequest) Context() context.Context { return context.Background() }
+
+func (r *benchRequest) MultipartForm(int64) (*multipart.Form, error) { return nil, nil }
 
 // benchResponseWriter is a no-op transport.ResponseWriter for benchmarks.
 type benchResponseWriter struct{}
@@ -38,10 +39,6 @@ func (m *benchHeaderMap) Set(string, string) {}
 func (m *benchHeaderMap) Add(string, string) {}
 func (m *benchHeaderMap) Get(string) string  { return "" }
 func (m *benchHeaderMap) Del(string)         {}
-
-// ---------------------------------------------------------------------------
-// Benchmarks: raw framework overhead (ServeKruda hot path)
-// ---------------------------------------------------------------------------
 
 // BenchmarkPlaintext measures the simplest possible handler — c.Text("Hello, World!")
 // This is the standard TechEmpower plaintext benchmark pattern.
@@ -145,7 +142,7 @@ func BenchmarkMiddleware1(b *testing.B) {
 func BenchmarkMiddleware5(b *testing.B) {
 	app := New()
 	noop := func(c *Ctx) error { return c.Next() }
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		app.Use(noop)
 	}
 	app.Get("/", func(c *Ctx) error { return c.Text("ok") })

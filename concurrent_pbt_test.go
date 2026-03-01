@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// Feature: phase2b-extensions, Property 17: Parallel Success and Error Propagation
-//
-// For any list of tasks, if all tasks return nil then Parallel should return nil.
-// If at least one task returns a non-nil error, Parallel should return a non-nil error.
-
 func TestPropertyParallelSuccessAndError(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}
 
@@ -78,10 +73,6 @@ func TestPropertyParallelSuccessAndError(t *testing.T) {
 	})
 }
 
-// Feature: phase2b-extensions, Property 18: Parallel Waits for All Tasks
-//
-// For any list of tasks, after Parallel returns, all tasks should have completed.
-
 func TestPropertyParallelWaitsForAll(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}
 
@@ -104,10 +95,6 @@ func TestPropertyParallelWaitsForAll(t *testing.T) {
 		t.Error(err)
 	}
 }
-
-// Feature: phase2b-extensions, Property 19: Race Returns First Result
-//
-// For any single task, Race should return that task's result.
 
 func TestPropertyRaceReturnsFirstResult(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}
@@ -152,12 +139,6 @@ func TestPropertyRaceReturnsFirstResult(t *testing.T) {
 	})
 }
 
-// Feature: phase2b-extensions, Property 20: Each Success and Error Propagation
-//
-// For any slice of items and a function, if the function returns nil for all items
-// then Each should return nil. If the function returns an error for at least one
-// item, Each should return a non-nil error.
-
 func TestPropertyEachSuccessAndError(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}
 
@@ -192,11 +173,6 @@ func TestPropertyEachSuccessAndError(t *testing.T) {
 		}
 	})
 }
-
-// Feature: phase2b-extensions, Property 21: Each Waits for All Items
-//
-// For any slice of items, after Each returns, the function should have been
-// called for every item.
 
 func TestPropertyEachWaitsForAll(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 100}

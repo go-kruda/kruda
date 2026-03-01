@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// ---------------------------------------------------------------------------
-// OpenAPI 3.1.0 types
-// ---------------------------------------------------------------------------
-
-// openAPISpec represents the complete OpenAPI 3.1.0 document.
 type openAPISpec struct {
 	OpenAPI    string                  `json:"openapi"`
 	Info       openAPIInfo             `json:"info"`
@@ -98,10 +93,6 @@ type routeInfo struct {
 	hasValidate bool
 }
 
-// ---------------------------------------------------------------------------
-// Schema generation
-// ---------------------------------------------------------------------------
-
 // generateSchema converts a Go reflect.Type to a JSON Schema.
 func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef {
 	if t.Kind() == reflect.Ptr {
@@ -140,9 +131,8 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	}
 
 	// NOTE: uses short struct name as component key. Structs with the same name
-	// from different packages (e.g. user.CreateReq vs product.CreateReq) will
-	// collide. A future improvement could detect this via t.PkgPath() and suffix
-	// with the package name when a collision is found.
+	// from different packages will collide. A future improvement could detect
+	// this via t.PkgPath() and suffix with the package name.
 	refPath := "#/components/schemas/" + name
 	if _, exists := components[name]; exists {
 		return &schemaRef{Ref: refPath}
@@ -267,10 +257,6 @@ func convertPath(path string) string {
 	}
 	return b.String()
 }
-
-// ---------------------------------------------------------------------------
-// Spec builder
-// ---------------------------------------------------------------------------
 
 // buildOpenAPISpec generates the complete OpenAPI 3.1.0 document from route metadata.
 func (app *App) buildOpenAPISpec() ([]byte, error) {

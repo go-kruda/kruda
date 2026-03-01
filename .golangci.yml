@@ -10,9 +10,6 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
-      - path: transport/netpoll\.go
-        linters:
-          - errcheck
       - path: transport/nethttp\.go
         linters:
           - errcheck

@@ -2,20 +2,6 @@
 
 Configuration is set via functional options passed to `kruda.New()`.
 
-## Config Struct
-
-```go
-type Config struct {
-    ReadTimeout    time.Duration
-    WriteTimeout   time.Duration
-    IdleTimeout    time.Duration
-    BodyLimit      int
-    DevMode        bool
-    SecurityHeaders bool
-    Security       SecurityConfig
-}
-```
-
 ## Functional Options
 
 ### WithReadTimeout
@@ -25,10 +11,6 @@ func WithReadTimeout(d time.Duration) Option
 ```
 
 Sets the maximum duration for reading the entire request. Default: `30s`.
-
-```go
-kruda.New(kruda.WithReadTimeout(60 * time.Second))
-```
 
 ### WithWriteTimeout
 
@@ -54,9 +36,13 @@ func WithBodyLimit(bytes int) Option
 
 Sets the maximum request body size in bytes. Default: `4194304` (4 MB). Bodies exceeding this limit receive HTTP 413.
 
+### WithMaxBodySize
+
 ```go
-kruda.New(kruda.WithBodyLimit(10 * 1024 * 1024)) // 10 MB
+func WithMaxBodySize(size int) Option
 ```
+
+Alias for `WithBodyLimit`.
 
 ### WithDevMode
 
@@ -70,21 +56,15 @@ Enables development mode. When enabled:
 
 Default: `false`. Also auto-detected via `KRUDA_ENV=development`.
 
-```go
-kruda.New(kruda.WithDevMode(true))
-```
-
-### WithSecurityHeaders
+### WithSecureHeaders
 
 ```go
-func WithSecurityHeaders(enabled bool) Option
+func WithSecureHeaders() Option
 ```
 
-Enables or disables default security headers. Default: `true`.
+Explicitly enables default security headers. Use this to make security enablement explicit in your code.
 
-```go
-kruda.New(kruda.WithSecurityHeaders(false)) // disable all security headers
-```
+Security headers are opt-in. Use `WithSecureHeaders()` to enable, or `WithSecurity()` to enable all security features.
 
 ### WithLegacySecurityHeaders
 
@@ -92,44 +72,136 @@ kruda.New(kruda.WithSecurityHeaders(false)) // disable all security headers
 func WithLegacySecurityHeaders() Option
 ```
 
-Restores Phase 1-4 security header defaults for backward compatibility:
-- `X-Frame-Options: SAMEORIGIN` (instead of `DENY`)
-- `X-XSS-Protection: 1; mode=block` (instead of `0`)
-- `Referrer-Policy: no-referrer` (instead of `strict-origin-when-cross-origin`)
+Restores Phase 1-4 security header defaults for backward compatibility.
 
 ### WithErrorHandler
 
 ```go
-func WithErrorHandler(handler func(c *Ctx, err error)) Option
+func WithErrorHandler(h func(c *Ctx, err *KrudaError)) Option
 ```
 
-Sets a custom error handler for unhandled errors.
+Sets a custom error handler. Receives `*KrudaError` (not `error`).
+
+### WithLogger
 
 ```go
-kruda.New(kruda.WithErrorHandler(func(c *kruda.Ctx, err error) {
-    c.JSON(500, map[string]string{"error": err.Error()})
-}))
+func WithLogger(l *slog.Logger) Option
 ```
 
-## SecurityConfig
+Sets a custom structured logger.
+
+### WithTransport
 
 ```go
-type SecurityConfig struct {
-    XSSProtection         string
-    ContentTypeNosniff    string
-    XFrameOptions         string
-    ReferrerPolicy        string
-}
+func WithTransport(t transport.Transport) Option
 ```
 
-Default values:
+Sets a custom transport implementation.
 
-| Field | Default |
-|-------|---------|
-| `XSSProtection` | `"0"` |
-| `ContentTypeNosniff` | `"nosniff"` |
-| `XFrameOptions` | `"DENY"` |
-| `ReferrerPolicy` | `"strict-origin-when-cross-origin"` |
+### FastHTTP
+
+```go
+func FastHTTP() Option
+```
+
+Selects the fasthttp transport for maximum performance. This is the **default** — calling `FastHTTP()` is optional but explicit.
+
+### NetHTTP
+
+```go
+func NetHTTP() Option
+```
+
+Selects the net/http transport for HTTP/2, TLS, and Windows compatibility.
+
+### WithTLS
+
+```go
+func WithTLS(certFile, keyFile string) Option
+```
+
+Enables TLS with the given certificate and key files.
+
+### WithHTTP3
+
+```go
+func WithHTTP3(certFile, keyFile string) Option
+```
+
+Enables HTTP/3 dual-stack (QUIC + TCP) with TLS.
+
+### WithTrustProxy
+
+```go
+func WithTrustProxy(trust bool) Option
+```
+
+When true, trusts `X-Forwarded-For` / `X-Real-IP` headers. Default: `false`.
+
+### WithShutdownTimeout
+
+```go
+func WithShutdownTimeout(d time.Duration) Option
+```
+
+Sets the graceful shutdown timeout. Default: `10s`.
+
+### WithJSONEncoder / WithJSONDecoder
+
+```go
+func WithJSONEncoder(enc func(v any) ([]byte, error)) Option
+func WithJSONDecoder(dec func(data []byte, v any) error) Option
+```
+
+Override the JSON encoder/decoder.
+
+### WithEnvPrefix
+
+```go
+func WithEnvPrefix(prefix string) Option
+```
+
+Loads configuration from environment variables with the given prefix.
+
+### WithValidator
+
+```go
+func WithValidator(v *Validator) Option
+```
+
+Sets a custom validator for typed handler input validation.
+
+### WithContainer
+
+```go
+func WithContainer(c *Container) Option
+```
+
+Sets the DI container for the app.
+
+### WithOpenAPIInfo
+
+```go
+func WithOpenAPIInfo(title, version, description string) Option
+```
+
+Sets OpenAPI spec metadata.
+
+### WithOpenAPIPath
+
+```go
+func WithOpenAPIPath(path string) Option
+```
+
+Sets the path to serve the OpenAPI spec (default: `/openapi.json`).
+
+### WithOpenAPITag
+
+```go
+func WithOpenAPITag(name, description string) Option
+```
+
+Adds an OpenAPI tag definition.
 
 ## Defaults Summary
 
@@ -139,5 +211,8 @@ Default values:
 | WriteTimeout | 30s |
 | IdleTimeout | 120s |
 | BodyLimit | 4 MB |
+| ShutdownTimeout | 10s |
 | DevMode | false |
-| SecurityHeaders | true |
+| SecurityHeaders | false |
+| TrustProxy | false |
+| TransportName | "fasthttp" |

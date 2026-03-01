@@ -1,0 +1,40 @@
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/middleware"
+
+	"{{.ModuleName}}/handlers"
+	"{{.ModuleName}}/routes"
+)
+
+func main() {
+	app := kruda.New()
+
+	// Global middleware
+	app.Use(middleware.Logger())
+	app.Use(middleware.Recovery())
+	app.Use(middleware.RequestID())
+
+	// API routes
+	routes.Register(app, handlers.NewUserHandler())
+
+	// Static file serving — serves files from ./static directory
+	app.Get("/static/*filepath", func(c *kruda.Ctx) error {
+		fp := c.Param("filepath")
+		http.ServeFile(c.ResponseWriter(), c.Request(), "static/"+fp)
+		return nil
+	})
+
+	// Serve index.html for root
+	app.Get("/", func(c *kruda.Ctx) error {
+		http.ServeFile(c.ResponseWriter(), c.Request(), "static/index.html")
+		return nil
+	})
+
+	log.Println("Starting {{.ProjectName}} on :3000")
+	app.Listen(":3000")
+}

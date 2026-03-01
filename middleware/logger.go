@@ -20,6 +20,8 @@ type LoggerConfig struct {
 // Logger returns middleware that logs request information using slog.
 // It logs method, path, status code, latency, and client IP.
 // Log level is determined by status code: 5xx=Error, 4xx=Warn, 2xx/3xx=Info.
+// Status is resolved from the error if the handler returned one, since
+// handleError hasn't set the status on Ctx yet when Logger reads it.
 func Logger(config ...LoggerConfig) kruda.HandlerFunc {
 	cfg := LoggerConfig{
 		Logger: slog.Default(),
@@ -38,16 +40,12 @@ func Logger(config ...LoggerConfig) kruda.HandlerFunc {
 	}
 
 	return func(c *kruda.Ctx) error {
-		// Skip logging for configured paths.
 		if skip[c.Path()] {
 			return c.Next()
 		}
 
-		// Execute next handler.
 		err := c.Next()
 
-		// N1 fix: resolve status from error if handler returned one,
-		// since handleError hasn't set the status on Ctx yet when Logger reads it.
 		status := c.StatusCode()
 		if err != nil {
 			var ke *kruda.KrudaError

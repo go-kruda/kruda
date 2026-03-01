@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -20,22 +19,30 @@ var errPathTraversal = errors.New("kruda: path traversal detected")
 // and rejects any result that still contains "..".
 // This is called before route matching in ServeKruda.
 func cleanPath(raw string) (string, error) {
-	// 1. Decode percent-encoded sequences (e.g. %2e%2e%2f → ../)
-	decoded, err := url.PathUnescape(raw)
-	if err != nil {
-		return "", err
+	// Decode percent-encoded sequences in a loop to prevent double-encode bypass
+	// (e.g. %252e%252e → %2e%2e → ..). Max 3 iterations to bound cost.
+	decoded := raw
+	for range 3 {
+		next, err := url.PathUnescape(decoded)
+		if err != nil {
+			return "", err
+		}
+		if next == decoded {
+			break // stable — no more encoded sequences
+		}
+		decoded = next
 	}
 
-	// 2. Check for path traversal: walk segments and track depth.
+	// Check for path traversal: walk segments and track depth.
 	// If depth goes below 0, the path tries to escape above root → reject.
 	if isTraversal(decoded) {
 		return "", errPathTraversal
 	}
 
-	// 3. Normalize with path.Clean (resolves . and safe ..)
+	// Normalize with path.Clean (resolves . and safe ..)
 	cleaned := path.Clean(decoded)
 
-	// 4. Ensure leading slash
+	// Ensure leading slash
 	if !strings.HasPrefix(cleaned, "/") {
 		cleaned = "/" + cleaned
 	}
@@ -64,12 +71,61 @@ func isTraversal(p string) bool {
 	return false
 }
 
+// Method index constants for the methodTrees array.
+const (
+	mGET = iota
+	mPOST
+	mPUT
+	mDELETE
+	mPATCH
+	mOPTIONS
+	mHEAD
+	mCOUNT // number of standard methods (array size)
+)
+
+// methodIndex returns the array index for a standard HTTP method using
+// first-byte + length dispatch for O(1) identification.
+// Returns -1 for custom/unknown methods (fallback to map).
+func methodIndex(method string) int {
+	switch len(method) {
+	case 3:
+		if method[0] == 'G' && method[1] == 'E' && method[2] == 'T' { // GET
+			return mGET
+		}
+		if method[0] == 'P' && method[1] == 'U' && method[2] == 'T' { // PUT
+			return mPUT
+		}
+	case 4:
+		if method[0] == 'P' && method[1] == 'O' { // POST
+			return mPOST
+		}
+		if method[0] == 'H' && method[1] == 'E' { // HEAD
+			return mHEAD
+		}
+	case 5:
+		if method[0] == 'P' && method[1] == 'A' { // PATCH
+			return mPATCH
+		}
+	case 6:
+		if method[0] == 'D' && method[1] == 'E' { // DELETE
+			return mDELETE
+		}
+	case 7:
+		if method[0] == 'O' && method[1] == 'P' { // OPTIONS
+			return mOPTIONS
+		}
+	}
+	return -1 // custom method → fallback to map
+}
+
 // Router is a radix tree router with a separate tree per HTTP method.
 // It provides O(1) child lookup via the indices string on each node.
 type Router struct {
-	trees               map[string]*node // method → root node
+	methodTrees         [mCOUNT]*node
+	trees               map[string]*node
+	staticRoutes        [mCOUNT]map[string][]HandlerFunc // indexed by method for O(1) first lookup
 	compiled            bool
-	allowedMethodsCache map[string]string // path → "GET, POST, ..." (built at Compile)
+	allowedMethodsCache map[string]string
 }
 
 // node is a single node in the radix tree.
@@ -77,15 +133,15 @@ type Router struct {
 // Param nodes have param set (e.g. "id") and path stores the pattern (e.g. ":id").
 // Wildcard nodes have wildcard=true and param stores the capture name.
 type node struct {
-	path     string         // static path segment text
-	children []*node        // child nodes
-	indices  string         // first byte of each child's path for O(1) lookup
-	handlers []HandlerFunc  // pre-built chain (nil if not terminal)
-	param    string         // parameter name (e.g. "id" for ":id")
-	wildcard bool           // true for "*filepath" patterns
-	regex    *regexp.Regexp // compiled regex for ":id<[0-9]+>" patterns
-	optional bool           // true for ":id?" patterns
-	hits     uint32         // frequency counter for AOT sort optimization
+	path     string
+	children []*node
+	indices  string // first byte of each child's path for O(1) lookup
+	handlers []HandlerFunc
+	param    string
+	wildcard bool
+	regex    *regexp.Regexp
+	optional bool
+	hits     uint32 // frequency counter for AOT sort optimization
 }
 
 // standardMethods lists the HTTP methods that get pre-initialized trees.
@@ -97,32 +153,46 @@ func newRouter() *Router {
 	for _, m := range standardMethods {
 		trees[m] = &node{path: "/"}
 	}
-	return &Router{trees: trees}
+	r := &Router{trees: trees}
+	// Populate methodTrees array for O(1) method dispatch
+	for _, m := range standardMethods {
+		if idx := methodIndex(m); idx >= 0 {
+			r.methodTrees[idx] = trees[m]
+		}
+	}
+	return r
 }
 
 // Compile freezes the router tree and performs AOT optimizations:
-// 1. Sort children by frequency (most-hit routes first)
-// 2. Flatten single-child static chains to reduce tree depth
-// 3. Build allowed methods cache for static paths (P3-006 fix)
+// sorts children by frequency, flattens single-child static chains,
+// builds a static route map for O(1) exact-match lookup,
+// and caches allowed methods for static paths.
 func (r *Router) Compile() {
-	// 1. Sort children by frequency (statics by hits desc, then params, wildcards last)
 	r.optimizeTree()
 
-	// 2. Flatten single-child static chains
 	for _, root := range r.trees {
 		flattenNode(root)
 	}
 
-	// 3. Build allowed methods cache for static paths
+	for method, root := range r.trees {
+		m := make(map[string][]HandlerFunc)
+		collectStaticRoutes(root, "/", m)
+		if len(m) > 0 {
+			if idx := methodIndex(method); idx >= 0 {
+				r.staticRoutes[idx] = m
+			}
+		}
+	}
+
 	r.allowedMethodsCache = make(map[string]string)
 	staticPaths := r.collectStaticPaths()
-	tmpParams := make(map[string]string, 4)
+	var tmpParams routeParams
 	for _, path := range staticPaths {
 		var b strings.Builder
 		first := true
 		for _, method := range standardMethods {
-			clear(tmpParams)
-			if r.find(method, path, tmpParams) != nil {
+			tmpParams.reset()
+			if r.find(method, path, &tmpParams) != nil {
 				if !first {
 					b.WriteString(", ")
 				}
@@ -136,6 +206,40 @@ func (r *Router) Compile() {
 	}
 
 	r.compiled = true
+}
+
+// collectStaticRoutes recursively traverses the radix tree and collects all
+// terminal nodes whose full path contains no param (`:`) or wildcard (`*`) segments.
+// Results are stored in the provided map as path → handlers.
+func collectStaticRoutes(n *node, prefix string, out map[string][]HandlerFunc) {
+	if n.param != "" || n.wildcard {
+		return
+	}
+
+	current := prefix
+	if n.path != "" {
+		if n.path == "/" {
+			if len(current) > 0 && current[len(current)-1] != '/' {
+				current = current + "/"
+			}
+		} else if current == "/" {
+			current = "/" + n.path
+		} else {
+			current = current + n.path
+		}
+	}
+
+	if n.handlers != nil {
+		p := current
+		if p != "/" && len(p) > 1 && p[len(p)-1] == '/' {
+			p = p[:len(p)-1]
+		}
+		out[p] = n.handlers
+	}
+
+	for _, child := range n.children {
+		collectStaticRoutes(child, current, out)
+	}
 }
 
 // collectStaticPaths walks all method trees and returns unique terminal static paths.
@@ -162,13 +266,11 @@ func collectPaths(n *node, prefix string, seen map[string]bool) {
 		}
 	}
 
-	// Skip param/wildcard subtrees — only collect fully static paths
 	if n.param != "" || n.wildcard {
 		return
 	}
 
 	if n.handlers != nil {
-		// Normalize: ensure leading slash, remove trailing slash (except root)
 		p := current
 		if p != "/" && len(p) > 1 && p[len(p)-1] == '/' {
 			p = p[:len(p)-1]
@@ -194,15 +296,12 @@ func optimizeNode(n *node) {
 	if len(n.children) > 1 {
 		sort.SliceStable(n.children, func(i, j int) bool {
 			ci, cj := n.children[i], n.children[j]
-			// Wildcards always last
 			if ci.wildcard != cj.wildcard {
 				return !ci.wildcard
 			}
-			// Params after statics
 			if (ci.param != "") != (cj.param != "") {
 				return ci.param == ""
 			}
-			// Sort statics by hits descending
 			return ci.hits > cj.hits
 		})
 		// Rebuild indices
@@ -253,6 +352,8 @@ func flattenNode(n *node) {
 
 // addRoute inserts a route into the tree for the given method.
 // It panics if the router is compiled or if a duplicate route is detected.
+// For standard methods, it also updates methodTrees[idx] to keep the array
+// and map pointing to the same node object.
 func (r *Router) addRoute(method, path string, handlers []HandlerFunc) {
 	if r.compiled {
 		panic("kruda: cannot add route after Compile()")
@@ -265,6 +366,12 @@ func (r *Router) addRoute(method, path string, handlers []HandlerFunc) {
 	if !ok {
 		root = &node{path: "/"}
 		r.trees[method] = root
+	}
+
+	// Keep methodTrees array in sync with trees map for standard methods.
+	// Both must point to the SAME node object (not a copy).
+	if idx := methodIndex(method); idx >= 0 {
+		r.methodTrees[idx] = root
 	}
 
 	if path == "/" {
@@ -375,8 +482,6 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 	}
 
 	if !seg.static {
-		// Param segment
-		// Look for existing param child with same name
 		for _, child := range n.children {
 			if child.param == seg.param && !child.wildcard {
 				if seg.optional && idx == len(segments)-1 {
@@ -384,7 +489,7 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 						panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 					}
 					child.handlers = handlers
-					// Also set on parent for "without param" case
+					// Also set on parent for the "without param" case
 					if n.handlers != nil {
 						panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 					}
@@ -416,17 +521,11 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 		return
 	}
 
-	// Static segment — use radix tree insertion
-	// Build the static string: "segment/" if not last, "segment" if last
+	// Static segment — "segment/" if not last, "segment" if last
 	var staticStr string
-	if idx < len(segments)-1 && !segments[idx+1].static {
-		// Next segment is param/wildcard — just use the segment text + "/"
-		staticStr = seg.text + "/"
-	} else if idx < len(segments)-1 {
-		// Next segment is also static — combine with "/"
+	if idx < len(segments)-1 {
 		staticStr = seg.text + "/"
 	} else {
-		// Last segment
 		staticStr = seg.text
 	}
 
@@ -436,16 +535,13 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 // insertStatic inserts a static string into the radix tree at node n,
 // then continues inserting remaining segments.
 func insertStatic(n *node, str string, segments []segment, segIdx int, handlers []HandlerFunc, method, fullPath string) {
-	// Look for a child with matching first byte
 	if len(str) > 0 {
 		idx := strings.IndexByte(n.indices, str[0])
 		if idx >= 0 {
 			child := n.children[idx]
 			if child.param != "" || child.wildcard {
-				// This shouldn't happen for static insertion
 				panic(fmt.Sprintf("kruda: route conflict at %s", fullPath))
 			}
-			// Found matching child — split if needed
 			splitAndInsert(child, str, segments, segIdx, handlers, method, fullPath)
 			return
 		}
@@ -539,18 +635,34 @@ func longestPrefix(a, b string) int {
 }
 
 // find looks up a path in the method tree and returns the handler chain.
-// It populates the params map with extracted parameter values.
-// Zero allocation on the hot path — params map is pre-allocated on Ctx.
-func (r *Router) find(method, path string, params map[string]string) []HandlerFunc {
-	root, ok := r.trees[method]
-	if !ok {
+// Populates params with extracted values. Zero alloc on the hot path.
+//
+// Lookup order: static map O(1) → method array → tree traversal.
+func (r *Router) find(method, path string, params *routeParams) []HandlerFunc {
+	// Resolve method index once — used for both static lookup and tree selection.
+	idx := methodIndex(method)
+
+	// O(1) static route lookup — array index (not map) for method, then path map.
+	if idx >= 0 {
+		if routes := r.staticRoutes[idx]; routes != nil {
+			if handlers, ok := routes[path]; ok {
+				return handlers
+			}
+		}
+	}
+
+	var root *node
+	if idx >= 0 {
+		root = r.methodTrees[idx]
+	} else {
+		root = r.trees[method]
+	}
+	if root == nil {
 		return nil
 	}
 
-	// Track hits only before Compile — after Compile the tree is frozen
 	trackHits := !r.compiled
 
-	// Root path
 	if path == "/" {
 		if root.handlers != nil {
 			if trackHits {
@@ -558,10 +670,9 @@ func (r *Router) find(method, path string, params map[string]string) []HandlerFu
 			}
 			return root.handlers
 		}
-		// Check optional param children
 		for _, child := range root.children {
 			if child.optional && child.handlers != nil {
-				params[child.param] = ""
+				params.set(child.param, "")
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
@@ -571,34 +682,29 @@ func (r *Router) find(method, path string, params map[string]string) []HandlerFu
 		return nil
 	}
 
-	// Strip leading slash
 	return findInNode(root, path[1:], params, trackHits)
 }
 
 // findInNode searches for a path match starting from node n.
 // path has no leading slash. trackHits enables frequency counting before Compile.
-func findInNode(n *node, path string, params map[string]string, trackHits bool) []HandlerFunc {
-	// 1. Try static children via indices (O(1) lookup by first byte)
+func findInNode(n *node, path string, params *routeParams, trackHits bool) []HandlerFunc {
 	if len(path) > 0 && len(n.indices) > 0 {
 		idx := strings.IndexByte(n.indices, path[0])
 		if idx >= 0 {
 			child := n.children[idx]
 			if child.param == "" && !child.wildcard {
-				// Static child — check prefix match
 				if strings.HasPrefix(path, child.path) {
 					remaining := path[len(child.path):]
 					if remaining == "" {
-						// Exact match
 						if child.handlers != nil {
 							if trackHits {
 								atomic.AddUint32(&child.hits, 1)
 							}
 							return child.handlers
 						}
-						// Check optional param children
 						for _, gc := range child.children {
 							if gc.optional && gc.handlers != nil {
-								params[gc.param] = ""
+								params.set(gc.param, "")
 								if trackHits {
 									atomic.AddUint32(&gc.hits, 1)
 								}
@@ -606,15 +712,13 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 							}
 						}
 					} else {
-						// Continue searching in child
 						result := findInNode(child, remaining, params, trackHits)
 						if result != nil {
 							return result
 						}
 					}
 				} else if child.path == path+"/" {
-					// Path matches static child minus trailing slash (e.g. path="users", child.path="users/")
-					// This happens with optional params: /users/:id? where /users should also match
+					// optional param: /users/:id? — /users should also match
 					if child.handlers != nil {
 						if trackHits {
 							atomic.AddUint32(&child.hits, 1)
@@ -623,7 +727,7 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 					}
 					for _, gc := range child.children {
 						if gc.optional && gc.handlers != nil {
-							params[gc.param] = ""
+							params.set(gc.param, "")
 							if trackHits {
 								atomic.AddUint32(&gc.hits, 1)
 							}
@@ -635,13 +739,11 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 		}
 	}
 
-	// 2. Try param children
 	for _, child := range n.children {
 		if child.param == "" || child.wildcard {
 			continue
 		}
 
-		// Extract param value up to next "/"
 		end := strings.IndexByte(path, '/')
 		if end == -1 {
 			end = len(path)
@@ -650,7 +752,7 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 
 		if value == "" {
 			if child.optional && child.handlers != nil {
-				params[child.param] = ""
+				params.set(child.param, "")
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
@@ -659,25 +761,22 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 			continue
 		}
 
-		// Regex validation
 		if child.regex != nil && !child.regex.MatchString(value) {
 			continue
 		}
 
-		params[child.param] = value
+		params.set(child.param, value)
 
 		if end == len(path) {
-			// No more path after param value
 			if child.handlers != nil {
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
 				return child.handlers
 			}
-			// Check optional param grandchildren
 			for _, gc := range child.children {
 				if gc.optional && gc.handlers != nil {
-					params[gc.param] = ""
+					params.set(gc.param, "")
 					if trackHits {
 						atomic.AddUint32(&gc.hits, 1)
 					}
@@ -685,23 +784,21 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 				}
 			}
 		} else {
-			// More path after "/" — continue from child
 			result := findInNode(child, path[end+1:], params, trackHits)
 			if result != nil {
 				return result
 			}
 		}
 
-		// Didn't match — clean up
-		delete(params, child.param)
+		params.del(child.param)
 	}
 
-	// 3. Try wildcard children
+	// Try wildcard children
 	for _, child := range n.children {
 		if !child.wildcard {
 			continue
 		}
-		params[child.param] = path
+		params.set(child.param, path)
 		if trackHits {
 			atomic.AddUint32(&child.hits, 1)
 		}
@@ -711,18 +808,9 @@ func findInNode(n *node, path string, params map[string]string, trackHits bool) 
 	return nil
 }
 
-// tmpParamsPool reuses maps for findAllowedMethods slow path (P3-006 fix).
-var tmpParamsPool = sync.Pool{
-	New: func() any { return make(map[string]string, 4) },
-}
-
-// findAllowedMethods scans all method trees for a path match.
-// Returns a comma-separated list of methods that match (e.g. "GET, POST"),
-// or an empty string if no method matches.
-// P3-006 fix: uses allowedMethodsCache for static paths (zero alloc),
-// falls back to pooled tmpParams + strings.Builder for dynamic paths.
+// findAllowedMethods returns a comma-separated list of methods that match the path,
+// or empty string if none. Uses allowedMethodsCache for static paths (zero alloc).
 func (r *Router) findAllowedMethods(path string) string {
-	// Fast path: check cache (zero alloc for static paths)
 	if r.allowedMethodsCache != nil {
 		if cached, ok := r.allowedMethodsCache[path]; ok {
 			return cached
@@ -730,17 +818,12 @@ func (r *Router) findAllowedMethods(path string) string {
 	}
 
 	// Slow path: scan trees (dynamic paths with params/wildcards)
-	tmpParams := tmpParamsPool.Get().(map[string]string)
-	defer func() {
-		clear(tmpParams)
-		tmpParamsPool.Put(tmpParams)
-	}()
-
+	var tmpParams routeParams
 	var b strings.Builder
 	first := true
 	for _, method := range standardMethods {
-		clear(tmpParams)
-		if r.find(method, path, tmpParams) != nil {
+		tmpParams.reset()
+		if r.find(method, path, &tmpParams) != nil {
 			if !first {
 				b.WriteString(", ")
 			}

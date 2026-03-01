@@ -7,11 +7,10 @@ import (
 	kruda "github.com/go-kruda/kruda"
 )
 
-// BenchmarkKruda_NoSecurityHeaders tests performance without security headers
+// BenchmarkKruda_NoSecurityHeaders tests performance without security headers.
 func BenchmarkKruda_NoSecurityHeaders(b *testing.B) {
 	app := kruda.New(
-		kruda.WithTransportName("nethttp"),
-		kruda.WithSecurityHeaders(false), // Disable security headers
+		kruda.NetHTTP(),
 	)
 	app.Get("/", func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
@@ -32,11 +31,10 @@ func BenchmarkKruda_NoSecurityHeaders(b *testing.B) {
 	})
 }
 
-// BenchmarkKruda_MinimalPath tests with path traversal check disabled
+// BenchmarkKruda_MinimalPath tests with path traversal check disabled.
 func BenchmarkKruda_MinimalPath(b *testing.B) {
 	app := kruda.New(
-		kruda.WithTransportName("nethttp"),
-		kruda.WithSecurityHeaders(false),
+		kruda.NetHTTP(),
 	)
 	app.Get("/", func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
@@ -52,8 +50,6 @@ func BenchmarkKruda_MinimalPath(b *testing.B) {
 			w := httptest.NewRecorder()
 			tr := newTestRequest(r)
 			tw := newTestResponseWriter(w)
-			
-			// Call ServeKruda but bypass path cleaning by using a simple path
 			app.ServeKruda(tw, tr)
 		}
 	})

@@ -85,10 +85,13 @@ func (a appRegistrar) Delete(p string, h HandlerFunc) routeRegistrar { a.app.Del
 // groupRegistrar wraps *Group to implement routeRegistrar.
 type groupRegistrar struct{ group *Group }
 
-func (g groupRegistrar) Get(p string, h HandlerFunc) routeRegistrar    { g.group.Get(p, h); return g }
-func (g groupRegistrar) Post(p string, h HandlerFunc) routeRegistrar   { g.group.Post(p, h); return g }
-func (g groupRegistrar) Put(p string, h HandlerFunc) routeRegistrar    { g.group.Put(p, h); return g }
-func (g groupRegistrar) Delete(p string, h HandlerFunc) routeRegistrar { g.group.Delete(p, h); return g }
+func (g groupRegistrar) Get(p string, h HandlerFunc) routeRegistrar  { g.group.Get(p, h); return g }
+func (g groupRegistrar) Post(p string, h HandlerFunc) routeRegistrar { g.group.Post(p, h); return g }
+func (g groupRegistrar) Put(p string, h HandlerFunc) routeRegistrar  { g.group.Put(p, h); return g }
+func (g groupRegistrar) Delete(p string, h HandlerFunc) routeRegistrar {
+	g.group.Delete(p, h)
+	return g
+}
 
 // Resource auto-wires 5 REST endpoints from a ResourceService on the App.
 // It registers: GET (list), GET/:id (get), POST (create), PUT/:id (update), DELETE/:id (delete).
@@ -237,8 +240,8 @@ func resourceShouldRegister(cfg resourceConfig, method string) bool {
 }
 
 // resourceWrapMW wraps a handler with resource-scoped middleware by temporarily
-// replacing c.handlers/c.routeIndex. Relies on ServeKruda's panic recovery
-// to restore state if a middleware panics before the deferred restore runs.
+// replacing c.handlers/c.routeIndex. The deferred restore handles cleanup even
+// if a middleware panics.
 func resourceWrapMW(mw []HandlerFunc, handler HandlerFunc) HandlerFunc {
 	if len(mw) == 0 {
 		return handler

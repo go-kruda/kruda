@@ -18,29 +18,29 @@ func TestRouterStaticRoutes(t *testing.T) {
 	r.addRoute("GET", "/users/settings", h)
 	r.addRoute("POST", "/users", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Test root
-	if got := r.find("GET", "/", params); got == nil {
+	if got := r.find("GET", "/", &params); got == nil {
 		t.Error("GET / should match")
 	}
 
 	// Test static paths
-	if got := r.find("GET", "/users", params); got == nil {
+	if got := r.find("GET", "/users", &params); got == nil {
 		t.Error("GET /users should match")
 	}
-	if got := r.find("GET", "/users/settings", params); got == nil {
+	if got := r.find("GET", "/users/settings", &params); got == nil {
 		t.Error("GET /users/settings should match")
 	}
-	if got := r.find("POST", "/users", params); got == nil {
+	if got := r.find("POST", "/users", &params); got == nil {
 		t.Error("POST /users should match")
 	}
 
 	// Test no match
-	if got := r.find("GET", "/notfound", params); got != nil {
+	if got := r.find("GET", "/notfound", &params); got != nil {
 		t.Error("GET /notfound should not match")
 	}
-	if got := r.find("DELETE", "/users", params); got != nil {
+	if got := r.find("DELETE", "/users", &params); got != nil {
 		t.Error("DELETE /users should not match (not registered)")
 	}
 }
@@ -52,26 +52,26 @@ func TestRouterParamRoutes(t *testing.T) {
 	r.addRoute("GET", "/users/:id", h)
 	r.addRoute("GET", "/users/:id/posts/:postId", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Single param
-	clear(params)
-	if got := r.find("GET", "/users/123", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users/123", &params); got == nil {
 		t.Error("GET /users/123 should match")
-	} else if params["id"] != "123" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "123")
+	} else if params.get("id") != "123" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "123")
 	}
 
 	// Multi param
-	clear(params)
-	if got := r.find("GET", "/users/1/posts/2", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users/1/posts/2", &params); got == nil {
 		t.Error("GET /users/1/posts/2 should match")
 	} else {
-		if params["id"] != "1" {
-			t.Errorf("params[id] = %q, want %q", params["id"], "1")
+		if params.get("id") != "1" {
+			t.Errorf("params.get(id) = %q, want %q", params.get("id"), "1")
 		}
-		if params["postId"] != "2" {
-			t.Errorf("params[postId] = %q, want %q", params["postId"], "2")
+		if params.get("postId") != "2" {
+			t.Errorf("params.get(postId) = %q, want %q", params.get("postId"), "2")
 		}
 	}
 }
@@ -82,17 +82,17 @@ func TestRouterRegexParam(t *testing.T) {
 
 	r.addRoute("GET", "/users/:id<[0-9]+>", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Matching regex
-	clear(params)
-	if got := r.find("GET", "/users/123", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users/123", &params); got == nil {
 		t.Error("GET /users/123 should match regex [0-9]+")
 	}
 
 	// Non-matching regex
-	clear(params)
-	if got := r.find("GET", "/users/abc", params); got != nil {
+	params.reset()
+	if got := r.find("GET", "/users/abc", &params); got != nil {
 		t.Error("GET /users/abc should NOT match regex [0-9]+")
 	}
 }
@@ -103,19 +103,19 @@ func TestRouterOptionalParam(t *testing.T) {
 
 	r.addRoute("GET", "/users/:id?", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// With param
-	clear(params)
-	if got := r.find("GET", "/users/123", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users/123", &params); got == nil {
 		t.Error("GET /users/123 should match optional param")
-	} else if params["id"] != "123" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "123")
+	} else if params.get("id") != "123" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "123")
 	}
 
 	// Without param
-	clear(params)
-	if got := r.find("GET", "/users", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users", &params); got == nil {
 		t.Error("GET /users should match optional param (without value)")
 	}
 }
@@ -126,20 +126,20 @@ func TestRouterWildcard(t *testing.T) {
 
 	r.addRoute("GET", "/files/*filepath", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if got := r.find("GET", "/files/css/style.css", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/files/css/style.css", &params); got == nil {
 		t.Error("GET /files/css/style.css should match wildcard")
-	} else if params["filepath"] != "css/style.css" {
-		t.Errorf("params[filepath] = %q, want %q", params["filepath"], "css/style.css")
+	} else if params.get("filepath") != "css/style.css" {
+		t.Errorf("params.get(filepath) = %q, want %q", params.get("filepath"), "css/style.css")
 	}
 
-	clear(params)
-	if got := r.find("GET", "/files/readme.txt", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/files/readme.txt", &params); got == nil {
 		t.Error("GET /files/readme.txt should match wildcard")
-	} else if params["filepath"] != "readme.txt" {
-		t.Errorf("params[filepath] = %q, want %q", params["filepath"], "readme.txt")
+	} else if params.get("filepath") != "readme.txt" {
+		t.Errorf("params.get(filepath) = %q, want %q", params.get("filepath"), "readme.txt")
 	}
 }
 
@@ -245,18 +245,18 @@ func TestRouterStaticRadixCompression(t *testing.T) {
 	r.addRoute("GET", "/users/settings", h)
 	r.addRoute("GET", "/users/profile", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	if r.find("GET", "/users", params) == nil {
+	if r.find("GET", "/users", &params) == nil {
 		t.Error("GET /users should match")
 	}
-	if r.find("GET", "/users/settings", params) == nil {
+	if r.find("GET", "/users/settings", &params) == nil {
 		t.Error("GET /users/settings should match")
 	}
-	if r.find("GET", "/users/profile", params) == nil {
+	if r.find("GET", "/users/profile", &params) == nil {
 		t.Error("GET /users/profile should match")
 	}
-	if r.find("GET", "/users/unknown", params) != nil {
+	if r.find("GET", "/users/unknown", &params) != nil {
 		t.Error("GET /users/unknown should not match")
 	}
 }
@@ -268,20 +268,20 @@ func TestRouterMixedStaticAndParam(t *testing.T) {
 	r.addRoute("GET", "/users/settings", h)
 	r.addRoute("GET", "/users/:id", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// Static should take priority (checked first via indices)
-	clear(params)
-	if r.find("GET", "/users/settings", params) == nil {
+	params.reset()
+	if r.find("GET", "/users/settings", &params) == nil {
 		t.Error("GET /users/settings should match static route")
 	}
 
 	// Param should match other values
-	clear(params)
-	if got := r.find("GET", "/users/42", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/users/42", &params); got == nil {
 		t.Error("GET /users/42 should match param route")
-	} else if params["id"] != "42" {
-		t.Errorf("params[id] = %q, want %q", params["id"], "42")
+	} else if params.get("id") != "42" {
+		t.Errorf("params.get(id) = %q, want %q", params.get("id"), "42")
 	}
 }
 
@@ -291,13 +291,13 @@ func TestRouterWildcardDeepPath(t *testing.T) {
 
 	r.addRoute("GET", "/static/*filepath", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
-	clear(params)
-	if got := r.find("GET", "/static/a/b/c/d.js", params); got == nil {
+	params.reset()
+	if got := r.find("GET", "/static/a/b/c/d.js", &params); got == nil {
 		t.Error("GET /static/a/b/c/d.js should match wildcard")
-	} else if params["filepath"] != "a/b/c/d.js" {
-		t.Errorf("params[filepath] = %q, want %q", params["filepath"], "a/b/c/d.js")
+	} else if params.get("filepath") != "a/b/c/d.js" {
+		t.Errorf("params.get(filepath) = %q, want %q", params.get("filepath"), "a/b/c/d.js")
 	}
 }
 
@@ -308,10 +308,10 @@ func TestRouter405Detection(t *testing.T) {
 	r.addRoute("GET", "/api/data", h)
 	r.addRoute("POST", "/api/data", h)
 
-	params := make(map[string]string, 4)
+	var params routeParams
 
 	// DELETE /api/data should give 405 (GET and POST exist)
-	if r.find("DELETE", "/api/data", params) != nil {
+	if r.find("DELETE", "/api/data", &params) != nil {
 		t.Error("DELETE /api/data should not match")
 	}
 	allowed := r.findAllowedMethods("/api/data")
@@ -335,8 +335,8 @@ func TestRouterRootRoute(t *testing.T) {
 
 	r.addRoute("GET", "/", h)
 
-	params := make(map[string]string, 4)
-	if r.find("GET", "/", params) == nil {
+	var params routeParams
+	if r.find("GET", "/", &params) == nil {
 		t.Error("GET / should match")
 	}
 }

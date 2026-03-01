@@ -99,7 +99,7 @@ Kruda enforces resource limits by default to prevent resource exhaustion:
 
 When a request body exceeds the configured limit, the framework responds with HTTP 413 (Request Entity Too Large). The transport layer enforces this via `io.LimitReader` wrapping.
 
-Timeouts are enforced at the transport level (`net/http` server or Netpoll) and apply to all connections.
+Timeouts are enforced at the transport level (`net/http` server or fasthttp) and apply to all connections.
 
 ```go
 // Custom limits
@@ -188,8 +188,8 @@ Kruda does not set a `Server` response header by default. Server version informa
 ### Configuration Options
 
 ```go
-// Disable all security headers (not recommended)
-app := kruda.New(kruda.WithSecurityHeaders(false))
+// Enable security headers (recommended)
+app := kruda.New(kruda.WithSecureHeaders())
 
 // Restore Phase 1-4 defaults for backward compatibility
 app := kruda.New(kruda.WithLegacySecurityHeaders())

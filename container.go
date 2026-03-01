@@ -13,27 +13,26 @@ import (
 )
 
 // Container is the dependency injection container.
-// It stores services keyed by reflect.Type with three lifetime models:
+// Stores services keyed by reflect.Type with three lifetime models:
 // singleton (Give), transient (GiveTransient), and lazy singleton (GiveLazy).
 // Thread-safe via sync.RWMutex.
 type Container struct {
 	mu         sync.RWMutex
-	singletons map[reflect.Type]any             // pre-built instances
-	transients map[reflect.Type]*transientEntry // factory per call
-	lazies     map[reflect.Type]*lazyEntry      // factory + mutex-guarded init
-	named      map[string]any                   // named instances (key = name)
-	initOrder  []any                            // registration order for OnInit
-	resolving  sync.Map                         // goroutine ID → []reflect.Type stack for cycle detection
+	singletons map[reflect.Type]any
+	transients map[reflect.Type]*transientEntry
+	lazies     map[reflect.Type]*lazyEntry
+	named      map[string]any
+	initOrder  []any
+	resolving  sync.Map // goroutine ID → []reflect.Type stack for cycle detection
 }
 
 // transientEntry holds a factory function for transient services.
-// The factory is invoked on every resolution to produce a new instance.
 type transientEntry struct {
 	factory func() (any, error)
 }
 
-// lazyEntry holds a factory function for lazy singleton services.
-// Uses sync.Mutex (not sync.Once) to allow retry on factory failure per R2.8.
+// lazyEntry holds a lazy singleton factory.
+// Uses sync.Mutex (not sync.Once) to allow retry on factory failure.
 // The done field uses atomic.Bool for lock-free reads in discoverHealthCheckers.
 type lazyEntry struct {
 	factory  func() (any, error)
@@ -199,13 +198,10 @@ func (c *Container) isRegistered(t reflect.Type) bool {
 	return false
 }
 
-// goid returns the current goroutine's ID by parsing runtime.Stack() output.
-// The output starts with "goroutine NNN [" — we extract NNN.
-// NOTE: This is a well-known Go idiom (used by Gin, goleak, etc.) and the
-// format has been stable since Go 1.0. Used only for circular dependency
-// detection during resolve — not on the hot path.
-// If Go changes the stack format, this returns 0 and cycle detection degrades
-// to no-op (safe fallback — no false positives, only missed cycle errors).
+// goid returns the current goroutine ID by parsing runtime.Stack() output.
+// The format "goroutine NNN [" has been stable since Go 1.0.
+// Used only for circular dependency detection — not on the hot path.
+// Returns 0 if parsing fails (cycle detection degrades to no-op, no false positives).
 func goid() int64 {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
@@ -265,21 +261,18 @@ func (c *Container) popResolving() {
 }
 
 // Use resolves a service of type T from the container.
-// Checks singletons first, then transients, then lazy singletons.
-// For transient and lazy types, circular dependency detection is applied
-// per goroutine. Singletons skip cycle detection (already constructed).
+// Checks singletons first (no cycle detection), then transients, then lazy singletons.
 // Returns (zero, error) if the type is not registered or a factory fails.
 func Use[T any](c *Container) (T, error) {
 	var zero T
 	t := reflect.TypeOf((*T)(nil)).Elem()
 
 	c.mu.RLock()
-	// 1. Check singletons — skip cycle detection (already constructed per R4.4)
+	// Singletons skip cycle detection — already constructed
 	if inst, ok := c.singletons[t]; ok {
 		c.mu.RUnlock()
 		return inst.(T), nil
 	}
-	// 2. Check transients
 	if entry, ok := c.transients[t]; ok {
 		c.mu.RUnlock()
 		if err := c.pushResolving(t); err != nil {
@@ -292,10 +285,8 @@ func Use[T any](c *Container) (T, error) {
 		}
 		return inst.(T), nil
 	}
-	// 3. Check lazies
 	if entry, ok := c.lazies[t]; ok {
 		c.mu.RUnlock()
-		// Fast path: already resolved — no lock needed
 		if entry.done.Load() {
 			return entry.instance.(T), nil
 		}
@@ -357,9 +348,8 @@ func MustUseNamed[T any](c *Container, name string) T {
 
 // resolve attempts to initialize the lazy singleton.
 // Uses sync.Mutex (not sync.Once) so that if the factory returns an error,
-// done remains false and the factory will be retried on the next call (R2.8).
-// Returns (instance, firstResolve, error). firstResolve is true only for the
-// goroutine that actually ran the factory successfully.
+// done remains false and the factory will be retried on the next call.
+// Returns (instance, firstResolve, error).
 func (le *lazyEntry) resolve() (any, bool, error) {
 	le.mu.Lock()
 	defer le.mu.Unlock()
@@ -390,10 +380,8 @@ type Shutdowner interface {
 }
 
 // Start calls OnInit on all services in initOrder that implement Initializer,
-// in registration/resolution order. This includes singletons (Give/GiveAs),
-// named instances (GiveNamed), and lazy singletons that have been resolved.
-// If any OnInit fails, already-initialized services that implement Shutdowner
-// get OnShutdown called for cleanup in reverse order.
+// in registration/resolution order. If any OnInit fails, already-initialized
+// services that implement Shutdowner get OnShutdown called for cleanup in reverse order.
 func (c *Container) Start(ctx context.Context) error {
 	c.mu.RLock()
 	order := make([]any, len(c.initOrder))
@@ -404,17 +392,12 @@ func (c *Container) Start(ctx context.Context) error {
 	for _, inst := range order {
 		if init, ok := inst.(Initializer); ok {
 			if err := init.OnInit(ctx); err != nil {
-				// Cleanup already-initialized services in reverse
 				for i := len(initialized) - 1; i >= 0; i-- {
 					_ = initialized[i].OnShutdown(ctx)
 				}
 				return fmt.Errorf("kruda: OnInit failed for %T: %w", inst, err)
 			}
 		}
-		// Track all Shutdowners seen so far for cleanup on failure.
-		// NOTE: This includes Shutdowner-only services that don't implement
-		// Initializer — their OnShutdown may be called even though OnInit was
-		// never called. Implementations must handle this gracefully.
 		if sd, ok := inst.(Shutdowner); ok {
 			initialized = append(initialized, sd)
 		}
@@ -451,4 +434,78 @@ func (c *Container) InjectMiddleware() HandlerFunc {
 		ctx.Set("container", c)
 		return ctx.Next()
 	}
+}
+
+// Module is the interface for modular DI registration.
+// Modules group related service registrations into reusable units.
+type Module interface {
+	Install(c *Container) error
+}
+
+// Module installs a DI module into the App.
+// If no container is configured, a new one is created automatically.
+// Panics if Install returns an error — module registration failures are
+// considered programming errors. Returns the App for method chaining.
+func (app *App) Module(m Module) *App {
+	if app.container == nil {
+		app.container = NewContainer()
+	}
+	if err := m.Install(app.container); err != nil {
+		panic(fmt.Sprintf("kruda: module install failed: %v", err))
+	}
+	return app
+}
+
+// resolveContainer returns the DI container from the request context.
+func resolveContainer(c *Ctx) (*Container, error) {
+	if raw := c.Get("container"); raw != nil {
+		container, ok := raw.(*Container)
+		if !ok {
+			return nil, errors.New("kruda: invalid container in context")
+		}
+		return container, nil
+	}
+	if c.app.container != nil {
+		return c.app.container, nil
+	}
+	return nil, errors.New("kruda: no container configured")
+}
+
+// Resolve resolves a service of type T from the DI container
+// attached to the current request context.
+func Resolve[T any](c *Ctx) (T, error) {
+	var zero T
+	container, err := resolveContainer(c)
+	if err != nil {
+		return zero, err
+	}
+	return Use[T](container)
+}
+
+// ResolveNamed resolves a named instance of type T from the DI container.
+func ResolveNamed[T any](c *Ctx, name string) (T, error) {
+	var zero T
+	container, err := resolveContainer(c)
+	if err != nil {
+		return zero, err
+	}
+	return UseNamed[T](container, name)
+}
+
+// MustResolve is like Resolve but panics on error.
+func MustResolve[T any](c *Ctx) T {
+	v, err := Resolve[T](c)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// MustResolveNamed is like ResolveNamed but panics on error.
+func MustResolveNamed[T any](c *Ctx, name string) T {
+	v, err := ResolveNamed[T](c, name)
+	if err != nil {
+		panic(err)
+	}
+	return v
 }

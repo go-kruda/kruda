@@ -1,18 +1,17 @@
 package bench
 
 import (
+	"context"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 
 	"github.com/go-kruda/kruda/transport"
 )
 
-// ---------------------------------------------------------------------------
-// Transport adapters for benchmarking
-// ---------------------------------------------------------------------------
-// These wrap standard net/http types to implement transport.Request and
-// transport.ResponseWriter, allowing us to call App.ServeKruda directly
-// without network I/O overhead.
+// testResponseWriter and testRequest wrap standard net/http types to implement
+// transport.Request and transport.ResponseWriter, allowing App.ServeKruda to be
+// called directly without network I/O overhead.
 
 // testResponseWriter wraps http.ResponseWriter to implement transport.ResponseWriter.
 type testResponseWriter struct {
@@ -123,4 +122,12 @@ func (r *testRequest) Cookie(name string) string {
 	}
 	return c.Value
 }
-func (r *testRequest) RawRequest() any { return r.r }
+func (r *testRequest) RawRequest() any          { return r.r }
+func (r *testRequest) Context() context.Context { return r.r.Context() }
+
+func (r *testRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if err := r.r.ParseMultipartForm(maxBytes); err != nil {
+		return nil, err
+	}
+	return r.r.MultipartForm, nil
+}

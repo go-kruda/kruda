@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Task 13.1: ValidationError.Error() and MarshalJSON
-// ---------------------------------------------------------------------------
-
 func TestValidationError_Error_Single(t *testing.T) {
 	ve := &ValidationError{Errors: []FieldError{
 		{Field: "email", Rule: "required", Message: "email is required"},
@@ -79,10 +75,6 @@ func TestValidationError_MarshalJSON_Empty(t *testing.T) {
 		t.Errorf("errors length = %d, want 0", len(errs))
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 13.2: Built-in rule tests (18 rules)
-// ---------------------------------------------------------------------------
 
 func TestValidateRequired(t *testing.T) {
 	tests := []struct {
@@ -349,10 +341,6 @@ func TestValidateEndsWith(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 13.3: Custom rule registration via Register()
-// ---------------------------------------------------------------------------
-
 func TestValidator_Register_CustomRule(t *testing.T) {
 	v := NewValidator()
 	v.Register("even", func(value any, param string) bool {
@@ -373,10 +361,6 @@ func TestValidator_Register_CustomRule(t *testing.T) {
 		t.Error("3 should not be even")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 13.4: Message override via Messages() and message:"text" struct tag
-// ---------------------------------------------------------------------------
 
 func TestValidator_Messages_Override(t *testing.T) {
 	v := NewValidator()
@@ -415,10 +399,6 @@ func TestValidator_MessageTag_Override(t *testing.T) {
 		t.Errorf("message = %q, want custom Thai message", ve.Errors[0].Message)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 13.5: buildValidators tests
-// ---------------------------------------------------------------------------
 
 func TestBuildValidators_MultiField(t *testing.T) {
 	type Input struct {
@@ -487,10 +467,6 @@ func TestBuildValidators_JsonTagStripping(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 13.6: validate() tests
-// ---------------------------------------------------------------------------
-
 func TestValidate_AllPass(t *testing.T) {
 	type Input struct {
 		Name  string `json:"name" validate:"required,min=2"`
@@ -552,10 +528,6 @@ func TestFormatMessage_UnknownRule(t *testing.T) {
 		t.Errorf("unknown rule message = %q, want 'field is invalid'", msg)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 5.3: File upload validation rules (max_size, mime, required for *FileUpload)
-// ---------------------------------------------------------------------------
 
 func TestValidateMaxSize(t *testing.T) {
 	tests := []struct {

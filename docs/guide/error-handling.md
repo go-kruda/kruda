@@ -8,7 +8,7 @@ The built-in error type for HTTP errors:
 
 ```go
 err := kruda.NewError(404, "User not found")
-err := kruda.NewErrorWithDetails(422, "Validation failed", details)
+err := kruda.NewError(422, "Validation failed", wrappedErr)
 ```
 
 Return errors from handlers:
@@ -19,7 +19,7 @@ app.Get("/users/:id", func(c *kruda.Ctx) error {
     if err != nil {
         return kruda.NewError(404, "User not found")
     }
-    return c.JSON(200, user)
+    return c.JSON(user)
 })
 ```
 
@@ -27,7 +27,7 @@ Error response format:
 
 ```json
 {
-  "error": "User not found",
+  "message": "User not found",
   "code": 404
 }
 ```
@@ -36,7 +36,7 @@ Error response format:
 
 Map domain errors to HTTP responses without cluttering handler logic:
 
-### MapError — Map Specific Errors
+### MapError — Map Specific Errors (method on App)
 
 ```go
 var ErrNotFound = errors.New("not found")
@@ -54,20 +54,22 @@ app.Get("/users/:id", func(c *kruda.Ctx) error {
     if err != nil {
         return err // ErrNotFound → 404 automatically
     }
-    return c.JSON(200, user)
+    return c.JSON(user)
 })
 ```
 
-### MapErrorType — Map Error Types
+### MapErrorType — Map Error Types (package-level generic function)
 
 ```go
-app.MapErrorType(reflect.TypeOf(&ValidationError{}), 422, "Validation failed")
+kruda.MapErrorType[*ValidationError](app, 422, "Validation failed")
 ```
 
-### MapErrorFunc — Custom Error Mapping
+Note: This is a generic package-level function, not a method on App.
+
+### MapErrorFunc — Custom Error Mapping (package-level function)
 
 ```go
-app.MapErrorFunc(func(err error) *kruda.KrudaError {
+kruda.MapErrorFunc(app, ErrDatabase, func(err error) *kruda.KrudaError {
     var pgErr *pgconn.PgError
     if errors.As(err, &pgErr) {
         if pgErr.Code == "23505" { // unique violation
@@ -83,22 +85,15 @@ app.MapErrorFunc(func(err error) *kruda.KrudaError {
 Override the default error handler:
 
 ```go
-app := kruda.New(kruda.WithErrorHandler(func(c *kruda.Ctx, err error) {
-    code := 500
-    message := "Internal Server Error"
-
-    var kErr *kruda.KrudaError
-    if errors.As(err, &kErr) {
-        code = kErr.Code
-        message = kErr.Message
-    }
-
-    c.JSON(code, map[string]interface{}{
-        "error":     message,
+app := kruda.New(kruda.WithErrorHandler(func(c *kruda.Ctx, err *kruda.KrudaError) {
+    c.Status(err.Code).JSON(map[string]any{
+        "error":     err.Message,
         "requestId": c.Header("X-Request-ID"),
     })
 }))
 ```
+
+Note: `WithErrorHandler` receives `*KrudaError` (not `error`).
 
 ## Dev Mode Error Page
 

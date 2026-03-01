@@ -20,7 +20,7 @@ type RecoveryConfig struct {
 
 // Recovery returns middleware that recovers from panics in handlers,
 // logs the panic value and stack trace, and returns a 500 Internal Server Error.
-// M5 fix: returns an InternalError so that OnError hooks fire properly.
+// Returns an InternalError so that OnError hooks fire properly.
 // It accepts an optional RecoveryConfig for customization.
 func Recovery(config ...RecoveryConfig) kruda.HandlerFunc {
 	cfg := RecoveryConfig{
@@ -44,17 +44,15 @@ func Recovery(config ...RecoveryConfig) kruda.HandlerFunc {
 				stack := string(buf[:n])
 
 				if cfg.PanicHandler != nil {
-					// F2 fix: always log stack trace before calling custom handler,
-					// so panic context is never silently lost.
+					// Log before calling custom handler so the panic is never silently lost.
 					cfg.Logger.Error("panic recovered (custom handler)",
 						"panic", r,
 						"stack", stack,
 					)
 					cfg.PanicHandler(c, r)
-					// NEW-1 fix: only propagate error if custom handler didn't
-					// write a response, to avoid double-write risk.
-					// If it did respond, OnError hooks won't fire — this is
-					// documented: custom PanicHandler takes full ownership.
+					// Only propagate if the custom handler didn't write a response —
+					// avoids double-write. If it responded, OnError hooks won't fire;
+					// the custom handler takes full ownership.
 					if c.StatusCode() == 200 && !c.Responded() {
 						retErr = kruda.InternalError("panic recovered")
 					}
@@ -66,8 +64,7 @@ func Recovery(config ...RecoveryConfig) kruda.HandlerFunc {
 					"stack", stack,
 				)
 
-				// M5: return error instead of writing response directly,
-				// so OnError hooks can fire. The error handler will write the response.
+				// Return error so OnError hooks fire; the error handler writes the response.
 				retErr = kruda.InternalError("internal server error")
 			}
 		}()

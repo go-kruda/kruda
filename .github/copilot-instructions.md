@@ -33,6 +33,7 @@ type Input struct {
 
 ## Key Conventions
 
+- Transport: `kruda.New()` (default fasthttp) or `kruda.New(kruda.NetHTTP())` (HTTP/2, TLS)
 - Functional options: `kruda.New(kruda.WithReadTimeout(30*time.Second))`
 - Error returns: use `kruda.BadRequest("msg")`, `kruda.NotFound("msg")`, etc.
 - Middleware: `type MiddlewareFunc = HandlerFunc`

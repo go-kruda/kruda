@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Test input/output types
-// ---------------------------------------------------------------------------
-
 type createUserIn struct {
 	Name  string `json:"name" validate:"required"`
 	Email string `json:"email" validate:"required,email"`
@@ -27,10 +23,6 @@ type queryIn struct {
 }
 
 type emptyOut struct{}
-
-// ---------------------------------------------------------------------------
-// Task 15.1: Typed handler with binding
-// ---------------------------------------------------------------------------
 
 func TestTypedHandler_PostWithBody(t *testing.T) {
 	app := New()
@@ -114,10 +106,6 @@ func TestTypedHandler_GetWithQueryDefaults(t *testing.T) {
 		t.Errorf("In.Sort = %q, want created_at (default)", captured.Sort)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 15.2: Validation error flow
-// ---------------------------------------------------------------------------
 
 func TestTypedHandler_ValidationError_EmptyBody(t *testing.T) {
 	app := New(WithValidator(NewValidator()))
@@ -246,10 +234,6 @@ func TestTypedHandler_NoValidator_SkipsValidation(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 15.3: Response variants
-// ---------------------------------------------------------------------------
-
 func TestTypedHandler_NonNilResponse200(t *testing.T) {
 	app := New()
 
@@ -349,10 +333,6 @@ func TestTypedHandler_KrudaErrorPropagated(t *testing.T) {
 		t.Errorf("error code = %d, want 400", ke.Code)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 15.4: Short handlers (GetX/PostX)
-// ---------------------------------------------------------------------------
 
 func TestShortHandler_GetX_NonNil200(t *testing.T) {
 	app := New()
@@ -465,10 +445,6 @@ func TestShortHandler_PostX_Nil204(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Edge cases
-// ---------------------------------------------------------------------------
-
 func TestTypedHandler_PostWithParams(t *testing.T) {
 	type mixedIn struct {
 		ID   string `param:"id"`
@@ -496,12 +472,7 @@ func TestTypedHandler_PostWithParams(t *testing.T) {
 	}
 }
 
-// Suppress unused import warnings
 var _ = fmt.Sprintf
-
-// ---------------------------------------------------------------------------
-// Task 8.6: OnParse hook tests
-// ---------------------------------------------------------------------------
 
 func TestOnParse_HookCalled(t *testing.T) {
 	app := New()
@@ -636,10 +607,6 @@ func TestOnParse_NoHooks_SkipsCleanly(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Task 8.6: Provide/Need tests
-// ---------------------------------------------------------------------------
 
 func TestProvideNeed_RoundTrip(t *testing.T) {
 	app := New()

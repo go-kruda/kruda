@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------------------
-// Mock health checkers for testing
-// ---------------------------------------------------------------------------
-
 type healthyDB struct{}
 
 func (h *healthyDB) Check(_ context.Context) error { return nil }
@@ -35,10 +31,6 @@ func (h *slowChecker) Check(ctx context.Context) error {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
 func execHealth(t *testing.T, app *App) (int, map[string]any) {
 	t.Helper()
 	app.Compile()
@@ -52,10 +44,6 @@ func execHealth(t *testing.T, app *App) (int, map[string]any) {
 	}
 	return resp.statusCode, body
 }
-
-// ---------------------------------------------------------------------------
-// Test 1: No container — returns 200 with empty checks
-// ---------------------------------------------------------------------------
 
 func TestHealthHandlerNoContainer(t *testing.T) {
 	app := New()
@@ -77,10 +65,6 @@ func TestHealthHandlerNoContainer(t *testing.T) {
 		t.Fatalf("expected empty checks, got %v", checks)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 2: All healthy — returns 200 with both "ok"
-// ---------------------------------------------------------------------------
 
 func TestHealthHandlerAllHealthy(t *testing.T) {
 	c := NewContainer()
@@ -112,10 +96,6 @@ func TestHealthHandlerAllHealthy(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 3: One unhealthy — returns 503 with "unhealthy" status
-// ---------------------------------------------------------------------------
-
 func TestHealthHandlerOneUnhealthy(t *testing.T) {
 	c := NewContainer()
 	_ = c.Give(&healthyDB{})
@@ -144,10 +124,6 @@ func TestHealthHandlerOneUnhealthy(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 4: Timeout — slow checker reports "health check timed out"
-// ---------------------------------------------------------------------------
-
 func TestHealthHandlerTimeout(t *testing.T) {
 	c := NewContainer()
 	_ = c.Give(&slowChecker{delay: 2 * time.Second})
@@ -171,10 +147,6 @@ func TestHealthHandlerTimeout(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 5: WithHealthTimeout option works
-// ---------------------------------------------------------------------------
 
 func TestHealthHandlerCustomTimeout(t *testing.T) {
 	cfg := defaultHealthConfig()

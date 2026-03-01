@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// Custom error types for testing
 type testDomainError struct {
 	Field string
 }

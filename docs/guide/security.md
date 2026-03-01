@@ -13,10 +13,10 @@ Every response includes these security headers:
 | `X-XSS-Protection` | `0` | Disabled per modern best practice (CSP preferred) |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Controls referrer information |
 
-Disable security headers if needed:
+Enable security headers explicitly:
 
 ```go
-app := kruda.New(kruda.WithSecurityHeaders(false))
+app := kruda.New(kruda.WithSecureHeaders())
 ```
 
 Restore Phase 1-4 defaults for backward compatibility:

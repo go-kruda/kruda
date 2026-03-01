@@ -13,7 +13,7 @@ Type-safe Go web framework with auto-everything.
 - Typed handlers `C[T]` — body + param + query parsed into one struct, validated at compile time
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
-- Pluggable transport — Netpoll (epoll) default, net/http fallback
+- Pluggable transport — fasthttp default, net/http fallback
 - Zero external deps — core uses only Go stdlib
 - Dev mode error page — rich HTML with source code context, like Next.js
 
@@ -65,7 +65,7 @@ kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User,
 ## Auto CRUD
 
 ```go
-kruda.Resource(app, "/users", &UserCRUD{db: db})
+kruda.Resource[User, string](app, "/users", &UserCRUD{db: db})
 // Registers: GET /users, GET /users/:id, POST /users, PUT /users/:id, DELETE /users/:id
 ```
 

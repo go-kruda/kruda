@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,7 +26,7 @@ type NetHTTPConfig struct {
 	IdleTimeout    time.Duration
 	MaxBodySize    int
 	MaxHeaderBytes int    // maps to http.Server.MaxHeaderBytes
-	TrustProxy     bool   // C6: only trust X-Forwarded-For/X-Real-IP when true
+	TrustProxy     bool   // only trust X-Forwarded-For/X-Real-IP when true
 	TLSCertFile    string // path to TLS certificate file
 	TLSKeyFile     string // path to TLS private key file
 }
@@ -35,26 +36,33 @@ func NewNetHTTP(cfg NetHTTPConfig) *NetHTTPTransport {
 	return &NetHTTPTransport{config: cfg}
 }
 
-// ListenAndServe starts the HTTP server.
-func (t *NetHTTPTransport) ListenAndServe(addr string, handler Handler) error {
-	t.mu.Lock()
-	t.server = &http.Server{
+// newServer creates and configures an http.Server with the transport's config.
+func (t *NetHTTPTransport) newServer(addr string, handler Handler) *http.Server {
+	s := &http.Server{
 		Addr:    addr,
 		Handler: &netHTTPAdapter{handler: handler, maxBody: t.config.MaxBodySize, trustProxy: t.config.TrustProxy},
 	}
 
 	if t.config.ReadTimeout > 0 {
-		t.server.ReadTimeout = t.config.ReadTimeout
+		s.ReadTimeout = t.config.ReadTimeout
 	}
 	if t.config.WriteTimeout > 0 {
-		t.server.WriteTimeout = t.config.WriteTimeout
+		s.WriteTimeout = t.config.WriteTimeout
 	}
 	if t.config.IdleTimeout > 0 {
-		t.server.IdleTimeout = t.config.IdleTimeout
+		s.IdleTimeout = t.config.IdleTimeout
 	}
 	if t.config.MaxHeaderBytes > 0 {
-		t.server.MaxHeaderBytes = t.config.MaxHeaderBytes
+		s.MaxHeaderBytes = t.config.MaxHeaderBytes
 	}
+
+	return s
+}
+
+// ListenAndServe starts the HTTP server.
+func (t *NetHTTPTransport) ListenAndServe(addr string, handler Handler) error {
+	t.mu.Lock()
+	t.server = t.newServer(addr, handler)
 	srv := t.server
 	t.mu.Unlock()
 
@@ -63,6 +71,16 @@ func (t *NetHTTPTransport) ListenAndServe(addr string, handler Handler) error {
 		return srv.ListenAndServeTLS(t.config.TLSCertFile, t.config.TLSKeyFile)
 	}
 	return srv.ListenAndServe()
+}
+
+// Serve starts the HTTP server on an existing listener.
+func (t *NetHTTPTransport) Serve(ln net.Listener, handler Handler) error {
+	t.mu.Lock()
+	t.server = t.newServer("", handler)
+	srv := t.server
+	t.mu.Unlock()
+
+	return srv.Serve(ln)
 }
 
 // Shutdown gracefully shuts down the server.
@@ -89,8 +107,6 @@ func (a *netHTTPAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.handler.ServeKruda(resp, req)
 }
 
-// --- Request implementation ---
-
 type netHTTPRequest struct {
 	r          *http.Request
 	maxBody    int
@@ -98,8 +114,8 @@ type netHTTPRequest struct {
 	body       []byte
 	bodyErr    error
 	bodyRead   bool
-	queryVals  url.Values // cached parsed query string
-	queryDone  bool       // whether queryVals has been parsed
+	queryVals  url.Values
+	queryDone  bool
 }
 
 func (r *netHTTPRequest) Method() string { return r.r.Method }
@@ -127,7 +143,6 @@ func (r *netHTTPRequest) Body() ([]byte, error) {
 	}
 	defer r.r.Body.Close()
 
-	// Limit body size
 	reader := io.Reader(r.r.Body)
 	if r.maxBody > 0 {
 		reader = io.LimitReader(r.r.Body, int64(r.maxBody)+1)
@@ -148,8 +163,7 @@ func (r *netHTTPRequest) Body() ([]byte, error) {
 	return data, nil
 }
 
-// QueryParam returns a query parameter value.
-// Parses the query string once and caches the result for subsequent calls.
+// QueryParam returns a query parameter value, parsing and caching the query string on first call.
 func (r *netHTTPRequest) QueryParam(key string) string {
 	if !r.queryDone {
 		r.queryVals = r.r.URL.Query()
@@ -159,18 +173,16 @@ func (r *netHTTPRequest) QueryParam(key string) string {
 }
 
 // RemoteAddr returns the client IP. Only trusts proxy headers (X-Forwarded-For,
-// X-Real-IP) when TrustProxy is enabled. (C6 fix)
-// N8 fix: strips port from r.r.RemoteAddr for consistent bare-IP format.
+// X-Real-IP) when TrustProxy is enabled. Strips port for consistent bare-IP format.
 func (r *netHTTPRequest) RemoteAddr() string {
 	if r.trustProxy {
 		if ip := r.r.Header.Get("X-Forwarded-For"); ip != "" {
-			// Take the first IP in the chain
+			// Take the first IP in the chain (may have leading/trailing spaces).
 			for i := 0; i < len(ip); i++ {
 				if ip[i] == ',' {
 					return trimSpace(ip[:i])
 				}
 			}
-			// NEW-2 fix: trim single-value case too (may have leading/trailing spaces)
 			return trimSpace(ip)
 		}
 		if ip := r.r.Header.Get("X-Real-Ip"); ip != "" {
@@ -180,7 +192,6 @@ func (r *netHTTPRequest) RemoteAddr() string {
 	return stripPort(r.r.RemoteAddr)
 }
 
-// Cookie returns the value of the named cookie via the transport interface. (H4 fix)
 func (r *netHTTPRequest) Cookie(name string) string {
 	cookie, err := r.r.Cookie(name)
 	if err != nil {
@@ -255,8 +266,6 @@ func stripPort(addr string) string {
 	return addr
 }
 
-// --- ResponseWriter implementation ---
-
 type netHTTPResponseWriter struct {
 	w          http.ResponseWriter
 	statusCode int
@@ -297,8 +306,6 @@ func (w *netHTTPResponseWriter) Flush() {
 	}
 }
 
-// --- HeaderMap implementation ---
-
 type netHTTPHeaderMap struct {
 	h http.Header
 }
@@ -308,10 +315,8 @@ func (m *netHTTPHeaderMap) Get(key string) string { return m.h.Get(key) }
 func (m *netHTTPHeaderMap) Del(key string)        { m.h.Del(key) }
 func (m *netHTTPHeaderMap) Add(key, value string) { m.h.Add(key, value) }
 
-// DirectHeader implements DirectHeaderAccess interface for optimization
+// DirectHeader implements DirectHeaderAccess for direct header map access.
 func (m *netHTTPHeaderMap) DirectHeader() http.Header { return m.h }
-
-// --- Errors ---
 
 var ErrBodyTooLarge = &BodyTooLargeError{}
 

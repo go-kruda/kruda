@@ -4,7 +4,7 @@
 
 ## Context
 Two conflicting specifications exist for benchmark regression thresholds:
-- docs/features Task 10: >5% regression triggers warning
+- Phase 3 Task 10: >5% regression triggers warning
 - .kiro spec R9.4: >10% regression triggers warning
 
 Go benchmarks have inherent variance due to:

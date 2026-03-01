@@ -16,6 +16,6 @@ func newFastHTTPTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		MaxBodySize:  cfg.BodyLimit,
 		TrustProxy:   cfg.TrustProxy,
 	}
-	logger.Info("transport selected", "name", "fasthttp")
+	logger.Debug("transport selected", "name", "fasthttp")
 	return transport.NewFastHTTP(fasthttpCfg)
 }

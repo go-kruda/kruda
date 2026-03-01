@@ -6,10 +6,8 @@ import (
 	"sync"
 )
 
-// Parallel executes all tasks concurrently and returns a joined error of all failures.
-// Waits for ALL tasks to complete before returning, even if some error early.
-// Returns nil if all tasks succeed or if no tasks are provided.
-// When multiple tasks fail, the returned error wraps all of them via errors.Join.
+// Parallel executes all tasks concurrently and waits for ALL to complete.
+// Returns a joined error of all failures, or nil if all succeed.
 func Parallel(tasks ...func() error) error {
 	if len(tasks) == 0 {
 		return nil
@@ -31,9 +29,7 @@ func Parallel(tasks ...func() error) error {
 }
 
 // Race executes all tasks concurrently and returns the result of the first to complete.
-// The provided context is passed to each task, allowing cancellation of slower tasks
-// after the first one finishes. Callers should pass a cancellable context and defer
-// its cancel function to clean up remaining goroutines.
+// The context is passed to each task so callers can cancel slower goroutines.
 // Returns (nil, nil) if no tasks are provided.
 func Race(ctx context.Context, tasks ...func(context.Context) (any, error)) (any, error) {
 	if len(tasks) == 0 {
@@ -46,12 +42,12 @@ func Race(ctx context.Context, tasks ...func(context.Context) (any, error)) (any
 	}
 	ch := make(chan result, 1)
 	raceCtx, cancel := context.WithCancel(ctx)
-	defer cancel() // Cancel remaining goroutines when first completes
+	defer cancel()
 
 	for _, task := range tasks {
 		go func(fn func(context.Context) (any, error)) {
 			v, err := fn(raceCtx)
-			// Non-blocking send — only first goroutine succeeds
+			// Non-blocking send — only the first goroutine wins
 			select {
 			case ch <- result{v, err}:
 			default:
@@ -69,7 +65,6 @@ func Race(ctx context.Context, tasks ...func(context.Context) (any, error)) (any
 
 // Each applies fn to each item concurrently and returns a joined error of all failures.
 // Waits for ALL invocations to complete before returning.
-// Returns nil if all succeed or if items is empty.
 func Each[T any](items []T, fn func(T) error) error {
 	if len(items) == 0 {
 		return nil

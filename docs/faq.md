@@ -6,7 +6,7 @@ Kruda fills the gap between raw performance frameworks (Fiber, Fasthttp) and typ
 
 - Type-safe handlers with `C[T]` — body, params, and query in one struct, validated at compile time
 - Auto-everything — validation, error mapping, OpenAPI generation, CRUD endpoints
-- Pluggable transport — Netpoll for Linux performance, net/http for compatibility
+- Pluggable transport — fasthttp for Linux performance, net/http for compatibility
 - Built-in DI — no codegen, no reflection, just `Give` and `Use`
 - 60-70% less boilerplate than Gin or Fiber
 
@@ -14,28 +14,29 @@ Think of it as the Go equivalent of Elysia or tRPC.
 
 ## How does the DI container work?
 
-Kruda's DI uses Go generics instead of reflection:
+Kruda's DI uses Go generics. Services are registered on a `*Container` and resolved in handlers via `*Ctx`:
 
 ```go
-// Register a service factory
-kruda.Give(app, func() *UserService {
-    return &UserService{db: connectDB()}
-})
+// Set up container
+c := kruda.NewContainer()
+c.Give(&UserService{db: connectDB()})
+
+app := kruda.New(kruda.WithContainer(c))
 
 // Resolve in a handler
 app.Get("/users", func(c *kruda.Ctx) error {
-    svc := kruda.Use[*UserService](c)
+    svc := kruda.MustResolve[*UserService](c)
     // ...
 })
 ```
 
-Services are singletons by default — the factory runs once on first `Use` call and the result is cached. Group related services into modules with the `Module` interface.
+Services are singletons by default — registered via `Give` and resolved via `MustResolve` in handlers. Group related services into modules with the `Module` interface.
 
 See the [DI Container guide](/guide/di-container) for details.
 
-## Netpoll vs net/http — which transport should I use?
+## fasthttp vs net/http — which transport should I use?
 
-| | Netpoll | net/http |
+| | fasthttp | net/http |
 |---|---------|----------|
 | Platform | Linux only | All platforms |
 | Performance | Higher throughput, lower latency | Good, standard Go performance |
@@ -43,8 +44,8 @@ See the [DI Container guide](/guide/di-container) for details.
 | Maturity | Production-ready (used by ByteDance) | Go stdlib, battle-tested |
 
 Kruda auto-selects the transport:
-- Linux with Netpoll available → Netpoll
-- Windows/macOS or Netpoll unavailable → net/http
+- Linux with fasthttp available → fasthttp
+- Windows/macOS or fasthttp unavailable → net/http
 
 You can force a specific transport via configuration.
 
@@ -56,14 +57,14 @@ Use the built-in `TestClient` for in-memory testing — no server startup, no po
 func TestHello(t *testing.T) {
     app := kruda.New()
     app.Get("/hello", func(c *kruda.Ctx) error {
-        return c.String(200, "Hello!")
+        return c.Text("Hello!")
     })
 
     tc := kruda.NewTestClient(app)
-    resp := tc.Get("/hello")
+    resp, _ := tc.Get("/hello")
 
-    if resp.StatusCode != 200 {
-        t.Fatalf("expected 200, got %d", resp.StatusCode)
+    if resp.StatusCode() != 200 {
+        t.Fatalf("expected 200, got %d", resp.StatusCode())
     }
 }
 ```

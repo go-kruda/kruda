@@ -3,6 +3,7 @@ package kruda
 import (
 	"context"
 	"log/slog"
+	"net"
 	"os"
 	"testing"
 
@@ -14,19 +15,19 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 1}))
 }
 
-func TestSelectTransport_DefaultReturnsTransport(t *testing.T) {
+func TestSelectTransport_DefaultReturnsFastHTTP(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	tr := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")
 	}
-	// Auto-selection: fasthttp on Linux/macOS, net/http on Windows.
+	// Default is fasthttp on Linux/macOS, net/http on Windows (fasthttp build tag).
 	switch tr.(type) {
 	case *transport.NetHTTPTransport:
-		// expected on Windows or as fallback
+		// expected on Windows (fasthttp has build tag !windows)
 	default:
-		// fasthttp or netpoll on Linux/macOS — any non-nil transport is valid
+		// fasthttp on Linux/macOS — any non-nil transport is valid
 	}
 }
 
@@ -41,53 +42,23 @@ func TestSelectTransport_ExplicitTransport(t *testing.T) {
 	}
 }
 
-func TestSelectTransport_WithTransportNameNetHTTP(t *testing.T) {
+func TestSelectTransport_NetHTTPOption(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	cfg.TransportName = "nethttp"
+	cfg.TransportName = "nethttp" // set by NetHTTP() option
 	tr := selectTransport(cfg, cfg.Logger)
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected *transport.NetHTTPTransport, got %T", tr)
 	}
 }
 
-func TestSelectTransport_NetpollExplicit(t *testing.T) {
+func TestSelectTransport_DefaultSelectsFastHTTP(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	cfg.TransportName = "netpoll"
-	tr := selectTransport(cfg, cfg.Logger)
-	// On Linux/macOS, NewNetpoll succeeds → *NetpollTransport.
-	// On Windows, NewNetpoll returns error → falls back to *NetHTTPTransport.
-	switch tr.(type) {
-	case *transport.NetpollTransport:
-		// expected on Linux/macOS
-	case *transport.NetHTTPTransport:
-		// expected on Windows (netpoll not supported)
-	default:
-		t.Errorf("expected *NetpollTransport or *NetHTTPTransport, got %T", tr)
-	}
-}
-
-func TestSelectTransport_NetpollTLSFallback(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	cfg.TransportName = "netpoll"
-	cfg.TLSCertFile = "cert.pem"
-	cfg.TLSKeyFile = "key.pem"
-	tr := selectTransport(cfg, cfg.Logger)
-	// TLS configured → must fall back to net/http regardless of OS.
-	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
-		t.Errorf("expected TLS fallback to *transport.NetHTTPTransport, got %T", tr)
-	}
-}
-
-func TestSelectTransport_AutoSelectsNetpollOrNetHTTP(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	// TransportName defaults to "auto"
+	// TransportName defaults to "" → fasthttp
 	tr := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
-		t.Fatal("selectTransport returned nil for auto")
+		t.Fatal("selectTransport returned nil for default")
 	}
 }
 
@@ -109,7 +80,7 @@ func TestSelectTransport_EnvOverride(t *testing.T) {
 
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	// TransportName is empty/"auto" — env should take effect
+	// TransportName is empty — env should take effect
 	tr := selectTransport(cfg, cfg.Logger)
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected *transport.NetHTTPTransport from env override, got %T", tr)
@@ -117,7 +88,7 @@ func TestSelectTransport_EnvOverride(t *testing.T) {
 }
 
 func TestSelectTransport_ExplicitTransportOverridesEnv(t *testing.T) {
-	os.Setenv("KRUDA_TRANSPORT", "netpoll")
+	os.Setenv("KRUDA_TRANSPORT", "nethttp")
 	defer os.Unsetenv("KRUDA_TRANSPORT")
 
 	custom := &mockTransport{}
@@ -130,17 +101,17 @@ func TestSelectTransport_ExplicitTransportOverridesEnv(t *testing.T) {
 	}
 }
 
-func TestSelectTransport_TransportNameOverridesEnv(t *testing.T) {
-	os.Setenv("KRUDA_TRANSPORT", "netpoll")
+func TestSelectTransport_ExplicitOptionOverridesEnv(t *testing.T) {
+	os.Setenv("KRUDA_TRANSPORT", "nethttp")
 	defer os.Unsetenv("KRUDA_TRANSPORT")
 
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	cfg.TransportName = "nethttp"
+	cfg.TransportName = "nethttp" // set by NetHTTP() option
 	tr := selectTransport(cfg, cfg.Logger)
-	// TransportName is "nethttp" (not "auto"), so env should NOT override
+	// Explicit TransportName set, env should NOT override
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
-		t.Errorf("expected WithTransportName to override env, got %T", tr)
+		t.Errorf("expected NetHTTP() to override env, got %T", tr)
 	}
 }
 
@@ -158,10 +129,17 @@ func TestSelectTransport_ConfigPassthrough(t *testing.T) {
 	}
 }
 
-func TestWithTransportName_Option(t *testing.T) {
-	app := New(WithTransportName("nethttp"))
+func TestNetHTTP_Option(t *testing.T) {
+	app := New(NetHTTP())
 	if app.config.TransportName != "nethttp" {
 		t.Errorf("expected TransportName 'nethttp', got %q", app.config.TransportName)
+	}
+}
+
+func TestFastHTTP_Option(t *testing.T) {
+	app := New(FastHTTP())
+	if app.config.TransportName != "fasthttp" {
+		t.Errorf("expected TransportName 'fasthttp', got %q", app.config.TransportName)
 	}
 }
 
@@ -173,5 +151,9 @@ func (m *mockTransport) ListenAndServe(addr string, handler transport.Handler) e
 }
 
 func (m *mockTransport) Shutdown(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockTransport) Serve(ln net.Listener, handler transport.Handler) error {
 	return nil
 }

@@ -1,5 +1,3 @@
-//go:build kruda_stdjson || !sonic_avail
-
 package bench
 
 import (
@@ -10,13 +8,10 @@ import (
 	kruda "github.com/go-kruda/kruda"
 )
 
-// ---------------------------------------------------------------------------
-// Kruda Benchmarks
-// ---------------------------------------------------------------------------
+// Kruda benchmarks now use ServeHTTP for fair comparison with Echo/Gin
 
-// BenchmarkKruda_StaticGET benchmarks a simple static GET route returning text.
 func BenchmarkKruda_StaticGET(b *testing.B) {
-	app := kruda.New(kruda.WithTransportName("nethttp"))
+	app := kruda.New(kruda.NetHTTP())
 	app.Get("/", func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
 	})
@@ -29,16 +24,13 @@ func BenchmarkKruda_StaticGET(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			w := httptest.NewRecorder()
-			tr := newTestRequest(r)
-			tw := newTestResponseWriter(w)
-			app.ServeKruda(tw, tr)
+			app.ServeHTTP(w, r)
 		}
 	})
 }
 
-// BenchmarkKruda_ParamGET benchmarks a parameterized GET route with param extraction.
 func BenchmarkKruda_ParamGET(b *testing.B) {
-	app := kruda.New(kruda.WithTransportName("nethttp"))
+	app := kruda.New(kruda.NetHTTP())
 	app.Get("/users/:id", func(c *kruda.Ctx) error {
 		return c.Text(c.Param("id"))
 	})
@@ -51,16 +43,13 @@ func BenchmarkKruda_ParamGET(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			w := httptest.NewRecorder()
-			tr := newTestRequest(r)
-			tw := newTestResponseWriter(w)
-			app.ServeKruda(tw, tr)
+			app.ServeHTTP(w, r)
 		}
 	})
 }
 
-// BenchmarkKruda_POSTJSON benchmarks POST with JSON body parsing and JSON response.
 func BenchmarkKruda_POSTJSON(b *testing.B) {
-	app := kruda.New(kruda.WithTransportName("nethttp"))
+	app := kruda.New(kruda.NetHTTP())
 	app.Post("/users", func(c *kruda.Ctx) error {
 		var user struct {
 			Name  string `json:"name"`
@@ -82,32 +71,14 @@ func BenchmarkKruda_POSTJSON(b *testing.B) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest("POST", "/users", bytes.NewReader(jsonBody))
 			r.Header.Set("Content-Type", "application/json")
-			tr := newTestRequest(r)
-			tw := newTestResponseWriter(w)
-			app.ServeKruda(tw, tr)
+			app.ServeHTTP(w, r)
 		}
 	})
 }
 
-// BenchmarkKruda_Middleware1 benchmarks 1 no-op middleware in the chain.
-func BenchmarkKruda_Middleware1(b *testing.B) {
-	benchKrudaMiddleware(b, 1)
-}
-
-// BenchmarkKruda_Middleware5 benchmarks 5 no-op middleware in the chain.
 func BenchmarkKruda_Middleware5(b *testing.B) {
-	benchKrudaMiddleware(b, 5)
-}
-
-// BenchmarkKruda_Middleware10 benchmarks 10 no-op middleware in the chain.
-func BenchmarkKruda_Middleware10(b *testing.B) {
-	benchKrudaMiddleware(b, 10)
-}
-
-func benchKrudaMiddleware(b *testing.B, n int) {
-	b.Helper()
-	app := kruda.New(kruda.WithTransportName("nethttp"))
-	for i := 0; i < n; i++ {
+	app := kruda.New(kruda.NetHTTP())
+	for i := 0; i < 5; i++ {
 		app.Use(func(c *kruda.Ctx) error { return c.Next() })
 	}
 	app.Get("/", func(c *kruda.Ctx) error {
@@ -122,31 +93,7 @@ func benchKrudaMiddleware(b *testing.B, n int) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			w := httptest.NewRecorder()
-			tr := newTestRequest(r)
-			tw := newTestResponseWriter(w)
-			app.ServeKruda(tw, tr)
-		}
-	})
-}
-
-// BenchmarkKruda_JSONEncode benchmarks JSON encoding throughput.
-func BenchmarkKruda_JSONEncode(b *testing.B) {
-	app := kruda.New(kruda.WithTransportName("nethttp"))
-	app.Get("/json", func(c *kruda.Ctx) error {
-		return c.JSON(map[string]string{"message": "Hello, World!"})
-	})
-	app.Compile()
-
-	r := httptest.NewRequest("GET", "/json", nil)
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			w := httptest.NewRecorder()
-			tr := newTestRequest(r)
-			tw := newTestResponseWriter(w)
-			app.ServeKruda(tw, tr)
+			app.ServeHTTP(w, r)
 		}
 	})
 }

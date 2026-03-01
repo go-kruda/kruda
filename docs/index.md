@@ -22,7 +22,7 @@ features:
     details: Auto-validation, auto-error-mapping, auto-OpenAPI 3.1, auto-CRUD. 60-70% less boilerplate than Gin or Fiber.
   - icon: 🚀
     title: Blazing Fast
-    details: Pluggable transport with Netpoll (epoll) and net/http. Zero-alloc hot paths, pooled contexts, radix tree router.
+    details: Pluggable transport with fasthttp and net/http. Zero-alloc hot paths, pooled contexts, radix tree router.
   - icon: 📦
     title: Built-in DI
     details: Optional dependency injection with Give/Use pattern. No codegen, no reflection. Modules, lifecycle management, and auto-wiring.
@@ -39,7 +39,7 @@ func main() {
     app := kruda.New()
 
     app.Get("/", func(c *kruda.Ctx) error {
-        return c.JSON(200, map[string]string{"message": "Hello, Kruda!"})
+        return c.Status(200).JSON(map[string]string{"message": "Hello, Kruda!"})
     })
 
     app.Listen(":3000")

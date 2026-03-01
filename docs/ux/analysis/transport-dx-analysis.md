@@ -19,7 +19,7 @@ Based on user research with Go backend developers, the primary user need is **pe
 kruda.New() // Uses fasthttp unless HTTP/2 or multipart detected
 
 // Explicit override when needed
-kruda.New(kruda.WithNetHTTP()) // Force net/http for HTTP/2
+kruda.New(kruda.NetHTTP()) // Force net/http for HTTP/2
 ```
 
 ## 2. Ideal API Design
@@ -29,14 +29,9 @@ kruda.New(kruda.WithNetHTTP()) // Force net/http for HTTP/2
 // Smart default - analyzes route handlers for compatibility
 app := kruda.New()
 
-// Semantic options for common scenarios
-app := kruda.New(kruda.WithMaxPerformance()) // fasthttp, warns about limitations
-app := kruda.New(kruda.WithHTTP2Support())   // net/http
-app := kruda.New(kruda.WithFileUploads())    // net/http or netpoll
-
-// Explicit transport selection
-app := kruda.New(kruda.WithTransport("fasthttp"))
-app := kruda.New(kruda.WithFastHTTP())
+// Explicit transport selection (implemented API)
+app := kruda.New(kruda.FastHTTP()) // fasthttp — max performance (default)
+app := kruda.New(kruda.NetHTTP())  // net/http — HTTP/2, TLS, Windows
 ```
 
 **Why this works:**
@@ -51,8 +46,8 @@ app := kruda.New(kruda.WithFastHTTP())
 ### Compile-time Detection
 ```go
 // Analyze route handlers during app.Listen()
-if hasMultipartRoutes && transport == "fasthttp" {
-    log.Warn("fasthttp doesn't support multipart uploads, switching to netpoll")
+if hasMultipartRoutes && transportName == "fasthttp" {
+    log.Warn("fasthttp doesn't support multipart uploads, switching to net/http")
     // Auto-switch or fail with clear message
 }
 ```
@@ -61,7 +56,7 @@ if hasMultipartRoutes && transport == "fasthttp" {
 ```go
 // In development mode
 app.POST("/upload", uploadHandler) // Triggers compatibility check
-// Output: "⚠️  Route /upload uses multipart, consider WithFileUploads() for better compatibility"
+// Output: "⚠️  Route /upload uses multipart, consider NetHTTP() for better compatibility"
 ```
 
 ### Documentation Strategy
@@ -90,17 +85,9 @@ type Config struct {
 // Smart default with feature detection
 func New(opts ...Option) *App
 
-// Semantic options
-func WithMaxPerformance() Option    // fasthttp + warnings
-func WithHTTP2Support() Option      // net/http
-func WithFileUploads() Option       // net/http/netpoll
-func WithCompatibility() Option     // net/http
-
-// Explicit options
-func WithTransport(name string) Option
-func WithFastHTTP() Option
-func WithNetHTTP() Option
-func WithNetpoll() Option
+// Implemented API (simplified from original proposal)
+func FastHTTP() Option   // fasthttp transport (default)
+func NetHTTP() Option    // net/http transport (HTTP/2, TLS, Windows)
 ```
 
 ### Developer Experience Features
@@ -110,7 +97,7 @@ func WithNetpoll() Option
    $ go run main.go
    🚀 Kruda using fasthttp (220k req/s)
    ⚠️  HTTP/2 not available with current transport
-   💡 Use kruda.WithHTTP2Support() if needed
+   💡 Use kruda.NetHTTP() if needed
    ```
 
 2. **Runtime Transport Info**
@@ -138,7 +125,7 @@ func WithNetpoll() Option
 Kruda automatically selects the fastest compatible transport:
 - 🚀 220k req/s with fasthttp (default for simple APIs)
 - 🔄 HTTP/2 support with net/http (auto-detected)
-- 📁 File uploads with netpoll (auto-detected)
+- 📁 File uploads with net/http (auto-detected)
 ```
 
 ### Migration Guide

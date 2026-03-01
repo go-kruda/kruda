@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
-// Mock types for Resource tests
-// ---------------------------------------------------------------------------
-
 type mockUser struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -58,7 +54,6 @@ func (s *mockUserService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// mockItem + mockItemService for int ID tests
 type mockItem struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
@@ -102,10 +97,6 @@ func (s *mockItemService) Delete(ctx context.Context, id int) error {
 	}
 	return nil
 }
-
-// ---------------------------------------------------------------------------
-// Test 1: GET /users — list with pagination
-// ---------------------------------------------------------------------------
 
 func TestResourceList(t *testing.T) {
 	app := New()
@@ -155,10 +146,6 @@ func TestResourceList(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 2: GET /users/abc — get single resource
-// ---------------------------------------------------------------------------
-
 func TestResourceGet(t *testing.T) {
 	app := New()
 	svc := &mockUserService{
@@ -188,10 +175,6 @@ func TestResourceGet(t *testing.T) {
 		t.Errorf("name = %q, want Alice", user.Name)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 3: POST /users — create resource
-// ---------------------------------------------------------------------------
 
 func TestResourceCreate(t *testing.T) {
 	app := New()
@@ -229,10 +212,6 @@ func TestResourceCreate(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 4: PUT /users/abc — update resource
-// ---------------------------------------------------------------------------
-
 func TestResourceUpdate(t *testing.T) {
 	app := New()
 	svc := &mockUserService{
@@ -269,10 +248,6 @@ func TestResourceUpdate(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 5: DELETE /users/abc — delete resource
-// ---------------------------------------------------------------------------
-
 func TestResourceDelete(t *testing.T) {
 	app := New()
 	deletedID := ""
@@ -297,10 +272,6 @@ func TestResourceDelete(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 6: Service error propagation
-// ---------------------------------------------------------------------------
-
 func TestResourceServiceError(t *testing.T) {
 	app := New()
 	svc := &mockUserService{
@@ -320,10 +291,6 @@ func TestResourceServiceError(t *testing.T) {
 		t.Fatalf("status = %d, want 500\nbody: %s", resp.statusCode, resp.body)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 7: WithResourceOnly — only GET registered
-// ---------------------------------------------------------------------------
 
 func TestResourceWithOnly(t *testing.T) {
 	app := New()
@@ -357,10 +324,6 @@ func TestResourceWithOnly(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 8: WithResourceExcept — DELETE excluded
-// ---------------------------------------------------------------------------
-
 func TestResourceWithExcept(t *testing.T) {
 	app := New()
 	svc := &mockUserService{
@@ -388,10 +351,6 @@ func TestResourceWithExcept(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 9: WithResourceMiddleware — middleware sets header
-// ---------------------------------------------------------------------------
-
 func TestResourceWithMiddleware(t *testing.T) {
 	app := New()
 	svc := &mockUserService{
@@ -417,10 +376,6 @@ func TestResourceWithMiddleware(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 10: String ID parsing
-// ---------------------------------------------------------------------------
-
 func TestResourceParseIDString(t *testing.T) {
 	app := New()
 	var receivedID string
@@ -444,10 +399,6 @@ func TestResourceParseIDString(t *testing.T) {
 		t.Errorf("received id = %q, want hello-world-123", receivedID)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 11: Int ID parsing
-// ---------------------------------------------------------------------------
 
 func TestResourceParseIDInt(t *testing.T) {
 	app := New()
@@ -473,10 +424,6 @@ func TestResourceParseIDInt(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Test 12: Invalid int ID returns 400
-// ---------------------------------------------------------------------------
-
 func TestResourceInvalidID(t *testing.T) {
 	app := New()
 	svc := &mockItemService{}
@@ -499,10 +446,6 @@ func TestResourceInvalidID(t *testing.T) {
 		t.Errorf("body.Code = %d, want 400", body.Code)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Test 13: GroupResource — routes registered with group prefix
-// ---------------------------------------------------------------------------
 
 func TestGroupResource(t *testing.T) {
 	app := New()

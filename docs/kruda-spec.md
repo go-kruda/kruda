@@ -52,9 +52,9 @@ Kruda (ครุฑ) is a high-performance Go web framework that combines the sp
 
 ### 1.2 Core Principles
 
-1. **Fast by default** — Uses CloudWeGo Netpoll (epoll-based) as default transport, zero-allocation hot paths, Sonic JSON (SIMD-accelerated)
+1. **Fast by default** — Uses CloudWeGo fasthttp (epoll-based) as default transport, zero-allocation hot paths, Sonic JSON (SIMD-accelerated)
 2. **Type-safe by design** — Go generics for typed handlers, compile-time type checking, zero reflection at runtime
-3. **Standard by nature** — Switchable between Netpoll and net/http, compatible with Go ecosystem
+3. **Standard by nature** — Switchable between fasthttp and net/http, compatible with Go ecosystem
 4. **Secure by default** — No context reuse bugs, built-in security headers, fail-fast UUID generation
 5. **Write less, do more** — 60-70% less boilerplate than Fiber/Gin while maintaining same or better performance
 
@@ -98,7 +98,7 @@ go get github.com/kruda-framework/kruda
 │            └────────┬────────┘                        │
 │         ┌───────────┴───────────┐                     │
 │    ┌────┴──────┐         ┌──────┴──────┐              │
-│    │  Netpoll  │         │  net/http   │              │
+│    │  fasthttp  │         │  net/http   │              │
 │    │ (default) │         │ (fallback)  │              │
 │    └───────────┘         └─────────────┘              │
 │    epoll/kqueue           Go standard                 │
@@ -111,7 +111,7 @@ go get github.com/kruda-framework/kruda
 
 | Dependency | Purpose | Why chosen |
 |-----------|---------|------------|
-| `github.com/cloudwego/netpoll` | Default network transport | epoll-based, used by ByteDance in 50K+ microservices |
+| `github.com/cloudwego/fasthttp` | Default network transport | epoll-based, used by ByteDance in 50K+ microservices |
 | `github.com/bytedance/sonic` | JSON serialization | SIMD-accelerated, 2-5x faster than encoding/json |
 | Go standard `net/http` | Fallback transport | HTTP/2, TLS, streaming support |
 | Go standard `crypto/rand` | UUID/token generation | Secure randomness, fail-fast on error |
@@ -154,16 +154,16 @@ type Handler interface {
 }
 ```
 
-### 3.2 Netpoll Transport (Default)
+### 3.2 fasthttp Transport (Default)
 
-**Why Netpoll over fasthttp:**
-- Netpoll is a pure networking library (not HTTP framework) — cleaner separation
+**Why fasthttp over fasthttp:**
+- fasthttp is a pure networking library (not HTTP framework) — cleaner separation
 - epoll/kqueue based, non-blocking I/O
 - Used in production at ByteDance with 50,000+ microservices
 - Does not have fasthttp's context reuse safety issues
-- Supports switching between Netpoll and Go net on demand
+- Supports switching between fasthttp and Go net on demand
 
-**Why Netpoll over raw net/http:**
+**Why fasthttp over raw net/http:**
 - Better scheduling strategy for small requests
 - Worker pool goroutine management
 - Lower latency under high concurrency
@@ -171,21 +171,21 @@ type Handler interface {
 
 **Implementation notes:**
 - Default for Linux/macOS
-- Auto-fallback to net/http on Windows (Netpoll doesn't support Windows)
+- Auto-fallback to net/http on Windows (fasthttp doesn't support Windows)
 - For requests > 1MB, recommend switching to net/http with streaming
-- Netpoll uses LT (Level-Triggered) mode vs Go net's ET (Edge-Triggered) mode
+- fasthttp uses LT (Level-Triggered) mode vs Go net's ET (Edge-Triggered) mode
 
 ```go
 // Usage: select transport
-app := kruda.New()                           // default: Netpoll
-app := kruda.New(kruda.WithNetHTTP())        // use net/http
+app := kruda.New()                           // default: fasthttp
+app := kruda.New(kruda.NetHTTP())             // use net/http
 app := kruda.New(kruda.WithTransport(custom)) // custom transport
 ```
 
 ### 3.3 net/http Transport (Fallback)
 
 Used when:
-- TLS/HTTPS is needed (Netpoll TLS not yet mature)
+- TLS/HTTPS is needed (fasthttp TLS not yet mature)
 - HTTP/2 is required
 - Large request/response streaming (> 1MB)
 - Windows environment
@@ -200,7 +200,7 @@ Running on Windows? → Use net/http
   ↓ No
 TLS configured? → Use net/http
   ↓ No
-Use Netpoll (default)
+Use fasthttp (default)
 ```
 
 ---
@@ -251,7 +251,7 @@ type Config struct {
     HeaderLimit     int            // default: 8KB (8 * 1024)
     
     // Transport
-    Transport       Transport      // default: Netpoll
+    Transport       Transport      // default: fasthttp
     
     // JSON engine
     JSONEncoder     JSONEncoder    // default: sonic
@@ -291,7 +291,7 @@ func New(opts ...Option) *App {
         if runtime.GOOS == "windows" {
             app.transport = newNetHTTPTransport(app.config)
         } else {
-            app.transport = newNetpollTransport(app.config)
+            app.transport = newfasthttpTransport(app.config)
         }
     }
     
@@ -2711,7 +2711,7 @@ Kruda v2.0       680K+        1.4 μs      0 B         + Rust simd-json (v2.0)
 
 **Why Kruda v1.0 matches Fiber without Fiber's safety issues:**
 - Same zero-alloc approach
-- Same radix tree + net/http (or Netpoll)
+- Same radix tree + net/http (or fasthttp)
 - But context is safe in goroutines (no c.Copy() footgun)
 - No CVE history from context reuse bugs
 
@@ -2813,7 +2813,7 @@ kruda/                            ← core framework (github.com/kruda-framework
 │
 ├── transport/
 │   ├── transport.go      # Transport interface
-│   ├── netpoll.go        # Netpoll implementation
+│   ├── fasthttp.go        # fasthttp implementation
 │   └── nethttp.go        # net/http implementation
 │
 ├── json/
@@ -2986,13 +2986,13 @@ app.Listen(":3000")
 
 **Milestone:** Typed handlers with validation — cleanest API in the Go ecosystem
 
-### Phase 3 — Netpoll & Performance (Week 7-8)
+### Phase 3 — fasthttp & Performance (Week 7-8)
 
 > **Core goal:** Be the fastest type-safe Go framework. Pluggable transport gives Kruda an edge no other typed framework has.
 
 | Task | Description | Est. Days | Priority |
 |------|-------------|-----------|----------|
-| `transport/netpoll.go` | Netpoll integration | 4 | 🔴 |
+| `transport/fasthttp.go` | fasthttp integration | 4 | 🔴 |
 | Transport auto-selection | OS/config-based selection | 1 | 🔴 |
 | Zero-alloc context | sync.Pool optimization, pre-alloc maps | 3 | 🔴 |
 | Header optimization | Fixed-slot headers | 2 | 🟡 |
@@ -3116,7 +3116,7 @@ CGO_ENABLED=0 go build ./...        # Force: No CGO at all
 ```
 Week  1-3:  ████████░░░░░░░░░░░░░░░░  Phase 1: Foundation (pure Go)
 Week  4-6:  ░░░░░░░░████████░░░░░░░░  Phase 2: Type System (cleanest DX in Go)
-Week  7-8:  ░░░░░░░░░░░░░░░░████░░░░  Phase 3: Netpoll (fastest typed framework)
+Week  7-8:  ░░░░░░░░░░░░░░░░████░░░░  Phase 3: fasthttp (fastest typed framework)
 Week  9-12: ░░░░░░░░░░░░░░░░░░░░████  Phase 4: Ecosystem (auto CRUD, DI, plugins)
 Week 13-16: ████████████████░░░░░░░░  Phase 5: Production ready + AI-Friendly DX
 Week 16-18: ░░░░░░░░░░░░░░░░████████  Phase 6: Launch 🚀 (llms.txt, AI blog post)
@@ -3175,7 +3175,7 @@ Kruda (target)  ~240K         ~1.8ms        ✅ safe
 
 | Aspect | Fiber | Kruda | Winner |
 |--------|-------|-------|--------|
-| Raw performance | fasthttp-based | Netpoll-based | ~tie |
+| Raw performance | fasthttp-based | fasthttp-based | ~tie |
 | Context safety | ⚠️ pool reuse bugs | ✅ safe by default | Kruda |
 | Type safety | ❌ none | ✅ Go generics | Kruda |
 | Validation | ❌ external lib | ✅ built-in auto | Kruda |
@@ -3213,7 +3213,7 @@ Kruda (target)  ~240K         ~1.8ms        ✅ safe
 
 | Aspect | Hertz | Kruda | Winner |
 |--------|-------|-------|--------|
-| Performance | Excellent (Netpoll) | Uses same Netpoll | ~tie |
+| Performance | Excellent (fasthttp) | Uses same fasthttp | ~tie |
 | DX | Moderate | High (auto-everything) | Kruda |
 | Generics | Limited | Full | Kruda |
 | Auto CRUD | ❌ none | ✅ Resource() | Kruda |
@@ -3247,11 +3247,11 @@ kruda.Post[CreateUserReq, UserRes](app, "/users", func(c *kruda.C[CreateUserReq]
 |--------|-------|-------|--------|
 | Typed handlers (generics) | ✅ yes | ✅ yes | Tie |
 | Auto OpenAPI from code | ✅ yes | ✅ yes | Tie |
-| net/http compatible | ✅ yes | ✅ yes (+ Netpoll) | Kruda |
+| net/http compatible | ✅ yes | ✅ yes (+ fasthttp) | Kruda |
 | Validation | ✅ go-playground | ✅ pre-compiled | Kruda (faster) |
 | Auto CRUD / Resource | ❌ none | ✅ `app.Resource()` | **Kruda** |
 | Error mapping | ❌ none | ✅ `app.MapError()` | **Kruda** |
-| High-perf transport | ❌ net/http only | ✅ Netpoll switchable | **Kruda** |
+| High-perf transport | ❌ net/http only | ✅ fasthttp switchable | **Kruda** |
 | Rust acceleration | ❌ none | ✅ simd-json, validator, router | **Kruda** |
 | Concurrency helpers | ❌ none | ✅ Parallel, Race, Each | **Kruda** |
 | Lifecycle hooks | ❌ basic middleware | ✅ full lifecycle | **Kruda** |
@@ -3298,7 +3298,7 @@ c.In // direct field, ready to use
 - Actix (Rust) → on raw performance (~10-20%, but irrelevant in real workloads)
 - Laravel → on ecosystem size and full-stack features
 
-**Kruda's unique position:** No framework in any language combines all of: type-safe generics + auto CRUD + auto OpenAPI + Netpoll performance + Rust acceleration + security defaults
+**Kruda's unique position:** No framework in any language combines all of: type-safe generics + auto CRUD + auto OpenAPI + fasthttp performance + Rust acceleration + security defaults
 
 ---
 
@@ -3477,7 +3477,7 @@ These are non-negotiable for the first public release:
 
 ### 26.2 Should-Have for v1.0 (Week 7-12)
 
-14. Netpoll Transport
+14. fasthttp Transport
 15. Auto CRUD (Resource)
 16. Auto OpenAPI / Swagger
 17. Dependency Injection (Give/Use/Module)
@@ -3708,7 +3708,7 @@ CGO_ENABLED=0 go build ./...         # No CGO at all (stdlib JSON)
 - Plugin system
 - Auto CRUD / Resource
 - OpenAPI generation
-- HTTP transport (Netpoll/net/http)
+- HTTP transport (fasthttp/net/http)
 
 ### 27.6 Rust JSON Engine (simd-json)
 
@@ -3877,7 +3877,7 @@ Reasons this rule exists:
 
 ### 28.1 Positioning Statement
 
-> **Kruda is the first Go framework that combines type-safe generics, auto CRUD, auto OpenAPI, Netpoll performance, Rust acceleration, AI-native DX, automatic MCP server, and security-by-default in one package.**
+> **Kruda is the first Go framework that combines type-safe generics, auto CRUD, auto OpenAPI, fasthttp performance, Rust acceleration, AI-native DX, automatic MCP server, and security-by-default in one package.**
 >
 > No framework in Go — or any language — offers all of these together.
 
@@ -3932,12 +3932,12 @@ Marketing phases:
 - Marketing angle: "Echo's reliability with zero boilerplate"
 
 **vs Hertz (CloudWeGo) — Win on: DX + International docs**
-- Same Netpoll performance, but Hertz DX is verbose and docs are primarily Chinese
-- Marketing angle: "Netpoll performance with world-class DX"
+- Same fasthttp performance, but Hertz DX is verbose and docs are primarily Chinese
+- Marketing angle: "fasthttp performance with world-class DX"
 
 **vs Fuego (~1K stars) — Win on: Complete platform**
 - Fuego proved typed handlers + auto OpenAPI works in Go
-- Kruda adds: auto CRUD, error mapping, Netpoll, Rust acceleration, security, concurrency helpers, CLI
+- Kruda adds: auto CRUD, error mapping, fasthttp, Rust acceleration, security, concurrency helpers, CLI
 - Marketing angle: "The full platform, not just typed handlers"
 
 **vs FastAPI (Python) — Win on: Performance + True type safety**
@@ -3961,7 +3961,7 @@ What ONLY Kruda has (no other Go framework):
 1. Auto CRUD (Resource)            — One line, five endpoints
 2. Rust acceleration               — 6x faster JSON via simd-json FFI
 3. Error mapping                   — app.MapError() auto HTTP status
-4. Netpoll + net/http switchable   — Best of both worlds
+4. fasthttp + net/http switchable   — Best of both worlds
 5. Concurrency helpers             — Parallel, Race, Each built-in
 6. Security by default             — Headers, limits, CRLF, UUID fail-fast
 7. Complete lifecycle hooks        — onRequest → beforeHandle → afterHandle → onResponse
@@ -4949,7 +4949,7 @@ When developing Kruda with Claude Code, follow these guidelines:
 7. Then `resource.go` — auto CRUD
 8. Then built-in middleware: `middleware/logger.go`, `recovery.go`, `cors.go`, `requestid.go`
 9. Then contrib packages: `contrib/jwt/`, `contrib/ratelimit/`, `contrib/swagger/`
-10. Then `transport/netpoll.go` — can start with net/http and add Netpoll later
+10. Then `transport/fasthttp.go` — can start with net/http and add fasthttp later
 11. **Rust components come last (Phase 7/v2.0)** — everything must work in pure Go first
 
 ### C.2 DX Design Principles

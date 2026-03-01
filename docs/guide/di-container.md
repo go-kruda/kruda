@@ -1,82 +1,83 @@
 # DI Container
 
-Kruda includes a built-in dependency injection container using the Give/Use pattern. No codegen, no reflection at runtime.
+Kruda includes a built-in dependency injection container. Services are registered on a `*Container` and resolved in handlers via `*Ctx`.
 
-## Registering Services
-
-Use `kruda.Give` to register a service:
+## Setting Up
 
 ```go
-app := kruda.New()
+c := kruda.NewContainer()
+c.Give(&UserService{db: connectDB()})
+c.GiveLazy(func() (*DBPool, error) { return connectDB() })
+c.GiveNamed("write", &DB{DSN: "primary"})
 
-// Register a service
-kruda.Give(app, func() *UserService {
-    return &UserService{
-        db: connectDB(),
-    }
-})
+app := kruda.New(kruda.WithContainer(c))
 ```
 
-## Resolving Services
-
-Use `kruda.Use` to resolve a service in handlers:
+## Resolving in Handlers
 
 ```go
 app.Get("/users", func(c *kruda.Ctx) error {
-    svc := kruda.Use[*UserService](c)
-    users, err := svc.ListAll()
-    if err != nil {
-        return err
-    }
-    return c.JSON(200, users)
+    svc := kruda.MustResolve[*UserService](c)
+    return c.JSON(svc.ListAll())
 })
 ```
 
-## Service Lifecycle
+## Registration Methods
 
-Services are created lazily on first resolution and cached for the app lifetime (singleton by default):
+All registration is done on `*Container`:
 
-```go
-// This factory runs once, on first Use[*DBPool] call
-kruda.Give(app, func() *DBPool {
-    pool, _ := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-    return &DBPool{pool}
-})
-```
+| Method | Behavior |
+|--------|----------|
+| `Give(instance)` | Singleton — pre-built instance |
+| `GiveLazy(factory)` | Lazy singleton — factory runs once on first use |
+| `GiveTransient(factory)` | New instance per resolution |
+| `GiveNamed(name, instance)` | Named singleton |
+| `GiveAs(instance, ifacePtr)` | Register under interface type |
+
+## Resolution Functions
+
+In handlers, use package-level generic functions with `*Ctx`:
+
+| Function | Behavior |
+|----------|----------|
+| `Resolve[T](c)` | Returns `(T, error)` |
+| `MustResolve[T](c)` | Returns `T`, panics on error |
+| `ResolveNamed[T](c, name)` | Named resolution with error |
+| `MustResolveNamed[T](c, name)` | Named resolution, panics on error |
 
 ## Modules
 
-Group related services into modules for better organization:
+Group related services into modules:
 
 ```go
 type UserModule struct{}
 
-func (m *UserModule) Register(app *kruda.App) {
-    kruda.Give(app, NewUserRepository)
-    kruda.Give(app, NewUserService)
+func (m *UserModule) Install(c *kruda.Container) error {
+    c.Give(&UserRepository{})
+    c.Give(&UserService{})
+    return nil
 }
 
-// Register the module
 app.Module(&UserModule{})
+```
+
+The `Module` interface:
+
+```go
+type Module interface {
+    Install(c *Container) error
+}
 ```
 
 ## Dependency Chains
 
-Services can depend on other services:
-
 ```go
-kruda.Give(app, func() *DBPool {
-    return NewDBPool()
-})
+c := kruda.NewContainer()
+c.Give(&DBPool{dsn: os.Getenv("DATABASE_URL")})
+c.Give(&UserRepository{})
+c.Give(&UserService{})
 
-kruda.Give(app, func() *UserRepository {
-    // Resolved from container automatically
-    return &UserRepository{}
-})
-
-kruda.Give(app, func() *UserService {
-    return &UserService{}
-})
+app := kruda.New(kruda.WithContainer(c))
 ```
 
 ## Example
@@ -95,16 +96,15 @@ func (s *GreetService) Greet(name string) string {
 }
 
 func main() {
-    app := kruda.New()
+    c := kruda.NewContainer()
+    c.Give(&GreetService{prefix: "Hello"})
 
-    kruda.Give(app, func() *GreetService {
-        return &GreetService{prefix: "Hello"}
-    })
+    app := kruda.New(kruda.WithContainer(c))
 
     app.Get("/greet/:name", func(c *kruda.Ctx) error {
-        svc := kruda.Use[*GreetService](c)
+        svc := kruda.MustResolve[*GreetService](c)
         msg := svc.Greet(c.Param("name"))
-        return c.JSON(200, map[string]string{"message": msg})
+        return c.JSON(map[string]string{"message": msg})
     })
 
     app.Listen(":3000")

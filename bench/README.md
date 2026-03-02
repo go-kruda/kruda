@@ -209,16 +209,24 @@ Wing is Kruda's custom transport using io_uring (Linux) and kqueue (macOS) — z
 
 ### Micro Benchmarks (go test -bench)
 
-| Benchmark | M3 (ns/op) | i5-13500 (ns/op) | Allocs |
-|-----------|-----------|-------------------|--------|
-| ParseGET | 152 | 170 | 5 allocs, 136 B |
-| ParsePOST | 195 | 237 | 5 allocs, 176 B |
-| ResponseBuild (zero-copy) | 100 | 140 | 4 allocs, 360 B |
-| ResponseBuildCopy | 42 | 58 | 1 alloc, 112 B |
-| FullCycle (parse→respond) | 262 | 284 | 8 allocs, 304 B |
-| HandlerInline (full path) | 283 | 283 | 8 allocs, 304 B |
+| Benchmark | M3 (ns/op) | i5-13500 (ns/op) | i5-14500 (ns/op) | Allocs |
+|-----------|-----------|-------------------|-------------------|--------|
+| ParseGET | 152 | 170 | 288 | 5 allocs, 136 B |
+| ParsePOST | 195 | 237 | 373 | 5 allocs, 176 B |
+| ResponseBuild (zero-copy) | 100 | 140 | — | 4 allocs, 360 B |
+| ResponseBuildCopy | 42 | 58 | — | 1 alloc, 112 B |
+| FullCycle (parse→respond) | 262 | 284 | 519 | 8 allocs, 304 B |
+| HandlerInline (full path) | 283 | 283 | 532 | 8 allocs, 304 B |
 
-*Full request→response cycle: ~280ns, 8 allocations*
+*Full request→response cycle: ~280ns (M3/Linux), ~520ns (Windows), 8 allocations*
+
+### Windows
+
+Wing does not support Windows. On Windows, `kruda.Wing()` automatically falls back
+to fasthttp. Windows IOCP was prototyped and benchmarked but removed — it was 37%
+slower than fasthttp due to Go's mature net package and Windows SO_REUSEADDR not
+distributing connections like Linux SO_REUSEPORT. The maintenance cost and bug risk
+were not justified.
 
 ### How to Run
 

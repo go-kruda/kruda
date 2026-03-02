@@ -170,7 +170,7 @@ func TestSelectTransport_TLSPassthrough(t *testing.T) {
 	cfg.TLSKeyFile = "key.pem"
 
 	// selectTransport should create a transport without error when TLS is configured
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")
 	}

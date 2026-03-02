@@ -64,7 +64,7 @@ jobs:
 ### 1.2 Pre-Release Quality Gates
 
 **Required Checks Before v1.0.0 Tag:**
-- [ ] All tests pass (Go 1.24 + stable × Linux/macOS/Windows)
+- [ ] All tests pass (Go 1.25 + stable × Linux/macOS/Windows)
 - [ ] golangci-lint clean
 - [ ] Benchmark regression < 5% vs baseline
 - [ ] TFB verification passes locally

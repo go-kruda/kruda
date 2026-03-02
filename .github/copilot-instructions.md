@@ -1,6 +1,6 @@
 # Kruda Framework — GitHub Copilot Instructions
 
-Kruda is a type-safe Go web framework (github.com/go-kruda/kruda). Go 1.24+, zero external deps in core.
+Kruda is a type-safe Go web framework (github.com/go-kruda/kruda). Go 1.25+, zero external deps in core.
 
 ## Handler Patterns
 

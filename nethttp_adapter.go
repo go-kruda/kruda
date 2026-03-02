@@ -169,6 +169,11 @@ func (w *fastNetHTTPResponseWriter) SetContentLength(length string) {
 	w.w.Header()["Content-Length"] = w.contentLengthSlice
 }
 
+// Unwrap returns the underlying http.ResponseWriter for hijacking and http.ServeFile.
+func (w *fastNetHTTPResponseWriter) Unwrap() http.ResponseWriter {
+	return w.w
+}
+
 type fastNetHTTPHeaderMap struct {
 	h http.Header
 }

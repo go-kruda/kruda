@@ -142,14 +142,14 @@ func (p *routeParams) reset() {
 type dirtyFlags uint8
 
 const (
-	dirtyHeaders    dirtyFlags = 1 << iota // c.headers was written
-	dirtyRespHdrs                          // c.respHeaders was written
-	dirtyLocals                            // c.locals was written
-	dirtyCookies                           // c.cookies was appended
-	dirtyBody                              // c.body was set (lazy response path)
-	dirtyBodyBytes                         // c.bodyBytes was read (body parsing)
-	dirtyCtx                               // c.ctx was set
-	dirtyMultipart                         // c.multipartForm was used
+	dirtyHeaders   dirtyFlags = 1 << iota // c.headers was written
+	dirtyRespHdrs                         // c.respHeaders was written
+	dirtyLocals                           // c.locals was written
+	dirtyCookies                          // c.cookies was appended
+	dirtyBody                             // c.body was set (lazy response path)
+	dirtyBodyBytes                        // c.bodyBytes was read (body parsing)
+	dirtyCtx                              // c.ctx was set
+	dirtyMultipart                        // c.multipartForm was used
 )
 
 // Hot fields accessed every request are packed into the first cache lines
@@ -1312,3 +1312,21 @@ func isBodyTooLarge(err error) bool {
 //
 //	c.JSON(kruda.Map{"message": "hello", "ok": true})
 type Map = map[string]any
+
+// Transport returns the transport type string: "nethttp", "fasthttp", or "wing".
+// Contrib modules use this to detect transport-specific behavior (e.g. hijack support).
+func (c *Ctx) Transport() string {
+	return c.app.transportType
+}
+
+// ResponseWriter returns the underlying transport.ResponseWriter.
+// Used by contrib modules (e.g. ws) that need direct access to the writer for hijacking.
+func (c *Ctx) ResponseWriter() transport.ResponseWriter {
+	return c.writer
+}
+
+// Request returns the underlying transport.Request.
+// Used by contrib modules that need access to the raw request.
+func (c *Ctx) Request() transport.Request {
+	return c.request
+}

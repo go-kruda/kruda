@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/textproto"
 	"os"
@@ -40,6 +41,10 @@ type App struct {
 	// Set once at Compile() time. ServeFast() checks this single bool
 	// to skip the entire lifecycle path — zero-cost when no hooks.
 	hasLifecycle bool
+
+	// transportType identifies the active transport: "nethttp", "fasthttp", or "wing".
+	// Set once during New() based on the resolved transport selection.
+	transportType string
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -62,9 +67,10 @@ func New(opts ...Option) *App {
 
 	if app.config.DevMode {
 		app.config.Security.XFrameOptions = "SAMEORIGIN"
+		app.registerPprofRoutes()
 	}
 
-	app.transport = selectTransport(app.config, app.config.Logger)
+	app.transport, app.transportType = selectTransport(app.config, app.config.Logger)
 
 	app.ctxPool = sync.Pool{
 		New: func() any {
@@ -140,6 +146,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.embeddedResp.w = w
 	c.embeddedResp.statusCode = 200
 	c.embeddedResp.written = false
+	c.embeddedResp.headerMap = nil
 
 	if c.multipartForm != nil {
 		_ = c.multipartForm.RemoveAll()
@@ -588,6 +595,14 @@ func (app *App) handleError(c *Ctx, err error) {
 
 	ke := app.resolveError(err)
 
+	// R7.7: Always log the full unsanitized error regardless of DevMode
+	slog.Error("request error",
+		"method", c.Method(),
+		"path", c.Path(),
+		"status", ke.Code,
+		"error", err.Error(),
+	)
+
 	// Execute OnError hooks (always fire, even if already responded,
 	// so logging/metrics hooks still work)
 	for _, hook := range app.hooks.OnError {
@@ -604,6 +619,25 @@ func (app *App) handleError(c *Ctx, err error) {
 		if devErr := renderDevErrorPage(c, err, ke.Code); devErr != nil {
 			return // dev page rendered successfully
 		}
+	}
+
+	// R7.1-R7.6: Sanitize error response in production mode
+	if !app.config.DevMode {
+		var krudaErr *KrudaError
+		isKrudaError := errors.As(err, &krudaErr)
+
+		if !isKrudaError && !ke.mapped {
+			// R7.6: Raw Go error (not KrudaError, not mapped) → replace message with HTTP status text
+			ke.Message = http.StatusText(ke.Code)
+			if ke.Message == "" {
+				ke.Message = "Internal Server Error"
+			}
+			ke.Detail = ""
+		} else if ke.Code >= 500 {
+			// R7.2: KrudaError or mapped error with 5xx → preserve user-facing Message, strip Detail
+			ke.Detail = ""
+		}
+		// R7.5: KrudaError/mapped error with 4xx → preserve Message and Detail as-is (user-facing)
 	}
 
 	// Use custom error handler if configured

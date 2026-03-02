@@ -22,8 +22,8 @@ var (
 
 // parseHTTPRequest parses a raw HTTP/1.1 request from buf.
 // All strings are safe copies (no reference to buf after return).
-// Returns nil, false if the request is incomplete.
-func parseHTTPRequest(data []byte) (*wingRequest, bool) {
+// Returns nil, false if the request is incomplete or exceeds limits.
+func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 	// Find end of headers.
 	headerEnd := bytes.Index(data, crlfcrlf)
 	if headerEnd < 0 {
@@ -42,7 +42,7 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 	}
 
 	sp1 := bytes.IndexByte(line, ' ')
-	if sp1 < 0 {
+	if sp1 <= 0 {
 		return nil, false
 	}
 	sp2 := bytes.IndexByte(line[sp1+1:], ' ')
@@ -50,10 +50,24 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 		return nil, false
 	}
 	sp2 += sp1 + 1
+	if sp2 <= sp1+1 {
+		return nil, false
+	}
+
+	// Validate request line format — version must start with "HTTP/".
+	version := line[sp2+1:]
+	if len(version) < 5 || !bytes.Equal(version[:5], bHTTPVersionPrefix) {
+		return nil, false
+	}
 
 	// Safe copies via string().
 	method := string(line[:sp1])
 	rawPath := line[sp1+1 : sp2]
+
+	// Request-target must start with '/' or be exactly '*'.
+	if len(rawPath) == 0 || (rawPath[0] != '/' && !bytes.Equal(rawPath, bStar)) {
+		return nil, false
+	}
 
 	path := string(rawPath)
 	query := ""
@@ -66,6 +80,10 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 	contentLength := 0
 	contentType := ""
 	keepAlive := true // HTTP/1.1 default
+	headerCount := 0
+	contentLengthSeen := false
+	hasTE := false            
+	hasCL := false            
 
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -75,6 +93,11 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 			hline = data[pos:headerEnd]
 			pos = headerEnd
 		} else {
+			// Reject bare LF (without preceding CR) as line terminator.
+			absIdx := pos + nlIdx
+			if absIdx == 0 || data[absIdx-1] != '\r' {
+				return nil, false
+			}
 			hline = data[pos : pos+nlIdx]
 			pos += nlIdx + 1
 		}
@@ -86,11 +109,44 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 		if colon < 0 {
 			continue
 		}
+
+		// R1: header count limit (only when configured > 0).
+		headerCount++
+		if limits.maxHeaderCount > 0 && headerCount > limits.maxHeaderCount {
+			return nil, false
+		}
+
+		// R1: header size limit — full line (key + ":" + value).
+		if limits.maxHeaderSize > 0 && len(hline) > limits.maxHeaderSize {
+			return nil, false
+		}
+
 		key := bytes.TrimSpace(hline[:colon])
 		val := bytes.TrimSpace(hline[colon+1:])
 
+		// Validate header name characters (RFC 7230 token set).
+		if !isValidTokenName(key) {
+			return nil, false
+		}
+
+		// Reject bare CR or LF in header values (CRLF injection).
+		if containsCRLF(val) {
+			return nil, false
+		}
+
 		switch {
 		case len(key) == 14 && asciiEqualFold(key, bContentLength):
+			// Reject duplicate Content-Length headers.
+			if contentLengthSeen {
+				return nil, false
+			}
+			contentLengthSeen = true
+			hasCL = true
+
+			// Reject non-numeric Content-Length values.
+			if !isAllDigits(val) {
+				return nil, false
+			}
 			contentLength = btoi(val)
 		case len(key) == 12 && asciiEqualFold(key, bContentType):
 			contentType = string(val)
@@ -98,7 +154,14 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
 			}
+		case len(key) == 17 && asciiEqualFold(key, bTransferEncoding):
+			hasTE = true
 		}
+	}
+
+	// Reject requests with both Transfer-Encoding and Content-Length (RFC 7230 §3.3.3).
+	if hasTE && hasCL {
+		return nil, false
 	}
 
 	// Verify body completeness.
@@ -124,12 +187,43 @@ func parseHTTPRequest(data []byte) (*wingRequest, bool) {
 }
 
 var (
-	crlfcrlf       = []byte("\r\n\r\n")
-	bContentLength = []byte("content-length")
-	bContentType   = []byte("content-type")
-	bConnection    = []byte("connection")
-	bClose         = []byte("close")
+	crlfcrlf           = []byte("\r\n\r\n")
+	bContentLength     = []byte("content-length")
+	bContentType       = []byte("content-type")
+	bConnection        = []byte("connection")
+	bClose             = []byte("close")
+	bTransferEncoding  = []byte("transfer-encoding")
+	bHTTPVersionPrefix = []byte("HTTP/")
+	bStar              = []byte("*")
 )
+
+// noLimits is a zero-value parserLimits (all unlimited).
+var noLimits = parserLimits{}
+
+// tokenTable is a lookup table for RFC 7230 token characters.
+// token = 1*tchar
+// tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+//
+//	"^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+var tokenTable [128]bool
+
+func init() {
+	// DIGIT
+	for c := '0'; c <= '9'; c++ {
+		tokenTable[c] = true
+	}
+	// ALPHA
+	for c := 'A'; c <= 'Z'; c++ {
+		tokenTable[c] = true
+	}
+	for c := 'a'; c <= 'z'; c++ {
+		tokenTable[c] = true
+	}
+	// Special tchar
+	for _, c := range "!#$%&'*+-.^_`|~" {
+		tokenTable[c] = true
+	}
+}
 
 func asciiEqualFold(a []byte, b []byte) bool {
 	if len(a) != len(b) {
@@ -166,6 +260,43 @@ func btoi(b []byte) int {
 	return n
 }
 
+// isValidTokenName checks that every byte in name is a valid RFC 7230 token character.
+// Uses the pre-computed tokenTable for O(1) per character lookup.
+func isValidTokenName(name []byte) bool {
+	if len(name) == 0 {
+		return false
+	}
+	for _, c := range name {
+		if c >= 128 || !tokenTable[c] {
+			return false
+		}
+	}
+	return true
+}
+
+// containsCRLF returns true if b contains any bare CR or LF character.
+func containsCRLF(b []byte) bool {
+	for _, c := range b {
+		if c == '\r' || c == '\n' {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllDigits returns true if b is non-empty and every byte is an ASCII digit.
+func isAllDigits(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	for _, c := range b {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // ----------------------------- request adapter -----------------------------
 
 // wingRequest implements transport.Request with safe-copied strings.
@@ -178,14 +309,14 @@ type wingRequest struct {
 	keepAlive   bool
 }
 
-func (r *wingRequest) Method() string                                  { return r.method }
-func (r *wingRequest) Path() string                                    { return r.path }
-func (r *wingRequest) Body() ([]byte, error)                           { return r.body, nil }
-func (r *wingRequest) RemoteAddr() string                              { return "" }
-func (r *wingRequest) RawRequest() any                                 { return nil }
-func (r *wingRequest) Context() context.Context                        { return context.Background() }
-func (r *wingRequest) Cookie(_ string) string                          { return "" }
-func (r *wingRequest) MultipartForm(_ int64) (*multipart.Form, error)  { return nil, nil }
+func (r *wingRequest) Method() string                                 { return r.method }
+func (r *wingRequest) Path() string                                   { return r.path }
+func (r *wingRequest) Body() ([]byte, error)                          { return r.body, nil }
+func (r *wingRequest) RemoteAddr() string                             { return "" }
+func (r *wingRequest) RawRequest() any                                { return nil }
+func (r *wingRequest) Context() context.Context                       { return context.Background() }
+func (r *wingRequest) Cookie(_ string) string                         { return "" }
+func (r *wingRequest) MultipartForm(_ int64) (*multipart.Form, error) { return nil, nil }
 
 func (r *wingRequest) Header(key string) string {
 	if key == "Content-Type" || key == "content-type" {
@@ -251,8 +382,8 @@ type wingResponse struct {
 	buf     []byte // scratch buffer for serialization
 }
 
-func (r *wingResponse) WriteHeader(code int)            { r.status = code }
-func (r *wingResponse) Header() transport.HeaderMap      { return &r.headers }
+func (r *wingResponse) WriteHeader(code int)        { r.status = code }
+func (r *wingResponse) Header() transport.HeaderMap { return &r.headers }
 func (r *wingResponse) Write(data []byte) (int, error) {
 	r.body = append(r.body, data...)
 	return len(data), nil
@@ -284,8 +415,6 @@ func init() {
 // SAFETY: The wingResponse is returned to pool AFTER conn.sendBuf is set,
 // but the underlying array is NOT reused until releaseResponse is called
 // on the NEXT request cycle, by which time the send has completed.
-// Actually — we must NOT return the buf to pool while sendBuf points to it.
-// Solution: swap buf out of the wingResponse before releasing to pool.
 func (r *wingResponse) buildZeroCopy() []byte {
 	b := r.buf[:0]
 

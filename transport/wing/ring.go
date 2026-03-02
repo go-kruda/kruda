@@ -6,6 +6,7 @@
 package wing
 
 import (
+	"fmt"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
@@ -57,32 +58,32 @@ type ioUringParams struct {
 
 type sqringOffsets struct {
 	head, tail, ringMask, ringEntries uint32
-	flags, dropped, array, resv1     uint32
-	userAddr                         uint64
+	flags, dropped, array, resv1      uint32
+	userAddr                          uint64
 }
 
 type cqringOffsets struct {
 	head, tail, ringMask, ringEntries uint32
-	overflow, cqes, flags, resv1     uint32
-	userAddr                         uint64
+	overflow, cqes, flags, resv1      uint32
+	userAddr                          uint64
 }
 
 // SQE is a Submission Queue Entry (64 bytes, matches kernel layout).
 type SQE struct {
-	Opcode     uint8
-	Flags      uint8
-	Ioprio     uint16
-	Fd         int32
-	Off        uint64
-	Addr       uint64
-	Len        uint32
-	OpcFlags   uint32
-	UserData   uint64
-	BufIndex   uint16
+	Opcode      uint8
+	Flags       uint8
+	Ioprio      uint16
+	Fd          int32
+	Off         uint64
+	Addr        uint64
+	Len         uint32
+	OpcFlags    uint32
+	UserData    uint64
+	BufIndex    uint16
 	Personality uint16
-	SpliceFdIn int32
-	Addr3      uint64
-	_pad       uint64
+	SpliceFdIn  int32
+	Addr3       uint64
+	_pad        uint64
 }
 
 // CQE is a Completion Queue Event (16 bytes, matches kernel layout).
@@ -103,17 +104,17 @@ type Ring struct {
 	sqeTail uint32 // prepared up to here
 
 	// Kernel-shared SQ pointers.
-	sqKHead *uint32         // kernel writes (consumed head)
-	sqKTail *uint32         // we write (submitted tail)
-	sqMask  uint32          // ring_entries - 1
-	sqArr   unsafe.Pointer  // *[N]uint32 index array
-	sqes    unsafe.Pointer  // *[N]SQE
+	sqKHead *uint32        // kernel writes (consumed head)
+	sqKTail *uint32        // we write (submitted tail)
+	sqMask  uint32         // ring_entries - 1
+	sqArr   unsafe.Pointer // *[N]uint32 index array
+	sqes    unsafe.Pointer // *[N]SQE
 
 	// Kernel-shared CQ pointers.
-	cqKHead *uint32         // we write (consumed head)
-	cqKTail *uint32         // kernel writes (completed tail)
+	cqKHead *uint32 // we write (consumed head)
+	cqKTail *uint32 // kernel writes (completed tail)
 	cqMask  uint32
-	cqesPtr unsafe.Pointer  // *[N]CQE
+	cqesPtr unsafe.Pointer // *[N]CQE
 
 	// For munmap cleanup.
 	sqRingMem []byte
@@ -155,9 +156,18 @@ func (r *Ring) mapRings(p *ioUringParams) error {
 	var err error
 	r.sqRingMem, err = syscall.Mmap(r.fd, offSQRing, sqRingSz,
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED|syscall.MAP_POPULATE)
-	if err != nil {
-		return err
+	if err != nil || len(r.sqRingMem) == 0 {
+		return fmt.Errorf("wing: mmap sq ring failed: %w", err)
 	}
+
+	// Bounds check SQ offsets before pointer arithmetic.
+	sqBufLen := uint32(len(r.sqRingMem))
+	if sq.head >= sqBufLen || sq.tail >= sqBufLen || sq.ringMask >= sqBufLen || sq.array >= sqBufLen {
+		syscall.Munmap(r.sqRingMem)
+		r.sqRingMem = nil
+		return fmt.Errorf("wing: sq ring offsets out of bounds")
+	}
+
 	base := unsafe.Pointer(&r.sqRingMem[0])
 	r.sqKHead = (*uint32)(unsafe.Add(base, sq.head))
 	r.sqKTail = (*uint32)(unsafe.Add(base, sq.tail))
@@ -165,34 +175,56 @@ func (r *Ring) mapRings(p *ioUringParams) error {
 	r.sqArr = unsafe.Add(base, sq.array)
 
 	// --- CQ ring ---
+	var cqBase unsafe.Pointer
 	if singleMmap {
 		r.cqRingMem = nil // same mapping
-		base = unsafe.Pointer(&r.sqRingMem[0])
+		cqBase = unsafe.Pointer(&r.sqRingMem[0])
 	} else {
 		cqRingSz := int(cq.cqes) + int(p.cqEntries)*int(unsafe.Sizeof(CQE{}))
 		r.cqRingMem, err = syscall.Mmap(r.fd, offCQRing, cqRingSz,
 			syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED|syscall.MAP_POPULATE)
-		if err != nil {
+		if err != nil || len(r.cqRingMem) == 0 {
 			syscall.Munmap(r.sqRingMem)
-			return err
+			r.sqRingMem = nil
+			return fmt.Errorf("wing: mmap cq ring failed: %w", err)
 		}
-		base = unsafe.Pointer(&r.cqRingMem[0])
+		cqBase = unsafe.Pointer(&r.cqRingMem[0])
 	}
-	r.cqKHead = (*uint32)(unsafe.Add(base, cq.head))
-	r.cqKTail = (*uint32)(unsafe.Add(base, cq.tail))
-	r.cqMask = *(*uint32)(unsafe.Add(base, cq.ringMask))
-	r.cqesPtr = unsafe.Add(base, cq.cqes)
+
+	// Bounds check CQ offsets before pointer arithmetic.
+	var cqBufLen uint32
+	if singleMmap {
+		cqBufLen = sqBufLen
+	} else {
+		cqBufLen = uint32(len(r.cqRingMem))
+	}
+	if cq.head >= cqBufLen || cq.tail >= cqBufLen || cq.ringMask >= cqBufLen || cq.cqes >= cqBufLen {
+		if r.cqRingMem != nil {
+			syscall.Munmap(r.cqRingMem)
+			r.cqRingMem = nil
+		}
+		syscall.Munmap(r.sqRingMem)
+		r.sqRingMem = nil
+		return fmt.Errorf("wing: cq ring offsets out of bounds")
+	}
+
+	r.cqKHead = (*uint32)(unsafe.Add(cqBase, cq.head))
+	r.cqKTail = (*uint32)(unsafe.Add(cqBase, cq.tail))
+	r.cqMask = *(*uint32)(unsafe.Add(cqBase, cq.ringMask))
+	r.cqesPtr = unsafe.Add(cqBase, cq.cqes)
 
 	// --- SQE array ---
 	sqeSz := int(p.sqEntries) * int(unsafe.Sizeof(SQE{}))
 	r.sqeMem, err = syscall.Mmap(r.fd, offSQEs, sqeSz,
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED|syscall.MAP_POPULATE)
-	if err != nil {
+	if err != nil || len(r.sqeMem) == 0 {
 		if r.cqRingMem != nil {
 			syscall.Munmap(r.cqRingMem)
+			r.cqRingMem = nil
 		}
 		syscall.Munmap(r.sqRingMem)
-		return err
+		r.sqRingMem = nil
+		return fmt.Errorf("wing: mmap sqes failed: %w", err)
 	}
 	r.sqes = unsafe.Pointer(&r.sqeMem[0])
 	return nil
@@ -202,6 +234,9 @@ func (r *Ring) mapRings(p *ioUringParams) error {
 
 // GetSQE returns the next available SQE, or nil if the submission queue is full.
 func (r *Ring) GetSQE() *SQE {
+	if r.sqes == nil {
+		return nil
+	}
 	head := atomic.LoadUint32(r.sqKHead)
 	if r.sqeTail-head > r.sqMask {
 		return nil
@@ -265,6 +300,9 @@ func (r *Ring) SubmitAndWait(waitNr uint32) (int, error) {
 
 // PeekCQE returns the next CQE without consuming it, or nil.
 func (r *Ring) PeekCQE() *CQE {
+	if r.cqesPtr == nil {
+		return nil
+	}
 	head := atomic.LoadUint32(r.cqKHead)
 	tail := atomic.LoadUint32(r.cqKTail)
 	if head == tail {

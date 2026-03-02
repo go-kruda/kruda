@@ -16,9 +16,12 @@ var _ transport.Transport = (*Transport)(nil)
 
 // Config holds Wing transport settings.
 type Config struct {
-	Workers     int    // worker count (0 = NumCPU)
-	RingSize    uint32 // engine ring/event capacity (0 = 4096)
-	ReadBufSize int    // per-conn read buffer (0 = 8192)
+	Workers           int    // worker count (0 = NumCPU)
+	RingSize          uint32 // engine ring/event capacity (0 = 4096)
+	ReadBufSize       int    // per-conn read buffer (0 = 8192)
+	MaxHeaderCount    int    // max headers per request (0 = unlimited, recommended: 100)
+	MaxHeaderSize     int    // max single header size in bytes (0 = unlimited, recommended: 8192)
+	MaxConnsPerWorker int    // max concurrent connections per worker (0 = unlimited, recommended: 10000)
 }
 
 func (c *Config) defaults() {
@@ -34,7 +37,7 @@ func (c *Config) defaults() {
 }
 
 // Transport implements transport.Transport using platform-native async I/O.
-// Linux: io_uring, macOS: kqueue, Windows: IOCP.
+// Linux: io_uring, macOS: kqueue.
 type Transport struct {
 	config   Config
 	workers  []*worker
@@ -121,14 +124,23 @@ func (t *Transport) cleanupWorkers(upTo int) {
 // maxEventsPerWait is the maximum events drained per Wait call.
 const maxEventsPerWait = 128
 
+// parserLimits holds HTTP parser limits, created once per worker at init.
+// Zero values mean unlimited (opt-in enforcement).
+type parserLimits struct {
+	maxHeaderCount int
+	maxHeaderSize  int
+}
+
 type worker struct {
 	id       int
 	listenFd int
 	eng      engine
 	handler  transport.Handler
 	config   Config
+	limits   parserLimits
+	maxConns int
 	conns    map[int32]*conn
-	events   [maxEventsPerWait]event // reused per Wait call
+	events   [maxEventsPerWait]event
 	pipeR    int
 	pipeW    int
 	pipeBuf  [8]byte
@@ -174,6 +186,8 @@ func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker
 		eng:      eng,
 		handler:  handler,
 		config:   cfg,
+		limits:   parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
+		maxConns: cfg.MaxConnsPerWorker,
 		conns:    make(map[int32]*conn, 1024),
 		pipeR:    pipeR,
 		pipeW:    pipeW,
@@ -230,6 +244,13 @@ func (w *worker) handleAccept(res int32) {
 		return
 	}
 	fd := res
+
+	// Connection limit check (0 = unlimited).
+	if w.maxConns > 0 && len(w.conns) >= w.maxConns {
+		closeFd(int(fd))
+		return
+	}
+
 	setTCPNodelay(fd)
 
 	c := &conn{
@@ -253,7 +274,7 @@ func (w *worker) handleRecv(fd, res int32) {
 
 	c.readN += int(res)
 
-	req, ok := parseHTTPRequest(c.readBuf[:c.readN])
+	req, ok := parseHTTPRequest(c.readBuf[:c.readN], w.limits)
 	if !ok {
 		if c.readN >= len(c.readBuf) {
 			w.closeConn(fd) // buffer full, no valid request
@@ -263,10 +284,18 @@ func (w *worker) handleRecv(fd, res int32) {
 		return
 	}
 
+	// Outer recovery — close fd on any panic during request handling.
+	// Protects the event loop from panics in handler, response build, or send.
+	defer func() {
+		if r := recover(); r != nil {
+			w.closeConn(fd)
+		}
+	}()
+
 	// OPTIMIZATION: Inline handler — run handler directly in event loop.
 	// Eliminates goroutine spawn + channel + pipe syscall per request.
 	//
-	// SAFETY: recover from handler panics to protect the event loop.
+	// SAFETY: inner recovery catches handler panics and writes a 500 response.
 	resp := acquireResponse()
 	func() {
 		defer func() {
@@ -290,6 +319,13 @@ func (w *worker) handleRecv(fd, res int32) {
 
 // dispatchAsync falls back to goroutine dispatch (for future slow-handler detection).
 func (w *worker) dispatchAsync(fd int32, req *wingRequest) {
+	// Close fd on any panic during async request handling.
+	defer func() {
+		if r := recover(); r != nil {
+			w.closeConn(fd)
+		}
+	}()
+
 	resp := acquireResponse()
 	func() {
 		defer func() {
@@ -359,7 +395,7 @@ func (w *worker) handleWake() {
 
 // closeConn eagerly removes the connection from the map and submits a close.
 // On Linux (io_uring), close is async and opClose fires later — the extra
-// delete is a harmless no-op. On macOS (kqueue) and Windows (IOCP), close is
+// delete is a harmless no-op. On macOS (kqueue), close is
 // synchronous and no opClose event is emitted, so the eager delete prevents
 // a map leak.
 func (w *worker) closeConn(fd int32) {

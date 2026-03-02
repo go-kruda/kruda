@@ -1,6 +1,6 @@
 module techempower-kruda
 
-go 1.24.0
+go 1.25.7
 
 replace github.com/go-kruda/kruda => ../../../../
 

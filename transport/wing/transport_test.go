@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -249,14 +248,14 @@ func TestCreateListenFd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createListenFd failed: %v", err)
 	}
-	defer syscall.Close(fd1)
+	defer closeFd(fd1)
 
 	// SO_REUSEPORT should allow a second bind on the same address.
 	fd2, err := createListenFd(addr)
 	if err != nil {
 		t.Fatalf("second createListenFd failed (SO_REUSEPORT not working): %v", err)
 	}
-	defer syscall.Close(fd2)
+	defer closeFd(fd2)
 }
 
 // TestShutdownGraceful verifies clean shutdown.

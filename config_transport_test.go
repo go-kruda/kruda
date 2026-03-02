@@ -18,7 +18,7 @@ func discardLogger() *slog.Logger {
 func TestSelectTransport_DefaultReturnsFastHTTP(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")
 	}
@@ -36,7 +36,7 @@ func TestSelectTransport_ExplicitTransport(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	cfg.Transport = custom
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr != custom {
 		t.Error("expected explicit Transport to take priority")
 	}
@@ -46,9 +46,12 @@ func TestSelectTransport_NetHTTPOption(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	cfg.TransportName = "nethttp" // set by NetHTTP() option
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, name := selectTransport(cfg, cfg.Logger)
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected *transport.NetHTTPTransport, got %T", tr)
+	}
+	if name != "nethttp" {
+		t.Errorf("expected transport name 'nethttp', got %q", name)
 	}
 }
 
@@ -56,7 +59,7 @@ func TestSelectTransport_DefaultSelectsFastHTTP(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	// TransportName defaults to "" → fasthttp
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil for default")
 	}
@@ -67,10 +70,13 @@ func TestSelectTransport_AutoTLSUsesNetHTTP(t *testing.T) {
 	cfg.Logger = discardLogger()
 	cfg.TLSCertFile = "cert.pem"
 	cfg.TLSKeyFile = "key.pem"
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, name := selectTransport(cfg, cfg.Logger)
 	// Auto + TLS → always net/http for HTTP/2.
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected auto+TLS to select *transport.NetHTTPTransport, got %T", tr)
+	}
+	if name != "nethttp" {
+		t.Errorf("expected transport name 'nethttp' for TLS, got %q", name)
 	}
 }
 
@@ -81,7 +87,7 @@ func TestSelectTransport_EnvOverride(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	// TransportName is empty — env should take effect
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected *transport.NetHTTPTransport from env override, got %T", tr)
 	}
@@ -95,7 +101,7 @@ func TestSelectTransport_ExplicitTransportOverridesEnv(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	cfg.Transport = custom
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr != custom {
 		t.Error("explicit WithTransport should override KRUDA_TRANSPORT env")
 	}
@@ -108,7 +114,7 @@ func TestSelectTransport_ExplicitOptionOverridesEnv(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	cfg.TransportName = "nethttp" // set by NetHTTP() option
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	// Explicit TransportName set, env should NOT override
 	if _, ok := tr.(*transport.NetHTTPTransport); !ok {
 		t.Errorf("expected NetHTTP() to override env, got %T", tr)
@@ -122,7 +128,7 @@ func TestSelectTransport_ConfigPassthrough(t *testing.T) {
 	cfg.WriteTimeout = 10e9 // 10s
 	cfg.BodyLimit = 1024
 	cfg.TrustProxy = true
-	tr := selectTransport(cfg, cfg.Logger)
+	tr, _ := selectTransport(cfg, cfg.Logger)
 	// Just verify it returns a valid transport — config passthrough is internal
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")

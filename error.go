@@ -13,6 +13,7 @@ type KrudaError struct {
 	Message string `json:"message"`
 	Detail  string `json:"detail,omitempty"`
 	Err     error  `json:"-"`
+	mapped  bool   // true when error was resolved via MapError/MapErrorFunc/MapErrorType
 }
 
 // Error implements the error interface.
@@ -147,13 +148,16 @@ func (app *App) resolveError(err error) *KrudaError {
 				Message: mapping.Message,
 				Detail:  err.Error(),
 				Err:     err,
+				mapped:  true,
 			}
 		}
 	}
 
 	for _, ef := range app.errorFuncs {
 		if errors.Is(err, ef.target) {
-			return ef.fn(err)
+			ke := ef.fn(err)
+			ke.mapped = true
+			return ke
 		}
 	}
 
@@ -167,6 +171,7 @@ func (app *App) resolveError(err error) *KrudaError {
 				Message: et.message,
 				Detail:  err.Error(),
 				Err:     err,
+				mapped:  true,
 			}
 		}
 	}

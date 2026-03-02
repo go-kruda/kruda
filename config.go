@@ -78,17 +78,17 @@ type SecurityConfig struct {
 // defaultConfig returns the default configuration.
 func defaultConfig() Config {
 	return Config{
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     120 * time.Second,
-		BodyLimit:       4 * 1024 * 1024, // 4MB
-		HeaderLimit:     8 * 1024,        // 8KB
-		ShutdownTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		BodyLimit:         4 * 1024 * 1024, // 4MB
+		HeaderLimit:       8 * 1024,        // 8KB
+		ShutdownTimeout:   10 * time.Second,
 		JSONEncoder:       krudajson.Marshal,
 		JSONDecoder:       krudajson.Unmarshal,
 		JSONStreamEncoder: krudajson.MarshalToBuffer,
-		Logger:          slog.Default(),
-		SecurityHeaders: false,
+		Logger:            slog.Default(),
+		SecurityHeaders:   false,
 		Security: SecurityConfig{
 			XSSProtection:      "0",
 			ContentTypeNosniff: "nosniff",
@@ -199,7 +199,7 @@ func NetHTTP() Option {
 // Wing selects the Wing transport for maximum performance.
 // Wing uses io_uring on Linux and kqueue on macOS for async I/O
 // without goroutine-per-connection overhead — 2x+ faster than fasthttp.
-// On unsupported platforms (Windows), falls back to fasthttp automatically.
+// On unsupported platforms, falls back to fasthttp automatically.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
 }
@@ -419,10 +419,10 @@ func WithOpenAPITag(name, description string) Option {
 // selectTransport chooses the transport based on config, env, and OS.
 // Priority: explicit WithTransport() > FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default (fasthttp).
 // Default is fasthttp for maximum performance. TLS or Windows auto-falls back to net/http.
-func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
+func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, string) {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {
-		return cfg.Transport
+		return cfg.Transport, cfg.TransportName
 	}
 
 	name := cfg.TransportName
@@ -448,25 +448,25 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	switch name {
 	case "nethttp":
 		logger.Debug("transport selected", "name", "nethttp")
-		return transport.NewNetHTTP(netHTTPCfg)
+		return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 	case "wing":
 		// TLS → force net/http for HTTP/2.
 		if cfg.TLSCertFile != "" {
 			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
-			return transport.NewNetHTTP(netHTTPCfg)
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
-		return newWingTransport(cfg, logger)
+		return newWingTransport(cfg, logger), "wing"
 	default: // "fasthttp" or any other value
 		// TLS → force net/http for HTTP/2 auto-negotiation.
 		if cfg.TLSCertFile != "" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "tls")
-			return transport.NewNetHTTP(netHTTPCfg)
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
 		// Windows → force net/http (fasthttp has build tag !windows).
 		if runtime.GOOS == "windows" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "windows")
-			return transport.NewNetHTTP(netHTTPCfg)
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
-		return newFastHTTPTransport(cfg, logger)
+		return newFastHTTPTransport(cfg, logger), "fasthttp"
 	}
 }

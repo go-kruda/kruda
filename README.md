@@ -2,7 +2,7 @@
 
 Type-safe Go web framework with auto-everything.
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
 [![Coverage](https://codecov.io/gh/go-kruda/kruda/branch/main/graph/badge.svg)](https://codecov.io/gh/go-kruda/kruda)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-kruda/kruda)](https://goreportcard.com/report/github.com/go-kruda/kruda)
@@ -122,6 +122,71 @@ Full documentation at [kruda.dev](https://kruda.dev):
 - [DI Container](https://kruda.dev/guide/di-container)
 - [Error Handling](https://kruda.dev/guide/error-handling)
 - [API Reference](https://kruda.dev/api/app)
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for our responsible disclosure policy.
+
+### Security Hardening (Recommended)
+
+```go
+import (
+    "os"
+    "time"
+
+    "github.com/go-kruda/kruda"
+    "github.com/go-kruda/kruda/middleware"
+    "github.com/go-kruda/kruda/contrib/jwt"
+    "github.com/go-kruda/kruda/contrib/ratelimit"
+)
+
+app := kruda.New(
+    // Parser limits (Wing transport)
+    kruda.WithMaxHeaderCount(100),
+    kruda.WithMaxHeaderSize(8192),
+)
+
+// Rate limiting — 100 req/min per IP
+app.Use(ratelimit.New(ratelimit.Config{
+    Max: 100, Window: time.Minute,
+    TrustedProxies: []string{"10.0.0.0/8"},
+}))
+
+// Stricter limit on auth endpoints
+app.Use(ratelimit.ForRoute("/api/login", 5, time.Minute))
+
+// JWT authentication on protected routes
+api := app.Group("/api", jwt.New(jwt.Config{
+    Secret: []byte(os.Getenv("JWT_SECRET")),
+}))
+```
+
+### Contrib Modules
+
+| Module | Install | Description |
+|--------|---------|-------------|
+| [contrib/jwt](contrib/jwt/) | `go get github.com/go-kruda/kruda/contrib/jwt` | JWT sign, verify, refresh (HS256/384/512, RS256) |
+| [contrib/ws](contrib/ws/) | `go get github.com/go-kruda/kruda/contrib/ws` | WebSocket upgrade, RFC 6455 frames, ping/pong |
+| [contrib/ratelimit](contrib/ratelimit/) | `go get github.com/go-kruda/kruda/contrib/ratelimit` | Token bucket / sliding window rate limiting |
+
+### Pre-release Checklist
+
+Run vulnerability scan before every release:
+
+```bash
+# Install govulncheck (one-time)
+go install golang.org/x/vuln/cmd/govulncheck@latest
+
+# Scan root module
+govulncheck ./...
+
+# Scan Wing transport module
+cd transport/wing && govulncheck ./...
+```
+
+Kruda core has zero external dependencies — all vulnerabilities will be Go stdlib issues. Upgrade to the latest Go patch release to resolve them.
+
+**Minimum Go version for zero stdlib vulnerabilities:** go1.25.7+
 
 ## Contributing
 

@@ -33,6 +33,13 @@ CLAUDE.md
 .claude/
 .plan
 KIRO_*.md
+.github/copilot-instructions.md
+
+# Internal planning docs
+LAUNCH_PLAN.md
+docs/architecture-analysis.md
+docs/PLAYGROUND_DEPLOYMENT.md
+docs/ux/
 
 # Build output (root-level compiled binaries from examples)
 /auth
@@ -47,11 +54,15 @@ KIRO_*.md
 /typed-handlers
 /kruda
 cmd/kruda/kruda
+examples/websocket/websocket
+examples/ratelimit/ratelimit
 
 # Bench artifacts
 bench/*.txt
 bench/*.prof
 bench/bench.test
+bench/tfb/fiber/bench-fiber
+bench/tfb/fiber/
 
 bench/tfb/results/
 frameworks/Go/kruda/src/techempower-kruda

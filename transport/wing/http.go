@@ -516,6 +516,8 @@ type wingResponse struct {
 	buf        []byte // scratch buffer for serialization
 	staticResp []byte // pre-built full response (if set, buildZeroCopy returns this)
 	jsonFast   bool   // SetJSON fast path — skip header interface, write status+json directly
+	fileFd     int32  // sendfile fd (0 = not a file response)
+	fileSize   int64  // sendfile byte count
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -527,6 +529,12 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
 func (r *wingResponse) SetStaticText(status int, contentType, text string) {
 	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
+}
+
+// SetSendFile configures the response to use sendfile(2) for zero-copy file transfer.
+func (r *wingResponse) SetSendFile(fd int32, size int64) {
+	r.fileFd = fd
+	r.fileSize = size
 }
 func (r *wingResponse) SetJSON(status int, data []byte) {
 	r.status = status
@@ -607,6 +615,11 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	if r.staticResp != nil {
 		return r.staticResp
 	}
+
+	// Sendfile path: build headers only, body sent via sendfile(2).
+	if r.fileFd > 0 {
+		return r.buildHeadersOnly()
+	}
 	b := r.buf[:0]
 
 	// JSON fast path — status + Date+Server + Content-Type:json + Content-Length + body
@@ -666,9 +679,30 @@ func (r *wingResponse) build() []byte {
 	b := r.buildZeroCopy()
 	out := make([]byte, len(b))
 	copy(out, b)
-	// Restore buf to pool (we made a copy).
 	r.buf = b
 	return out
+}
+
+// buildHeadersOnly builds HTTP headers without body (for sendfile responses).
+func (r *wingResponse) buildHeadersOnly() []byte {
+	b := r.buf[:0]
+	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
+		b = append(b, statusLines[r.status]...)
+	} else {
+		b = append(b, "HTTP/1.1 200 OK\r\n"...)
+	}
+	b = append(b, dateHdr()...)
+	for i := 0; i < r.headers.count; i++ {
+		b = append(b, r.headers.keys[i]...)
+		b = append(b, ": "...)
+		b = append(b, r.headers.vals[i]...)
+		b = append(b, "\r\n"...)
+	}
+	b = append(b, "Content-Length: "...)
+	b = strconv.AppendInt(b, r.fileSize, 10)
+	b = append(b, "\r\n\r\n"...)
+	r.buf = nil
+	return b
 }
 
 func statusText(code int) string {

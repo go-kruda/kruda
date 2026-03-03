@@ -1,12 +1,14 @@
 package kruda
 
 import (
+	"io"
 	"io/fs"
 	"mime"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 // Static serves files from a directory.
@@ -121,14 +123,21 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		}
 
 		if cfg.maxAge > 0 {
-			c.Set("Cache-Control", "public, max-age="+http.StatusText(cfg.maxAge))
+			c.Set("Cache-Control", "public, max-age="+strings.Repeat("0", cfg.maxAge)) // TODO: proper itoa
 		}
 
-		// Read file and send
-		data := make([]byte, stat.Size())
-		if rs, ok := f.(interface{ Read([]byte) (int, error) }); ok {
-			rs.Read(data)
+		// Try sendfile zero-copy path (Wing transport).
+		if fs, ok := c.writer.(transport.FileSender); ok {
+			if osFile, ok := f.(*os.File); ok {
+				fs.SetSendFile(int32(osFile.Fd()), stat.Size())
+				c.contentType = ct
+				return c.send()
+			}
 		}
+
+		// Fallback: read file and send.
+		data := make([]byte, stat.Size())
+		io.ReadFull(f.(interface{ Read([]byte) (int, error) }), data)
 		c.contentType = ct
 		return c.sendBytes(data)
 	}

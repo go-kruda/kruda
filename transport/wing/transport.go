@@ -194,6 +194,8 @@ type conn struct {
 	readDeadline int64 // unix nano — set when first byte arrives, cleared on full request
 	ctx          context.Context
 	cancel       context.CancelFunc
+	sendFileFd   int32 // sendfile: source fd (0 = none)
+	sendFileSize int64 // sendfile: remaining bytes
 }
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -530,6 +532,17 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				w.handler.ServeKruda(resp, req)
+				if resp.fileFd > 0 {
+					// Sendfile path: write headers, then sendfile for body.
+					hdr := resp.buildZeroCopy()
+					c.keepAlive = req.keepAlive
+					c.sendBuf = append(c.sendBuf, hdr...)
+					c.sendFileFd = resp.fileFd
+					c.sendFileSize = resp.fileSize
+					releaseResponse(resp)
+					releaseRequest(req)
+					break
+				}
 				data := resp.buildZeroCopy()
 				c.keepAlive = req.keepAlive
 				c.sendBuf = append(c.sendBuf, data...)
@@ -678,6 +691,19 @@ func (w *worker) directSend(c *conn) {
 	}
 	c.sendBuf = c.sendBuf[:0]
 	c.sendN = 0
+	// Sendfile: transfer file body after headers are written.
+	if c.sendFileFd > 0 {
+		for c.sendFileSize > 0 {
+			n, err := sendfile(c.fd, c.sendFileFd, nil, int(c.sendFileSize))
+			if err != nil {
+				w.closeConn(c.fd)
+				return
+			}
+			c.sendFileSize -= int64(n)
+		}
+		syscall.Close(int(c.sendFileFd))
+		c.sendFileFd = 0
+	}
 	if !c.keepAlive {
 		w.closeConn(c.fd)
 		return

@@ -74,6 +74,12 @@ type StaticTextResponder interface {
 	SetStaticText(status int, contentType, text string)
 }
 
+// FileSender is an optional interface for ResponseWriters that support
+// sendfile(2) zero-copy file transfer (e.g., Wing transport).
+type FileSender interface {
+	SetSendFile(fd int32, size int64)
+}
+
 // JSONResponder is an optional interface for ResponseWriters that support
 // a zero-copy JSON fast path — bypasses header interface overhead.
 // Implement SetJSON(status int, data []byte) to write status + Content-Type:json + body in one shot.

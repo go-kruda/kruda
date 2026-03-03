@@ -3,6 +3,9 @@ package wing
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"mime"
 	"mime/multipart"
 	"strconv"
 	"strings"
@@ -399,7 +402,26 @@ func (r *wingRequest) Context() context.Context {
 	return context.Background()
 }
 func (r *wingRequest) Cookie(name string) string                      { return parseCookieValue(r.cookie, name) }
-func (r *wingRequest) MultipartForm(_ int64) (*multipart.Form, error) { return nil, nil }
+func (r *wingRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	ct := r.contentType
+	if ct == "" {
+		return nil, fmt.Errorf("missing Content-Type")
+	}
+	// Extract boundary from Content-Type: multipart/form-data; boundary=xxx
+	_, params, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return nil, err
+	}
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil, fmt.Errorf("no boundary in Content-Type")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 32 << 20 // 32 MB default
+	}
+	mr := multipart.NewReader(io.LimitReader(bytes.NewReader(r.body), maxBytes), boundary)
+	return mr.ReadForm(maxBytes)
+}
 
 func (r *wingRequest) Header(key string) string {
 	if key == "Content-Type" || key == "content-type" {

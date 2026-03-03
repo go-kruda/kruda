@@ -384,6 +384,7 @@ type wingRequest struct {
 	keepAlive   bool
 	extraHdrs   [8]struct{ k, v string } // non-special headers (up to 8)
 	extraN      int
+	ctx         context.Context // set by transport when conn has a cancel func
 }
 
 func (r *wingRequest) Method() string                                 { return r.method }
@@ -391,7 +392,12 @@ func (r *wingRequest) Path() string                                   { return r
 func (r *wingRequest) Body() ([]byte, error)                          { return r.body, nil }
 func (r *wingRequest) RemoteAddr() string                             { return r.remoteAddr }
 func (r *wingRequest) RawRequest() any                                { return nil }
-func (r *wingRequest) Context() context.Context                       { return context.Background() }
+func (r *wingRequest) Context() context.Context {
+	if r.ctx != nil {
+		return r.ctx
+	}
+	return context.Background()
+}
 func (r *wingRequest) Cookie(name string) string                      { return parseCookieValue(r.cookie, name) }
 func (r *wingRequest) MultipartForm(_ int64) (*multipart.Form, error) { return nil, nil }
 

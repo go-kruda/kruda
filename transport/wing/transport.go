@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/go-kruda/kruda/transport"
@@ -26,6 +27,9 @@ type Config struct {
 	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
 	DefaultFeather    Feather            // fallback feather for routes not in Feathers
 	Prefork           bool               // fork N processes with GOMAXPROCS(1) each
+	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
+	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
+	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
 }
 
 func (c *Config) defaults() {
@@ -167,14 +171,18 @@ type parserLimits struct {
 }
 
 type conn struct {
-	fd         int32
-	readBuf    []byte
-	readN      int
-	sendBuf    []byte
-	sendN      int
-	keepAlive  bool
-	pending    int // in-flight handler goroutines
-	remoteAddr string
+	fd           int32
+	readBuf      []byte
+	readN        int
+	sendBuf      []byte
+	sendN        int
+	keepAlive    bool
+	pending      int // in-flight handler goroutines
+	remoteAddr   string
+	lastActive   int64 // unix nano — updated on accept + each recv
+	readDeadline int64 // unix nano — set when first byte arrives, cleared on full request
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -186,22 +194,26 @@ type doneMsg struct {
 }
 
 type worker struct {
-	id       int
-	listenFd int
-	eng      engine
-	handler  transport.Handler
-	config   Config
-	limits   parserLimits
-	maxConns int
-	conns    map[int32]*conn
-	events   [maxEventsPerWait]event
-	pipeR    int
-	pipeW    int
-	pipeBuf  [8]byte
-	doneCh   chan doneMsg
-	pool     *workerPool
-	feathers FeatherTable
-	shutdown *atomic.Bool
+	id           int
+	listenFd     int
+	eng          engine
+	handler      transport.Handler
+	config       Config
+	limits       parserLimits
+	maxConns     int
+	conns        map[int32]*conn
+	events       [maxEventsPerWait]event
+	pipeR        int
+	pipeW        int
+	pipeBuf      [8]byte
+	doneCh       chan doneMsg
+	pool         *workerPool
+	feathers     FeatherTable
+	shutdown     *atomic.Bool
+	readTimeout  int64 // nanoseconds (0 = disabled)
+	writeTimeout int64
+	idleTimeout  int64
+	sweepAt      int64 // next sweep unix nano
 }
 
 type handlerJob struct {
@@ -279,18 +291,21 @@ func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewFeatherTable(cfg.Feathers, cfg.DefaultFeather)
 	w := &worker{
-		id:       id,
-		listenFd: listenFd,
-		eng:      eng,
-		handler:  handler,
-		config:   cfg,
-		limits:   parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
-		maxConns: cfg.MaxConnsPerWorker,
-		conns:    make(map[int32]*conn, 1024),
-		pipeR:    pipeR,
-		pipeW:    pipeW,
-		doneCh:   doneCh,
-		feathers: ft,
+		id:           id,
+		listenFd:     listenFd,
+		eng:          eng,
+		handler:      handler,
+		config:       cfg,
+		limits:       parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
+		maxConns:     cfg.MaxConnsPerWorker,
+		conns:        make(map[int32]*conn, 1024),
+		pipeR:        pipeR,
+		pipeW:        pipeW,
+		doneCh:       doneCh,
+		feathers:     ft,
+		readTimeout:  int64(cfg.ReadTimeout),
+		writeTimeout: int64(cfg.WriteTimeout),
+		idleTimeout:  int64(cfg.IdleTimeout),
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -315,6 +330,10 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	w.eng.Flush()
 
 	hasAsync := w.config.needsAsync()
+	hasTimeout := w.readTimeout > 0 || w.writeTimeout > 0 || w.idleTimeout > 0
+	if hasTimeout {
+		w.sweepAt = time.Now().UnixNano() + int64(time.Second)
+	}
 
 	for !shutdown.Load() {
 		if hasAsync {
@@ -339,9 +358,39 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
+		if hasTimeout {
+			if now := time.Now().UnixNano(); now >= w.sweepAt {
+				w.sweepTimeouts(now)
+				w.sweepAt = now + int64(time.Second)
+			}
+		}
 	}
 	w.cleanup()
 }
+// sweepTimeouts closes connections that have exceeded their timeout.
+// Called at most once per second — zero cost when no timeouts configured.
+func (w *worker) sweepTimeouts(now int64) {
+	for fd, c := range w.conns {
+		if c.pending > 0 {
+			continue // handler in flight — don't close
+		}
+		// Read timeout: partial request sitting too long.
+		if w.readTimeout > 0 && c.readDeadline > 0 && now > c.readDeadline {
+			w.closeConn(fd)
+			continue
+		}
+		// Idle timeout: keep-alive conn with no activity.
+		if w.idleTimeout > 0 && c.readN == 0 && now-c.lastActive > w.idleTimeout {
+			w.closeConn(fd)
+			continue
+		}
+		// Write timeout: sendBuf stuck (partial send not draining).
+		if w.writeTimeout > 0 && len(c.sendBuf) > 0 && now-c.lastActive > w.writeTimeout {
+			w.closeConn(fd)
+		}
+	}
+}
+
 func (w *worker) handleEvent(ev event) {
 	switch ev.Op {
 	case opAccept:
@@ -372,10 +421,18 @@ func (w *worker) handleAccept(ev event) {
 	}
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
+	now := time.Now().UnixNano()
+	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
 		fd:         fd,
 		readBuf:    make([]byte, w.config.ReadBufSize),
 		remoteAddr: getPeerAddr(fd),
+		lastActive: now,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+	if w.readTimeout > 0 {
+		c.readDeadline = now + w.readTimeout
 	}
 	w.conns[fd] = c
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
@@ -404,6 +461,12 @@ func (w *worker) handleRecv(ev event) {
 		w.closeConn(c.fd)
 		return
 	}
+	now := time.Now().UnixNano()
+	c.lastActive = now
+	// Set read deadline on first byte of a new request.
+	if c.readN == 0 && w.readTimeout > 0 {
+		c.readDeadline = now + w.readTimeout
+	}
 	c.readN += int(nr)
 	w.tryParse(c)
 }
@@ -419,6 +482,10 @@ func (w *worker) tryParse(c *conn) {
 			break
 		}
 		req.remoteAddr = c.remoteAddr
+		req.ctx = c.ctx
+		// Full request received — clear read deadline, update idle clock.
+		c.readDeadline = 0
+		c.lastActive = time.Now().UnixNano()
 
 		f := w.feathers.Lookup(req.method, req.path)
 
@@ -633,6 +700,9 @@ func (w *worker) handleSend(ev event) {
 }
 
 func (w *worker) closeConn(fd int32) {
+	if c, ok := w.conns[fd]; ok && c.cancel != nil {
+		c.cancel()
+	}
 	delete(w.conns, fd)
 	w.eng.SubmitClose(fd)
 }

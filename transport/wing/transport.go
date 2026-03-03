@@ -167,13 +167,14 @@ type parserLimits struct {
 }
 
 type conn struct {
-	fd        int32
-	readBuf   []byte
-	readN     int
-	sendBuf   []byte
-	sendN     int
-	keepAlive bool
-	pending   int // in-flight handler goroutines
+	fd         int32
+	readBuf    []byte
+	readN      int
+	sendBuf    []byte
+	sendN      int
+	keepAlive  bool
+	pending    int // in-flight handler goroutines
+	remoteAddr string
 }
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -372,8 +373,9 @@ func (w *worker) handleAccept(ev event) {
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
 	c := &conn{
-		fd:      fd,
-		readBuf: make([]byte, w.config.ReadBufSize),
+		fd:         fd,
+		readBuf:    make([]byte, w.config.ReadBufSize),
+		remoteAddr: getPeerAddr(fd),
 	}
 	w.conns[fd] = c
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
@@ -416,6 +418,7 @@ func (w *worker) tryParse(c *conn) {
 			}
 			break
 		}
+		req.remoteAddr = c.remoteAddr
 
 		f := w.feathers.Lookup(req.method, req.path)
 

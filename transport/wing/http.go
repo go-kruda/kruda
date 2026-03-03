@@ -87,11 +87,14 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	// Parse headers (only fields we need).
 	contentLength := 0
 	contentType := ""
+	cookie := ""
 	keepAlive := true // HTTP/1.1 default
 	headerCount := 0
 	contentLengthSeen := false
 	hasTE := false            
-	hasCL := false            
+	hasCL := false
+	var extraHdrs [8]struct{ k, v string }
+	extraN := 0
 
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -164,6 +167,21 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 			}
 		case len(key) == 17 && asciiEqualFold(key, bTransferEncoding):
 			hasTE = true
+		case len(key) == 6 && asciiEqualFold(key, bCookie):
+			cookie = string(val)
+		default:
+			if extraN < len(extraHdrs) {
+				lk := make([]byte, len(key))
+				for i, c := range key {
+					if c >= 'A' && c <= 'Z' {
+						lk[i] = byte(c + 32)
+					} else {
+						lk[i] = byte(c)
+					}
+				}
+				extraHdrs[extraN] = struct{ k, v string }{string(lk), string(val)}
+				extraN++
+			}
 		}
 	}
 
@@ -189,6 +207,9 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 		r.query = query
 		r.body = body
 		r.contentType = contentType
+		r.cookie = cookie
+		r.extraHdrs = extraHdrs
+		r.extraN = extraN
 		r.keepAlive = keepAlive
 		return r, consumed, true
 	}
@@ -198,6 +219,9 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	r.path = path
 	r.query = query
 	r.contentType = contentType
+	r.cookie = cookie
+	r.extraHdrs = extraHdrs
+	r.extraN = extraN
 	r.keepAlive = keepAlive
 	return r, bodyStart, true
 }
@@ -209,6 +233,7 @@ var (
 	bConnection        = []byte("connection")
 	bClose             = []byte("close")
 	bTransferEncoding  = []byte("transfer-encoding")
+	bCookie            = []byte("cookie")
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
 )
@@ -328,6 +353,25 @@ func releaseRequest(r *wingRequest) {
 	reqPool.Put(r)
 }
 
+// parseCookieValue finds the value of a named cookie in a Cookie header string.
+// e.g. "session=abc; user=tiger" → parseCookieValue(..., "session") = "abc"
+func parseCookieValue(cookie, name string) string {
+	for len(cookie) > 0 {
+		var pair string
+		if i := strings.IndexByte(cookie, ';'); i >= 0 {
+			pair = strings.TrimSpace(cookie[:i])
+			cookie = strings.TrimSpace(cookie[i+1:])
+		} else {
+			pair = strings.TrimSpace(cookie)
+			cookie = ""
+		}
+		if eq := strings.IndexByte(pair, '='); eq >= 0 && pair[:eq] == name {
+			return pair[eq+1:]
+		}
+	}
+	return ""
+}
+
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
 	method      string
@@ -335,21 +379,34 @@ type wingRequest struct {
 	query       string
 	body        []byte
 	contentType string
+	cookie      string
+	remoteAddr  string
 	keepAlive   bool
+	extraHdrs   [8]struct{ k, v string } // non-special headers (up to 8)
+	extraN      int
 }
 
 func (r *wingRequest) Method() string                                 { return r.method }
 func (r *wingRequest) Path() string                                   { return r.path }
 func (r *wingRequest) Body() ([]byte, error)                          { return r.body, nil }
-func (r *wingRequest) RemoteAddr() string                             { return "" }
+func (r *wingRequest) RemoteAddr() string                             { return r.remoteAddr }
 func (r *wingRequest) RawRequest() any                                { return nil }
 func (r *wingRequest) Context() context.Context                       { return context.Background() }
-func (r *wingRequest) Cookie(_ string) string                         { return "" }
+func (r *wingRequest) Cookie(name string) string                      { return parseCookieValue(r.cookie, name) }
 func (r *wingRequest) MultipartForm(_ int64) (*multipart.Form, error) { return nil, nil }
 
 func (r *wingRequest) Header(key string) string {
 	if key == "Content-Type" || key == "content-type" {
 		return r.contentType
+	}
+	if key == "Cookie" || key == "cookie" {
+		return r.cookie
+	}
+	lk := strings.ToLower(key)
+	for i := range r.extraN {
+		if r.extraHdrs[i].k == lk {
+			return r.extraHdrs[i].v
+		}
 	}
 	return ""
 }

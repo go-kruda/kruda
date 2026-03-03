@@ -8,7 +8,7 @@ package wing
 //	wing.New(wing.Config{
 //	    Feathers: map[string]Feather{
 //	        "GET /plaintext": wing.Bolt,
-//	        "GET /json":      wing.Flash,
+//	        "GET /json":      wing.Bolt,
 //	        "GET /db":        wing.Arrow,
 //	    },
 //	})

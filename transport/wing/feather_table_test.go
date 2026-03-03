@@ -8,7 +8,7 @@ import (
 func TestFeatherTableLookupExact(t *testing.T) {
 	ft := NewFeatherTable(map[string]Feather{
 		"GET /plaintext": Bolt,
-		"GET /json":      Flash,
+		"GET /json":      Bolt,
 		"POST /db":       Arrow,
 	}, Arrow)
 
@@ -17,7 +17,7 @@ func TestFeatherTableLookupExact(t *testing.T) {
 		want         Feather
 	}{
 		{"GET", "/plaintext", Bolt},
-		{"GET", "/json", Flash},
+		{"GET", "/json", Bolt},
 		{"POST", "/db", Arrow},
 		{"GET", "/unknown", Arrow}, // default
 		{"DELETE", "/db", Arrow},   // wrong method → default
@@ -31,22 +31,18 @@ func TestFeatherTableLookupExact(t *testing.T) {
 }
 
 func TestFeatherTableDefault(t *testing.T) {
-	ft := NewFeatherTable(nil, Hawk)
+	ft := NewFeatherTable(nil, Arrow)
 	got := ft.Lookup("GET", "/anything")
-	if !reflect.DeepEqual(got, Hawk) {
-		t.Errorf("empty table Lookup = %+v, want Hawk", got)
+	if !reflect.DeepEqual(got, Arrow) {
+		t.Errorf("empty table Lookup = %+v, want Arrow", got)
 	}
 }
 
 func TestFeatherTableDefaultsApplied(t *testing.T) {
-	// Partial feather — defaults() should fill missing axes.
 	ft := NewFeatherTable(map[string]Feather{
 		"GET /custom": {Dispatch: Inline},
 	}, Arrow)
 	got := ft.Lookup("GET", "/custom")
-	if got.Engine == 0 {
-		t.Error("defaults() not applied: Engine is zero")
-	}
 	if got.Dispatch != Inline {
 		t.Errorf("Dispatch = %v, want Inline", got.Dispatch)
 	}
@@ -73,12 +69,11 @@ func TestSplitKey(t *testing.T) {
 func BenchmarkFeatherTableLookup(b *testing.B) {
 	ft := NewFeatherTable(map[string]Feather{
 		"GET /plaintext": Bolt,
-		"GET /json":      Flash,
+		"GET /json":      Bolt,
 		"POST /db":       Arrow,
-		"GET /fortunes":  Hawk,
+		"GET /fortunes":  Arrow,
 		"GET /queries":   Arrow,
 		"GET /updates":   Arrow,
-		"GET /cached":    Flash,
 	}, Arrow)
 
 	b.ResetTimer()

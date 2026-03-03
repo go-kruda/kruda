@@ -30,10 +30,6 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		}
 	}
 	wcfg := wing.Config{Workers: workers, HandlerPoolSize: poolSize}
-	// Bone: engine-level optimizations from env
-	if os.Getenv("KRUDA_BATCH_WRITE") == "1" {
-		wcfg.Bone.BatchWrite = true
-	}
 	if os.Getenv("KRUDA_ASYNC") == "1" {
 		wcfg.DefaultFeather = wing.Feather{Dispatch: wing.Pool}
 	}

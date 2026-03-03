@@ -352,7 +352,18 @@ func acquireRequest() *wingRequest {
 }
 
 func releaseRequest(r *wingRequest) {
-	*r = wingRequest{}
+	// Soft reset — keep allocated slices, clear values only
+	r.method = ""
+	r.path = ""
+	r.query = ""
+	r.body = r.body[:0]
+	r.contentType = ""
+	r.cookie = ""
+	r.remoteAddr = ""
+	r.keepAlive = false
+	r.fd = 0
+	r.extraN = 0
+	r.ctx = nil
 	reqPool.Put(r)
 }
 
@@ -480,12 +491,19 @@ func acquireResponse() *wingResponse {
 }
 
 func releaseResponse(r *wingResponse) {
-	// Cap pool buffers to avoid holding huge allocations.
+	r.status = 0
+	r.staticResp = nil
+	r.jsonFast = false
+	r.headers.count = 0
 	if cap(r.buf) > 65536 {
 		r.buf = make([]byte, 0, 2048)
+	} else {
+		r.buf = r.buf[:0]
 	}
 	if cap(r.body) > 65536 {
 		r.body = make([]byte, 0, 512)
+	} else {
+		r.body = r.body[:0]
 	}
 	respPool.Put(r)
 }
@@ -497,6 +515,7 @@ type wingResponse struct {
 	body       []byte
 	buf        []byte // scratch buffer for serialization
 	staticResp []byte // pre-built full response (if set, buildZeroCopy returns this)
+	jsonFast   bool   // SetJSON fast path — skip header interface, write status+json directly
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -508,6 +527,11 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
 func (r *wingResponse) SetStaticText(status int, contentType, text string) {
 	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
+}
+func (r *wingResponse) SetJSON(status int, data []byte) {
+	r.status = status
+	r.body = data
+	r.jsonFast = true
 }
 
 // Pre-computed status lines to avoid strconv per response.
@@ -548,29 +572,22 @@ func init() {
 	}()
 }
 
+// methodTable uses XOR hash for O(1) method lookup (silverlining technique).
+var methodTable [256]string
+
+func init() {
+	methodTable['G'^'E'+'T'] = "GET"
+	methodTable['P'^'U'+'T'] = "PUT"
+	methodTable['P'^'O'+'S'] = "POST"
+	methodTable['H'^'E'+'A'] = "HEAD"
+	methodTable['P'^'A'+'T'] = "PATCH"
+	methodTable['D'^'E'+'L'] = "DELETE"
+}
+
 func internMethod(b []byte) string {
-	switch len(b) {
-	case 3:
-		if b[0] == 'G' && b[1] == 'E' && b[2] == 'T' {
-			return "GET"
-		}
-		if b[0] == 'P' && b[1] == 'U' && b[2] == 'T' {
-			return "PUT"
-		}
-	case 4:
-		if b[0] == 'P' && b[1] == 'O' && b[2] == 'S' && b[3] == 'T' {
-			return "POST"
-		}
-		if b[0] == 'H' && b[1] == 'E' && b[2] == 'A' && b[3] == 'D' {
-			return "HEAD"
-		}
-	case 5:
-		if b[0] == 'P' && b[1] == 'A' && b[2] == 'T' && b[3] == 'C' && b[4] == 'H' {
-			return "PATCH"
-		}
-	case 6:
-		if b[0] == 'D' && b[1] == 'E' && b[2] == 'L' && b[3] == 'E' && b[4] == 'T' && b[5] == 'E' {
-			return "DELETE"
+	if len(b) >= 3 {
+		if m := methodTable[b[0]^b[1]+b[2]]; m != "" && len(m) == len(b) {
+			return m
 		}
 	}
 	return *(*string)(unsafe.Pointer(&b))
@@ -591,6 +608,22 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		return r.staticResp
 	}
 	b := r.buf[:0]
+
+	// JSON fast path — status + Date+Server + Content-Type:json + Content-Length + body
+	if r.jsonFast {
+		if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
+			b = append(b, statusLines[r.status]...)
+		} else {
+			b = append(b, "HTTP/1.1 200 OK\r\n"...)
+		}
+		b = append(b, dateHdr()...)
+		b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
+		b = strconv.AppendInt(b, int64(len(r.body)), 10)
+		b = append(b, "\r\n\r\n"...)
+		b = append(b, r.body...)
+		r.buf = nil
+		return b
+	}
 
 	// Status line — use pre-computed when available.
 	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {

@@ -1,6 +1,6 @@
 package wing
 
-// Feather (ขนนก) is the per-route tuning system for Wing.
+// Feather is the per-route tuning system for Wing.
 // Each axis controls one aspect of request processing.
 // Zero values are filled with Inline defaults (fast-by-default).
 // Use named presets like Arrow for Pool dispatch.
@@ -47,7 +47,7 @@ func (f *Feather) defaults() {
 	}
 }
 
-// --------------- Axis 1: Dispatch (วิธีรัน handler) ---------------
+// --------------- Axis 1: Dispatch (how the handler is scheduled) ---------------
 
 // DispatchMode controls how the handler goroutine is scheduled.
 type DispatchMode uint8
@@ -94,7 +94,7 @@ const (
 	Net
 )
 
-// --------------- Axis 3: Response (วิธีส่ง response) ---------------
+// --------------- Axis 3: Response (how the response is written back) ---------------
 
 // ResponseMode controls how the response is written back to the client.
 type ResponseMode uint8
@@ -125,7 +125,7 @@ const (
 	Sendfile
 )
 
-// --------------- Axis 4: Buffer (วิธีจัดการ memory) ---------------
+// --------------- Axis 4: Buffer (memory allocation strategy) ---------------
 
 // BufferMode controls response buffer allocation strategy.
 type BufferMode uint8
@@ -196,7 +196,7 @@ func Conn(m ConnMode) FeatherOption { return func(f *Feather) { f.Conn = m } }
 // When set, the handler is bypassed entirely — the response bytes are written directly.
 func Static(resp []byte) FeatherOption { return func(f *Feather) { f.StaticResponse = resp } }
 
-// --------------- Named Presets (ชุดสำเร็จรูป) ---------------
+// --------------- Named Presets ---------------
 
 var (
 	// Bolt ⚡ — maximum throughput for in-memory responses.
@@ -271,6 +271,33 @@ var (
 		Buffer:   Grow,
 		Conn:     KeepAlive,
 	}
+
+	// ---- Wing types (request-type presets) ----
+	// User-facing names that map request types to optimal Feather composition.
+
+	// Plaintext — static text responses, health checks.
+	// Feathers: InlineDispatch + ZeroCopyBuf + DirectResponse + PipelineConn
+	Plaintext = Bolt
+
+	// JSON — JSON response without route params.
+	// Feathers: InlineDispatch + ZeroCopyBuf + DirectResponse + KeepAliveConn
+	JSON = Flash
+
+	// ParamJSON — JSON response with route param extraction.
+	// Feathers: InlineDispatch + ZeroCopyBuf + DirectResponse + KeepAliveConn
+	ParamJSON = Flash
+
+	// PostJSON — POST body parse + JSON response.
+	// Feathers: InlineDispatch + ZeroCopyBuf + DirectResponse + KeepAliveConn
+	PostJSON = Flash
+
+	// Query — DB/Redis short I/O.
+	// Feathers: PoolDispatch + FixedBuf + DirectWrite + KeepAliveConn
+	Query = Arrow
+
+	// Render — template/HTML rendering with variable-size output.
+	// Feathers: PoolDispatch + GrowBuf + Writeback + KeepAliveConn
+	Render = Hawk
 )
 
 // --------------- Stringer ---------------

@@ -13,7 +13,7 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-const preforkChildEnv = "WING_PREFORK_CHILD"
+const preforkChildEnv = "KRUDA_PREFORK_CHILD"
 
 func (t *Transport) listenAndServePrefork(addr string, handler transport.Handler) error {
 	if os.Getenv(preforkChildEnv) != "" {

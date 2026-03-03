@@ -507,6 +507,12 @@ func (c *Ctx) jsonSend(data []byte) error {
 	if c.tryFastHTTPJSON(data) {
 		return nil
 	}
+	// Fast path for Wing transport — bypass header interface entirely
+	if jr, ok := c.writer.(transport.JSONResponder); ok {
+		c.responded = true
+		jr.SetJSON(c.status, data)
+		return nil
+	}
 	// Fast path for net/http embedded adapter — bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
 		c.responded = true

@@ -59,11 +59,9 @@ NCPU=$(nproc)
 KRUDA="$RESULTS_DIR/kruda-bench"
 FIBER="$RESULTS_DIR/fiber-bench"
 
-run_config "Kruda turbo  GOMAXPROCS=1/child  (current)" "$KRUDA" \
-    KRUDA_TURBO=1 KRUDA_WORKERS=$NCPU
+run_config "Kruda GOMAXPROCS=8" "$KRUDA" \
+    KRUDA_WORKERS=$NCPU
 
-run_config "Kruda turbo  GOMAXPROCS=default" "$KRUDA" \
-    KRUDA_TURBO=1 KRUDA_WORKERS=$NCPU KRUDA_NO_GOMAXPROCS=1
 
 run_config "Fiber prefork GOMAXPROCS=1/child (fair)" "$FIBER" \
     FIBER_PREFORK=1 FIBER_WORKERS=$NCPU GOMAXPROCS=1

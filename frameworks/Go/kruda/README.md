@@ -2,14 +2,9 @@
 
 [Kruda](https://github.com/go-kruda/kruda) (ครุฑ) is a high-performance Go web framework combining speed with type-safety through Go generics.
 
-## Test Variants
+## Test Types
 
-| Variant | Display Name | Description | Dockerfile |
-|---------|-------------|-------------|------------|
-| default | Kruda | Single-process mode | `Dockerfile` |
-| turbo | Kruda [turbo] | SO_REUSEPORT prefork mode (1 process per CPU core) | `kruda-turbo.dockerfile` |
-
-Both variants implement all 7 TFB test types:
+All 7 TFB test types:
 
 - `/json` — JSON serialization
 - `/plaintext` — Plaintext
@@ -25,8 +20,7 @@ Both variants implement all 7 TFB test types:
 docker compose up --build
 ```
 
-- Default variant: http://localhost:8080
-- Turbo variant: http://localhost:8081
+- Kruda: http://localhost:8080
 - PostgreSQL: localhost:5432
 
 ## Key Optimizations
@@ -38,4 +32,4 @@ docker compose up --build
 - `pgx.Batch` for single-roundtrip multi-query and update operations
 - Flat-array in-memory cache for cached queries (0-alloc lookups)
 - Atomic date header cache (1-second refresh)
-- SO_REUSEPORT prefork in turbo mode (1 process per CPU, `GOMAXPROCS(1)`)
+- Wing transport: epoll per-worker, zero-copy response building

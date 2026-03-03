@@ -25,30 +25,6 @@
         "versus": "go",
         "notes": "",
         "dockerfile": "Dockerfile"
-      },
-      "turbo": {
-        "json_url": "/json",
-        "plaintext_url": "/plaintext",
-        "db_url": "/db",
-        "query_url": "/queries?queries=",
-        "update_url": "/updates?queries=",
-        "fortune_url": "/fortunes",
-        "cached_query_url": "/cached-queries?count=",
-        "port": 8080,
-        "approach": "Realistic",
-        "classification": "Micro",
-        "database": "Postgres",
-        "database_os": "Linux",
-        "display_name": "Kruda [turbo]",
-        "framework": "kruda",
-        "language": "Go",
-        "orm": "Raw",
-        "os": "Linux",
-        "platform": "None",
-        "webserver": "None",
-        "versus": "go",
-        "notes": "SO_REUSEPORT prefork mode",
-        "dockerfile": "kruda-turbo.dockerfile"
       }
     }
   ]

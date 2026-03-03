@@ -30,16 +30,18 @@ type epollEngine struct {
 	pipeW    int
 	pipeR    int
 	pipeBuf  [8]byte
-	rawMode  bool  // true = RawSyscall (LockOSThread), false = Syscall (async)
-	wakeup   int32 // CAS gate for PostWake
-	idle     int32 // consecutive zero-event polls for adaptive wait
-	connPtrs map[int32]unsafe.Pointer // fd → *conn for epollMod data
+	rawMode  bool
+	wakeup   int32
+	idle     int32
+	connPtrs map[int32]unsafe.Pointer
 	listenFd int
+	epevs    []epollEvent // elastic event list
 }
 
 func newEngine() engine {
 	return &epollEngine{
 		connPtrs: make(map[int32]unsafe.Pointer, 1024),
+		epevs:    make([]epollEvent, 128),
 	}
 }
 
@@ -88,7 +90,8 @@ func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
 }
 
 func (e *epollEngine) SubmitRecv(fd int32, _ []byte, _ int) {
-	// Re-arm EPOLLIN only (remove EPOLLOUT if it was added by SubmitSend).
+	// Edge-triggered EPOLLIN persists — only need epollMod to remove EPOLLOUT
+	// after a partial write fallback. Track with hasOut flag on conn.
 	e.epollModPtr(fd, epollin|epollet)
 }
 
@@ -126,8 +129,7 @@ func (e *epollEngine) WaitNonBlock(events []event) (int, error) {
 }
 
 func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
-	var epevs [128]epollEvent
-	n, err := epollWait(e.epfd, epevs[:], msec, e.rawMode)
+	n, err := epollWait(e.epfd, e.epevs, msec, e.rawMode)
 	if err != nil {
 		if err == syscall.EINTR {
 			return 0, nil
@@ -135,9 +137,16 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 		return 0, err
 	}
 
+	// Elastic resize
+	if n == len(e.epevs) && len(e.epevs) < 1024 {
+		e.epevs = make([]epollEvent, len(e.epevs)*2)
+	} else if n < len(e.epevs)/4 && len(e.epevs) > 128 {
+		e.epevs = make([]epollEvent, len(e.epevs)/2)
+	}
+
 	count := 0
 	for i := 0; i < n && count < len(events); i++ {
-		ev := &epevs[i]
+		ev := &e.epevs[i]
 		// Listen fd and pipe fd store int32 in data[0:4].
 		// Conn fds store unsafe.Pointer in data[0:8].
 		fd := *(*int32)(unsafe.Pointer(&ev.data[0]))

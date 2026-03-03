@@ -26,6 +26,7 @@ type Config struct {
 	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
 	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
 	DefaultFeather    Feather            // fallback feather for routes not in Feathers
+	Bone              Bone               // engine-level optimizations (affects all connections)
 	Prefork           bool               // fork N processes with GOMAXPROCS(1) each
 	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
 	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
@@ -43,7 +44,7 @@ func (c *Config) defaults() {
 		c.ReadBufSize = 8192
 	}
 	if c.HandlerPoolSize <= 0 {
-		c.HandlerPoolSize = 256
+		c.HandlerPoolSize = c.Workers
 	}
 }
 
@@ -141,6 +142,16 @@ func (t *Transport) Serve(ln net.Listener, handler transport.Handler) error {
 	return t.ListenAndServe(addr, handler)
 }
 
+// SetRouteFeather implements transport.FeatherConfigurator.
+func (t *Transport) SetRouteFeather(method, path string, feather any) {
+	if f, ok := feather.(Feather); ok {
+		if t.config.Feathers == nil {
+			t.config.Feathers = make(map[string]Feather)
+		}
+		t.config.Feathers[method+" "+path] = f
+	}
+}
+
 func (t *Transport) Shutdown(_ context.Context) error {
 	<-t.ready
 	t.shutdown.Store(true)
@@ -210,6 +221,7 @@ type worker struct {
 	pool         *workerPool
 	feathers     FeatherTable
 	shutdown     *atomic.Bool
+	hasTimeout   bool
 	readTimeout  int64 // nanoseconds (0 = disabled)
 	writeTimeout int64
 	idleTimeout  int64
@@ -331,6 +343,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 
 	hasAsync := w.config.needsAsync()
 	hasTimeout := w.readTimeout > 0 || w.writeTimeout > 0 || w.idleTimeout > 0
+	w.hasTimeout = hasTimeout
 	if hasTimeout {
 		w.sweepAt = time.Now().UnixNano() + int64(time.Second)
 	}
@@ -421,18 +434,20 @@ func (w *worker) handleAccept(ev event) {
 	}
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
-	now := time.Now().UnixNano()
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
 		fd:         fd,
 		readBuf:    make([]byte, w.config.ReadBufSize),
 		remoteAddr: getPeerAddr(fd),
-		lastActive: now,
 		ctx:        ctx,
 		cancel:     cancel,
 	}
-	if w.readTimeout > 0 {
-		c.readDeadline = now + w.readTimeout
+	if w.hasTimeout {
+		now := time.Now().UnixNano()
+		c.lastActive = now
+		if w.readTimeout > 0 {
+			c.readDeadline = now + w.readTimeout
+		}
 	}
 	w.conns[fd] = c
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
@@ -443,7 +458,7 @@ func (w *worker) handleAccept(ev event) {
 		w.tryParse(c)
 		return
 	}
-	w.eng.SubmitRecv(fd, nil, 0)
+	// ET EPOLLIN already registered by RegisterConn — no SubmitRecv needed.
 }
 
 func (w *worker) handleRecv(ev event) {
@@ -461,13 +476,14 @@ func (w *worker) handleRecv(ev event) {
 		w.closeConn(c.fd)
 		return
 	}
-	now := time.Now().UnixNano()
-	c.lastActive = now
-	// Set read deadline on first byte of a new request.
-	if c.readN == 0 && w.readTimeout > 0 {
-		c.readDeadline = now + w.readTimeout
-	}
 	c.readN += int(nr)
+	if w.hasTimeout {
+		now := time.Now().UnixNano()
+		c.lastActive = now
+		if c.readN == int(nr) && w.readTimeout > 0 {
+			c.readDeadline = now + w.readTimeout
+		}
+	}
 	w.tryParse(c)
 }
 
@@ -485,8 +501,10 @@ func (w *worker) tryParse(c *conn) {
 		req.fd = c.fd
 		req.ctx = c.ctx
 		// Full request received — clear read deadline, update idle clock.
-		c.readDeadline = 0
-		c.lastActive = time.Now().UnixNano()
+		if w.hasTimeout {
+			c.readDeadline = 0
+			c.lastActive = time.Now().UnixNano()
+		}
 
 		f := w.feathers.Lookup(req.method, req.path)
 
@@ -674,7 +692,8 @@ func (w *worker) directSend(c *conn) {
 		w.tryParse(c)
 		return
 	}
-	w.eng.SubmitRecv(c.fd, nil, 0)
+	// Speculative read got EAGAIN — wait for epoll EPOLLIN.
+	// No SubmitRecv needed: ET EPOLLIN fires on new data arrival.
 }
 func (w *worker) send503(c *conn) {
 	c.sendBuf = resp503

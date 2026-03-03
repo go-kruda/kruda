@@ -318,59 +318,72 @@ response:
 }
 
 // Get registers a GET route.
-func (app *App) Get(path string, handler HandlerFunc) *App {
-	app.addRoute("GET", path, handler)
+func (app *App) Get(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("GET", path, handler, opts...)
 	return app
 }
 
 // Post registers a POST route.
-func (app *App) Post(path string, handler HandlerFunc) *App {
-	app.addRoute("POST", path, handler)
+func (app *App) Post(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("POST", path, handler, opts...)
 	return app
 }
 
 // Put registers a PUT route.
-func (app *App) Put(path string, handler HandlerFunc) *App {
-	app.addRoute("PUT", path, handler)
+func (app *App) Put(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("PUT", path, handler, opts...)
 	return app
 }
 
 // Delete registers a DELETE route.
-func (app *App) Delete(path string, handler HandlerFunc) *App {
-	app.addRoute("DELETE", path, handler)
+func (app *App) Delete(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("DELETE", path, handler, opts...)
 	return app
 }
 
 // Patch registers a PATCH route.
-func (app *App) Patch(path string, handler HandlerFunc) *App {
-	app.addRoute("PATCH", path, handler)
+func (app *App) Patch(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("PATCH", path, handler, opts...)
 	return app
 }
 
 // Options registers an OPTIONS route.
-func (app *App) Options(path string, handler HandlerFunc) *App {
-	app.addRoute("OPTIONS", path, handler)
+func (app *App) Options(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("OPTIONS", path, handler, opts...)
 	return app
 }
 
 // Head registers a HEAD route.
-func (app *App) Head(path string, handler HandlerFunc) *App {
-	app.addRoute("HEAD", path, handler)
+func (app *App) Head(path string, handler HandlerFunc, opts ...RouteOption) *App {
+	app.addRoute("HEAD", path, handler, opts...)
 	return app
 }
 
 // All registers a route on all standard HTTP methods.
-func (app *App) All(path string, handler HandlerFunc) *App {
+func (app *App) All(path string, handler HandlerFunc, opts ...RouteOption) *App {
 	for _, method := range standardMethods {
-		app.addRoute(method, path, handler)
+		app.addRoute(method, path, handler, opts...)
 	}
 	return app
 }
 
 // addRoute builds the pre-built handler chain and registers the route.
-func (app *App) addRoute(method, path string, handler HandlerFunc) {
+func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...RouteOption) {
 	chain := buildChain(app.middleware, nil, handler)
 	app.router.addRoute(method, path, chain)
+
+	// Apply Wing feather if transport supports it.
+	if len(opts) > 0 {
+		var rc routeConfig
+		for _, o := range opts {
+			o(&rc)
+		}
+		if rc.wingFeather != nil {
+			if fc, ok := app.transport.(transport.FeatherConfigurator); ok {
+				fc.SetRouteFeather(method, path, rc.wingFeather)
+			}
+		}
+	}
 }
 
 // Use appends global middleware to the App.

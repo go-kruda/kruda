@@ -74,6 +74,20 @@ type StaticTextResponder interface {
 	SetStaticText(status int, contentType, text string)
 }
 
+// JSONResponder is an optional interface for ResponseWriters that support
+// a zero-copy JSON fast path — bypasses header interface overhead.
+// Implement SetJSON(status int, data []byte) to write status + Content-Type:json + body in one shot.
+type JSONResponder interface {
+	SetJSON(status int, data []byte)
+}
+
+// FeatherConfigurator is an optional interface for transports that support
+// per-route tuning (e.g., Wing transport). SetRouteFeather is called during
+// route registration to configure dispatch/buffer/response modes per route.
+type FeatherConfigurator interface {
+	SetRouteFeather(method, path string, feather any)
+}
+
 // HeaderMap abstracts response header manipulation.
 type HeaderMap interface {
 	Set(key, value string)

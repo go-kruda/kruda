@@ -167,7 +167,7 @@ var textResp = []byte("Hello, World!")
 
 func main() {
 	addr := flag.String("addr", ":8081", "listen address")
-	workers := flag.Int("workers", 0, "Wing workers (0=NumCPU)")
+	workers := flag.Int("workers", 0, "Workers (0=NumCPU)")
 	flag.Parse()
 
 	tr := wing.New(wing.Config{

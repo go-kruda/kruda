@@ -9,7 +9,7 @@
 // Flags:
 //   -duration  Benchmark duration per test (default: 10s)
 //   -conns     Concurrent connections (default: 256)
-//   -workers   Wing workers (default: 0 = NumCPU)
+//   -workers   Workers (default: 0 = NumCPU)
 //   -pipeline  HTTP pipeline depth (default: 16)
 //
 // Requirements:
@@ -47,7 +47,7 @@ import (
 var (
 	duration  = flag.Duration("duration", 10*time.Second, "benchmark duration per test")
 	conns     = flag.Int("conns", 256, "concurrent connections")
-	workers   = flag.Int("workers", 0, "Wing workers (0=NumCPU)")
+	workers   = flag.Int("workers", 0, "Workers (0=NumCPU)")
 	pipeline  = flag.Int("pipeline", 16, "wrk pipeline depth")
 	useWrk    = flag.Bool("wrk", false, "use wrk for external benchmarking (must be installed)")
 	warmup    = flag.Duration("warmup", 2*time.Second, "warmup duration before measurement")

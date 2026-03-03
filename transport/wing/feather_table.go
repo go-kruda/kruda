@@ -14,8 +14,14 @@ package wing
 //	})
 type FeatherTable struct {
 	routes   [mCount]map[string]Feather // indexed by method for O(1) first lookup
+	prefixes [mCount][]prefixFeather    // param routes: prefix before ':'
 	fallback map[string]Feather         // custom methods
 	def      Feather
+}
+
+type prefixFeather struct {
+	prefix  string
+	feather Feather
 }
 
 // method index constants matching Wing's HTTP parser internMethod output.
@@ -65,10 +71,17 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 		method, path := splitKey(key)
 		idx := methodIdx(method)
 		if idx >= 0 {
-			if ft.routes[idx] == nil {
-				ft.routes[idx] = make(map[string]Feather, 4)
+			// Param route: store as prefix match
+			if colonIdx := indexByte(path, ':'); colonIdx > 0 {
+				ft.prefixes[idx] = append(ft.prefixes[idx], prefixFeather{
+					prefix: path[:colonIdx], feather: f,
+				})
+			} else {
+				if ft.routes[idx] == nil {
+					ft.routes[idx] = make(map[string]Feather, 4)
+				}
+				ft.routes[idx][path] = f
 			}
-			ft.routes[idx][path] = f
 		} else {
 			if ft.fallback == nil {
 				ft.fallback = make(map[string]Feather, 2)
@@ -89,8 +102,13 @@ func (ft *FeatherTable) Lookup(method, path string) Feather {
 				return f
 			}
 		}
+		// Check param route prefixes
+		for _, pf := range ft.prefixes[idx] {
+			if len(path) >= len(pf.prefix) && path[:len(pf.prefix)] == pf.prefix {
+				return pf.feather
+			}
+		}
 	} else if ft.fallback != nil {
-		// Slow path for custom methods — need concat but extremely rare.
 		key := method + " " + path
 		if f, ok := ft.fallback[key]; ok {
 			return f
@@ -107,4 +125,13 @@ func splitKey(key string) (string, string) {
 		}
 	}
 	return key, "/"
+}
+
+func indexByte(s string, c byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
 }

@@ -174,9 +174,56 @@ go build -v ./... 2>&1 | grep -i pgo
 
 You should see your package listed as using PGO.
 
+## Wing Transport Tuning
+
+Wing is Kruda's high-performance epoll/kqueue transport. Enable with `kruda.Wing()`.
+
+### Wing Types (Feather)
+
+Assign a Wing type per route to select the optimal dispatch strategy:
+
+```go
+app := kruda.New(kruda.Wing())
+
+app.Get("/",          handler, kruda.WingPlaintext())  // Inline, zero-copy
+app.Get("/json",      handler, kruda.WingJSON())       // Inline, fixed buffer
+app.Get("/users/:id", handler, kruda.WingParamJSON())  // Inline, param extraction
+app.Post("/json",     handler, kruda.WingPostJSON())   // Inline, body parse
+app.Get("/db",        handler, kruda.WingQuery())      // Pool dispatch
+app.Get("/fortunes",  handler, kruda.WingRender())     // Pool dispatch, growable buffer
+```
+
+CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs directly on the epoll worker with zero overhead.
+
+I/O-bound routes (DB, Redis) use **Pool** dispatch — handler runs in a goroutine pool so the epoll worker isn't blocked.
+
+### Handler Pool Size
+
+Pool dispatch routes share a goroutine pool per worker. Default size = number of workers.
+
+```bash
+# Env var (per worker)
+KRUDA_POOL_SIZE=16
+
+# Or in code
+kruda.New(kruda.Wing(wing.Config{HandlerPoolSize: 16}))
+```
+
+Rule of thumb: keep total pool goroutines (workers × pool_size) close to your DB `pool_max_conns`. Too many goroutines cause Go runtime scheduler contention — in benchmarks, 2048 goroutines fighting for 64 DB connections lost 37% throughput vs a right-sized pool.
+
+### Env Vars
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `KRUDA_WORKERS` | GOMAXPROCS | Number of epoll workers |
+| `KRUDA_POOL_SIZE` | workers | Goroutine pool size per worker |
+| `KRUDA_BATCH_WRITE` | off | Coalesce pipelined responses (`1` to enable) |
+| `KRUDA_POOL_ROUTES` | — | Comma-separated routes for Pool dispatch |
+| `KRUDA_SPAWN_ROUTES` | — | Comma-separated routes for Spawn dispatch |
+
 ## Production Tips
 
-1. Use fasthttp on Linux/macOS for maximum throughput
+1. Use Wing transport on Linux for maximum throughput (`kruda.Wing()`)
 2. Set appropriate timeouts to prevent resource exhaustion:
    ```go
    kruda.New(

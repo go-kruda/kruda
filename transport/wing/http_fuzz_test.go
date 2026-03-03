@@ -23,7 +23,7 @@ func FuzzParseHTTPRequest(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// R5.2: fuzz with arbitrary []byte, using noLimits for max coverage
-		req, ok := parseHTTPRequest(data, noLimits)
+		req, consumed, ok := parseHTTPRequest(data, noLimits)
 
 		// R5.3: if parse fails, that's fine — just must not panic
 		if !ok {
@@ -36,6 +36,14 @@ func FuzzParseHTTPRequest(f *testing.F) {
 		}
 		if !strings.HasPrefix(req.Path(), "/") && req.Path() != "*" {
 			t.Errorf("parsed request Path = %q, want prefix '/' or '*'", req.Path())
+		}
+
+		// Pipelining invariant: consumed must be > 0 and <= len(data).
+		if consumed <= 0 {
+			t.Errorf("consumed = %d, must be > 0 on successful parse", consumed)
+		}
+		if consumed > len(data) {
+			t.Errorf("consumed = %d > len(data) = %d, out of bounds", consumed, len(data))
 		}
 	})
 }

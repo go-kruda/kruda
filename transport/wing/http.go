@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
+	"unsafe"
 
 	"github.com/go-kruda/kruda/transport"
 )
@@ -22,19 +25,21 @@ var (
 
 // parseHTTPRequest parses a raw HTTP/1.1 request from buf.
 // All strings are safe copies (no reference to buf after return).
-// Returns nil, false if the request is incomplete or exceeds limits.
-func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
+// Returns (nil, 0, false) if the request is incomplete or exceeds limits.
+// On success, consumed is the number of bytes used by the parsed request,
+// allowing callers to preserve any pipelined data that follows.
+func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
 	// Find end of headers.
 	headerEnd := bytes.Index(data, crlfcrlf)
 	if headerEnd < 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	bodyStart := headerEnd + 4
 
 	// Parse request line: "METHOD /path HTTP/1.x\r\n"
 	lineEnd := bytes.IndexByte(data, '\n')
 	if lineEnd < 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	line := data[:lineEnd]
 	if len(line) > 0 && line[len(line)-1] == '\r' {
@@ -43,37 +48,40 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 
 	sp1 := bytes.IndexByte(line, ' ')
 	if sp1 <= 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	sp2 := bytes.IndexByte(line[sp1+1:], ' ')
 	if sp2 < 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	sp2 += sp1 + 1
 	if sp2 <= sp1+1 {
-		return nil, false
+		return nil, 0, false
 	}
 
 	// Validate request line format — version must start with "HTTP/".
 	version := line[sp2+1:]
 	if len(version) < 5 || !bytes.Equal(version[:5], bHTTPVersionPrefix) {
-		return nil, false
+		return nil, 0, false
 	}
 
 	// Safe copies via string().
-	method := string(line[:sp1])
+	method := internMethod(line[:sp1])
 	rawPath := line[sp1+1 : sp2]
 
 	// Request-target must start with '/' or be exactly '*'.
 	if len(rawPath) == 0 || (rawPath[0] != '/' && !bytes.Equal(rawPath, bStar)) {
-		return nil, false
+		return nil, 0, false
 	}
 
-	path := string(rawPath)
-	query := ""
+	var path, query string
 	if qi := bytes.IndexByte(rawPath, '?'); qi >= 0 {
 		path = string(rawPath[:qi])
 		query = string(rawPath[qi+1:])
+	} else if len(rawPath) == 1 && rawPath[0] == '/' {
+		path = "/"
+	} else {
+		path = string(rawPath)
 	}
 
 	// Parse headers (only fields we need).
@@ -96,7 +104,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 			// Reject bare LF (without preceding CR) as line terminator.
 			absIdx := pos + nlIdx
 			if absIdx == 0 || data[absIdx-1] != '\r' {
-				return nil, false
+				return nil, 0, false
 			}
 			hline = data[pos : pos+nlIdx]
 			pos += nlIdx + 1
@@ -113,12 +121,12 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 		// R1: header count limit (only when configured > 0).
 		headerCount++
 		if limits.maxHeaderCount > 0 && headerCount > limits.maxHeaderCount {
-			return nil, false
+			return nil, 0, false
 		}
 
 		// R1: header size limit — full line (key + ":" + value).
 		if limits.maxHeaderSize > 0 && len(hline) > limits.maxHeaderSize {
-			return nil, false
+			return nil, 0, false
 		}
 
 		key := bytes.TrimSpace(hline[:colon])
@@ -126,26 +134,26 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 
 		// Validate header name characters (RFC 7230 token set).
 		if !isValidTokenName(key) {
-			return nil, false
+			return nil, 0, false
 		}
 
 		// Reject bare CR or LF in header values (CRLF injection).
 		if containsCRLF(val) {
-			return nil, false
+			return nil, 0, false
 		}
 
 		switch {
 		case len(key) == 14 && asciiEqualFold(key, bContentLength):
 			// Reject duplicate Content-Length headers.
 			if contentLengthSeen {
-				return nil, false
+				return nil, 0, false
 			}
 			contentLengthSeen = true
 			hasCL = true
 
 			// Reject non-numeric Content-Length values.
 			if !isAllDigits(val) {
-				return nil, false
+				return nil, 0, false
 			}
 			contentLength = btoi(val)
 		case len(key) == 12 && asciiEqualFold(key, bContentType):
@@ -161,29 +169,37 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, bool) {
 
 	// Reject requests with both Transfer-Encoding and Content-Length (RFC 7230 §3.3.3).
 	if hasTE && hasCL {
-		return nil, false
+		return nil, 0, false
 	}
 
 	// Verify body completeness.
 	if contentLength > maxContentLength {
-		return nil, false // reject oversized requests
+		return nil, 0, false // reject oversized requests
 	}
 	if contentLength > 0 {
 		if bodyStart+contentLength > len(data) {
-			return nil, false // incomplete body
+			return nil, 0, false // incomplete body
 		}
+		consumed := bodyStart + contentLength
 		body := make([]byte, contentLength) // safe copy
 		copy(body, data[bodyStart:bodyStart+contentLength])
-		return &wingRequest{
-			method: method, path: path, query: query,
-			body: body, contentType: contentType, keepAlive: keepAlive,
-		}, true
+		r := acquireRequest()
+		r.method = method
+		r.path = path
+		r.query = query
+		r.body = body
+		r.contentType = contentType
+		r.keepAlive = keepAlive
+		return r, consumed, true
 	}
 
-	return &wingRequest{
-		method: method, path: path, query: query,
-		contentType: contentType, keepAlive: keepAlive,
-	}, true
+	r := acquireRequest()
+	r.method = method
+	r.path = path
+	r.query = query
+	r.contentType = contentType
+	r.keepAlive = keepAlive
+	return r, bodyStart, true
 }
 
 var (
@@ -299,6 +315,19 @@ func isAllDigits(b []byte) bool {
 
 // ----------------------------- request adapter -----------------------------
 
+var reqPool = sync.Pool{
+	New: func() any { return &wingRequest{} },
+}
+
+func acquireRequest() *wingRequest {
+	return reqPool.Get().(*wingRequest)
+}
+
+func releaseRequest(r *wingRequest) {
+	*r = wingRequest{}
+	reqPool.Put(r)
+}
+
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
 	method      string
@@ -360,6 +389,7 @@ func acquireResponse() *wingResponse {
 	r.headers.count = 0
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
+	r.staticResp = nil
 	return r
 }
 
@@ -376,10 +406,11 @@ func releaseResponse(r *wingResponse) {
 
 // wingResponse implements transport.ResponseWriter.
 type wingResponse struct {
-	status  int
-	headers wingHeaders
-	body    []byte
-	buf     []byte // scratch buffer for serialization
+	status     int
+	headers    wingHeaders
+	body       []byte
+	buf        []byte // scratch buffer for serialization
+	staticResp []byte // pre-built full response (if set, buildZeroCopy returns this)
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -387,6 +418,10 @@ func (r *wingResponse) Header() transport.HeaderMap { return &r.headers }
 func (r *wingResponse) Write(data []byte) (int, error) {
 	r.body = append(r.body, data...)
 	return len(data), nil
+}
+func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
+func (r *wingResponse) SetStaticText(status int, contentType, text string) {
+	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
 }
 
 // Pre-computed status lines to avoid strconv per response.
@@ -415,7 +450,60 @@ func init() {
 // SAFETY: The wingResponse is returned to pool AFTER conn.sendBuf is set,
 // but the underlying array is NOT reused until releaseResponse is called
 // on the NEXT request cycle, by which time the send has completed.
+// cachedDateHdr holds "Date: <RFC1123>\r\n" updated every second.
+var cachedDateHdr atomic.Pointer[[]byte]
+
+func init() {
+	updateDateHdr()
+	go func() {
+		for range time.Tick(time.Second) {
+			updateDateHdr()
+		}
+	}()
+}
+
+func internMethod(b []byte) string {
+	switch len(b) {
+	case 3:
+		if b[0] == 'G' && b[1] == 'E' && b[2] == 'T' {
+			return "GET"
+		}
+		if b[0] == 'P' && b[1] == 'U' && b[2] == 'T' {
+			return "PUT"
+		}
+	case 4:
+		if b[0] == 'P' && b[1] == 'O' && b[2] == 'S' && b[3] == 'T' {
+			return "POST"
+		}
+		if b[0] == 'H' && b[1] == 'E' && b[2] == 'A' && b[3] == 'D' {
+			return "HEAD"
+		}
+	case 5:
+		if b[0] == 'P' && b[1] == 'A' && b[2] == 'T' && b[3] == 'C' && b[4] == 'H' {
+			return "PATCH"
+		}
+	case 6:
+		if b[0] == 'D' && b[1] == 'E' && b[2] == 'L' && b[3] == 'E' && b[4] == 'T' && b[5] == 'E' {
+			return "DELETE"
+		}
+	}
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+func updateDateHdr() {
+	b := []byte("Date: " + time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT") + "\r\nServer: Kruda\r\n")
+	cachedDateHdr.Store(&b)
+}
+
+// dateHdr returns the cached Date+Server header chunk.
+func dateHdr() []byte {
+	return *cachedDateHdr.Load()
+}
+
 func (r *wingResponse) buildZeroCopy() []byte {
+	if r.staticResp != nil {
+		return r.staticResp
+	}
 	b := r.buf[:0]
 
 	// Status line — use pre-computed when available.
@@ -426,6 +514,9 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		b = strconv.AppendInt(b, int64(r.status), 10)
 		b = append(b, " Unknown\r\n"...)
 	}
+
+	// Fixed headers: Date + Server (combined in dateHdr)
+	b = append(b, dateHdr()...)
 
 	// Headers — check for Content-Length in the same loop.
 	hasCL := false

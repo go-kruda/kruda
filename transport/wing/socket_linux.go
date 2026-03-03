@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"syscall"
+	"unsafe"
 )
 
 // SO_REUSEPORT on Linux.
@@ -55,4 +56,17 @@ func createListenFd(addr string) (int, error) {
 		return 0, fmt.Errorf("listen: %w", err)
 	}
 	return fd, nil
+}
+
+// setCPUAffinity pins the current OS thread to a specific CPU core.
+func setCPUAffinity(cpu int) {
+	var mask [1024 / 64]uintptr
+	mask[cpu/64] = 1 << (uint(cpu) % 64)
+	syscall.RawSyscall(syscall.SYS_SCHED_SETAFFINITY, 0, uintptr(len(mask)*8), uintptr(unsafe.Pointer(&mask[0])))
+}
+
+// setTCPQuickACK disables delayed ACK on Linux.
+func setTCPQuickACK(fd int32) {
+	const tcpQuickACK = 12
+	syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, tcpQuickACK, 1)
 }

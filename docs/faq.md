@@ -10,7 +10,7 @@ Kruda fills the gap between raw performance frameworks (Fiber, Fasthttp) and typ
 - Built-in DI — no codegen, no reflection, just `Give` and `Use`
 - 60-70% less boilerplate than Gin or Fiber
 
-Think of it as the Go equivalent of Elysia or tRPC.
+Think of it as the Go equivalent of tRPC — maximum DX without sacrificing performance.
 
 ## How does the DI container work?
 

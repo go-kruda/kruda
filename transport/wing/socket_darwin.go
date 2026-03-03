@@ -60,3 +60,8 @@ func createListenFd(addr string) (int, error) {
 	}
 	return fd, nil
 }
+
+// setCPUAffinity is a no-op on macOS (no sched_setaffinity).
+func setCPUAffinity(_ int) {}
+
+func setTCPQuickACK(_ int32) {}

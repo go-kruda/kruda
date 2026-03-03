@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/bytedance/sonic v1.15.0
+	github.com/go-kruda/kruda/transport/wing v0.0.0-00010101000000-000000000000
 	github.com/valyala/fasthttp v1.69.0
 )
 

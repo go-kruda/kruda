@@ -15,14 +15,14 @@ var rawPOST = []byte("POST /users HTTP/1.1\r\nHost: localhost\r\nContent-Type: a
 func BenchmarkParseGET(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		parseHTTPRequest(rawGET, noLimits)
+		_, _, _ = parseHTTPRequest(rawGET, noLimits)
 	}
 }
 
 func BenchmarkParsePOST(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
-		parseHTTPRequest(rawPOST, noLimits)
+		_, _, _ = parseHTTPRequest(rawPOST, noLimits)
 	}
 }
 
@@ -55,7 +55,7 @@ func BenchmarkFullCycle(b *testing.B) {
 	body := []byte("Hello, World!")
 	b.ReportAllocs()
 	for b.Loop() {
-		req, _ := parseHTTPRequest(rawGET, noLimits)
+		req, _, _ := parseHTTPRequest(rawGET, noLimits)
 		_ = req.Path()
 		r := acquireResponse()
 		r.Header().Set("Content-Type", "text/plain")
@@ -75,7 +75,7 @@ func BenchmarkHandlerInline(b *testing.B) {
 	})
 	b.ReportAllocs()
 	for b.Loop() {
-		req, _ := parseHTTPRequest(rawGET, noLimits)
+		req, _, _ := parseHTTPRequest(rawGET, noLimits)
 		resp := acquireResponse()
 		handler.ServeKruda(resp, req)
 		_ = resp.buildZeroCopy()

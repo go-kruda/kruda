@@ -27,8 +27,17 @@ const (
 	opIORecv   uint8 = 27
 )
 
+// io_uring accept flags.
+const iouringAcceptMultishot uint16 = 1 << 0
+
 // io_uring_enter flags.
 const iouringEnterGetEvents uint32 = 1
+
+// io_uring_setup flags.
+const (
+	iouringSetupSingleIssuer uint32 = 1 << 12 // kernel 6.0+
+	iouringSetupDeferTaskrun uint32 = 1 << 13 // kernel 6.1+
+)
 
 // io_uring_setup feature flags.
 const featSingleMmap uint32 = 1
@@ -125,7 +134,6 @@ type Ring struct {
 // NewRing creates a new io_uring with the given number of entries.
 func NewRing(entries uint32) (*Ring, error) {
 	var p ioUringParams
-
 	fd, _, errno := syscall.Syscall(sysIOUringSetup, uintptr(entries), uintptr(unsafe.Pointer(&p)), 0)
 	if errno != 0 {
 		return nil, errno
@@ -338,6 +346,7 @@ func (sqe *SQE) PrepareAccept(fd int, flags uint32) {
 	sqe.Opcode = opIOAccept
 	sqe.Fd = int32(fd)
 	sqe.OpcFlags = flags
+	sqe.Ioprio = iouringAcceptMultishot
 }
 
 func (sqe *SQE) PrepareRecv(fd int, buf unsafe.Pointer, length uint32) {

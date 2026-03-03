@@ -540,6 +540,12 @@ func (c *Ctx) Text(s string) error {
 	if c.tryFastHTTPText(s) {
 		return nil
 	}
+	// Fast path for transports with pre-built static response support (e.g., Wing)
+	if sr, ok := c.writer.(transport.StaticTextResponder); ok {
+		c.responded = true
+		sr.SetStaticText(c.status, "text/plain; charset=utf-8", s)
+		return nil
+	}
 	// Fast path for net/http embedded adapter - bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
 		c.responded = true

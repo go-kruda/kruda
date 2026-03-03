@@ -40,6 +40,7 @@ LAUNCH_PLAN.md
 docs/architecture-analysis.md
 docs/PLAYGROUND_DEPLOYMENT.md
 docs/ux/
+docs/kruda-spec.md
 
 # Build output (root-level compiled binaries from examples)
 /auth

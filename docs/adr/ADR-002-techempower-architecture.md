@@ -8,11 +8,11 @@ Kruda needs to dominate TechEmpower Web Framework Benchmarks across all 7 scenar
 
 **Micro-benchmark Results:**
 - fasthttp mode: StaticGET 53ns/0alloc (ties Fiber)
-- Real HTTP: 221k req/s (beats Elysia 159k req/s)
+- Real HTTP: 221k req/s (fasthttp transport)
 
 **Target Competition:**
 - Go: Fiber, Gin, Echo (current leaders)
-- Cross-language: Elysia (Bun/JS), Actix (Rust), Spring (Java)
+- Cross-language: Actix (Rust), Spring (Java)
 
 **TechEmpower Scenarios:**
 1. JSON serialization

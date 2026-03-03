@@ -97,3 +97,84 @@ func BenchmarkKruda_Middleware5(b *testing.B) {
 		}
 	})
 }
+
+// --- alloc diagnostics ---
+
+func BenchmarkHttpTestRecorder(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			w := httptest.NewRecorder()
+			_ = w
+		}
+	})
+}
+
+func BenchmarkTestAdapters(b *testing.B) {
+	r := httptest.NewRequest("GET", "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			w := httptest.NewRecorder()
+			tr := newTestRequest(r)
+			tw := newTestResponseWriter(w)
+			_ = tr
+			_ = tw
+		}
+	})
+}
+
+func BenchmarkKrudaJustText(b *testing.B) {
+	app := kruda.New()
+	app.Get("/", func(c *kruda.Ctx) error { return c.Text("Hello, World!") })
+	app.Compile()
+	r := httptest.NewRequest("GET", "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			w := httptest.NewRecorder()
+			tr := newTestRequest(r)
+			tw := newTestResponseWriter(w)
+			app.ServeKruda(tw, tr)
+		}
+	})
+}
+
+// --- profile variants ---
+
+func BenchmarkKruda_NoSecurityHeaders(b *testing.B) {
+	app := kruda.New(kruda.NetHTTP())
+	app.Get("/", func(c *kruda.Ctx) error { return c.Text("Hello, World!") })
+	app.Compile()
+	r := httptest.NewRequest("GET", "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			w := httptest.NewRecorder()
+			tr := newTestRequest(r)
+			tw := newTestResponseWriter(w)
+			app.ServeKruda(tw, tr)
+		}
+	})
+}
+
+func BenchmarkKruda_MinimalPath(b *testing.B) {
+	app := kruda.New(kruda.NetHTTP())
+	app.Get("/", func(c *kruda.Ctx) error { return c.Text("Hello, World!") })
+	app.Compile()
+	r := httptest.NewRequest("GET", "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			w := httptest.NewRecorder()
+			tr := newTestRequest(r)
+			tw := newTestResponseWriter(w)
+			app.ServeKruda(tw, tr)
+		}
+	})
+}

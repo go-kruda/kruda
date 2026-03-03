@@ -27,7 +27,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GitHub Actions CI/CD: test matrix, benchmark regression, docs deployment
 - VitePress documentation site in `docs/`
 - Benchmark baseline (`bench/baseline.txt`)
-- Cross-runtime benchmark suite (Kruda vs Elysia/Bun)
+- Cross-runtime benchmark suite (Go frameworks comparison)
 - fasthttp transport for maximum throughput
 - AI-friendly DX: `llms.txt`, `.cursor/rules`, `copilot-instructions.md`
 - Integration tests (`integration_test.go`)
@@ -38,7 +38,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Default transport: fasthttp (Linux/macOS), net/http (Windows)
 
 ### Performance
-- Kruda beats Elysia (Bun) by 38% on GET routes with fasthttp transport
 - 3x faster than Echo/Gin, 5x faster than Fiber on Go benchmarks
 
 ### Security

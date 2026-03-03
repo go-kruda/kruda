@@ -3,147 +3,248 @@
 package wing
 
 import (
+	"runtime"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
 
-// User-data encoding: upper 8 bits = operation, lower 56 bits = fd.
 const (
-	udAccept uint64 = 1 << 56
-	udRecv   uint64 = 2 << 56
-	udSend   uint64 = 3 << 56
-	udClose  uint64 = 4 << 56
-	udWake   uint64 = 5 << 56
+	epollin    = 0x1
+	epollout   = 0x4
+	epollet    = 0x80000000
+	epolloneshot = 0x40000000
+
+	epollCtlAdd = 1
+	epollCtlMod = 3
+	epollCtlDel = 2
 )
 
-// ioUringEngine wraps Ring behind the engine interface.
-type ioUringEngine struct {
-	ring  *Ring
-	pipeW int // write end of wake pipe for PostWake
+type epollEvent struct {
+	events uint32
+	data   [8]byte // fd packed as int32 in first 4 bytes
+}
+
+type epollEngine struct {
+	epfd     int
+	pipeW    int
+	pipeR    int
+	pipeBuf  [8]byte
+	rawMode  bool  // true = RawSyscall (LockOSThread), false = Syscall (async)
+	wakeup   int32 // CAS gate for PostWake
+	idle     int32 // consecutive zero-event polls for adaptive wait
+	connPtrs map[int32]unsafe.Pointer // fd → *conn for epollMod data
+	listenFd int
 }
 
 func newEngine() engine {
-	return &ioUringEngine{}
+	return &epollEngine{
+		connPtrs: make(map[int32]unsafe.Pointer, 1024),
+	}
 }
 
-func (e *ioUringEngine) Init(cfg engineConfig) error {
-	ring, err := NewRing(cfg.RingSize)
+func (e *epollEngine) Init(cfg engineConfig) error {
+	epfd, err := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC)
 	if err != nil {
 		return err
 	}
-	e.ring = ring
+	e.epfd = epfd
 	e.pipeW = cfg.PipeW
+	e.rawMode = cfg.RawMode
+
+	// find pipeR from pipeW — transport passes pipeW; we need pipeR for wake.
+	// Instead, use the pipe pair created by transport: pipeW is in cfg,
+	// but we need pipeR to register with epoll.
+	// Solution: transport registers pipeR via SubmitPipeRecv on first call.
+	e.pipeR = -1
 	return nil
 }
 
-func (e *ioUringEngine) PostWake() {
-	syscall.Write(e.pipeW, []byte{1})
+func (e *epollEngine) PostWake() {
+	if atomic.CompareAndSwapInt32(&e.wakeup, 0, 1) {
+		syscall.Write(e.pipeW, []byte{1})
+	}
 }
 
-func (e *ioUringEngine) SubmitAccept(listenFd int) {
-	sqe := e.getSQE()
-	if sqe == nil {
+func (e *epollEngine) SubmitAccept(listenFd int) {
+	e.listenFd = listenFd
+	e.epollAdd(int32(listenFd), epollin|epollet)
+}
+
+func (e *epollEngine) SubmitPipeRecv(pipeFd int, _ []byte) {
+	if e.pipeR == pipeFd {
 		return
 	}
-	sqe.PrepareAccept(listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
-	sqe.UserData = udAccept
+	e.pipeR = pipeFd
+	e.epollAdd(int32(pipeFd), epollin|epollet)
 }
 
-func (e *ioUringEngine) SubmitRecv(fd int32, buf []byte, offset int) {
-	sqe := e.getSQE()
-	if sqe == nil {
-		return
+func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
+	e.connPtrs[fd] = ptr
+	// Edge-triggered read — fires when new data arrives. No re-arm needed.
+	ev := epollEvent{events: epollin | epollet}
+	*(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0])) = ptr
+	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+}
+
+func (e *epollEngine) SubmitRecv(fd int32, _ []byte, _ int) {
+	// Re-arm EPOLLIN only (remove EPOLLOUT if it was added by SubmitSend).
+	e.epollModPtr(fd, epollin|epollet)
+}
+
+func (e *epollEngine) SubmitSend(fd int32, _ []byte) {
+	// Add EPOLLOUT for partial write fallback.
+	e.epollModPtr(fd, epollin|epollout|epollet)
+}
+
+func (e *epollEngine) SubmitClose(fd int32) {
+	delete(e.connPtrs, fd)
+	syscall.EpollCtl(e.epfd, epollCtlDel, int(fd), nil)
+	syscall.Close(int(fd))
+}
+
+func (e *epollEngine) Wait(events []event) (int, error) {
+	// Adaptive: non-blocking first when busy, block when idle.
+	msec := 0 // non-blocking
+	if e.idle > 64 {
+		msec = -1 // block
 	}
-	sqe.PrepareRecv(int(fd), unsafe.Pointer(&buf[offset]), uint32(len(buf)-offset))
-	sqe.UserData = udRecv | uint64(fd)
-}
-
-func (e *ioUringEngine) SubmitSend(fd int32, data []byte) {
-	sqe := e.getSQE()
-	if sqe == nil {
-		return
+	n, err := e.waitWithTimeout(events, msec)
+	if n > 0 {
+		e.idle = 0
+	} else {
+		e.idle++
+		if msec == 0 && e.idle <= 64 {
+			runtime.Gosched()
+		}
 	}
-	sqe.PrepareSend(int(fd), unsafe.Pointer(&data[0]), uint32(len(data)))
-	sqe.UserData = udSend | uint64(fd)
+	return n, err
 }
 
-func (e *ioUringEngine) SubmitClose(fd int32) {
-	sqe := e.ring.GetSQE() // direct, avoid recursion via getSQE
-	if sqe == nil {
-		// Last resort: synchronous close.
-		syscall.Close(int(fd))
-		return
-	}
-	sqe.PrepareClose(int(fd))
-	sqe.UserData = udClose | uint64(fd)
+func (e *epollEngine) WaitNonBlock(events []event) (int, error) {
+	return e.waitWithTimeout(events, 0)
 }
 
-func (e *ioUringEngine) SubmitPipeRecv(pipeFd int, buf []byte) {
-	sqe := e.getSQE()
-	if sqe == nil {
-		return
-	}
-	sqe.PrepareRecv(pipeFd, unsafe.Pointer(&buf[0]), uint32(len(buf)))
-	sqe.UserData = udWake
-}
-
-func (e *ioUringEngine) Wait(events []event) (int, error) {
-	// Block until at least one CQE is ready.
-	cqe, err := e.ring.WaitCQE()
+func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
+	var epevs [128]epollEvent
+	n, err := epollWait(e.epfd, epevs[:], msec, e.rawMode)
 	if err != nil {
+		if err == syscall.EINTR {
+			return 0, nil
+		}
 		return 0, err
 	}
 
-	// Drain all available CQEs into events slice.
-	n := 0
-	for cqe != nil && n < len(events) {
-		events[n] = decodeCQE(cqe)
-		e.ring.SeenCQE()
-		n++
-		cqe = e.ring.PeekCQE()
+	count := 0
+	for i := 0; i < n && count < len(events); i++ {
+		ev := &epevs[i]
+		// Listen fd and pipe fd store int32 in data[0:4].
+		// Conn fds store unsafe.Pointer in data[0:8].
+		fd := *(*int32)(unsafe.Pointer(&ev.data[0]))
+
+		if int(fd) == e.listenFd {
+			count += e.drainAccept(events[count:])
+			continue
+		}
+
+		if int(fd) == e.pipeR {
+			syscall.Read(e.pipeR, e.pipeBuf[:])
+			atomic.StoreInt32(&e.wakeup, 0)
+			events[count] = event{Op: opWake, Fd: int32(e.pipeR)}
+			count++
+			continue
+		}
+
+		// Conn fd — decode pointer from epoll data.
+		ptr := *(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0]))
+
+		if ev.events&epollout != 0 {
+			events[count] = event{Op: opSend, ConnPtr: ptr}
+			count++
+			continue
+		}
+
+		if ev.events&epollin != 0 {
+			events[count] = event{Op: opRecv, ConnPtr: ptr}
+			count++
+		}
 	}
-	return n, nil
+	return count, nil
 }
 
-func (e *ioUringEngine) Flush() error {
-	_, err := e.ring.Submit()
-	return err
+func (e *epollEngine) drainAccept(events []event) int {
+	// Re-arm listen fd (ET, persistent — no need to re-add)
+	count := 0
+	for count < len(events) {
+		nfd, _, err := syscall.Accept4(e.listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
+		if err != nil {
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+				break
+			}
+			events[count] = event{Op: opAccept, Res: -1}
+			count++
+			break
+		}
+		e.epollAdd(int32(nfd), 0)
+		events[count] = event{Op: opAccept, Res: int32(nfd)}
+		count++
+	}
+	return count
 }
 
-func (e *ioUringEngine) Close() {
-	if e.ring != nil {
-		e.ring.Close()
+func (e *epollEngine) Flush() error { return nil }
+
+func (e *epollEngine) Close() {
+	if e.epfd > 0 {
+		syscall.Close(e.epfd)
 	}
 }
 
-// getSQE returns an SQE, flushing the ring if full (one retry).
-func (e *ioUringEngine) getSQE() *SQE {
-	if sqe := e.ring.GetSQE(); sqe != nil {
-		return sqe
-	}
-	// SQ full — flush pending submissions, then retry.
-	e.ring.Submit()
-	return e.ring.GetSQE()
+// epoll helpers
+
+func (e *epollEngine) epollAdd(fd int32, events uint32) {
+	ev := epollEvent{events: events}
+	*(*int32)(unsafe.Pointer(&ev.data[0])) = fd
+	syscall.EpollCtl(e.epfd, epollCtlAdd, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
 }
 
-// decodeCQE translates a kernel CQE into a generic event.
-func decodeCQE(cqe *CQE) event {
-	ud := cqe.UserData
-	opBits := ud & (0xFF << 56)
-	fd := int32(ud & 0x00FFFFFFFFFFFFFF)
+func (e *epollEngine) epollMod(fd int32, events uint32) {
+	ev := epollEvent{events: events}
+	*(*int32)(unsafe.Pointer(&ev.data[0])) = fd
+	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+}
 
-	var op uint8
-	switch opBits {
-	case udAccept:
-		op = opAccept
-	case udRecv:
-		op = opRecv
-	case udSend:
-		op = opSend
-	case udClose:
-		op = opClose
-	case udWake:
-		op = opWake
+func (e *epollEngine) epollModPtr(fd int32, events uint32) {
+	ev := epollEvent{events: events}
+	ptr := e.connPtrs[fd]
+	*(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0])) = ptr
+	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+}
+
+func epollWait(epfd int, events []epollEvent, msec int, raw bool) (int, error) {
+	var n uintptr
+	var errno syscall.Errno
+	if raw {
+		n, _, errno = syscall.RawSyscall6(
+			syscall.SYS_EPOLL_PWAIT,
+			uintptr(epfd),
+			uintptr(unsafe.Pointer(&events[0])),
+			uintptr(len(events)),
+			uintptr(msec),
+			0, 0,
+		)
+	} else {
+		n, _, errno = syscall.Syscall6(
+			syscall.SYS_EPOLL_PWAIT,
+			uintptr(epfd),
+			uintptr(unsafe.Pointer(&events[0])),
+			uintptr(len(events)),
+			uintptr(msec),
+			0, 0,
+		)
 	}
-	return event{Op: op, Fd: fd, Res: cqe.Res}
+	if errno != 0 {
+		return 0, errno
+	}
+	return int(n), nil
 }

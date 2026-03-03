@@ -93,21 +93,20 @@ kruda.MapErrorType[*ValidationError](app, 422, "validation failed")
 
 ## Benchmarks
 
-### Go Framework Comparison (Go test -bench, Apple M3)
-| Benchmark | Kruda | Echo | Gin | Fiber |
-|-----------|------:|-----:|----:|------:|
-| StaticGET (ns/op) | 416 | 1318 | 1227 | 2961 |
-| ParamGET (ns/op) | 416 | 1263 | 1253 | 3215 |
-| POST JSON (ns/op) | 917 | 1647 | 1791 | 4432 |
+Measured with `go test -bench -benchmem -count=3 -benchtime=3s` on Linux i5-13500. Lower is better.
 
-### Cross-Runtime Comparison (bombardier -c 100 -d 5s, Apple M3)
-| Benchmark | Kruda+fasthttp | Elysia (Bun) | Result |
-|-----------|---------------:|-------------:|--------|
-| GET / plaintext | 220,498 req/s | 158,696 req/s | Kruda +38% |
-| GET /users/:id | 219,460 req/s | 158,513 req/s | Kruda +39% |
-| POST /json | 211,386 req/s | 43,920 req/s | Kruda 4.8x |
+**Kruda (fasthttp transport) vs Fiber**
+| | Kruda ns/op | Fiber ns/op | allocs | vs Fiber |
+|--|--:|--:|--:|--:|
+| StaticGET | 58 | 58 | 0 | tie |
+| ParamGET | 57 | 58 | 0 | +2% |
 
-Note: Kruda uses fasthttp transport by default. Cross-runtime benchmarks use bombardier for fair HTTP-level comparison.
+**Kruda (net/http transport) vs Gin vs Echo**
+| | Kruda ns/op | Gin ns/op | Echo ns/op | vs Gin | vs Echo |
+|--|--:|--:|--:|--:|--:|
+| StaticGET | 256 / 8a | 268 / 9a | 264 / 10a | +4% | +3% |
+| ParamGET | 256 / 8a | 274 / 9a | 274 / 10a | +7% | +7% |
+| POST JSON | 1,560 / 31a | 1,985 / 33a | 1,960 / 33a | +21% | +20% |
 
 - See [`bench/`](bench/) for running benchmarks and Go framework comparisons
 

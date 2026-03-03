@@ -52,6 +52,9 @@ type Config struct {
 	ErrorHandler func(c *Ctx, err *KrudaError)
 	Validator    *Validator
 
+	// Views is the template engine for c.Render(). Nil = c.Render() returns error.
+	Views ViewEngine
+
 	// Turbo enables SO_REUSEPORT prefork mode (Linux only).
 	// Forks runtime.NumCPU() child processes, each with GOMAXPROCS(1) and its own listener.
 	Turbo bool

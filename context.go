@@ -571,10 +571,33 @@ func (c *Ctx) Text(s string) error {
 }
 
 // HTML sends an HTML response (raw string, no template).
-// For template rendering, use a template engine middleware.
+// For template rendering, use c.Render() with a ViewEngine.
 func (c *Ctx) HTML(html string) error {
 	c.contentType = "text/html; charset=utf-8"
 	return c.sendBytes([]byte(html))
+}
+
+// Render renders a named template with data using the configured ViewEngine.
+//
+//	app := kruda.New(kruda.WithViews(kruda.NewViewEngine("views/*.html")))
+//	app.Get("/", func(c *kruda.Ctx) error {
+//	    return c.Render("index", Map{"title": "Home"})
+//	})
+func (c *Ctx) Render(name string, data any, code ...int) error {
+	if c.app.config.Views == nil {
+		return NewError(500, "no view engine configured")
+	}
+	if len(code) > 0 {
+		c.status = code[0]
+	}
+	buf := viewBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer viewBufPool.Put(buf)
+	if err := c.app.config.Views.Render(buf, name, data); err != nil {
+		return err
+	}
+	c.contentType = "text/html; charset=utf-8"
+	return c.sendBytes(buf.Bytes())
 }
 
 // httpResponseWriter is an interface for transport.ResponseWriter implementations

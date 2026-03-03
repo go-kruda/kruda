@@ -385,16 +385,17 @@ type wingRequest struct {
 	cookie      string
 	remoteAddr  string
 	keepAlive   bool
-	extraHdrs   [8]struct{ k, v string } // non-special headers (up to 8)
+	fd          int32 // connection fd — for RawRequest().Fd()
+	extraHdrs   [8]struct{ k, v string }
 	extraN      int
-	ctx         context.Context // set by transport when conn has a cancel func
+	ctx         context.Context
 }
 
-func (r *wingRequest) Method() string                                 { return r.method }
-func (r *wingRequest) Path() string                                   { return r.path }
-func (r *wingRequest) Body() ([]byte, error)                          { return r.body, nil }
-func (r *wingRequest) RemoteAddr() string                             { return r.remoteAddr }
-func (r *wingRequest) RawRequest() any                                { return nil }
+func (r *wingRequest) Method() string         { return r.method }
+func (r *wingRequest) Path() string           { return r.path }
+func (r *wingRequest) Body() ([]byte, error)  { return r.body, nil }
+func (r *wingRequest) RemoteAddr() string     { return r.remoteAddr }
+func (r *wingRequest) RawRequest() any        { return r }
 func (r *wingRequest) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx

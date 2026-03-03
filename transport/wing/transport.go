@@ -482,6 +482,7 @@ func (w *worker) tryParse(c *conn) {
 			break
 		}
 		req.remoteAddr = c.remoteAddr
+		req.fd = c.fd
 		req.ctx = c.ctx
 		// Full request received — clear read deadline, update idle clock.
 		c.readDeadline = 0

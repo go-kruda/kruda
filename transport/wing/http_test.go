@@ -1826,3 +1826,158 @@ func TestTransportSim_ConnectionCloseStopsPipelining(t *testing.T) {
 	t.Error("should have returned on !keepAlive branch")
 }
 
+
+// ----------------------------- Cookie Tests -----------------------------
+
+func TestParseCookieValue_Single(t *testing.T) {
+	if v := parseCookieValue("session=abc123", "session"); v != "abc123" {
+		t.Errorf("got %q, want abc123", v)
+	}
+}
+
+func TestParseCookieValue_Multiple(t *testing.T) {
+	cookie := "session=abc; user=tiger; theme=dark"
+	cases := [][2]string{
+		{"session", "abc"},
+		{"user", "tiger"},
+		{"theme", "dark"},
+	}
+	for _, c := range cases {
+		if v := parseCookieValue(cookie, c[0]); v != c[1] {
+			t.Errorf("Cookie(%q) = %q, want %q", c[0], v, c[1])
+		}
+	}
+}
+
+func TestParseCookieValue_Missing(t *testing.T) {
+	if v := parseCookieValue("session=abc", "missing"); v != "" {
+		t.Errorf("got %q, want empty", v)
+	}
+}
+
+func TestParseCookieValue_Empty(t *testing.T) {
+	if v := parseCookieValue("", "session"); v != "" {
+		t.Errorf("got %q, want empty", v)
+	}
+}
+
+func TestParseHTTPRequest_CookieHeader(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\nCookie: session=xyz; user=bob\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	if req.Cookie("session") != "xyz" {
+		t.Errorf("Cookie(session) = %q, want xyz", req.Cookie("session"))
+	}
+	if req.Cookie("user") != "bob" {
+		t.Errorf("Cookie(user) = %q, want bob", req.Cookie("user"))
+	}
+	if req.Cookie("missing") != "" {
+		t.Errorf("Cookie(missing) = %q, want empty", req.Cookie("missing"))
+	}
+}
+
+func TestParseHTTPRequest_NoCookie(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	if req.Cookie("session") != "" {
+		t.Errorf("Cookie(session) = %q, want empty (no Cookie header)", req.Cookie("session"))
+	}
+}
+
+// ----------------------------- Extra Header Tests -----------------------------
+
+func TestParseHTTPRequest_ExtraHeaders(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\nAuthorization: Bearer token123\r\nX-Request-ID: req-456\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	if v := req.Header("Authorization"); v != "Bearer token123" {
+		t.Errorf("Header(Authorization) = %q, want Bearer token123", v)
+	}
+	if v := req.Header("X-Request-ID"); v != "req-456" {
+		t.Errorf("Header(X-Request-ID) = %q, want req-456", v)
+	}
+}
+
+func TestParseHTTPRequest_HeaderCaseInsensitive(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\nAuthorization: Bearer tok\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	// Lookup must be case-insensitive.
+	if v := req.Header("authorization"); v != "Bearer tok" {
+		t.Errorf("Header(authorization) = %q, want Bearer tok", v)
+	}
+	if v := req.Header("AUTHORIZATION"); v != "Bearer tok" {
+		t.Errorf("Header(AUTHORIZATION) = %q, want Bearer tok", v)
+	}
+}
+
+func TestParseHTTPRequest_ExtraHeadersMissing(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	if v := req.Header("X-Missing"); v != "" {
+		t.Errorf("Header(X-Missing) = %q, want empty", v)
+	}
+}
+
+func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
+	// 9 non-special headers — only first 8 stored, 9th silently dropped.
+	var raw string
+	raw = "GET / HTTP/1.1\r\n"
+	for i := 0; i < 9; i++ {
+		raw += "X-H" + strconv.Itoa(i) + ": v" + strconv.Itoa(i) + "\r\n"
+	}
+	raw += "\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse even with 9 extra headers")
+	}
+	// First 8 must be present.
+	for i := 0; i < 8; i++ {
+		k := "X-H" + strconv.Itoa(i)
+		want := "v" + strconv.Itoa(i)
+		if v := req.Header(k); v != want {
+			t.Errorf("Header(%s) = %q, want %q", k, v, want)
+		}
+	}
+	// 9th must be dropped.
+	if v := req.Header("X-H8"); v != "" {
+		t.Errorf("Header(X-H8) = %q, want empty (overflow dropped)", v)
+	}
+}
+
+// ----------------------------- RemoteAddr Tests -----------------------------
+
+func TestWingRequest_RemoteAddrSetFromConn(t *testing.T) {
+	// Verify that remoteAddr flows from conn → request via tryParse.
+	// We test this at the wingRequest level directly (unit test).
+	req := acquireRequest()
+	req.remoteAddr = "192.168.1.1:54321"
+	if req.RemoteAddr() != "192.168.1.1:54321" {
+		t.Errorf("RemoteAddr() = %q, want 192.168.1.1:54321", req.RemoteAddr())
+	}
+	releaseRequest(req)
+}
+
+func TestWingRequest_RemoteAddrEmptyByDefault(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatal("should parse")
+	}
+	// Parser doesn't set remoteAddr — transport sets it after parse.
+	if req.RemoteAddr() != "" {
+		t.Errorf("RemoteAddr() = %q, want empty (set by transport, not parser)", req.RemoteAddr())
+	}
+}

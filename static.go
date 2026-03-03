@@ -134,8 +134,9 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 	}
 
 	app.Get(prefix+"/*filepath", handler)
-	app.Get(prefix+"/", handler)
-	if prefix == "" {
+	if prefix != "" {
+		app.Get(prefix, handler)
+	} else {
 		app.Get("/", handler)
 	}
 	return app

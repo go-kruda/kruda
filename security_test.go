@@ -817,6 +817,136 @@ func TestSecureCookieFlags(t *testing.T) {
 	}
 }
 
+func TestMethodOverrideHeader(t *testing.T) {
+	app := New()
+	app.Get("/resource", func(c *Ctx) error {
+		return c.Text("get-ok")
+	})
+	app.Delete("/resource", func(c *Ctx) error {
+		return c.Text("delete-ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	resp, err := tc.Request("GET", "/resource").
+		Header("X-HTTP-Method-Override", "DELETE").
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := resp.BodyString()
+	if body == "delete-ok" {
+		t.Error("X-HTTP-Method-Override should not silently switch methods")
+	}
+}
+
+func TestLargeHeaderValue(t *testing.T) {
+	app := New()
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	bigValue := strings.Repeat("A", 10240)
+	resp, err := tc.Request("GET", "/test").
+		Header("X-Large", bigValue).
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 && resp.StatusCode() != 431 {
+		t.Logf("large header value returned %d", resp.StatusCode())
+	}
+}
+
+func TestSecurityHeadersOnErrorResponse(t *testing.T) {
+	app := New(WithSecureHeaders())
+	app.Get("/fail", func(c *Ctx) error {
+		return NewError(500, "internal error")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 500 {
+		t.Fatalf("expected 500, got %d", resp.StatusCode())
+	}
+
+	if got := resp.Header("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options missing on error response, got %q", got)
+	}
+	if got := resp.Header("X-Frame-Options"); got == "" {
+		t.Error("X-Frame-Options missing on error response")
+	}
+}
+
+func TestContentTypeOnJSONError(t *testing.T) {
+	app := New()
+	app.Get("/fail", func(c *Ctx) error {
+		return NewError(400, "bad request")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := resp.Header("Content-Type")
+	if !contains(ct, "application/json") {
+		t.Errorf("error response should be JSON, got Content-Type: %q", ct)
+	}
+}
+
+func TestDoSZeroLengthBody(t *testing.T) {
+	app := New(WithMaxBodySize(1024))
+	app.Post("/data", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Request("POST", "/data").
+		Body([]byte{}).
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Errorf("empty body should be accepted, got %d", resp.StatusCode())
+	}
+}
+
+func TestPathTraversal_OverlongUTF8(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/safe", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	paths := []string{
+		"/%c0%ae%c0%ae/etc/passwd",
+		"/%c0%af%c0%ae%c0%ae/etc/shadow",
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		if resp.StatusCode() == 200 && resp.BodyString() == "ok" {
+			t.Errorf("GET %s: should not reach /safe handler via overlong UTF-8", p)
+		}
+	}
+}
+
 func TestHostHeaderValidation(t *testing.T) {
 	app := New()
 	app.Get("/host", func(c *Ctx) error {
@@ -826,7 +956,6 @@ func TestHostHeaderValidation(t *testing.T) {
 
 	tc := NewTestClient(app)
 
-	// Normal host header should work
 	resp, err := tc.Get("/host")
 	if err != nil {
 		t.Fatal(err)
@@ -835,13 +964,10 @@ func TestHostHeaderValidation(t *testing.T) {
 		t.Errorf("expected 200, got %d", resp.StatusCode())
 	}
 
-	// Even with unusual paths, the framework should not crash or expose internal info
-	// This is a basic smoke test that the app doesn't panic on unusual input
 	resp, err = tc.Get("/host?redirect=http://evil.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Should still return 200 (query params don't affect routing)
 	if resp.StatusCode() != 200 {
 		t.Errorf("expected 200, got %d", resp.StatusCode())
 	}

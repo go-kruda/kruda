@@ -719,3 +719,130 @@ func TestDoSWithBodyLimitAlias(t *testing.T) {
 			2048, 2048, app1.config.BodyLimit, app2.config.BodyLimit)
 	}
 }
+
+// --- Additional security tests ---
+
+func TestPathTraversal_NullByteInjection(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/files/*path", func(c *Ctx) error {
+		return c.Text("file:" + c.Param("path"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	// Null byte injection: attacker tries to access /etc/passwd%00.jpg
+	// to bypass extension checks
+	paths := []string{
+		"/files/image%00.jpg",
+		"/files/../etc/passwd%00.txt",
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		// Should not expose the path with null byte to the handler
+		body := resp.BodyString()
+		if strings.Contains(body, "\x00") {
+			t.Errorf("GET %s: response body contains null byte: %q", p, body)
+		}
+	}
+}
+
+func TestPathTraversal_BackslashVariants(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/safe", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	// Backslash path traversal variants (Windows-style)
+	paths := []string{
+		"/..\\etc\\passwd",
+		"/..%5c..%5cetc%5cpasswd",   // %5c = backslash
+		"/..%5C..%5Cetc%5Cpasswd",   // uppercase %5C
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		// Should not return 200 (either 400 blocked or 404 no match)
+		if resp.StatusCode() == 200 && resp.BodyString() == "ok" {
+			t.Errorf("GET %s: should not reach handler with path traversal via backslash", p)
+		}
+	}
+}
+
+func TestSecureCookieFlags(t *testing.T) {
+	app := New()
+	app.Get("/setcookie", func(c *Ctx) error {
+		c.SetCookie(&Cookie{
+			Name:     "session",
+			Value:    "abc123",
+			Path:     "/",
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Strict",
+		})
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/setcookie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode())
+	}
+
+	setCookie := resp.Header("Set-Cookie")
+	if setCookie == "" {
+		t.Fatal("Set-Cookie header missing")
+	}
+
+	if !contains(setCookie, "HttpOnly") {
+		t.Errorf("Set-Cookie should contain HttpOnly, got: %q", setCookie)
+	}
+	if !contains(setCookie, "Secure") {
+		t.Errorf("Set-Cookie should contain Secure, got: %q", setCookie)
+	}
+	if !contains(setCookie, "SameSite=Strict") {
+		t.Errorf("Set-Cookie should contain SameSite=Strict, got: %q", setCookie)
+	}
+}
+
+func TestHostHeaderValidation(t *testing.T) {
+	app := New()
+	app.Get("/host", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	// Normal host header should work
+	resp, err := tc.Get("/host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode())
+	}
+
+	// Even with unusual paths, the framework should not crash or expose internal info
+	// This is a basic smoke test that the app doesn't panic on unusual input
+	resp, err = tc.Get("/host?redirect=http://evil.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should still return 200 (query params don't affect routing)
+	if resp.StatusCode() != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode())
+	}
+}

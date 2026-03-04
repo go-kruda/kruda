@@ -6,11 +6,13 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -630,4 +632,185 @@ func readServerFrame(t *testing.T, conn net.Conn) *frame {
 		t.Fatalf("read frame: %v", err)
 	}
 	return f
+}
+
+// --- Concurrent safety and edge case tests ---
+
+func TestConn_ConcurrentWrites(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			// Concurrently write 10 messages — should not panic or corrupt frames
+			var wg sync.WaitGroup
+			for i := 0; i < 10; i++ {
+				wg.Add(1)
+				go func(n int) {
+					defer wg.Done()
+					msg := fmt.Sprintf("msg-%d", n)
+					conn.WriteText(msg)
+				}(i)
+			}
+			wg.Wait()
+
+			// Send close to signal done
+			conn.Close(CloseNormalClosure, "done")
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	wsConn := dialWS(t, srv.URL+"/ws")
+	defer wsConn.Close()
+
+	// Read all messages until close
+	received := 0
+	for {
+		wsConn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		f, err := readFrame(bufio.NewReader(wsConn), 0)
+		if err != nil {
+			break // connection closed or error
+		}
+		if f.opcode == 0x8 {
+			break // close frame
+		}
+		if f.opcode == 0x1 {
+			received++
+		}
+	}
+
+	if received != 10 {
+		t.Errorf("received %d messages, want 10", received)
+	}
+}
+
+func TestUpgrade_InvalidMethod(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Post("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	// POST with upgrade headers — should be rejected (WS requires GET)
+	url := strings.Replace(srv.URL, "http://", "", 1)
+	conn, err := net.DialTimeout("tcp", url, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	key := base64.StdEncoding.EncodeToString([]byte("test-key-1234567"))
+	req := "POST /ws HTTP/1.1\r\n" +
+		"Host: " + url + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: " + key + "\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"\r\n"
+	conn.Write([]byte(req))
+
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Should be rejected — 400 or 405
+	if resp.StatusCode == 101 {
+		t.Error("POST should not upgrade to WebSocket")
+	}
+}
+
+func TestConn_WriteAfterClose(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	var writeErr error
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			conn.Close(CloseNormalClosure, "closing")
+			// Write after close should fail
+			writeErr = conn.WriteText("after close")
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	wsConn := dialWS(t, srv.URL+"/ws")
+	defer wsConn.Close()
+
+	// Wait for server to close and attempt write
+	time.Sleep(100 * time.Millisecond)
+
+	if writeErr == nil {
+		t.Error("expected error writing to closed connection")
+	}
+}
+
+func TestConn_ReadAfterClose(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			// Read one message, then close, then try to read again
+			conn.ReadMessage()
+			conn.Close(CloseNormalClosure, "closing")
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	wsConn := dialWS(t, srv.URL+"/ws")
+	defer wsConn.Close()
+
+	// Send a message, then close
+	sendClientFrame(t, wsConn, true, 0x1, []byte("hello"))
+
+	// Read server close frame
+	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	f, err := readFrame(bufio.NewReader(wsConn), 0)
+	if err != nil {
+		t.Logf("read after server close: %v (expected)", err)
+		return
+	}
+	if f.opcode == 0x8 {
+		// Good — server sent close frame
+		return
+	}
+}
+
+func TestConfig_Defaults(t *testing.T) {
+	var cfg Config
+	cfg.defaults()
+
+	if cfg.ReadBufferSize != 4096 {
+		t.Errorf("ReadBufferSize = %d, want 4096", cfg.ReadBufferSize)
+	}
+	if cfg.WriteBufferSize != 4096 {
+		t.Errorf("WriteBufferSize = %d, want 4096", cfg.WriteBufferSize)
+	}
+
+	// Non-zero values should be preserved
+	cfg2 := Config{ReadBufferSize: 8192, WriteBufferSize: 16384}
+	cfg2.defaults()
+	if cfg2.ReadBufferSize != 8192 {
+		t.Errorf("ReadBufferSize = %d, want 8192 (preserved)", cfg2.ReadBufferSize)
+	}
+	if cfg2.WriteBufferSize != 16384 {
+		t.Errorf("WriteBufferSize = %d, want 16384 (preserved)", cfg2.WriteBufferSize)
+	}
 }

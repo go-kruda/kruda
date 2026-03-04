@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -72,6 +73,17 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 			if o == "*" {
 				panic("kruda: CORS AllowCredentials=true cannot be used with AllowOrigins=[\"*\"]")
 			}
+		}
+	}
+
+	// Validate origin format at init to catch misconfigurations early.
+	for _, o := range cfg.AllowOrigins {
+		if o == "*" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			panic("kruda: CORS invalid origin: " + o + " (must be scheme://host[:port])")
 		}
 	}
 

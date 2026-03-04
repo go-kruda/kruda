@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,11 +17,15 @@ type Conn struct {
 	br     *bufio.Reader
 	bw     *bufio.Writer
 	mu     sync.Mutex // protects writes
-	closed bool
+	closed atomic.Bool
 
-	maxMessageSize int64
-	readTimeout    time.Duration
-	writeTimeout   time.Duration
+	maxMessageSize  int64
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	messageTimeout  time.Duration
+	maxPingPerSec   int
+	pingCount       int32
+	pingWindowStart time.Time
 }
 
 // newConn wraps a hijacked net.Conn into a WebSocket connection.
@@ -32,6 +37,8 @@ func newConn(rwc net.Conn, brw *bufio.ReadWriter, cfg Config) *Conn {
 		maxMessageSize: cfg.MaxMessageSize,
 		readTimeout:    cfg.ReadTimeout,
 		writeTimeout:   cfg.WriteTimeout,
+		messageTimeout: cfg.MessageTimeout,
+		maxPingPerSec:  cfg.MaxPingPerSecond,
 	}
 	return c
 }
@@ -45,6 +52,8 @@ func newConnFromRaw(rwc net.Conn, cfg Config) *Conn {
 		maxMessageSize: cfg.MaxMessageSize,
 		readTimeout:    cfg.ReadTimeout,
 		writeTimeout:   cfg.WriteTimeout,
+		messageTimeout: cfg.MessageTimeout,
+		maxPingPerSec:  cfg.MaxPingPerSecond,
 	}
 }
 
@@ -86,12 +95,18 @@ func (c *Conn) ReadMessage() (messageType int, data []byte, err error) {
 			return messageType, data, nil
 		}
 
-		// Fragmented message — assemble continuation frames
+		// Fragmented message — assemble continuation frames.
+		// If MessageTimeout is set, apply a single deadline for the entire
+		// message assembly instead of resetting per-frame.
+		if c.messageTimeout > 0 {
+			_ = c.rwc.SetReadDeadline(time.Now().Add(c.messageTimeout))
+		}
+
 		var totalSize int64
 		totalSize = int64(len(data))
 
 		for {
-			if c.readTimeout > 0 {
+			if c.messageTimeout == 0 && c.readTimeout > 0 {
 				_ = c.rwc.SetReadDeadline(time.Now().Add(c.readTimeout))
 			}
 
@@ -136,7 +151,7 @@ func (c *Conn) WriteMessage(messageType int, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.closed {
+	if c.closed.Load() {
 		return fmt.Errorf("ws: connection closed")
 	}
 
@@ -165,10 +180,10 @@ func (c *Conn) Close(code int, reason string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.closed {
+	if c.closed.Load() {
 		return nil
 	}
-	c.closed = true
+	c.closed.Store(true)
 
 	// Best-effort close frame — ignore write errors
 	if c.writeTimeout > 0 {
@@ -194,6 +209,18 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 func (c *Conn) handleControl(f *frame) error {
 	switch f.opcode {
 	case 0x9: // Ping → respond with Pong
+		if c.maxPingPerSec > 0 {
+			now := time.Now()
+			if now.Sub(c.pingWindowStart) >= time.Second {
+				c.pingCount = 0
+				c.pingWindowStart = now
+			}
+			c.pingCount++
+			if int(c.pingCount) > c.maxPingPerSec {
+				_ = c.Close(ClosePolicyViolation, "ping rate exceeded")
+				return fmt.Errorf("ws: ping rate exceeded (%d/s)", c.maxPingPerSec)
+			}
+		}
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if c.writeTimeout > 0 {
@@ -210,8 +237,8 @@ func (c *Conn) handleControl(f *frame) error {
 	case 0x8: // Close
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		if !c.closed {
-			c.closed = true
+		if !c.closed.Load() {
+			c.closed.Store(true)
 			// Echo close frame back
 			if c.writeTimeout > 0 {
 				_ = c.rwc.SetWriteDeadline(time.Now().Add(c.writeTimeout))
@@ -221,6 +248,10 @@ func (c *Conn) handleControl(f *frame) error {
 			_ = c.rwc.Close()
 		}
 		return nil
+
+	default:
+		// RFC 6455 §5.2: undefined control opcodes are protocol errors
+		_ = c.Close(CloseProtocolError, "unknown control opcode")
+		return fmt.Errorf("ws: unknown control opcode 0x%x", f.opcode)
 	}
-	return nil
 }

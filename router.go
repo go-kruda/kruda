@@ -434,13 +434,62 @@ func parseOneSegment(s string) segment {
 				panic(fmt.Sprintf("kruda: invalid regex constraint in %s", s))
 			}
 			name = raw[:idx]
-			rx = regexp.MustCompile("^" + raw[idx+1:end] + "$")
+			pattern := raw[idx+1 : end]
+			if err := validateRegexSafety(pattern); err != nil {
+				panic(fmt.Sprintf("kruda: unsafe regex in route %s: %v", s, err))
+			}
+			rx = regexp.MustCompile("^" + pattern + "$")
 		} else {
 			name = raw
 		}
 		return segment{text: s, param: name, regex: rx, optional: optional}
 	}
 	return segment{text: s, static: true}
+}
+
+// validateRegexSafety rejects patterns prone to catastrophic backtracking.
+// Detects quantified groups whose contents also contain quantifiers,
+// e.g. (a+)+, (a*)+, (a+)*, (a{2,})+.
+func validateRegexSafety(pattern string) error {
+	// Track whether each group depth contains a quantifier inside it.
+	type groupInfo struct {
+		hasInnerQuantifier bool
+	}
+	var stack []groupInfo
+
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		switch c {
+		case '\\':
+			i++ // skip escaped char
+		case '(':
+			stack = append(stack, groupInfo{})
+		case ')':
+			if len(stack) == 0 {
+				continue
+			}
+			top := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			// Check if the closing paren is followed by a quantifier
+			if i+1 < len(pattern) && isQuantifier(pattern[i+1]) && top.hasInnerQuantifier {
+				return fmt.Errorf("nested quantifier at position %d", i+1)
+			}
+		case '+', '*':
+			// Mark the current group (if any) as containing a quantifier
+			if len(stack) > 0 {
+				stack[len(stack)-1].hasInnerQuantifier = true
+			}
+		case '{':
+			if len(stack) > 0 {
+				stack[len(stack)-1].hasInnerQuantifier = true
+			}
+		}
+	}
+	return nil
+}
+
+func isQuantifier(c byte) bool {
+	return c == '+' || c == '*' || c == '?' || c == '{'
 }
 
 // insertRoute inserts segments into the tree starting at the given node.

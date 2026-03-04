@@ -271,7 +271,11 @@ func Use[T any](c *Container) (T, error) {
 	// Singletons skip cycle detection — already constructed
 	if inst, ok := c.singletons[t]; ok {
 		c.mu.RUnlock()
-		return inst.(T), nil
+		typed, ok := inst.(T)
+		if !ok {
+			return zero, fmt.Errorf("kruda: type mismatch for %v: stored %T", t, inst)
+		}
+		return typed, nil
 	}
 	if entry, ok := c.transients[t]; ok {
 		c.mu.RUnlock()
@@ -283,12 +287,20 @@ func Use[T any](c *Container) (T, error) {
 		if err != nil {
 			return zero, fmt.Errorf("kruda: transient factory for %v failed: %w", t, err)
 		}
-		return inst.(T), nil
+		typed, ok := inst.(T)
+		if !ok {
+			return zero, fmt.Errorf("kruda: type mismatch for %v: factory returned %T", t, inst)
+		}
+		return typed, nil
 	}
 	if entry, ok := c.lazies[t]; ok {
 		c.mu.RUnlock()
 		if entry.done.Load() {
-			return entry.instance.(T), nil
+			typed, ok := entry.instance.(T)
+			if !ok {
+				return zero, fmt.Errorf("kruda: type mismatch for %v: stored %T", t, entry.instance)
+			}
+			return typed, nil
 		}
 		if err := c.pushResolving(t); err != nil {
 			return zero, err
@@ -303,7 +315,11 @@ func Use[T any](c *Container) (T, error) {
 			c.initOrder = append(c.initOrder, inst)
 			c.mu.Unlock()
 		}
-		return inst.(T), nil
+		typed, ok := inst.(T)
+		if !ok {
+			return zero, fmt.Errorf("kruda: type mismatch for %v: factory returned %T", t, inst)
+		}
+		return typed, nil
 	}
 	c.mu.RUnlock()
 	return zero, fmt.Errorf("kruda: no provider for type %v", t)

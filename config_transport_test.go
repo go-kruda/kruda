@@ -15,20 +15,14 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 1}))
 }
 
-func TestSelectTransport_DefaultReturnsFastHTTP(t *testing.T) {
+func TestSelectTransport_DefaultReturnsWing(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
 	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")
 	}
-	// Default is fasthttp on Linux/macOS, net/http on Windows (fasthttp build tag).
-	switch tr.(type) {
-	case *transport.NetHTTPTransport:
-		// expected on Windows (fasthttp has build tag !windows)
-	default:
-		// fasthttp on Linux/macOS — any non-nil transport is valid
-	}
+	// Default is Wing on Linux/macOS, net/http on Windows.
 }
 
 func TestSelectTransport_ExplicitTransport(t *testing.T) {
@@ -55,10 +49,10 @@ func TestSelectTransport_NetHTTPOption(t *testing.T) {
 	}
 }
 
-func TestSelectTransport_DefaultSelectsFastHTTP(t *testing.T) {
+func TestSelectTransport_DefaultSelectsWing(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	// TransportName defaults to "" → fasthttp
+	// TransportName defaults to "" → Wing on Linux/macOS
 	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil for default")

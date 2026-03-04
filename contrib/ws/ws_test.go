@@ -263,7 +263,8 @@ func TestUpgrade_FullHandshake(t *testing.T) {
 	sendClientFrame(t, conn, true, 0x1, []byte("hello"))
 
 	// Read echo response
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x1 {
 		t.Errorf("expected text frame, got opcode %d", f.opcode)
 	}
@@ -299,7 +300,8 @@ func TestUpgrade_PingPong(t *testing.T) {
 	sendClientFrame(t, conn, true, 0x9, []byte("ping-data"))
 
 	// Expect pong with same payload
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0xA {
 		t.Errorf("expected pong (0xA), got opcode %d", f.opcode)
 	}
@@ -336,7 +338,8 @@ func TestUpgrade_CloseHandshake(t *testing.T) {
 	sendClientFrame(t, conn, true, 0x8, closePayload)
 
 	// Expect close frame back
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x8 {
 		t.Errorf("expected close frame, got opcode %d", f.opcode)
 	}
@@ -366,7 +369,8 @@ func TestUpgrade_BinaryMessage(t *testing.T) {
 	binData := []byte{0x00, 0xFF, 0xAB, 0xCD}
 	sendClientFrame(t, conn, true, 0x2, binData)
 
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x2 {
 		t.Errorf("expected binary frame, got opcode %d", f.opcode)
 	}
@@ -400,7 +404,8 @@ func TestUpgrade_MaxMessageSize(t *testing.T) {
 	sendClientFrame(t, conn, true, 0x1, bigData)
 
 	// Server should send close frame with 1009
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x8 {
 		t.Errorf("expected close frame, got opcode %d", f.opcode)
 	}
@@ -525,7 +530,8 @@ func TestUpgrade_FragmentedMessage(t *testing.T) {
 	sendClientFrame(t, conn, true, 0x0, []byte("world")) // final continuation (FIN)
 
 	// Read assembled message
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x1 {
 		t.Errorf("expected text frame, got opcode %d", f.opcode)
 	}
@@ -623,11 +629,11 @@ func sendClientFrame(t *testing.T, conn net.Conn, fin bool, opcode byte, payload
 	}
 }
 
-// readServerFrame reads an unmasked frame from the server.
-func readServerFrame(t *testing.T, conn net.Conn) *frame {
+// readServerFrame reads an unmasked frame from the server using the provided reader.
+func readServerFrame(t *testing.T, conn net.Conn, br *bufio.Reader) *frame {
 	t.Helper()
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	f, err := readFrame(bufio.NewReader(conn), 0)
+	f, err := readFrame(br, 0)
 	if err != nil {
 		t.Fatalf("read frame: %v", err)
 	}
@@ -668,9 +674,10 @@ func TestConn_ConcurrentWrites(t *testing.T) {
 
 	// Read all messages until close
 	received := 0
+	br := bufio.NewReader(wsConn)
 	for {
 		wsConn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		f, err := readFrame(bufio.NewReader(wsConn), 0)
+		f, err := readFrame(br, 0)
 		if err != nil {
 			break // connection closed or error
 		}
@@ -848,9 +855,10 @@ func TestUpgrade_PingDuringFragmentation(t *testing.T) {
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	gotPong := false
 	gotEcho := false
+	br := bufio.NewReader(conn)
 
 	for i := 0; i < 3; i++ {
-		f, err := readFrame(bufio.NewReader(conn), 0)
+		f, err := readFrame(br, 0)
 		if err != nil {
 			break
 		}
@@ -947,8 +955,9 @@ func TestUpgrade_MultipleMessages(t *testing.T) {
 		sendClientFrame(t, conn, true, 0x1, []byte(msg))
 	}
 
+	br := bufio.NewReader(conn)
 	for i, want := range msgs {
-		f := readServerFrame(t, conn)
+		f := readServerFrame(t, conn, br)
 		if f.opcode != 0x1 {
 			t.Errorf("msg %d: expected text frame, got opcode %d", i, f.opcode)
 			continue
@@ -984,7 +993,8 @@ func TestUpgrade_EmptyTextMessage(t *testing.T) {
 	// Send empty text message
 	sendClientFrame(t, conn, true, 0x1, []byte{})
 
-	f := readServerFrame(t, conn)
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
 	if f.opcode != 0x1 {
 		t.Errorf("expected text frame, got opcode %d", f.opcode)
 	}

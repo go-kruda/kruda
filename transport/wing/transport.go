@@ -148,7 +148,11 @@ func (t *Transport) SetRouteFeather(method, path string, feather any) {
 }
 
 func (t *Transport) Shutdown(_ context.Context) error {
-	<-t.ready
+	select {
+	case <-t.ready:
+	default:
+		return nil // never started
+	}
 	t.shutdown.Store(true)
 	for _, w := range t.workers {
 		if w != nil {

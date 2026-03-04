@@ -25,7 +25,7 @@ type Config struct {
 	ShutdownTimeout time.Duration // default: 10s
 
 	Transport     transport.Transport
-	TransportName string // "fasthttp" (default), "nethttp"
+	TransportName string // "wing" (default on Linux/macOS), "fasthttp", "nethttp"
 	TLSCertFile   string
 	TLSKeyFile    string
 	HTTP3         bool
@@ -180,8 +180,8 @@ func WithTransport(t transport.Transport) Option {
 	return func(a *App) { a.config.Transport = t }
 }
 
-// FastHTTP selects the fasthttp transport for maximum performance.
-// This is the default transport — calling FastHTTP() is optional but explicit.
+// FastHTTP selects the fasthttp transport.
+// Use when you need fasthttp's battle-tested HTTP/1.1 handling.
 func FastHTTP() Option {
 	return func(a *App) { a.config.TransportName = "fasthttp" }
 }
@@ -192,10 +192,9 @@ func NetHTTP() Option {
 	return func(a *App) { a.config.TransportName = "nethttp" }
 }
 
-// Wing selects the Wing transport for maximum performance.
-// Wing uses io_uring on Linux and kqueue on macOS for async I/O
-// without goroutine-per-connection overhead — 2x+ faster than fasthttp.
-// On unsupported platforms, falls back to fasthttp automatically.
+// Wing selects the Wing transport (epoll/kqueue).
+// This is the default on Linux and macOS — calling Wing() is optional but explicit.
+// Falls back to fasthttp on unsupported platforms.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
 }
@@ -378,8 +377,8 @@ func WithOpenAPITag(name, description string) Option {
 }
 
 // selectTransport chooses the transport based on config, env, and OS.
-// Priority: explicit WithTransport() > FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default (fasthttp).
-// Default is fasthttp for maximum performance. TLS or Windows auto-falls back to net/http.
+// Priority: explicit WithTransport() > Wing()/FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default.
+// Default is Wing on Linux/macOS for maximum performance. Falls back to net/http on Windows or when TLS is needed.
 func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, string) {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {
@@ -390,8 +389,10 @@ func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, stri
 	if name == "" {
 		if env := os.Getenv("KRUDA_TRANSPORT"); env != "" {
 			name = env
+		} else if runtime.GOOS == "windows" {
+			name = "nethttp"
 		} else {
-			name = "fasthttp" // default: fasthttp for maximum performance
+			name = "wing"
 		}
 	}
 
@@ -410,24 +411,21 @@ func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, stri
 	case "nethttp":
 		logger.Debug("transport selected", "name", "nethttp")
 		return transport.NewNetHTTP(netHTTPCfg), "nethttp"
-	case "wing":
-		// TLS → force net/http for HTTP/2.
-		if cfg.TLSCertFile != "" {
-			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
-			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
-		}
-		return newWingTransport(cfg, logger), "wing"
-	default: // "fasthttp" or any other value
-		// TLS → force net/http for HTTP/2 auto-negotiation.
+	case "fasthttp":
 		if cfg.TLSCertFile != "" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "tls")
 			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
-		// Windows → force net/http (fasthttp has build tag !windows).
 		if runtime.GOOS == "windows" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "windows")
 			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
 		return newFastHTTPTransport(cfg, logger), "fasthttp"
+	default: // "wing" or any other value
+		if cfg.TLSCertFile != "" {
+			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
+		}
+		return newWingTransport(cfg, logger), "wing"
 	}
 }

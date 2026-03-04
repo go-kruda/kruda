@@ -48,8 +48,8 @@ type App struct {
 }
 
 // New creates a new App with default config and applies the provided options.
-// If no Transport option is given, it defaults to the net/http transport
-// configured with the App's timeouts and body limit.
+// If no Transport option is given, it defaults to Wing (epoll/kqueue) on
+// Linux and macOS, and net/http on Windows.
 func New(opts ...Option) *App {
 	app := &App{
 		config:   defaultConfig(),

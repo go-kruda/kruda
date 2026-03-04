@@ -456,9 +456,18 @@ func (c *Ctx) JSON(v any) error {
 	}
 
 	// Ultra-fast path: fasthttp + default encoder → zero-copy via SetBodyRaw.
-	// Eliminates jsonBufPool Get/Put (pool contention) and SetBody memcpy.
-	// Safe because fasthttp handler is synchronous — data lives until response is written.
 	if c.tryFastHTTPJSONDirect(v) {
+		return nil
+	}
+
+	// Wing fast path: Marshal → SetJSON directly, skip pooled buffer.
+	if jr, ok := c.writer.(transport.JSONResponder); ok {
+		data, err := c.app.config.JSONEncoder(v)
+		if err != nil {
+			return err
+		}
+		c.responded = true
+		jr.SetJSON(c.status, data)
 		return nil
 	}
 

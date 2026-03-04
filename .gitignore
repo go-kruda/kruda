@@ -35,6 +35,9 @@ CLAUDE.md
 KIRO_*.md
 .github/copilot-instructions.md
 
+# Dev notes (kept locally, not in git)
+transport/wing/dev/
+
 # Internal planning docs
 LAUNCH_PLAN.md
 docs/architecture-analysis.md

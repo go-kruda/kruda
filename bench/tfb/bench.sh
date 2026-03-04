@@ -190,9 +190,9 @@ run_mode() {
     echo -e "${BOLD}========== KRUDA ($mode_label) ==========${NC}"
     log "Starting Kruda on :$PORT..."
     if [ "$mode" = "multi" ]; then
-        GOGC=${GOGC:-400} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
     else
-        GOGC=${GOGC:-400} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
     fi
     SERVER_PID=$!
     wait_for_port "$PORT" "Kruda" || exit 1
@@ -217,9 +217,9 @@ run_mode() {
     echo -e "${BOLD}========== FIBER ($mode_label) ==========${NC}"
     log "Starting Fiber on :$PORT..."
     if [ "$mode" = "multi" ]; then
-        GOGC=${GOGC:-400} FIBER_PREFORK=1 FIBER_WORKERS="$(nproc)" DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} FIBER_PREFORK=1 FIBER_WORKERS="$(nproc)" DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
     else
-        GOGC=${GOGC:-400} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
     fi
     SERVER_PID=$!
     wait_for_port "$PORT" "Fiber" || exit 1

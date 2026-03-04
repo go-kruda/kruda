@@ -18,10 +18,6 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			workers = n
 		}
-	} else if IsChild() {
-		// Turbo child: 1 worker per process.
-		// GoMaxProcs=2 gives Go runtime a thread for GC/sysmon alongside the worker.
-		workers = 1
 	}
 	poolSize := 0
 	if v := os.Getenv("KRUDA_POOL_SIZE"); v != "" {

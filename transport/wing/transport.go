@@ -26,7 +26,6 @@ type Config struct {
 	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
 	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
 	DefaultFeather    Feather            // fallback feather for routes not in Feathers
-	Prefork           bool               // fork N processes with GOMAXPROCS(1) each
 	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
 	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
 	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
@@ -105,9 +104,6 @@ func New(cfg Config) *Transport {
 }
 
 func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error {
-	if t.config.Prefork {
-		return t.listenAndServePrefork(addr, handler)
-	}
 	t.workers = make([]*worker, t.config.Workers)
 	for i := range t.workers {
 		fd, err := createListenFd(addr)

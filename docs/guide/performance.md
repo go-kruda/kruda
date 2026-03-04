@@ -236,3 +236,88 @@ Rule of thumb: keep total pool goroutines (workers × pool_size) close to your D
 4. Use `kruda_stdjson` build tag if CGO is problematic in your environment
 5. Disable dev mode in production (`WithDevMode(false)` — the default)
 6. Enable PGO for 2-7% free performance (see above)
+7. Tune GC for your workload (see below)
+
+## GC Tuning
+
+Go's garbage collector can be tuned via two environment variables. No code changes needed.
+
+### GOGC — GC Frequency
+
+`GOGC` controls how often the garbage collector runs. The default is `100`, meaning GC triggers when the heap grows to **2x** the live data size.
+
+```
+Live heap after GC = 50MB
+
+GOGC=100 (default) → next GC at 100MB  (50 + 50×100%)
+GOGC=200           → next GC at 150MB  (50 + 50×200%)
+GOGC=400           → next GC at 250MB  (50 + 50×400%)
+```
+
+Higher values = fewer GC pauses = more throughput, but more memory usage.
+
+### GOMEMLIMIT — Memory Safety Net
+
+`GOMEMLIMIT` sets a soft memory limit (Go 1.19+). When the heap approaches this limit, the GC runs more aggressively — regardless of `GOGC`. This prevents OOM when using high `GOGC` values.
+
+```bash
+# High throughput + OOM protection
+GOGC=400 GOMEMLIMIT=512MiB ./myapp
+```
+
+Without `GOMEMLIMIT`, high `GOGC` values can cause the heap to grow unbounded under load.
+
+### Recommended Presets
+
+| Workload | GOGC | GOMEMLIMIT | Use case |
+|----------|------|------------|----------|
+| Balanced | `100` (default) | not set | General purpose |
+| High throughput | `200`-`500` | set to available RAM | High-traffic API, benchmarks |
+| Low memory | `50` | not set | Containers with limited RAM |
+| Maximum perf | `off` | set to available RAM | Short benchmarks only |
+
+### How to Set
+
+```bash
+# Environment variables (recommended)
+GOGC=200 GOMEMLIMIT=512MiB ./myapp
+
+# Docker
+ENV GOGC=200 GOMEMLIMIT=512MiB
+CMD ["/app"]
+
+# Kubernetes
+env:
+  - name: GOGC
+    value: "200"
+  - name: GOMEMLIMIT
+    value: "512MiB"
+```
+
+> **Tip:** Start with defaults. Profile under load, then tune if GC appears in pprof. `GOGC=200` with `GOMEMLIMIT` set to 80% of your container's memory limit is a safe starting point for high-traffic services.
+
+## Benchmark Results
+
+Measured with wrk on Linux (AMD EPYC, 16 cores). Wing transport + PGO + `GOGC=400`.
+
+### Plaintext
+
+| Framework | Requests/sec | vs Fiber |
+|-----------|-------------:|---------:|
+| Kruda (Wing) | 786,000 | +11% |
+| Actix-web (Rust) | 826,000 | +16% |
+| Fiber (Go) | 710,000 | baseline |
+
+### Pipelined Plaintext (depth 16)
+
+| Framework | Requests/sec | vs Fiber |
+|-----------|-------------:|---------:|
+| **Kruda (Wing)** | **6,609,000** | **+357%** |
+| Actix-web (Rust) | 6,030,000 | +317% |
+| Fiber (Go) | 1,445,000 | baseline |
+
+**Why Kruda dominates pipelined benchmarks:** HTTP pipelining sends multiple requests in a single TCP packet without waiting for responses. TechEmpower uses pipeline depth 16 for the plaintext test.
+
+Wing's `tryParse` loop parses all 16 requests from a single `read()` buffer inline — only 1-2 syscalls for 16 requests. fasthttp (used by Fiber) processes one request per read, requiring 16 syscall pairs for the same work.
+
+> **Note:** Browsers no longer use HTTP pipelining (replaced by HTTP/2 multiplexing). Pipelined benchmarks measure raw framework throughput under ideal conditions — useful for comparing frameworks, but not representative of real-world browser traffic.

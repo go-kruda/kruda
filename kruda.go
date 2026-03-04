@@ -397,20 +397,6 @@ func (app *App) Use(middleware ...HandlerFunc) *App {
 // Listen compiles the router, starts the transport in a goroutine,
 // and blocks waiting for SIGINT or SIGTERM to initiate graceful shutdown.
 func (app *App) Listen(addr string) error {
-	// Turbo mode: supervisor forks children, children serve requests.
-	if app.config.Turbo {
-		if IsChild() {
-			SetupChild()
-		} else if IsSupervisor() {
-			sv := &Supervisor{
-				Addr:       addr,
-				Processes:  app.config.TurboConfig.Processes,
-				CPUPercent: app.config.TurboConfig.CPUPercent,
-				GoMaxProcs: app.config.TurboConfig.GoMaxProcs,
-			}
-			return sv.Run()
-		}
-	}
 	// Build and serve OpenAPI spec if configured (must be before Compile)
 	if app.config.openAPIInfo.Title != "" {
 		specJSON, err := app.buildOpenAPISpec()

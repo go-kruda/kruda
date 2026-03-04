@@ -27,7 +27,7 @@ run_config() {
     # remaining args are env vars: KEY=VAL ...
     echo ""
     echo "========== $label =========="
-    env GOGC=400 DATABASE_URL="$DB" PORT=$PORT "$@" "$bin" &
+    env GOGC=400 GOMEMLIMIT=512MiB DATABASE_URL="$DB" PORT=$PORT "$@" "$bin" &
     PID=$!
     wait_up
     for p in /json /db "/updates?queries=20"; do wrk -t2 -c32 -d3s "http://localhost:$PORT$p" >/dev/null 2>&1 || true; done

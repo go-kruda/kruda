@@ -55,13 +55,6 @@ type Config struct {
 	// Views is the template engine for c.Render(). Nil = c.Render() returns error.
 	Views ViewEngine
 
-	// Turbo enables SO_REUSEPORT prefork mode (Linux only).
-	// Forks runtime.NumCPU() child processes, each with GOMAXPROCS(1) and its own listener.
-	Turbo bool
-
-	// TurboConfig controls CPU usage in turbo mode.
-	TurboConfig TurboConfig
-
 	openAPIInfo openAPIInfo
 	openAPIPath string
 	openAPITags []openAPITagDef
@@ -205,41 +198,6 @@ func NetHTTP() Option {
 // On unsupported platforms, falls back to fasthttp automatically.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
-}
-
-// TurboConfig controls CPU usage for turbo (prefork) mode.
-type TurboConfig struct {
-	// Processes sets the exact number of child processes to fork.
-	// Overrides CPUPercent if set. 0 = auto.
-	Processes int
-
-	// CPUPercent limits CPU usage as a percentage (1–99).
-	// e.g. 50 on an 8-core machine = 4 processes.
-	// Ignored if Processes > 0. 0 = use all available CPUs.
-	CPUPercent float64
-
-	// GoMaxProcs sets GOMAXPROCS per child process.
-	// Default (0) = 1, which is optimal for CPU-bound workloads.
-	// Set to 2 for mixed CPU+DB workloads — allows goroutine scheduling
-	// during I/O wait without the overhead of full GOMAXPROCS=NumCPU.
-	// When using GoMaxProcs > 1, reduce Processes accordingly to keep
-	// total parallelism = Processes × GoMaxProcs ≈ NumCPU.
-	GoMaxProcs int
-}
-
-// WithTurbo enables SO_REUSEPORT prefork mode with optional CPU control.
-// On non-Linux platforms turbo is silently skipped — single-process mode is used instead.
-//
-// Examples:
-//
-//	kruda.WithTurbo(kruda.TurboConfig{})                  // auto: use all CPUs
-//	kruda.WithTurbo(kruda.TurboConfig{CPUPercent: 50})    // use 50% of CPUs
-//	kruda.WithTurbo(kruda.TurboConfig{Processes: 4})      // exactly 4 processes
-func WithTurbo(cfg TurboConfig) Option {
-	return func(a *App) {
-		a.config.Turbo = true
-		a.config.TurboConfig = cfg
-	}
 }
 
 // WithLogger sets a custom logger.

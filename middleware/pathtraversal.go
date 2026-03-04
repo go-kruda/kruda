@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/go-kruda/kruda"
@@ -44,14 +45,17 @@ func containsDotOrPercent(s string) bool {
 func isPathTraversal(raw string) bool {
 	decoded, err := url.PathUnescape(raw)
 	if err != nil {
-		// Malformed percent-encoding — treat as traversal attempt
+		return true
+	}
+	// Normalize with path.Clean to collapse redundant slashes and dots
+	cleaned := path.Clean(decoded)
+	if strings.HasPrefix(cleaned, "..") {
 		return true
 	}
 	depth := 0
-	for _, seg := range strings.Split(decoded, "/") {
+	for _, seg := range strings.Split(cleaned, "/") {
 		switch seg {
 		case "", ".":
-			// skip empty segments and current-dir references
 		case "..":
 			depth--
 			if depth < 0 {

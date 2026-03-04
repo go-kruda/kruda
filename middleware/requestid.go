@@ -55,14 +55,15 @@ func RequestID(config ...RequestIDConfig) kruda.HandlerFunc {
 
 // isValidRequestID checks that a request ID is safe to use:
 // - not too long
-// - contains only printable ASCII (no control chars, no newlines)
+// - contains only [a-zA-Z0-9_-] to prevent log injection
 func isValidRequestID(id string) bool {
 	if len(id) > maxRequestIDLen {
 		return false
 	}
 	for i := 0; i < len(id); i++ {
 		c := id[i]
-		if c < 0x20 || c > 0x7e {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') || c == '_' || c == '-') {
 			return false
 		}
 	}

@@ -23,13 +23,11 @@ func Marshal(v any) ([]byte, error) {
 // streaming encoder. This avoids the intermediate []byte allocation that
 // Marshal performs, enabling callers to reuse buffers via sync.Pool.
 func MarshalToBuffer(buf *bytes.Buffer, v any) error {
-	if err := sonic.ConfigDefault.NewEncoder(buf).Encode(v); err != nil {
+	data, err := sonic.Marshal(v)
+	if err != nil {
 		return err
 	}
-	// Encoder.Encode appends a trailing '\n' — trim it for clean JSON output.
-	if b := buf.Bytes(); len(b) > 0 && b[len(b)-1] == '\n' {
-		buf.Truncate(buf.Len() - 1)
-	}
+	buf.Write(data)
 	return nil
 }
 

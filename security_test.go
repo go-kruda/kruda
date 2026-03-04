@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -786,7 +787,7 @@ func TestSecureCookieFlags(t *testing.T) {
 			Path:     "/",
 			HTTPOnly: true,
 			Secure:   true,
-			SameSite: "Strict",
+			SameSite: http.SameSiteStrictMode,
 		})
 		return c.Text("ok")
 	})

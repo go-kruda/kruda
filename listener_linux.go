@@ -8,6 +8,12 @@ import (
 	"syscall"
 )
 
+const (
+	tcpDeferAccept   = 9  // TCP_DEFER_ACCEPT
+	tcpFastOpen      = 23 // TCP_FASTOPEN
+	fastOpenQueueLen = 256
+)
+
 // optimizedListener creates a TCP listener with performance socket options:
 //   - TCP_DEFER_ACCEPT: kernel holds connection until client sends data
 //   - TCP_FASTOPEN: data in SYN packet, saves 1 RTT for returning clients

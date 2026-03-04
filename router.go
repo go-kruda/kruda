@@ -19,6 +19,11 @@ var errPathTraversal = errors.New("kruda: path traversal detected")
 // and rejects any result that still contains "..".
 // This is called before route matching in ServeKruda.
 func cleanPath(raw string) (string, error) {
+	// Strip null bytes — prevents null byte injection attacks
+	if strings.ContainsRune(raw, 0) {
+		raw = strings.ReplaceAll(raw, "\x00", "")
+	}
+
 	// Decode percent-encoded sequences in a loop to prevent double-encode bypass
 	// (e.g. %252e%252e → %2e%2e → ..). Max 3 iterations to bound cost.
 	decoded := raw

@@ -174,6 +174,13 @@ func (w *fastNetHTTPResponseWriter) Unwrap() http.ResponseWriter {
 	return w.w
 }
 
+// Flush implements http.Flusher by delegating to the underlying ResponseWriter.
+func (w *fastNetHTTPResponseWriter) Flush() {
+	if f, ok := w.w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 type fastNetHTTPHeaderMap struct {
 	h http.Header
 }

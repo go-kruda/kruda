@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // SSEStream writes Server-Sent Events to the client.
@@ -13,6 +14,14 @@ type SSEStream struct {
 	flusher http.Flusher
 	encode  func(v any) ([]byte, error)
 	ctx     context.Context
+}
+
+// sanitizeSSE truncates at first newline to prevent SSE injection.
+func sanitizeSSE(s string) string {
+	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // Event sends a named event with data (JSON-encoded).
@@ -24,7 +33,10 @@ func (s *SSEStream) Event(event string, data any) error {
 	if err != nil {
 		return fmt.Errorf("SSE encode error: %w", err)
 	}
-	fmt.Fprintf(s.writer, "event: %s\ndata: %s\n\n", event, b)
+	_, err = fmt.Fprintf(s.writer, "event: %s\ndata: %s\n\n", sanitizeSSE(event), b)
+	if err != nil {
+		return err
+	}
 	s.flusher.Flush()
 	return nil
 }
@@ -38,7 +50,10 @@ func (s *SSEStream) EventWithID(id, event string, data any) error {
 	if err != nil {
 		return fmt.Errorf("SSE encode error: %w", err)
 	}
-	fmt.Fprintf(s.writer, "id: %s\nevent: %s\ndata: %s\n\n", id, event, b)
+	_, err = fmt.Fprintf(s.writer, "id: %s\nevent: %s\ndata: %s\n\n", sanitizeSSE(id), sanitizeSSE(event), b)
+	if err != nil {
+		return err
+	}
 	s.flusher.Flush()
 	return nil
 }
@@ -52,7 +67,10 @@ func (s *SSEStream) Data(data any) error {
 	if err != nil {
 		return fmt.Errorf("SSE encode error: %w", err)
 	}
-	fmt.Fprintf(s.writer, "data: %s\n\n", b)
+	_, err = fmt.Fprintf(s.writer, "data: %s\n\n", b)
+	if err != nil {
+		return err
+	}
 	s.flusher.Flush()
 	return nil
 }
@@ -62,7 +80,10 @@ func (s *SSEStream) Comment(text string) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
-	fmt.Fprintf(s.writer, ": %s\n\n", text)
+	_, err := fmt.Fprintf(s.writer, ": %s\n\n", sanitizeSSE(text))
+	if err != nil {
+		return err
+	}
 	s.flusher.Flush()
 	return nil
 }
@@ -72,7 +93,10 @@ func (s *SSEStream) Retry(ms int) error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
-	fmt.Fprintf(s.writer, "retry: %d\n\n", ms)
+	_, err := fmt.Fprintf(s.writer, "retry: %d\n\n", ms)
+	if err != nil {
+		return err
+	}
 	s.flusher.Flush()
 	return nil
 }

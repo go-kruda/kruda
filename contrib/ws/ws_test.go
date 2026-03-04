@@ -814,3 +814,181 @@ func TestConfig_Defaults(t *testing.T) {
 		t.Errorf("WriteBufferSize = %d, want 16384 (preserved)", cfg2.WriteBufferSize)
 	}
 }
+
+func TestUpgrade_PingDuringFragmentation(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			// Read the assembled message (fragments + interleaved ping)
+			msgType, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			conn.WriteMessage(msgType, data)
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	// Send first fragment (not FIN)
+	sendClientFrame(t, conn, false, 0x1, []byte("hel"))
+	// Send a ping between fragments (RFC 6455 allows control frames mid-fragmentation)
+	sendClientFrame(t, conn, true, 0x9, []byte("mid-ping"))
+	// Send final continuation
+	sendClientFrame(t, conn, true, 0x0, []byte("lo"))
+
+	// We should get a pong for our ping
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	gotPong := false
+	gotEcho := false
+
+	for i := 0; i < 3; i++ {
+		f, err := readFrame(bufio.NewReader(conn), 0)
+		if err != nil {
+			break
+		}
+		if f.opcode == 0xA {
+			gotPong = true
+			if string(f.payload) != "mid-ping" {
+				t.Errorf("pong payload = %q, want mid-ping", f.payload)
+			}
+		}
+		if f.opcode == 0x1 {
+			gotEcho = true
+			if string(f.payload) != "hello" {
+				t.Errorf("echo payload = %q, want hello", f.payload)
+			}
+		}
+		if gotPong && gotEcho {
+			break
+		}
+	}
+
+	if !gotPong {
+		t.Error("expected pong response for ping sent during fragmentation")
+	}
+	if !gotEcho {
+		t.Error("expected echo of assembled message")
+	}
+}
+
+func TestCloseFrame_EmptyPayload(t *testing.T) {
+	// Close frame with no status code (valid per RFC 6455 §7.1.6)
+	var buf bytes.Buffer
+	if err := writeFrame(&buf, true, 0x8, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := readFrame(bufio.NewReader(&buf), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.opcode != 0x8 {
+		t.Errorf("expected close opcode, got %d", f.opcode)
+	}
+	code, reason := parseClosePayload(f.payload)
+	if reason != "" {
+		t.Errorf("expected empty reason, got %q", reason)
+	}
+	_ = code // code is undefined for empty close
+}
+
+func TestCloseFrame_SingleBytePayload(t *testing.T) {
+	// Close frame with 1 byte payload is invalid (must be 0 or >=2)
+	var buf bytes.Buffer
+	if err := writeFrame(&buf, true, 0x8, []byte{0x03}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := readFrame(bufio.NewReader(&buf), 0)
+	if err != nil {
+		// Rejected at frame level — acceptable
+		return
+	}
+	// If read succeeds, parseClosePayload should handle gracefully
+	code, _ := parseClosePayload(f.payload)
+	_ = code
+}
+
+func TestUpgrade_MultipleMessages(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			for i := 0; i < 5; i++ {
+				msgType, data, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+				// Echo each message with a prefix
+				conn.WriteMessage(msgType, append([]byte("echo:"), data...))
+			}
+			conn.Close(CloseNormalClosure, "done")
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	msgs := []string{"alpha", "beta", "gamma", "delta", "epsilon"}
+	for _, msg := range msgs {
+		sendClientFrame(t, conn, true, 0x1, []byte(msg))
+	}
+
+	for i, want := range msgs {
+		f := readServerFrame(t, conn)
+		if f.opcode != 0x1 {
+			t.Errorf("msg %d: expected text frame, got opcode %d", i, f.opcode)
+			continue
+		}
+		expected := "echo:" + want
+		if string(f.payload) != expected {
+			t.Errorf("msg %d: got %q, want %q", i, f.payload, expected)
+		}
+	}
+}
+
+func TestUpgrade_EmptyTextMessage(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			msgType, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			conn.WriteMessage(msgType, data)
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	// Send empty text message
+	sendClientFrame(t, conn, true, 0x1, []byte{})
+
+	f := readServerFrame(t, conn)
+	if f.opcode != 0x1 {
+		t.Errorf("expected text frame, got opcode %d", f.opcode)
+	}
+	if len(f.payload) != 0 {
+		t.Errorf("expected empty payload, got %d bytes", len(f.payload))
+	}
+}

@@ -725,3 +725,113 @@ func TestPathTraversal_NullByte(t *testing.T) {
 		t.Log("Note: null byte in path returns 200 — verify handler receives sanitized path")
 	}
 }
+
+func TestRequestID_Uniqueness(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	seen := make(map[string]bool)
+	for i := 0; i < 200; i++ {
+		app := kruda.New()
+		app.Use(RequestID())
+		app.Get("/test", handler)
+
+		resp := newMockResponse()
+		app.ServeKruda(resp, getReq("/test", nil))
+
+		rid := resp.headers.Get("X-Request-ID")
+		if rid == "" {
+			t.Fatal("missing X-Request-ID")
+		}
+		if seen[rid] {
+			t.Fatalf("duplicate request ID: %s (after %d iterations)", rid, i)
+		}
+		seen[rid] = true
+	}
+}
+
+func TestCORS_NoOriginHeader(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	req := getReq("/test", nil) // no Origin
+	resp := serve(t, CORS(), handler, req)
+
+	if resp.statusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.statusCode)
+	}
+}
+
+func TestCORS_PreflightCustomHeaders(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowMethods: []string{"GET", "POST"},
+		AllowHeaders: []string{"X-Custom-Auth", "X-Trace-ID"},
+	}))
+	app.Get("/test", handler)
+	app.Options("/test", handler)
+
+	req := optionsReq(map[string]string{
+		"Origin":                         "http://example.com",
+		"Access-Control-Request-Method":  "POST",
+		"Access-Control-Request-Headers": "X-Custom-Auth",
+	})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.statusCode != 204 {
+		t.Fatalf("expected 204, got %d", resp.statusCode)
+	}
+
+	methods := resp.headers.Get("Access-Control-Allow-Methods")
+	if !strings.Contains(methods, "POST") {
+		t.Errorf("expected POST in allowed methods, got %q", methods)
+	}
+
+	headers := resp.headers.Get("Access-Control-Allow-Headers")
+	if !strings.Contains(headers, "X-Custom-Auth") {
+		t.Errorf("expected X-Custom-Auth in allowed headers, got %q", headers)
+	}
+}
+
+func TestRecovery_PanicWithIntValue(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		panic(42)
+	}
+
+	resp := serve(t, Recovery(), handler, getReq("/test", nil))
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
+	}
+}
+
+func TestTimeout_HandlerIgnoresContext(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		time.Sleep(200 * time.Millisecond)
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	resp := serve(t, Timeout(50*time.Millisecond), handler, getReq("/test", nil))
+
+	if resp.statusCode != 503 && resp.statusCode != 200 {
+		t.Fatalf("expected 503 or 200, got %d", resp.statusCode)
+	}
+}
+
+func TestLogger_WithError(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return kruda.NewError(500, "server error")
+	}
+
+	resp := serve(t, Logger(), handler, getReq("/test", nil))
+
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
+	}
+}

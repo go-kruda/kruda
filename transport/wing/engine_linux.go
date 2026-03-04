@@ -27,9 +27,7 @@ type epollEvent struct {
 
 type epollEngine struct {
 	epfd     int
-	pipeW    int
-	pipeR    int
-	pipeBuf  [8]byte
+	evfd     int // eventfd for wake (replaces pipe pair)
 	rawMode  bool
 	wakeup   int32
 	idle     int32
@@ -51,34 +49,26 @@ func (e *epollEngine) Init(cfg engineConfig) error {
 		return err
 	}
 	e.epfd = epfd
-	e.pipeW = cfg.PipeW
+	e.evfd = cfg.EventFd
 	e.rawMode = cfg.RawMode
-
-	// find pipeR from pipeW — transport passes pipeW; we need pipeR for wake.
-	// Instead, use the pipe pair created by transport: pipeW is in cfg,
-	// but we need pipeR to register with epoll.
-	// Solution: transport registers pipeR via SubmitPipeRecv on first call.
-	e.pipeR = -1
 	return nil
 }
 
 func (e *epollEngine) PostWake() {
 	if atomic.CompareAndSwapInt32(&e.wakeup, 0, 1) {
-		syscall.Write(e.pipeW, []byte{1})
+		eventfdWrite(e.evfd)
 	}
 }
 
 func (e *epollEngine) SubmitAccept(listenFd int) {
 	e.listenFd = listenFd
 	e.epollAdd(int32(listenFd), epollin|epollet)
+	// Register eventfd for wake signaling
+	e.epollAdd(int32(e.evfd), epollin|epollet)
 }
 
-func (e *epollEngine) SubmitPipeRecv(pipeFd int, _ []byte) {
-	if e.pipeR == pipeFd {
-		return
-	}
-	e.pipeR = pipeFd
-	e.epollAdd(int32(pipeFd), epollin|epollet)
+func (e *epollEngine) SubmitPipeRecv(_ int, _ []byte) {
+	// eventfd registered in SubmitAccept — no-op for compat
 }
 
 func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
@@ -108,9 +98,9 @@ func (e *epollEngine) SubmitClose(fd int32) {
 
 func (e *epollEngine) Wait(events []event) (int, error) {
 	// Adaptive: non-blocking first when busy, block when idle.
-	msec := 0 // non-blocking
+	msec := 0
 	if e.idle > 64 {
-		msec = -1 // block
+		msec = -1
 	}
 	n, err := e.waitWithTimeout(events, msec)
 	if n > 0 {
@@ -156,10 +146,10 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 			continue
 		}
 
-		if int(fd) == e.pipeR {
-			syscall.Read(e.pipeR, e.pipeBuf[:])
+		if int(fd) == e.evfd {
+			eventfdRead(e.evfd)
 			atomic.StoreInt32(&e.wakeup, 0)
-			events[count] = event{Op: opWake, Fd: int32(e.pipeR)}
+			events[count] = event{Op: opWake, Fd: int32(e.evfd)}
 			count++
 			continue
 		}

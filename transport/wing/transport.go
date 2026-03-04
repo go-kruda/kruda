@@ -211,9 +211,7 @@ type worker struct {
 	maxConns     int
 	conns        map[int32]*conn
 	events       [maxEventsPerWait]event
-	pipeR        int
-	pipeW        int
-	pipeBuf      [8]byte
+	evfd         int // eventfd for wake signaling
 	doneCh       chan doneMsg
 	pool         *workerPool
 	feathers     FeatherTable
@@ -287,14 +285,16 @@ func (p *workerPool) loop(h transport.Handler) {
 
 func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker, error) {
 	eng := newEngine()
-	pipeR, pipeW, err := createPipe()
+	wakeR, wakeW, err := createWakeFds()
 	if err != nil {
 		eng.Close()
 		return nil, err
 	}
-	if err := eng.Init(engineConfig{RingSize: cfg.RingSize, PipeW: pipeW, RawMode: !cfg.needsAsync()}); err != nil {
-		closeFd(pipeR)
-		closeFd(pipeW)
+	if err := eng.Init(engineConfig{RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
+		closeFd(wakeR)
+		if wakeW != wakeR {
+			closeFd(wakeW)
+		}
 		return nil, err
 	}
 	doneCh := make(chan doneMsg, 4096)
@@ -308,8 +308,7 @@ func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker
 		limits:       parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
 		maxConns:     cfg.MaxConnsPerWorker,
 		conns:        make(map[int32]*conn, 1024),
-		pipeR:        pipeR,
-		pipeW:        pipeW,
+		evfd:         wakeR,
 		doneCh:       doneCh,
 		feathers:     ft,
 		readTimeout:  int64(cfg.ReadTimeout),
@@ -328,14 +327,10 @@ func (w *worker) run(shutdown *atomic.Bool) {
 }
 
 func (w *worker) ioLoop(shutdown *atomic.Bool) {
-	canLock := !w.config.needsPool()
-	if canLock {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	w.eng.SubmitAccept(w.listenFd)
-	w.eng.SubmitPipeRecv(w.pipeR, w.pipeBuf[:])
 	w.eng.Flush()
 
 	hasAsync := w.config.needsAsync()
@@ -412,7 +407,7 @@ func (w *worker) handleEvent(ev event) {
 	case opClose:
 		delete(w.conns, ev.Fd)
 	case opWake:
-		w.eng.SubmitPipeRecv(w.pipeR, w.pipeBuf[:])
+		// eventfd re-arms automatically (edge-triggered)
 	}
 }
 
@@ -755,8 +750,7 @@ func (w *worker) cleanup() {
 		closeFd(int(fd))
 	}
 	w.eng.Close()
-	closeFd(w.pipeR)
-	closeFd(w.pipeW)
+	closeFd(w.evfd)
 	closeFd(w.listenFd)
 }
 

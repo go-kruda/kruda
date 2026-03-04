@@ -363,3 +363,152 @@ func (m *mockFlush) Flush() {
 
 // Ensure mockFlusherWriter implements http.Flusher
 var _ http.Flusher = (*mockFlusherWriter)(nil)
+
+type errWriter struct {
+	failAfter int
+	written   int
+}
+
+func (w *errWriter) Write(p []byte) (int, error) {
+	w.written += len(p)
+	if w.written > w.failAfter {
+		return 0, errors.New("connection reset by peer")
+	}
+	return len(p), nil
+}
+
+func TestSSEStream_WriterError(t *testing.T) {
+	flushCount := 0
+	w := &errWriter{failAfter: 10}
+	s := &SSEStream{
+		writer:  w,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	err := s.Event("test", "this is a longer payload that should fail")
+	if err == nil {
+		t.Error("expected write error when connection drops")
+	}
+}
+
+func TestSSEStream_MultiLineData(t *testing.T) {
+	var buf bytes.Buffer
+	flushCount := 0
+	s := &SSEStream{
+		writer:  &buf,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	// JSON with newlines gets serialized — the data itself is single-line JSON
+	data := "line1\nline2\nline3"
+	err := s.Data(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := buf.String()
+	if !strings.HasPrefix(got, "data: ") {
+		t.Errorf("expected data: prefix, got %q", got)
+	}
+	if !strings.HasSuffix(got, "\n\n") {
+		t.Errorf("expected trailing \\n\\n, got %q", got)
+	}
+}
+
+func TestSSEStream_EmptyEventName(t *testing.T) {
+	var buf bytes.Buffer
+	flushCount := 0
+	s := &SSEStream{
+		writer:  &buf,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	err := s.Event("", "payload")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := buf.String()
+	// Empty event name is technically valid SSE
+	if !strings.Contains(got, "event: \n") {
+		t.Errorf("empty event name output = %q", got)
+	}
+}
+
+func TestSSEStream_EventNameInjection(t *testing.T) {
+	var buf bytes.Buffer
+	flushCount := 0
+	s := &SSEStream{
+		writer:  &buf,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	// Attempt to inject a second event via newline in name
+	err := s.Event("ping\nevent: evil\ndata: hacked", "safe")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := buf.String()
+	if strings.Contains(got, "evil") && strings.Contains(got, "hacked") {
+		// Check if they appear on separate lines (which would mean injection worked)
+		lines := strings.Split(got, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "data: hacked") {
+				t.Error("SSE injection: attacker-controlled data line appeared")
+			}
+		}
+	}
+}
+
+func TestSSEStream_IDInjection(t *testing.T) {
+	var buf bytes.Buffer
+	flushCount := 0
+	s := &SSEStream{
+		writer:  &buf,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	// Attempt to inject via newline in ID
+	err := s.EventWithID("42\nevent: evil", "ping", "data")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := buf.String()
+	// The newline in the ID should be stripped
+	if strings.Contains(got, "event: evil") {
+		t.Error("SSE injection via ID: injected event line appeared")
+	}
+}
+
+func TestSSEStream_RapidEvents(t *testing.T) {
+	var buf bytes.Buffer
+	flushCount := 0
+	s := &SSEStream{
+		writer:  &buf,
+		flusher: &mockFlush{count: &flushCount},
+		encode:  json.Marshal,
+		ctx:     context.Background(),
+	}
+
+	for i := 0; i < 1000; i++ {
+		err := s.Event("tick", i)
+		if err != nil {
+			t.Fatalf("event %d failed: %v", i, err)
+		}
+	}
+	if flushCount != 1000 {
+		t.Errorf("flush count = %d, want 1000", flushCount)
+	}
+}

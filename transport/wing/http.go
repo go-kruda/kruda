@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/go-kruda/kruda/transport"
 )
@@ -296,9 +295,12 @@ func btoi(b []byte) int {
 		if c < '0' || c > '9' {
 			break
 		}
+		if n > maxContentLength/10 {
+			return maxContentLength + 1
+		}
 		n = n*10 + int(c-'0')
 		if n > maxContentLength {
-			return maxContentLength + 1 // caller will reject
+			return maxContentLength + 1
 		}
 	}
 	return n
@@ -598,7 +600,7 @@ func internMethod(b []byte) string {
 			return m
 		}
 	}
-	return *(*string)(unsafe.Pointer(&b))
+	return string(b)
 }
 
 func updateDateHdr() {

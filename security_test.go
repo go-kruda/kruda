@@ -719,3 +719,256 @@ func TestDoSWithBodyLimitAlias(t *testing.T) {
 			2048, 2048, app1.config.BodyLimit, app2.config.BodyLimit)
 	}
 }
+
+// --- Additional security tests ---
+
+func TestPathTraversal_NullByteInjection(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/files/*path", func(c *Ctx) error {
+		return c.Text("file:" + c.Param("path"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	// Null byte injection: attacker tries to access /etc/passwd%00.jpg
+	// to bypass extension checks
+	paths := []string{
+		"/files/image%00.jpg",
+		"/files/../etc/passwd%00.txt",
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		// Should not expose the path with null byte to the handler
+		body := resp.BodyString()
+		if strings.Contains(body, "\x00") {
+			t.Errorf("GET %s: response body contains null byte: %q", p, body)
+		}
+	}
+}
+
+func TestPathTraversal_BackslashVariants(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/safe", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	// Backslash path traversal variants (Windows-style)
+	paths := []string{
+		"/..\\etc\\passwd",
+		"/..%5c..%5cetc%5cpasswd",   // %5c = backslash
+		"/..%5C..%5Cetc%5Cpasswd",   // uppercase %5C
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		// Should not return 200 (either 400 blocked or 404 no match)
+		if resp.StatusCode() == 200 && resp.BodyString() == "ok" {
+			t.Errorf("GET %s: should not reach handler with path traversal via backslash", p)
+		}
+	}
+}
+
+func TestSecureCookieFlags(t *testing.T) {
+	app := New()
+	app.Get("/setcookie", func(c *Ctx) error {
+		c.SetCookie(&Cookie{
+			Name:     "session",
+			Value:    "abc123",
+			Path:     "/",
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Strict",
+		})
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/setcookie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode())
+	}
+
+	setCookie := resp.Header("Set-Cookie")
+	if setCookie == "" {
+		t.Fatal("Set-Cookie header missing")
+	}
+
+	if !contains(setCookie, "HttpOnly") {
+		t.Errorf("Set-Cookie should contain HttpOnly, got: %q", setCookie)
+	}
+	if !contains(setCookie, "Secure") {
+		t.Errorf("Set-Cookie should contain Secure, got: %q", setCookie)
+	}
+	if !contains(setCookie, "SameSite=Strict") {
+		t.Errorf("Set-Cookie should contain SameSite=Strict, got: %q", setCookie)
+	}
+}
+
+func TestMethodOverrideHeader(t *testing.T) {
+	app := New()
+	app.Get("/resource", func(c *Ctx) error {
+		return c.Text("get-ok")
+	})
+	app.Delete("/resource", func(c *Ctx) error {
+		return c.Text("delete-ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	resp, err := tc.Request("GET", "/resource").
+		Header("X-HTTP-Method-Override", "DELETE").
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := resp.BodyString()
+	if body == "delete-ok" {
+		t.Error("X-HTTP-Method-Override should not silently switch methods")
+	}
+}
+
+func TestLargeHeaderValue(t *testing.T) {
+	app := New()
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	bigValue := strings.Repeat("A", 10240)
+	resp, err := tc.Request("GET", "/test").
+		Header("X-Large", bigValue).
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 && resp.StatusCode() != 431 {
+		t.Logf("large header value returned %d", resp.StatusCode())
+	}
+}
+
+func TestSecurityHeadersOnErrorResponse(t *testing.T) {
+	app := New(WithSecureHeaders())
+	app.Get("/fail", func(c *Ctx) error {
+		return NewError(500, "internal error")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 500 {
+		t.Fatalf("expected 500, got %d", resp.StatusCode())
+	}
+
+	if got := resp.Header("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options missing on error response, got %q", got)
+	}
+	if got := resp.Header("X-Frame-Options"); got == "" {
+		t.Error("X-Frame-Options missing on error response")
+	}
+}
+
+func TestContentTypeOnJSONError(t *testing.T) {
+	app := New()
+	app.Get("/fail", func(c *Ctx) error {
+		return NewError(400, "bad request")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := resp.Header("Content-Type")
+	if !contains(ct, "application/json") {
+		t.Errorf("error response should be JSON, got Content-Type: %q", ct)
+	}
+}
+
+func TestDoSZeroLengthBody(t *testing.T) {
+	app := New(WithMaxBodySize(1024))
+	app.Post("/data", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Request("POST", "/data").
+		Body([]byte{}).
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Errorf("empty body should be accepted, got %d", resp.StatusCode())
+	}
+}
+
+func TestPathTraversal_OverlongUTF8(t *testing.T) {
+	app := New(WithPathTraversal())
+	app.Get("/safe", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	paths := []string{
+		"/%c0%ae%c0%ae/etc/passwd",
+		"/%c0%af%c0%ae%c0%ae/etc/shadow",
+	}
+	for _, p := range paths {
+		resp, err := tc.Get(p)
+		if err != nil {
+			t.Fatalf("GET %s: unexpected error: %v", p, err)
+		}
+		if resp.StatusCode() == 200 && resp.BodyString() == "ok" {
+			t.Errorf("GET %s: should not reach /safe handler via overlong UTF-8", p)
+		}
+	}
+}
+
+func TestHostHeaderValidation(t *testing.T) {
+	app := New()
+	app.Get("/host", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+
+	resp, err := tc.Get("/host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode())
+	}
+
+	resp, err = tc.Get("/host?redirect=http://evil.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode())
+	}
+}

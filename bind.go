@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strconv"
 )
@@ -244,8 +245,12 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 				continue // file not provided — let validation catch required
 			}
 			header := headers[0]
+			safeName := filepath.Base(header.Filename)
+			if safeName == "." || safeName == ".." {
+				safeName = "upload"
+			}
 			fu := &FileUpload{
-				Name:        header.Filename,
+				Name:        safeName,
 				Size:        header.Size,
 				ContentType: header.Header.Get("Content-Type"),
 				Header:      header,

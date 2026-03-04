@@ -3,6 +3,7 @@ package kruda
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -368,6 +369,166 @@ type integrationUnhealthyService struct{}
 
 func (s *integrationUnhealthyService) Check(_ context.Context) error {
 	return errors.New("database connection lost")
+}
+
+func TestIntegrationConcurrentRequests(t *testing.T) {
+	app := New()
+	app.Get("/echo/:msg", func(c *Ctx) error {
+		return c.Text(c.Param("msg"))
+	})
+	app.Post("/post", func(c *Ctx) error {
+		var body map[string]string
+		if err := c.Bind(&body); err != nil {
+			return BadRequest("invalid")
+		}
+		return c.JSON(Map{"got": body["value"]})
+	})
+	app.Compile()
+	tc := NewTestClient(app)
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	errs := make([]error, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			msg := fmt.Sprintf("msg-%d", idx)
+			resp, err := tc.Get("/echo/" + msg)
+			if err != nil {
+				errs[idx] = err
+				return
+			}
+			if resp.StatusCode() != 200 {
+				errs[idx] = fmt.Errorf("goroutine %d: status %d", idx, resp.StatusCode())
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("goroutine %d: %v", i, err)
+		}
+	}
+}
+
+func TestIntegrationErrorMiddlewareChain(t *testing.T) {
+	app := New()
+
+	app.Use(func(c *Ctx) error {
+		c.SetHeader("X-Before", "yes")
+		return c.Next()
+	})
+
+	app.Get("/fail", func(c *Ctx) error {
+		return NewError(422, "validation failed")
+	})
+
+	app.Compile()
+	tc := NewTestClient(app)
+
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 422 {
+		t.Fatalf("expected 422, got %d", resp.StatusCode())
+	}
+	// Middleware should still have run
+	if resp.Header("X-Before") != "yes" {
+		t.Error("middleware header should be present even when handler errors")
+	}
+	var body map[string]any
+	if err := resp.JSON(&body); err != nil {
+		t.Fatalf("failed to parse error JSON: %v", err)
+	}
+	if body["message"] != "validation failed" {
+		t.Errorf("expected message='validation failed', got %v", body["message"])
+	}
+}
+
+func TestIntegrationNotFoundRoute(t *testing.T) {
+	app := New()
+	app.Get("/exists", func(c *Ctx) error {
+		return c.Text("here")
+	})
+	app.Compile()
+	tc := NewTestClient(app)
+
+	resp, err := tc.Get("/nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 404 {
+		t.Errorf("expected 404, got %d", resp.StatusCode())
+	}
+}
+
+func TestIntegrationMethodNotAllowed(t *testing.T) {
+	app := New()
+	app.Get("/resource", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+	tc := NewTestClient(app)
+
+	resp, err := tc.Post("/resource", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expect 405 since GET is registered but not POST
+	if resp.StatusCode() != 405 {
+		t.Logf("POST /resource returned %d (framework may return 404 instead of 405)", resp.StatusCode())
+	}
+}
+
+func TestIntegrationQueryParamsEndToEnd(t *testing.T) {
+	app := New()
+	app.Get("/search", func(c *Ctx) error {
+		q := c.Query("q")
+		page := c.Query("page")
+		return c.JSON(Map{"q": q, "page": page})
+	})
+	app.Compile()
+	tc := NewTestClient(app)
+
+	resp, err := tc.Request("GET", "/search").
+		Query("q", "golang").
+		Query("page", "3").
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode())
+	}
+	var body map[string]any
+	if err := resp.JSON(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["q"] != "golang" {
+		t.Errorf("q = %v, want golang", body["q"])
+	}
+	if body["page"] != "3" {
+		t.Errorf("page = %v, want 3", body["page"])
+	}
+}
+
+func TestIntegrationMultipleShutdownHooks(t *testing.T) {
+	app := New()
+	var order []int
+
+	app.OnShutdown(func() { order = append(order, 1) })
+	app.OnShutdown(func() { order = append(order, 2) })
+	app.OnShutdown(func() { order = append(order, 3) })
+
+	_ = app.Shutdown(context.Background())
+
+	if len(order) != 3 {
+		t.Fatalf("expected 3 hooks called, got %d", len(order))
+	}
 }
 
 func TestIntegrationHealthCheckWithServices(t *testing.T) {

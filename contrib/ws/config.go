@@ -64,6 +64,18 @@ type Config struct {
 
 	// WriteBufferSize is the size of the write buffer. Default: 4096.
 	WriteBufferSize int
+
+	// MessageTimeout is the maximum time allowed for assembling a fragmented
+	// message. When set, a single deadline covers the entire assembly instead
+	// of resetting per frame — prevents slowloris-style attacks where a client
+	// sends fragments slowly to hold connections open.
+	// 0 = disabled (per-frame ReadTimeout applies). Recommended: 30s.
+	MessageTimeout time.Duration
+
+	// MaxPingPerSecond limits ping frames processed per second per connection.
+	// Excess pings cause the connection to close with ClosePolicyViolation.
+	// 0 = unlimited. Recommended: 10.
+	MaxPingPerSecond int
 }
 
 func (c *Config) defaults() {

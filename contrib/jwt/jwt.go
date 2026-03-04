@@ -18,12 +18,13 @@ import (
 
 // Errors returned by JWT operations.
 var (
-	ErrInvalidToken   = errors.New("invalid_token")
-	ErrTokenExpired   = errors.New("token_expired")
-	ErrMissingToken   = errors.New("missing_token")
-	ErrAlgNone        = errors.New("jwt: algorithm \"none\" is not allowed")
-	ErrUnsupportedAlg = errors.New("jwt: unsupported algorithm")
-	ErrInvalidKey     = errors.New("jwt: invalid signing key")
+	ErrInvalidToken      = errors.New("invalid_token")
+	ErrTokenExpired      = errors.New("token_expired")
+	ErrTokenNotYetValid  = errors.New("token_not_yet_valid")
+	ErrMissingToken      = errors.New("missing_token")
+	ErrAlgNone           = errors.New("jwt: algorithm \"none\" is not allowed")
+	ErrUnsupportedAlg    = errors.New("jwt: unsupported algorithm")
+	ErrInvalidKey        = errors.New("jwt: invalid signing key")
 )
 
 // header is the JWT header.
@@ -113,9 +114,16 @@ func Verify(tokenStr string, secret any) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
+	now := time.Now().Unix()
+
 	// Check expiration
-	if claims.ExpiresAt > 0 && time.Now().Unix() > claims.ExpiresAt {
+	if claims.ExpiresAt > 0 && now > claims.ExpiresAt {
 		return nil, ErrTokenExpired
+	}
+
+	// Check not-before
+	if claims.NotBefore > 0 && now < claims.NotBefore {
+		return nil, ErrTokenNotYetValid
 	}
 
 	return &claims, nil
@@ -170,6 +178,11 @@ func VerifyWithGrace(tokenStr string, secret any, gracePeriod time.Duration) (*C
 			return &claims, true, nil
 		}
 		return nil, false, ErrTokenExpired
+	}
+
+	// Check not-before
+	if claims.NotBefore > 0 && now < claims.NotBefore {
+		return nil, false, ErrTokenNotYetValid
 	}
 
 	return &claims, false, nil

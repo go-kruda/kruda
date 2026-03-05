@@ -12,7 +12,7 @@ import (
 var publicFS embed.FS
 
 func main() {
-	app := kruda.New()
+	app := kruda.New(kruda.NetHTTP())
 
 	// Serve embedded files at /static/*
 	sub, _ := fs.Sub(publicFS, "public")

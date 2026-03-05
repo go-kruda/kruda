@@ -110,6 +110,7 @@ func homeHandler(c *kruda.Ctx) error {
 
 func main() {
 	app := kruda.New(
+		kruda.NetHTTP(),
 		// Custom error handler — controls the JSON shape of ALL error responses.
 		// Without this, Kruda uses its default: {"code": N, "message": "..."}
 		kruda.WithErrorHandler(func(c *kruda.Ctx, err *kruda.KrudaError) {

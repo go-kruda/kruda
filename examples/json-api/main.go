@@ -138,7 +138,7 @@ type UpdateUserInput struct {
 func main() {
 	store := NewUserStore()
 
-	app := kruda.New()
+	app := kruda.New(kruda.NetHTTP())
 
 	// Global middleware: recovery from panics, request IDs, logging
 	app.Use(middleware.Recovery())

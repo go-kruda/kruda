@@ -105,7 +105,7 @@ func main() {
 	c := kruda.NewContainer()
 	c.Give(NewUserService())
 
-	app := kruda.New(kruda.WithContainer(c))
+	app := kruda.New(kruda.NetHTTP(), kruda.WithContainer(c))
 	app.Use(middleware.Recovery())
 	app.Use(middleware.Logger())
 

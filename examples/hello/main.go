@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	app := kruda.New()
+	app := kruda.New(kruda.NetHTTP())
 
 	// Global middleware
 	app.Use(middleware.Recovery())

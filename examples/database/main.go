@@ -165,7 +165,7 @@ func createUserHandler(c *kruda.Ctx) error {
 // ---------------------------------------------------------------------------
 
 func main() {
-	app := kruda.New()
+	app := kruda.New(kruda.NetHTTP())
 
 	// Install the database module — registers UserRepository in DI.
 	// app.Module() creates a container if none exists, then calls Install().

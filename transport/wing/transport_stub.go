@@ -7,22 +7,29 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/go-kruda/kruda/transport"
 )
 
 // Config for Wing transport (unsupported on this platform).
+// Fields mirror the real Config so code compiles cross-platform.
 type Config struct {
-	Workers      int
-	RingSize     uint32
-	ReadTimeout  int
-	WriteTimeout int
-	IdleTimeout  int
-	MaxBodySize  int
-	Feathers     map[string]Feather
+	Workers           int
+	RingSize          uint32
+	ReadBufSize       int
+	MaxHeaderCount    int
+	MaxHeaderSize     int
+	MaxConnsPerWorker int
+	HandlerPoolSize   int
+	Feathers          map[string]Feather
+	DefaultFeather    Feather
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
 }
 
-func (c *Config) defaults()    {}
+func (c *Config) defaults()       {}
 func (c *Config) needsPool() bool  { return false }
 func (c *Config) needsAsync() bool { return false }
 
@@ -40,11 +47,11 @@ func New(cfg Config) *Transport {
 }
 
 func (t *Transport) ListenAndServe(_ string, _ transport.Handler) error {
-	return fmt.Errorf("wing: unsupported platform")
+	return fmt.Errorf("wing: unsupported platform; use FastHTTP or NetHTTP transport")
 }
 
 func (t *Transport) Serve(_ net.Listener, _ transport.Handler) error {
-	return fmt.Errorf("wing: unsupported platform")
+	return fmt.Errorf("wing: unsupported platform; use FastHTTP or NetHTTP transport")
 }
 
 func (t *Transport) SetRouteFeather(_, _ string, _ any) {}
@@ -58,6 +65,7 @@ const (
 	Inline DispatchMode = iota + 1
 	Pool
 	Spawn
+	Takeover
 )
 
 // Feather is a per-route optimization hint.
@@ -69,21 +77,46 @@ type Feather struct {
 var (
 	Bolt      = Feather{Dispatch: Inline}
 	Arrow     = Feather{Dispatch: Pool}
+	Spear     = Feather{Dispatch: Takeover}
 	Plaintext = Bolt
 	JSON      = Bolt
-	ParamJSON = Bolt
-	PostJSON  = Bolt
-	Query     = Arrow
-	Render    = Arrow
+	Query     = Spear
+	Render    = Spear
 )
 
 // FeatherOption configures a Feather.
 type FeatherOption func(*Feather)
 
-func (f Feather) With(_ ...FeatherOption) Feather { return f }
-func (m DispatchMode) String() string             { return "stub" }
-func Dispatch(m DispatchMode) FeatherOption       { return func(f *Feather) { f.Dispatch = m } }
-func Static(resp []byte) FeatherOption            { return func(f *Feather) { f.StaticResponse = resp } }
+func (f Feather) With(opts ...FeatherOption) Feather {
+	for _, opt := range opts {
+		opt(&f)
+	}
+	return f
+}
+
+func (f *Feather) defaults() {
+	if f.Dispatch == 0 {
+		f.Dispatch = Inline
+	}
+}
+
+func (m DispatchMode) String() string {
+	switch m {
+	case Inline:
+		return "Inline"
+	case Pool:
+		return "Pool"
+	case Spawn:
+		return "Spawn"
+	case Takeover:
+		return "Takeover"
+	default:
+		return "Unknown"
+	}
+}
+
+func Dispatch(m DispatchMode) FeatherOption { return func(f *Feather) { f.Dispatch = m } }
+func Static(resp []byte) FeatherOption      { return func(f *Feather) { f.StaticResponse = resp } }
 
 // FeatherTable maps routes to Feathers.
 type FeatherTable struct{}

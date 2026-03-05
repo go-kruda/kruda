@@ -96,6 +96,11 @@ func (e *epollEngine) SubmitClose(fd int32) {
 	syscall.Close(int(fd))
 }
 
+func (e *epollEngine) Detach(fd int32) {
+	delete(e.connPtrs, fd)
+	syscall.EpollCtl(e.epfd, epollCtlDel, int(fd), nil)
+}
+
 func (e *epollEngine) Wait(events []event) (int, error) {
 	// Adaptive: non-blocking first when busy, block when idle.
 	msec := 0

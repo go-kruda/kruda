@@ -13,6 +13,7 @@ type engine interface {
 	SubmitRecv(fd int32, buf []byte, offset int)
 	SubmitSend(fd int32, data []byte)
 	SubmitClose(fd int32)
+	Detach(fd int32) // remove fd from poll without closing it
 	SubmitPipeRecv(pipeFd int, buf []byte)
 	RegisterConn(fd int32, ptr unsafe.Pointer) // store *conn for pointer-in-epoll
 	PostWake()

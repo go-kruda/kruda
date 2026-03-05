@@ -96,7 +96,7 @@ func main() {
 	app.Get("/users/:id", func(c *kruda.Ctx) error {
 		id, _ := c.ParamInt("id")
 		return c.JSON(UserResponse{ID: id, Name: "Tiger", Email: "tiger@kruda.dev"})
-	}, kruda.WingParamJSON())
+	}, kruda.WingJSON())
 
 	app.Post("/json", func(c *kruda.Ctx) error {
 		var body JSONBody
@@ -104,7 +104,7 @@ func main() {
 			return c.Status(400).JSON(map[string]string{"error": err.Error()})
 		}
 		return c.JSON(JSONResponse{Message: "received", Data: body})
-	}, kruda.WingPostJSON())
+	}, kruda.WingJSON())
 
 	// TFB: single DB query
 	app.Get("/db", func(c *kruda.Ctx) error {

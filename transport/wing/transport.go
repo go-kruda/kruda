@@ -77,7 +77,7 @@ func (c *Config) needsAsync() bool {
 	if d == 0 {
 		d = Inline
 	}
-	if d == Pool || d == Spawn {
+	if d == Pool || d == Spawn || d == Takeover {
 		return true
 	}
 	for _, f := range c.Feathers {
@@ -85,7 +85,7 @@ func (c *Config) needsAsync() bool {
 		if fd == 0 {
 			fd = Inline
 		}
-		if fd == Pool || fd == Spawn {
+		if fd == Pool || fd == Spawn || fd == Takeover {
 			return true
 		}
 	}
@@ -466,7 +466,7 @@ func (w *worker) handleRecv(ev event) {
 	} else {
 		c = w.conns[ev.Fd]
 	}
-	if c == nil {
+	if c == nil || c.pending > 0 {
 		return
 	}
 	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
@@ -609,6 +609,21 @@ func (w *worker) tryParse(c *conn) {
 			}(req, c.fd, req.keepAlive)
 			return
 
+		case Takeover:
+			// Goroutine takes over the connection with blocking I/O.
+			// Detach fd from epoll so the goroutine owns it exclusively.
+			c.keepAlive = req.keepAlive
+			c.pending++
+			w.eng.Detach(c.fd)
+			var leftover []byte
+			if c.readN > 0 {
+				leftover = make([]byte, c.readN)
+				copy(leftover, c.readBuf[:c.readN])
+				c.readN = 0
+			}
+			go w.takeoverLoop(req, c.fd, leftover)
+			return
+
 		default:
 			// Persist or unknown — treat as Pool for now.
 			c.keepAlive = req.keepAlive
@@ -717,6 +732,100 @@ func (w *worker) directSend(c *conn) {
 	// Speculative read got EAGAIN — wait for epoll EPOLLIN.
 	// No SubmitRecv needed: ET EPOLLIN fires on new data arrival.
 }
+// takeoverBufPool provides read buffers for Takeover goroutines.
+var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
+
+// takeoverLoop owns a connection fd: loops read→handle→write using
+// blocking syscalls (not RawSyscall) so the Go runtime detects the
+// blocking I/O and creates extra OS threads, avoiding starvation
+// from ioLoop's LockOSThread.
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
+	// Set fd to blocking mode so syscall.Read/Write will block the OS thread,
+	// triggering Go runtime to spin up new threads for other goroutines.
+	syscall.SetNonblock(int(fd), false)
+
+	bp := takeoverBufPool.Get().(*[]byte)
+	buf := *bp
+	readN := copy(buf, leftover)
+
+	remoteAddr := first.remoteAddr
+	req := first
+	keepAlive := req.keepAlive
+
+	for {
+		// Handle request.
+		resp := acquireResponse()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					resp.WriteHeader(500)
+					resp.Write([]byte("Internal Server Error\n"))
+				}
+			}()
+			w.handler.ServeKruda(resp, req)
+		}()
+		data := resp.buildZeroCopy()
+		releaseResponse(resp)
+		releaseRequest(req)
+
+		// Write full response — blocking syscall.Write (not RawSyscall).
+		for off := 0; off < len(data); {
+			n, err := syscall.Write(int(fd), data[off:])
+			if err != nil {
+				keepAlive = false
+				goto done
+			}
+			if n > 0 {
+				off += n
+			}
+		}
+
+		if !keepAlive {
+			goto done
+		}
+
+		// Read next request — blocking syscall.Read.
+		for {
+			if readN > 0 {
+				r, consumed, ok := parseHTTPRequest(buf[:readN], w.limits)
+				if ok {
+					remaining := readN - consumed
+					if remaining > 0 {
+						copy(buf, buf[consumed:readN])
+					}
+					readN = remaining
+					r.remoteAddr = remoteAddr
+					r.fd = fd
+					req = r
+					keepAlive = req.keepAlive
+					goto next
+				}
+			}
+			if readN >= len(buf) {
+				keepAlive = false
+				goto done
+			}
+			n, err := syscall.Read(int(fd), buf[readN:])
+			if n > 0 {
+				readN += n
+				continue
+			}
+			if err != nil {
+				keepAlive = false
+			}
+			goto done
+		}
+	next:
+	}
+
+done:
+	takeoverBufPool.Put(bp)
+	syscall.Close(int(fd))
+	// Clean up conn map — fd already closed, closeConn's SubmitClose is a no-op.
+	w.doneCh <- doneMsg{fd: fd, keepAlive: false}
+	w.wake()
+}
+
 func (w *worker) send503(c *conn) {
 	c.sendBuf = resp503
 	c.sendN = 0

@@ -13,6 +13,7 @@ type engine interface {
 	SubmitRecv(fd int32, buf []byte, offset int)
 	SubmitSend(fd int32, data []byte)
 	SubmitClose(fd int32)
+	Detach(fd int32)
 	SubmitPipeRecv(pipeFd int, buf []byte)
 	RegisterConn(fd int32, ptr unsafe.Pointer)
 	PostWake()
@@ -58,6 +59,7 @@ func (e *stubEngine) SubmitAccept(_ int)                    {}
 func (e *stubEngine) SubmitRecv(_ int32, _ []byte, _ int)   {}
 func (e *stubEngine) SubmitSend(_ int32, _ []byte)          {}
 func (e *stubEngine) SubmitClose(_ int32)                   {}
+func (e *stubEngine) Detach(_ int32)                        {}
 func (e *stubEngine) SubmitPipeRecv(_ int, _ []byte)        {}
 func (e *stubEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
 func (e *stubEngine) PostWake()                             {}

@@ -45,6 +45,13 @@ const (
 	// Spawn creates a new goroutine per request.
 	// ~2-3μs overhead. Use for heavy compute or variable latency.
 	Spawn
+
+	// Takeover spawns a goroutine that owns the connection.
+	// The goroutine loops read→handle→write directly, bypassing ioLoop
+	// until the connection goes idle (EAGAIN). Best for DB/Redis I/O
+	// where handler latency dominates — eliminates doneCh/wake/re-arm
+	// overhead between requests on the same connection.
+	Takeover
 )
 
 // --------------- Option constructors ---------------
@@ -56,23 +63,26 @@ func Dispatch(m DispatchMode) FeatherOption { return func(f *Feather) { f.Dispat
 func Static(resp []byte) FeatherOption { return func(f *Feather) { f.StaticResponse = resp } }
 
 // --------------- Named Presets ---------------
+//
+// Users pick by what the route does, not how it's dispatched.
+// Wing picks the optimal dispatch mode automatically.
 
 var (
-	// Bolt — maximum throughput for in-memory responses.
-	// Inline dispatch, HTTP pipelining.
+	// Bolt — inline in ioLoop. Maximum throughput, zero dispatch overhead.
 	Bolt = Feather{Dispatch: Inline}
 
-	// Arrow — the default preset for most routes.
-	// Pool dispatch for DB/Redis/external I/O.
+	// Arrow — goroutine pool dispatch.
 	Arrow = Feather{Dispatch: Pool}
 
-	// ---- Aliases ----
-	Plaintext = Bolt
-	JSON      = Bolt
-	ParamJSON = Bolt
-	PostJSON  = Bolt
-	Query     = Arrow
-	Render    = Arrow
+	// Spear — goroutine owns connection with blocking I/O.
+	// Go runtime auto-creates OS threads, avoiding ioLoop starvation.
+	Spear = Feather{Dispatch: Takeover}
+
+	// Semantic presets — pick by route behavior:
+	Plaintext = Bolt  // static text, health checks
+	JSON      = Bolt  // JSON encode, no I/O
+	Query     = Spear // DB/Redis short I/O
+	Render    = Spear // DB + template/HTML
 )
 
 // --------------- Stringer ---------------
@@ -85,6 +95,8 @@ func (m DispatchMode) String() string {
 		return "Pool"
 	case Spawn:
 		return "Spawn"
+	case Takeover:
+		return "Takeover"
 	default:
 		return "Unknown"
 	}

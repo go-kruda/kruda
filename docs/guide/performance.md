@@ -8,7 +8,7 @@ Kruda defaults to **Wing** transport on Linux for maximum performance — raw `e
 
 | Transport | Option | Best For |
 |-----------|--------|----------|
-| Wing | `kruda.New()` (default on Linux) | Maximum throughput (847K req/s) |
+| Wing | `kruda.New()` (default on Linux) | Maximum throughput (846K req/s) |
 | fasthttp | `kruda.New(kruda.FastHTTP())` (default on macOS) | Broad compatibility |
 | net/http | `kruda.New(kruda.NetHTTP())` (default on Windows) | HTTP/2, TLS |
 
@@ -186,17 +186,17 @@ Assign a Wing type per route to select the optimal dispatch strategy:
 ```go
 app := kruda.New(kruda.Wing())
 
-app.Get("/",          handler, kruda.WingPlaintext())  // Inline, zero-copy
-app.Get("/json",      handler, kruda.WingJSON())       // Inline, fixed buffer
-app.Get("/users/:id", handler, kruda.WingParamJSON())  // Inline, param extraction
-app.Post("/json",     handler, kruda.WingPostJSON())   // Inline, body parse
-app.Get("/db",        handler, kruda.WingQuery())      // Pool dispatch
-app.Get("/fortunes",  handler, kruda.WingRender())     // Pool dispatch, growable buffer
+app.Get("/",          handler, kruda.WingPlaintext())  // Inline in ioLoop
+app.Get("/json",      handler, kruda.WingJSON())       // Inline in ioLoop
+app.Get("/users/:id", handler, kruda.WingJSON())       // Inline in ioLoop
+app.Post("/json",     handler, kruda.WingJSON())       // Inline in ioLoop
+app.Get("/db",        handler, kruda.WingQuery())      // Blocking goroutine per connection
+app.Get("/fortunes",  handler, kruda.WingRender())     // Blocking goroutine per connection
 ```
 
 CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs directly on the epoll worker with zero overhead.
 
-I/O-bound routes (DB, Redis) use **Pool** dispatch — handler runs in a goroutine pool so the epoll worker isn't blocked.
+I/O-bound routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
 
 ### Handler Pool Size
 

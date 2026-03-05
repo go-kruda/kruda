@@ -104,6 +104,11 @@ func (e *kqueueEngine) SubmitClose(fd int32) {
 	syscall.Close(int(fd))
 }
 
+func (e *kqueueEngine) Detach(fd int32) {
+	delete(e.recvBufs, fd)
+	delete(e.sendBufs, fd)
+}
+
 func (e *kqueueEngine) SubmitPipeRecv(_ int, _ []byte) {}
 
 func (e *kqueueEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}

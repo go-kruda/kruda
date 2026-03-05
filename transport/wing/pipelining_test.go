@@ -22,7 +22,7 @@ import (
 //
 // These tests start an actual Wing server on a random port, connect via raw
 // TCP, send pipelined HTTP requests, and verify the responses. This covers
-// the FULL path: io_uring/kqueue → handleRecv → parser → handler →
+// the FULL path: epoll/kqueue → handleRecv → parser → handler →
 // buildResponse → handleSend → processPipelined → repeat.
 // ============================================================================
 

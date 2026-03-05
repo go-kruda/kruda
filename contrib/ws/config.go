@@ -6,7 +6,7 @@
 // Transport compatibility:
 //   - net/http: ✅ (via http.Hijacker)
 //   - fasthttp: ✅ (via RequestCtx.Hijack)
-//   - Wing: ❌ v1 (no hijack API — Wing manages fd directly via io_uring/kqueue/IOCP)
+//   - Wing: ❌ v1 (no hijack API — Wing manages fd directly via epoll/kqueue)
 package ws
 
 import "time"

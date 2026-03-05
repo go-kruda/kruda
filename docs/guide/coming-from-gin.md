@@ -160,7 +160,7 @@ app.Group("/api/v1").
 
 - **3x faster** than Gin in benchmarks (416ns vs 1318ns per request)
 - **Type-safe handlers** — no more manual `ShouldBindJSON`
-- **Pluggable transport** — fasthttp (default) or net/http (HTTP/2)
+- **Pluggable transport** — Wing (default on Linux), fasthttp (default on macOS), or net/http (HTTP/2)
 - **Zero boilerplate** — 60-70% less code than Gin
 - **Auto OpenAPI** — generated from your typed handlers
 - **Built-in DI** — optional dependency injection without codegen

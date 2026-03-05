@@ -22,7 +22,7 @@ func TestSelectTransport_DefaultReturnsWing(t *testing.T) {
 	if tr == nil {
 		t.Fatal("selectTransport returned nil")
 	}
-	// Default is Wing on Linux/macOS, net/http on Windows.
+	// Default is Wing on Linux, fasthttp on macOS, net/http on Windows.
 }
 
 func TestSelectTransport_ExplicitTransport(t *testing.T) {
@@ -52,7 +52,7 @@ func TestSelectTransport_NetHTTPOption(t *testing.T) {
 func TestSelectTransport_DefaultSelectsWing(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()
-	// TransportName defaults to "" → Wing on Linux/macOS
+	// TransportName defaults to "" → Wing on Linux, fasthttp on macOS
 	tr, _ := selectTransport(cfg, cfg.Logger)
 	if tr == nil {
 		t.Fatal("selectTransport returned nil for default")

@@ -13,7 +13,7 @@ Type-safe Go web framework with auto-everything.
 - Typed handlers `C[T]` — body + param + query parsed into one struct, validated at compile time
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
-- Pluggable transport — fasthttp default, net/http fallback
+- Pluggable transport — Wing (Linux, epoll+eventfd), fasthttp, or net/http
 - Zero external deps — core uses only Go stdlib
 - Dev mode error page — rich HTML with source code context, like Next.js
 
@@ -93,22 +93,22 @@ kruda.MapErrorType[*ValidationError](app, 422, "validation failed")
 
 ## Benchmarks
 
-Measured with `go test -bench -benchmem -count=3 -benchtime=3s` on Linux i5-13500. Lower is better.
+<p align="center">
+  <img src="docs/assets/benchmark-chart.png" alt="Kruda vs Fiber vs Actix Web benchmark" width="800">
+</p>
 
-**Kruda (fasthttp transport) vs Fiber**
-| | Kruda ns/op | Fiber ns/op | allocs | vs Fiber |
-|--|--:|--:|--:|--:|
-| StaticGET | 58 | 58 | 0 | tie |
-| ParamGET | 57 | 58 | 0 | +2% |
+Measured with `wrk -t4 -c256 -d5s` on Linux i5-13500 (8P cores), GOGC=400.
 
-**Kruda (net/http transport) vs Gin vs Echo**
-| | Kruda ns/op | Gin ns/op | Echo ns/op | vs Gin | vs Echo |
-|--|--:|--:|--:|--:|--:|
-| StaticGET | 256 / 8a | 268 / 9a | 264 / 10a | +4% | +3% |
-| ParamGET | 256 / 8a | 274 / 9a | 274 / 10a | +7% | +7% |
-| POST JSON | 1,560 / 31a | 1,985 / 33a | 1,960 / 33a | +21% | +20% |
+| Test | Kruda (Go) | Fiber (Go) | Actix (Rust) | vs Fiber | vs Actix |
+|------|--:|--:|--:|--:|--:|
+| plaintext | **846,622** | 670,240 | 814,652 | +26% | +4% |
+| JSON | **805,124** | 625,839 | 790,362 | +29% | +2% |
+| db | **108,468** | 107,450 | 37,373 | +1% | +190% |
+| fortunes | 104,144 | **106,623** | 45,078 | -2% | +131% |
 
-- See [`bench/`](bench/) for running benchmarks and Go framework comparisons
+Wing transport uses raw `epoll` + `eventfd` on Linux — bypasses both fasthttp and net/http. macOS defaults to fasthttp.
+
+- See [`bench/reproducible/`](bench/reproducible/) for full source code of all 3 frameworks and reproduction steps
 
 ## Documentation
 

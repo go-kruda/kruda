@@ -43,6 +43,8 @@ LAUNCH_PLAN.md
 docs/architecture-analysis.md
 docs/PLAYGROUND_DEPLOYMENT.md
 docs/ux/
+docs/adr/
+docs/features/
 docs/kruda-spec.md
 
 # Build output (root-level compiled binaries from examples)
@@ -65,21 +67,17 @@ examples/ratelimit/ratelimit
 bench/*.txt
 bench/*.prof
 bench/bench.test
-bench/tfb/fiber/bench-fiber
-bench/tfb/fiber/
-
-bench/tfb/results/
 frameworks/Go/kruda/src/techempower-kruda
 
-# Cross-framework comparison (separate repo: go-kruda/benchmarks)
+# Internal bench tools (not for public repo — use bench/reproducible/ instead)
+bench/tfb/
+bench/transport-compare/
+bench/cross-runtime/
 bench/elysia/
 bench/gin_test.go
 bench/fiber_test.go
 bench/echo_test.go
 bench/run_cross_bench.sh
-
-# Cross-runtime benchmark (separate concern, not part of core repo)
-bench/cross-runtime/
 
 # Node.js / Bun
 node_modules/

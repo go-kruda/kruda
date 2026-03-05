@@ -1,12 +1,12 @@
 # Transport Selection Guide
 
-Kruda ships with three transports. The default is **Wing** on Linux/macOS.
+Kruda ships with three transports. The default is **Wing** on Linux, **fasthttp** on macOS.
 
 ## When to use which
 
 | Feature needed | Transport | Why |
 |---------------|-----------|-----|
-| Maximum throughput (plaintext, JSON, DB) | **Wing** (default) | epoll/kqueue, zero-copy, no goroutine-per-conn |
+| Maximum throughput (plaintext, JSON, DB) | **Wing** (default on Linux) | epoll+eventfd, zero-copy, no goroutine-per-conn |
 | SSE (Server-Sent Events) | **net/http** | SSE requires `http.Flusher` streaming |
 | Session cookies / Set-Cookie headers | **net/http** | Wing's fast path skips custom headers |
 | HTTP/2, TLS termination | **net/http** | Wing is HTTP/1.1 only |
@@ -16,7 +16,7 @@ Kruda ships with three transports. The default is **Wing** on Linux/macOS.
 ## Usage
 
 ```go
-// Default: Wing on Linux/macOS, net/http on Windows
+// Default: Wing on Linux, fasthttp on macOS, net/http on Windows
 app := kruda.New()
 
 // Explicit net/http (for SSE, sessions, HTTP/2, TLS)

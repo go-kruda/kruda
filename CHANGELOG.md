@@ -3,24 +3,53 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — TechEmpower Domination
+## [Unreleased]
 
 ### Added
+- Wing transport — custom epoll+eventfd engine (default on Linux)
+- eventfd wake mechanism replacing pipe on Linux (lower syscall overhead)
+- Feather dispatch system — per-route I/O strategy hints (`WingPlaintext`, `WingJSON`, `WingQuery`, `WingRender`)
 - `Ctx.SetBody([]byte) *Ctx` — lazy-send response body (zero-copy, chainable)
 - `Ctx.SendBytes([]byte) error` — eager-send response body (immediate flush, terminal)
+- `Ctx.SendBytesWithTypeBytes([]byte, []byte) error` — zero-alloc typed response
+- `Ctx.SendStaticWithTypeBytes([]byte, []byte) error` — zero-copy for immutable data
 - `Ctx.SetContentType(string) *Ctx` — set Content-Type header (chainable)
-- Turbo Mode (`WithTurbo`) — SO_REUSEPORT prefork with per-core child processes (Linux only)
+- sendfile(2) zero-copy support for Wing static file serving
+- Wing RawRequest interface with Fd, RawHeader, RawBody, KeepAlive
+- Wing MultipartForm support
+- Wing read/write/idle timeouts + request Context cancellation
 - TechEmpower Framework Benchmarks submission (`frameworks/Go/kruda/`)
+- HTTP parser fuzz testing with seed corpus
+- contrib/jwt — JWT authentication (HS256/384/512, RS256)
+- contrib/ws — WebSocket with RFC 6455 compliance, ping rate limiting
+- contrib/ratelimit — token bucket + sliding window rate limiting
+- Security hardening: path traversal (3-layer), header injection, ReDoS prevention, SSE injection
+- `SECURITY.md` with responsible disclosure policy (48h ack, 7d assessment, 90d disclosure)
+- Consolidated security guide at `docs/guide/security.md`
+- GC tuning documentation with GOGC/GOMEMLIMIT presets
+
+### Changed
+- Default transport: Wing on Linux, fasthttp on macOS, net/http on Windows (auto-fallback)
+- TLS auto-fallback: Wing/fasthttp → net/http when TLS is configured
+- Security headers defaults: X-Frame-Options DENY, X-XSS-Protection 0, Referrer-Policy strict-origin
+- HTML escape in fortunes uses `&#34;` for quotes (TFB spec compliance)
 
 ### Removed
-- Legacy TFB code (`cmd/techempower/`, `techempower/`, root `Dockerfile.techempower`, root `benchmark_config.json`)
+- Turbo/prefork mode (replaced by Wing transport)
+- Legacy TFB code (`cmd/techempower/`, `techempower/`, root `Dockerfile.techempower`)
+- Bone configuration axis (simplified to Feather presets)
 
-## [Unreleased] — Phase 5: Production Ready
+### Performance
+- Plaintext: 862K req/s (vs Actix 799K, +8%)
+- Pipelined: 6.6M req/s (vs Fiber 1.4M, +4.6x)
+- JSON: 767K req/s
+- DB: 109K req/s (vs Actix 37K, +195%)
+- eventfd wake: +18% plaintext throughput vs pipe
+
+## [0.5.0] — Phase 5: Production Ready
 
 ### Added
-- Dev mode error page with source code context, stack trace, request details (`devmode.go`)
-- Security hardening: path traversal prevention, header injection prevention, DoS defaults
-- `docs/SECURITY.md` with threat model and mitigations
+- Dev mode error page with source code context, stack trace, request details
 - CLI tool `cmd/kruda/` with `new`, `dev`, `generate`, `validate` commands
 - Hot reload dev server with 100ms file polling
 - 12 runnable example applications
@@ -29,16 +58,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Benchmark baseline (`bench/baseline.txt`)
 - Cross-runtime benchmark suite (Go frameworks comparison)
 - fasthttp transport for maximum throughput
-- AI-friendly DX: `llms.txt`, `.cursor/rules`, `copilot-instructions.md`
 - Integration tests (`integration_test.go`)
 - Coverage gap tests reaching 92%+ on core package
-
-### Changed
-- Security headers defaults: X-Frame-Options DENY, X-XSS-Protection 0, Referrer-Policy strict-origin
-- Default transport: fasthttp (Linux/macOS), net/http (Windows)
-
-### Performance
-- 3x faster than Echo/Gin, 5x faster than Fiber on Go benchmarks
 
 ### Security
 - Default security headers: X-Content-Type-Options, X-Frame-Options, Referrer-Policy

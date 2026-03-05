@@ -59,7 +59,7 @@ func getFreePort(t *testing.T) int {
 	return port
 }
 
-// startTransport starts the io_uring transport in background and returns
+// startTransport starts the epoll/kqueue transport in background and returns
 // the address and a cleanup function.
 func startTransport(t *testing.T, handler transport.Handler) (string, func()) {
 	t.Helper()

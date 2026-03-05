@@ -104,7 +104,7 @@ Sets a custom transport implementation.
 func FastHTTP() Option
 ```
 
-Selects the fasthttp transport for maximum performance. This is the **default** — calling `FastHTTP()` is optional but explicit.
+Selects the fasthttp transport. On Linux the default is **Wing** (epoll+eventfd) which is faster — use `FastHTTP()` only if you need fasthttp compatibility. On macOS, fasthttp is already the default.
 
 ### NetHTTP
 

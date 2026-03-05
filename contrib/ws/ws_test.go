@@ -741,12 +741,12 @@ func TestConn_WriteAfterClose(t *testing.T) {
 	app := kruda.New(kruda.NetHTTP())
 	upgrader := New(Config{})
 
-	var writeErr error
+	errCh := make(chan error, 1)
 	app.Get("/ws", func(c *kruda.Ctx) error {
 		return upgrader.Upgrade(c, func(conn *Conn) {
 			conn.Close(CloseNormalClosure, "closing")
 			// Write after close should fail
-			writeErr = conn.WriteText("after close")
+			errCh <- conn.WriteText("after close")
 		})
 	})
 	app.Compile()
@@ -757,11 +757,13 @@ func TestConn_WriteAfterClose(t *testing.T) {
 	wsConn := dialWS(t, srv.URL+"/ws")
 	defer wsConn.Close()
 
-	// Wait for server to close and attempt write
-	time.Sleep(100 * time.Millisecond)
-
-	if writeErr == nil {
-		t.Error("expected error writing to closed connection")
+	select {
+	case writeErr := <-errCh:
+		if writeErr == nil {
+			t.Error("expected error writing to closed connection")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for write-after-close result")
 	}
 }
 

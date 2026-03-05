@@ -86,8 +86,9 @@ type RouteParam struct {
 // routeParams is a fixed-size array of path parameters, avoiding map overhead.
 // Linear scan on ≤8 items is faster than map hash+lookup due to cache locality.
 type routeParams struct {
-	items [maxRouteParams]RouteParam
-	count int
+	items   [maxRouteParams]RouteParam
+	count   int
+	pattern string // matched route pattern (e.g. "/users/:id"), set by find()
 }
 
 // set adds or updates a param. Returns the routeParams for chaining.
@@ -134,6 +135,7 @@ func (p *routeParams) del(key string) {
 // and will be overwritten before the next read, so no GC leak risk.
 func (p *routeParams) reset() {
 	p.count = 0
+	p.pattern = ""
 }
 
 // dirtyFlags tracks which cold fields were modified during a request.
@@ -226,6 +228,7 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.startTime = time.Time{}
 	c.writer = w
 	c.request = r
+	// routePattern is reset via params.reset() above
 
 	// Reset fixed-slot headers (zero-cost, no allocation)
 	c.contentType = ""
@@ -309,6 +312,15 @@ func (c *Ctx) Method() string { return c.method }
 
 // Path returns the request path.
 func (c *Ctx) Path() string { return c.path }
+
+// Route returns the matched route pattern (e.g. "/users/:id").
+// Returns the raw path if no pattern was matched (static routes).
+func (c *Ctx) Route() string {
+	if c.params.pattern != "" {
+		return c.params.pattern
+	}
+	return c.path
+}
 
 // Param returns a path parameter value by name.
 func (c *Ctx) Param(name string) string {
@@ -462,13 +474,15 @@ func (c *Ctx) JSON(v any) error {
 
 	// Wing fast path: Marshal → SetJSON directly, skip pooled buffer.
 	if jr, ok := c.writer.(transport.JSONResponder); ok {
-		data, err := c.app.config.JSONEncoder(v)
-		if err != nil {
-			return err
+		if len(c.cookies) == 0 && len(c.respHeaders) == 0 {
+			data, err := c.app.config.JSONEncoder(v)
+			if err != nil {
+				return err
+			}
+			c.responded = true
+			jr.SetJSON(c.status, data)
+			return nil
 		}
-		c.responded = true
-		jr.SetJSON(c.status, data)
-		return nil
 	}
 
 	// Fast path: stream into pooled buffer (net/http transport)

@@ -4,14 +4,15 @@ Kruda is designed for high performance with zero-allocation hot paths, pooled co
 
 ## Transport Selection
 
-Kruda defaults to **fasthttp** for maximum performance. Use `NetHTTP()` when you need HTTP/2 or TLS.
+Kruda defaults to **Wing** transport on Linux for maximum performance — raw `epoll` + `eventfd`.
 
 | Transport | Option | Best For |
 |-----------|--------|----------|
-| fasthttp | `kruda.New()` (default) | Maximum throughput, low latency |
-| net/http | `kruda.New(kruda.NetHTTP())` | HTTP/2, TLS, Windows |
+| Wing | `kruda.New()` (default on Linux) | Maximum throughput (847K req/s) |
+| fasthttp | `kruda.New(kruda.FastHTTP())` (default on macOS) | Broad compatibility |
+| net/http | `kruda.New(kruda.NetHTTP())` (default on Windows) | HTTP/2, TLS |
 
-Auto-fallback: TLS config or Windows automatically selects net/http even without `NetHTTP()`.
+Auto-fallback: TLS config automatically selects net/http. Wing is Linux only.
 
 ## Context Pool Tuning
 
@@ -176,7 +177,7 @@ You should see your package listed as using PGO.
 
 ## Wing Transport Tuning
 
-Wing is Kruda's high-performance epoll/kqueue transport. Enable with `kruda.Wing()`.
+Wing is Kruda's high-performance epoll+eventfd transport (Linux only). Enable explicitly with `kruda.Wing()` or use `kruda.New()` on Linux (auto-selected).
 
 ### Wing Types (Feather)
 
@@ -298,26 +299,17 @@ env:
 
 ## Benchmark Results
 
-Measured with wrk on Linux (AMD EPYC, 16 cores). Wing transport + PGO + `GOGC=400`.
+Measured with `wrk -t4 -c256 -d5s` on Linux i5-13500 (8P cores), `GOGC=400`. Wing transport (epoll + eventfd).
 
-### Plaintext
+### Kruda vs Fiber vs Actix Web
 
-| Framework | Requests/sec | vs Fiber |
-|-----------|-------------:|---------:|
-| Kruda (Wing) | 786,000 | +11% |
-| Actix-web (Rust) | 826,000 | +16% |
-| Fiber (Go) | 710,000 | baseline |
+| Test | Kruda (Wing) | Fiber (Go) | Actix (Rust) | vs Fiber | vs Actix |
+|------|--:|--:|--:|--:|--:|
+| plaintext | **846,622** | 670,240 | 814,652 | **+26%** | **+4%** |
+| JSON | **805,124** | 625,839 | 790,362 | **+29%** | **+2%** |
+| db | **108,468** | 107,450 | 37,373 | **+1%** | **+190%** |
+| fortunes | 104,144 | **106,623** | 45,078 | -2% | **+131%** |
 
-### Pipelined Plaintext (depth 16)
+**Why Kruda is fast:** Wing transport uses raw `epoll` + `eventfd` on Linux — bypassing both fasthttp and net/http entirely. Combined with zero-allocation hot paths and inline JSON serialization, this eliminates framework overhead on CPU-bound routes.
 
-| Framework | Requests/sec | vs Fiber |
-|-----------|-------------:|---------:|
-| **Kruda (Wing)** | **6,609,000** | **+357%** |
-| Actix-web (Rust) | 6,030,000 | +317% |
-| Fiber (Go) | 1,445,000 | baseline |
-
-**Why Kruda dominates pipelined benchmarks:** HTTP pipelining sends multiple requests in a single TCP packet without waiting for responses. TechEmpower uses pipeline depth 16 for the plaintext test.
-
-Wing's `tryParse` loop parses all 16 requests from a single `read()` buffer inline — only 1-2 syscalls for 16 requests. fasthttp (used by Fiber) processes one request per read, requiring 16 syscall pairs for the same work.
-
-> **Note:** Browsers no longer use HTTP pipelining (replaced by HTTP/2 multiplexing). Pipelined benchmarks measure raw framework throughput under ideal conditions — useful for comparing frameworks, but not representative of real-world browser traffic.
+> **Note:** DB and fortunes tests are I/O-bound and depend heavily on database driver and connection pool configuration. See [`bench/`](https://github.com/go-kruda/kruda/tree/main/bench) for full methodology and reproduction steps.

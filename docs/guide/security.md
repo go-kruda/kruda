@@ -41,7 +41,7 @@ Kruda assumes:
 | Denial of Service (DoS) | Medium | Mitigated |
 | CORS Bypass | Medium | Mitigated |
 | Cross-Site Scripting (XSS) | Medium | Mitigated (headers) |
-| Cross-Site Request Forgery (CSRF) | Medium | Guidance provided |
+| Cross-Site Request Forgery (CSRF) | Medium | Mitigated (middleware) |
 
 ## Path Traversal Prevention
 
@@ -128,31 +128,154 @@ Key behaviors:
 
 ## CSRF Protection
 
-CSRF protection is available as a separate `contrib/csrf` package (not in core).
+**Source:** `middleware/csrf.go`
 
-**Recommended pattern: Double-Submit Cookie**
-
-1. Generate a random CSRF token and set it as a cookie (`SameSite=Strict` or `SameSite=Lax`).
-2. Include the token in a hidden form field or custom header (`X-CSRF-Token`).
-3. Compare cookie value with header/form value on the server. Reject on mismatch.
+Built-in CSRF middleware using the double-submit cookie pattern.
 
 ```go
-func CSRFMiddleware() kruda.HandlerFunc {
-    return func(c *kruda.Ctx) error {
-        if c.Method() == "GET" || c.Method() == "HEAD" || c.Method() == "OPTIONS" {
-            return c.Next()
-        }
-        cookieToken := c.Cookie("csrf_token")
-        headerToken := c.Header("X-CSRF-Token")
-        if cookieToken == "" || cookieToken != headerToken {
-            return c.Status(403).JSON(kruda.Map{"error": "CSRF token mismatch"})
-        }
-        return c.Next()
-    }
+app.Use(middleware.CSRF())
+```
+
+**How it works:**
+
+1. **Safe methods** (GET, HEAD, OPTIONS, TRACE): Generates a random 32-byte token (crypto/rand), sets a `_csrf` cookie, and stores the token in `c.Set("csrf_token", token)` for template rendering.
+2. **Unsafe methods** (POST, PUT, DELETE, PATCH): Validates the `X-CSRF-Token` header against the `_csrf` cookie using `crypto/subtle.ConstantTimeCompare`. Rejects with 403 on mismatch.
+3. **After validation**, a new token is generated for the next request (one-time use).
+
+**SPA/AJAX pattern:** Read the `_csrf` cookie with JavaScript and send it as the `X-CSRF-Token` header on every mutation request.
+
+```javascript
+// Frontend: read cookie and send as header
+const csrfToken = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/)?.[1];
+fetch('/api/data', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify(data),
+});
+```
+
+**Server-rendered form pattern:** Access the token from the request context for hidden fields.
+
+```go
+app.Get("/form", func(c *kruda.Ctx) error {
+    token := c.Get("csrf_token").(string)
+    // Render form with hidden <input name="_csrf" value="token">
+    return c.HTML(renderForm(token))
+})
+```
+
+**Configuration:**
+
+```go
+app.Use(middleware.CSRF(middleware.CSRFConfig{
+    CookieName:   "_csrf",         // cookie name (default)
+    HeaderName:   "X-CSRF-Token",  // header to check (default)
+    CookiePath:   "/",             // cookie path (default)
+    CookieSecure: true,            // set for HTTPS-only
+    SameSite:     http.SameSiteStrictMode, // default
+    MaxAge:       3600,            // 1 hour (default)
+    TokenLength:  32,              // 32 bytes = 64 hex chars (default)
+    Skip: func(c *kruda.Ctx) bool {
+        return strings.HasPrefix(c.Path(), "/api/webhook")
+    },
+}))
+```
+
+Key security properties:
+
+- **Constant-time comparison** prevents timing attacks
+- **SameSite=Strict** prevents cross-site cookie sending
+- **HttpOnly=false** on CSRF cookie (JS must read it for double-submit pattern)
+- **Token refresh** on every request prevents replay
+- **Minimum 16-byte tokens** enforced at init (panics if shorter)
+
+> Applications using Bearer token authentication (`Authorization` header) are generally not vulnerable to CSRF.
+
+## Session Management
+
+**Source:** `contrib/session/`
+
+Session middleware with a pluggable store interface. Default in-memory store included.
+
+```go
+import "github.com/go-kruda/kruda/contrib/session"
+
+app.Use(session.New())
+```
+
+**Usage in handlers:**
+
+```go
+app.Post("/login", func(c *kruda.Ctx) error {
+    sess := session.GetSession(c)
+    sess.Set("user_id", 42)
+    sess.Set("role", "admin")
+    return c.JSON(kruda.Map{"ok": true})
+})
+
+app.Get("/profile", func(c *kruda.Ctx) error {
+    sess := session.GetSession(c)
+    userID := sess.GetInt("user_id")
+    role := sess.GetString("role")
+    return c.JSON(kruda.Map{"user_id": userID, "role": role})
+})
+
+app.Post("/logout", func(c *kruda.Ctx) error {
+    sess := session.GetSession(c)
+    sess.Destroy() // removes from store + expires cookie
+    return c.JSON(kruda.Map{"ok": true})
+})
+```
+
+**Session API:**
+
+| Method | Description |
+|--------|-------------|
+| `Get(key)` | Get any value |
+| `GetString(key, default...)` | Get string with optional default |
+| `GetInt(key, default...)` | Get int with optional default |
+| `Set(key, value)` | Store a value |
+| `Delete(key)` | Remove a key |
+| `Clear()` | Remove all values |
+| `Destroy()` | Delete session from store + expire cookie |
+| `ID()` | Get session ID |
+| `IsNew()` | True if session was just created |
+
+**Configuration:**
+
+```go
+app.Use(session.New(session.Config{
+    CookieName:     "_session",              // default
+    CookiePath:     "/",                     // default
+    CookieSecure:   true,                    // for HTTPS
+    CookieHTTPOnly: true,                    // default (prevents JS access)
+    CookieSameSite: http.SameSiteLaxMode,    // default
+    MaxAge:         86400,                   // 24h cookie (default)
+    IdleTimeout:    30 * time.Minute,        // server-side expiry (default)
+    Store:          session.NewMemoryStore(), // default
+    Skip: func(method, path string) bool {
+        return strings.HasPrefix(path, "/static/")
+    },
+}))
+```
+
+**Custom store:** Implement the `Store` interface for Redis, database, or other backends:
+
+```go
+type Store interface {
+    Get(id string) (*SessionData, error)
+    Save(id string, data *SessionData, ttl time.Duration) error
+    Delete(id string) error
 }
 ```
 
-> Applications using Bearer token authentication (`Authorization` header) are generally not vulnerable to CSRF.
+Session security properties:
+
+- **32-byte session IDs** from crypto/rand (64 hex chars)
+- **HttpOnly=true** by default (prevents XSS session theft)
+- **SameSite=Lax** by default
+- **Server-side expiration** via IdleTimeout (independent of cookie MaxAge)
+- **Automatic cleanup** of expired sessions in MemoryStore
 
 ## JWT Best Practices
 
@@ -263,7 +386,9 @@ Dev mode defaults to `false` -- must be explicitly enabled.
 ## Production Checklist
 
 - [ ] Use `middleware.Recovery` with `DisableStackTrace: true`
+- [ ] Enable `middleware.CSRF()` for form-based or cookie-authenticated routes
 - [ ] Configure CORS with explicit origins (never `*` with credentials)
+- [ ] Use `session.New()` with `CookieSecure: true` for HTTPS
 - [ ] Set `MessageTimeout` and `MaxPingPerSecond` on WebSocket endpoints
 - [ ] Validate file upload extensions in your handler
 - [ ] Use strong JWT secrets from environment variables or a vault
@@ -274,6 +399,8 @@ Dev mode defaults to `false` -- must be explicitly enabled.
 app := kruda.New()
 app.Use(middleware.Recovery(middleware.RecoveryConfig{DisableStackTrace: true}))
 app.Use(middleware.RequestID())
+app.Use(middleware.CSRF())
+app.Use(session.New(session.Config{CookieSecure: true}))
 app.Use(middleware.PathTraversal())
 app.Use(middleware.CORS(middleware.CORSConfig{
     AllowOrigins:     []string{"https://app.example.com"},

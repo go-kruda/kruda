@@ -1455,7 +1455,7 @@ func TestParser_HeaderWithoutColon(t *testing.T) {
 //
 // These tests simulate the exact buffer management logic that transport.go
 // performs (handleRecv → handleSend → processPipelined → handleSend → ...)
-// WITHOUT needing io_uring/kqueue. They verify the state machine is correct.
+// WITHOUT needing epoll/kqueue. They verify the state machine is correct.
 
 // transportSim simulates Wing's per-connection buffer management.
 // It mirrors the fields and logic in transport.go's conn struct and

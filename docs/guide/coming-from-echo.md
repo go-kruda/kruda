@@ -122,8 +122,11 @@ No separate bind + validate steps. No global validator registration. Validation 
 Echo uses net/http exclusively. Kruda offers both:
 
 ```go
-// fasthttp (default) — 3x faster than Echo
+// Wing (default on Linux) — epoll+eventfd, 847K req/s
 app := kruda.New()
+
+// fasthttp — broad compatibility
+app := kruda.New(kruda.FastHTTP())
 
 // net/http — same as Echo, but with Kruda's ergonomics
 app := kruda.New(kruda.NetHTTP())
@@ -190,10 +193,10 @@ app.Group("/api/v1").
 
 ## What You Gain
 
-- **3x faster** — fasthttp transport by default (416ns vs 1318ns)
+- **847K req/s** — Wing transport (epoll+eventfd) by default on Linux
 - **Type-safe handlers** — no more bind + validate dance
 - **Concrete context** — no interface overhead, better inlining
-- **Pluggable transport** — fasthttp or net/http, auto-selected
+- **Pluggable transport** — Wing, fasthttp, or net/http, auto-selected
 - **Auto OpenAPI** — generated from `C[T]` types
 - **Auto CRUD** — `app.Resource("/products", service)` generates full REST
 - **Built-in DI** — optional, no codegen needed

@@ -14,7 +14,7 @@ func main() {
 	svc := service.NewUserService(repo)
 	h := httpAdapter.NewUserHandler(svc)
 
-	app := kruda.New()
+	app := kruda.New(kruda.NetHTTP())
 	h.Register(app)
 
 	app.Listen(":3000")

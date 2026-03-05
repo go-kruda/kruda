@@ -103,15 +103,15 @@ Go:       (go version)
 GOMAXPROCS: (default = number of CPU cores)
 ```
 
-## Wing Transport Benchmark (io_uring / kqueue)
+## Wing Transport Benchmark (epoll / kqueue)
 
-Wing is Kruda's custom transport using io_uring (Linux) and kqueue (macOS) — zero external dependencies.
+Wing is Kruda's custom transport using epoll (Linux) and kqueue (macOS) — zero external dependencies.
 
 ### Linux (Intel i5-13500, 8 cores, 256 connections, 10s, wrk)
 
 | Framework | Plaintext RPS | JSON RPS |
 |-----------|-------------:|----------:|
-| **Kruda + Wing (io_uring)** | **521,318** | **496,586** |
+| **Kruda + Wing (epoll)** | **521,318** | **496,586** |
 | Fiber Prefork (8 workers) | 268,222 | 244,058 |
 | Kruda + fasthttp | 231,460 | 219,445 |
 | Fiber | 229,421 | 213,405* |
@@ -146,7 +146,6 @@ Wing is Kruda's custom transport using io_uring (Linux) and kqueue (macOS) — z
 ### Windows
 
 Wing does not support Windows. On Windows, `kruda.Wing()` automatically falls back
-to fasthttp. Windows IOCP was prototyped and benchmarked but removed — it was 37%
 slower than fasthttp due to Go's mature net package and Windows SO_REUSEADDR not
 distributing connections like Linux SO_REUSEPORT. The maintenance cost and bug risk
 were not justified.

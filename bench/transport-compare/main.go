@@ -13,7 +13,7 @@
 //   -pipeline  HTTP pipeline depth (default: 16)
 //
 // Requirements:
-//   - Linux (io_uring), macOS (kqueue), or Windows (IOCP)
+//   - Linux (epoll), macOS (kqueue)
 //   - wrk installed (apt install wrk) for external benchmarks
 //   - Run as: go run . OR go build -o bench && ./bench
 

@@ -3,7 +3,7 @@ package wing
 import "unsafe"
 
 // engine abstracts the OS-specific async I/O backend.
-// On Linux: io_uring (completion-based).
+// On Linux: epoll (event-driven).
 // On macOS: kqueue (readiness-based, engine does syscall internally).
 type engine interface {
 	Init(cfg engineConfig) error

@@ -41,7 +41,7 @@ The following components are in scope for security reports:
 
 - **Framework core** — `github.com/go-kruda/kruda` (router, context, config, error handling, lifecycle)
 - **Built-in middleware** — `middleware/` (logger, recovery, CORS, request ID, timeout)
-- **Wing transport** — `transport/wing/` (HTTP parser, io_uring/kqueue/IOCP engine, connection management)
+- **Wing transport** — `transport/wing/` (HTTP parser, epoll/kqueue engine, connection management)
 - **CLI tool** — `cmd/kruda/` (project scaffolding, dev server)
 
 ### Out of Scope

@@ -129,7 +129,7 @@ Handler → Response buffer → fasthttp.RequestCtx.Write → TCP
 - [ ] Configure SO_REUSEPORT for multi-process scaling
 - [ ] Enable TCP_NODELAY and TCP_QUICKACK
 - [ ] Set optimal TCP buffer sizes
-- [ ] Configure io_uring if available
+- [ ] Configure epoll/kqueue
 - [ ] Add CPU affinity for database connections
 
 ### Phase 5: Validation (2 hours)

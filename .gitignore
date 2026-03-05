@@ -87,3 +87,8 @@ node_modules/
 # Environment
 .env
 .env.*
+# Ignore compiled binaries and bench artifacts
+bench/chart.html
+frameworks/Go/kruda/src/
+sse
+static-files

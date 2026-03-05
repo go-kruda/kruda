@@ -25,7 +25,7 @@ type Config struct {
 	ShutdownTimeout time.Duration // default: 10s
 
 	Transport     transport.Transport
-	TransportName string // "wing" (default on Linux/macOS), "fasthttp", "nethttp"
+	TransportName string // "wing" (default on Linux), "fasthttp" (default on macOS), "nethttp" (default on Windows)
 	TLSCertFile   string
 	TLSKeyFile    string
 	HTTP3         bool
@@ -192,9 +192,9 @@ func NetHTTP() Option {
 	return func(a *App) { a.config.TransportName = "nethttp" }
 }
 
-// Wing selects the Wing transport (epoll/kqueue).
-// This is the default on Linux and macOS — calling Wing() is optional but explicit.
-// Falls back to fasthttp on unsupported platforms.
+// Wing selects the Wing transport (epoll+eventfd, Linux only).
+// This is the default on Linux — calling Wing() is optional but explicit.
+// On non-Linux platforms, falls back to fasthttp.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
 }
@@ -378,7 +378,7 @@ func WithOpenAPITag(name, description string) Option {
 
 // selectTransport chooses the transport based on config, env, and OS.
 // Priority: explicit WithTransport() > Wing()/FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default.
-// Default is Wing on Linux/macOS for maximum performance. Falls back to net/http on Windows or when TLS is needed.
+// Default is Wing on Linux (epoll+eventfd), fasthttp on macOS, net/http on Windows. Falls back to net/http when TLS is needed.
 func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, string) {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {
@@ -389,10 +389,12 @@ func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, stri
 	if name == "" {
 		if env := os.Getenv("KRUDA_TRANSPORT"); env != "" {
 			name = env
+		} else if runtime.GOOS == "linux" {
+			name = "wing"
 		} else if runtime.GOOS == "windows" {
 			name = "nethttp"
 		} else {
-			name = "wing"
+			name = "fasthttp"
 		}
 	}
 

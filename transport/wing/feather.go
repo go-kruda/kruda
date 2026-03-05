@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package wing
 
 // Feather is the per-route tuning system for Wing.

@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package wing
 
 // RawRequest provides low-level access to Wing's request data.

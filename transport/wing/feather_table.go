@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package wing
 
 // FeatherTable maps method+path to a Feather for per-route dispatch decisions.

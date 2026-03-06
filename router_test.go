@@ -1810,7 +1810,7 @@ func TestEdge_URLEncodedParamValues(t *testing.T) {
 	params.reset()
 	got := r.find("GET", "/users/john%20doe", &params)
 	if got == nil {
-		t.Fatal("GET /users/john%20doe should match param route")
+		t.Fatal("expected param route to match URL-encoded path")
 	}
 
 	// Plus sign (literal)

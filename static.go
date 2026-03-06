@@ -80,13 +80,13 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 			path = cfg.index
 		}
 
-		// Security: prevent path traversal — clean and reject escapes.
+		// Security: prevent path traversal — reject before cleaning.
+		if strings.Contains(path, "..") {
+			return c.Status(403).Text("Forbidden")
+		}
 		path = filepath.ToSlash(filepath.Clean("/" + path))[1:]
 		if path == "" {
 			path = cfg.index
-		}
-		if strings.HasPrefix(path, "..") || strings.Contains(path, "/../") {
-			return c.Status(403).Text("Forbidden")
 		}
 
 		f, err := fsys.Open(path)
@@ -131,7 +131,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		}
 
 		if cfg.maxAge > 0 {
-			c.Set("Cache-Control", "public, max-age="+strconv.Itoa(cfg.maxAge))
+			c.SetHeader("Cache-Control", "public, max-age="+strconv.Itoa(cfg.maxAge))
 		}
 
 		// Try sendfile zero-copy path (Wing transport).

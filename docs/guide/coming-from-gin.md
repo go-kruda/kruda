@@ -109,10 +109,15 @@ type CreateUser struct {
     Email string `json:"email" validate:"required,email"`
 }
 
-app.Post("/users", func(c *kruda.C[CreateUser]) error {
-    // c.In is already parsed + validated
-    return c.JSON(createUser(c.In))
+app.Post("/users", func(c *kruda.Ctx) error {
+    var input CreateUser
+    if err := c.Bind(&input); err != nil {
+        return err
+    }
+    return c.JSON(createUser(input))
 })
+// Or use typed handlers for compile-time safety:
+// kruda.Post[CreateUser, User](app, "/users", handler)
 ```
 
 No manual binding. No manual error checking. Validation errors return structured 422 automatically.
@@ -128,12 +133,14 @@ r.Use(cors.Default())
 
 **Kruda:**
 ```go
-app.Use(kruda.Logger())
-app.Use(kruda.Recovery())
-app.Use(kruda.CORS())
+import "github.com/go-kruda/kruda/middleware"
+
+app.Use(middleware.Logger())
+app.Use(middleware.Recovery())
+app.Use(middleware.CORS())
 ```
 
-Built-in middleware is included in core — no extra `gin-contrib` packages needed.
+Built-in middleware lives in the `middleware` package — no extra `gin-contrib` packages needed.
 
 ## Route Groups
 

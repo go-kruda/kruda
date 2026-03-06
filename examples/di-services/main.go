@@ -227,7 +227,7 @@ func main() {
 	c.Give(NewUserService(repo, email))
 
 	// Create the app with the container
-	app := kruda.New(kruda.NetHTTP(), kruda.WithContainer(c))
+	app := kruda.New(kruda.WithContainer(c))
 
 	// -----------------------------------------------------------------------
 	// Option B: Module-based setup (commented out — use one or the other)

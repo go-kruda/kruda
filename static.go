@@ -6,6 +6,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-kruda/kruda/transport"
@@ -123,7 +124,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		}
 
 		if cfg.maxAge > 0 {
-			c.Set("Cache-Control", "public, max-age="+strings.Repeat("0", cfg.maxAge)) // TODO: proper itoa
+			c.Set("Cache-Control", "public, max-age="+strconv.Itoa(cfg.maxAge))
 		}
 
 		// Try sendfile zero-copy path (Wing transport).

@@ -40,10 +40,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bone configuration axis (simplified to Feather presets)
 
 ### Performance
-- Plaintext: 862K req/s (vs Actix 799K, +8%)
-- Pipelined: 6.6M req/s (vs Fiber 1.4M, +4.6x)
-- JSON: 767K req/s
-- DB: 109K req/s (vs Actix 37K, +195%)
+- Plaintext: 846K req/s (vs Fiber 670K, +26%; vs Actix 814K, +4%)
+- JSON: 805K req/s (vs Fiber 625K, +29%; vs Actix 790K, +2%)
+- DB: 108K req/s (vs Fiber 107K, +1%; vs Actix 37K, +190%)
+- Fortunes: 104K req/s (vs Actix 45K, +131%)
 - eventfd wake: +18% plaintext throughput vs pipe
 
 ## [0.5.0] — Phase 5: Production Ready
@@ -84,7 +84,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.0] — Phase 3: Performance
 
 ### Added
-- fasthttp transport for maximum throughput (now the default)
+- fasthttp transport for maximum throughput (default at Phase 3; superseded by Wing in Phase 7)
 - `FastHTTP()` and `NetHTTP()` transport options
 - Transport auto-fallback: TLS or Windows → net/http
 - `WithTransport(transport.Transport)` for custom transport implementations

@@ -110,9 +110,15 @@ type CreateUser struct {
     Email string `json:"email" validate:"required,email"`
 }
 
-app.Post("/users", func(c *kruda.C[CreateUser]) error {
-    return c.Status(201).JSON(createUser(c.In))
+app.Post("/users", func(c *kruda.Ctx) error {
+    var input CreateUser
+    if err := c.Bind(&input); err != nil {
+        return err
+    }
+    return c.Status(201).JSON(createUser(input))
 })
+// Or use typed handlers for compile-time safety:
+// kruda.Post[CreateUser, User](app, "/users", handler)
 ```
 
 No separate bind + validate steps. No global validator registration. Validation is built into the type system.
@@ -122,7 +128,7 @@ No separate bind + validate steps. No global validator registration. Validation 
 Echo uses net/http exclusively. Kruda offers both:
 
 ```go
-// Wing (default on Linux) — epoll+eventfd, 847K req/s
+// Wing (default on Linux) — epoll+eventfd, 846K req/s
 app := kruda.New()
 
 // fasthttp — broad compatibility
@@ -182,18 +188,18 @@ app.Group("/api/v1").
 
 | Echo | Kruda |
 |------|-------|
-| `middleware.Logger()` | `kruda.Logger()` (built-in) |
-| `middleware.Recover()` | `kruda.Recovery()` (built-in) |
-| `middleware.CORS()` | `kruda.CORS()` (built-in) |
-| `middleware.RequestID()` | `kruda.RequestID()` (built-in) |
-| `middleware.TimeoutWithConfig()` | `kruda.Timeout()` (built-in) |
+| `middleware.Logger()` | `middleware.Logger()` (built-in) |
+| `middleware.Recover()` | `middleware.Recovery()` (built-in) |
+| `middleware.CORS()` | `middleware.CORS()` (built-in) |
+| `middleware.RequestID()` | `middleware.RequestID()` (built-in) |
+| `middleware.TimeoutWithConfig()` | `middleware.Timeout()` (built-in) |
 | `middleware.RateLimiter()` | `ratelimit.New()` (contrib) |
 | `middleware.GzipWithConfig()` | `compress.New()` (contrib) |
 | `echojwt.WithConfig()` | `jwt.New()` (contrib) |
 
 ## What You Gain
 
-- **847K req/s** — Wing transport (epoll+eventfd) by default on Linux
+- **846K req/s** — Wing transport (epoll+eventfd) by default on Linux
 - **Type-safe handlers** — no more bind + validate dance
 - **Concrete context** — no interface overhead, better inlining
 - **Pluggable transport** — Wing, fasthttp, or net/http, auto-selected

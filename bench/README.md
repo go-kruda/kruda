@@ -103,9 +103,9 @@ Go:       (go version)
 GOMAXPROCS: (default = number of CPU cores)
 ```
 
-## Wing Transport Benchmark (epoll / kqueue)
+## Wing Transport Benchmark
 
-Wing is Kruda's custom transport using epoll (Linux) and kqueue (macOS) — zero external dependencies.
+Wing is Kruda's custom transport using epoll+eventfd (Linux) — zero external dependencies. Wing is the default on Linux. On macOS, the default is fasthttp (Wing kqueue is available via `kruda.Wing()` but not the default).
 
 ### Linux (Intel i5-13500, 8 cores, 256 connections, 10s, wrk)
 

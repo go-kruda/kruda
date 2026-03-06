@@ -46,6 +46,22 @@ jobs:
         shell: bash
         run: go test -v -race -tags kruda_stdjson -coverprofile=coverage.out ./...
 
+      - name: Test Wing transport (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: cd transport/wing && go test -v -race ./...
+
+      - name: Test contrib packages
+        shell: bash
+        run: |
+          for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag; do
+            echo "::group::Testing $dir"
+            cd $dir && go test -tags kruda_stdjson ./... && cd ${{ github.workspace }}
+            echo "::endgroup::"
+          done
+
+      - name: Test CLI
+        run: cd cmd/kruda && go test -tags kruda_stdjson ./...
+
       - name: Upload coverage to Codecov
         # Upload only once per Go version (Linux) to avoid duplicates
         if: matrix.os == 'ubuntu-latest'

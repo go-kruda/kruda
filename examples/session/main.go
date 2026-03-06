@@ -8,9 +8,7 @@ import (
 )
 
 func main() {
-	// Session and SSE require net/http transport (Wing doesn't support
-	// Set-Cookie headers or HTTP flushing). See docs/guide/transport.md.
-	app := kruda.New(kruda.NetHTTP())
+	app := kruda.New()
 
 	// Session middleware with in-memory store
 	app.Use(session.New())

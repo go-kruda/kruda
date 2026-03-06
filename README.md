@@ -118,6 +118,9 @@ Full documentation at [kruda.dev](https://kruda.dev):
 - [Routing](https://kruda.dev/guide/routing)
 - [Typed Handlers](https://kruda.dev/guide/typed-handlers)
 - [Middleware](https://kruda.dev/guide/middleware)
+- [Transport](https://kruda.dev/guide/transport) — Wing, fasthttp, net/http
+- [Performance](https://kruda.dev/guide/performance) — benchmarks & tuning
+- [Security](https://kruda.dev/guide/security) — headers, path traversal, rate limiting
 - [DI Container](https://kruda.dev/guide/di-container)
 - [Error Handling](https://kruda.dev/guide/error-handling)
 - [API Reference](https://kruda.dev/api/app)
@@ -140,9 +143,8 @@ import (
 )
 
 app := kruda.New(
-    // Parser limits (Wing transport)
-    kruda.WithMaxHeaderCount(100),
-    kruda.WithMaxHeaderSize(8192),
+    kruda.WithBodyLimit(1024 * 1024), // 1MB body limit
+    kruda.WithReadTimeout(10 * time.Second),
 )
 
 // Rate limiting — 100 req/min per IP

@@ -126,7 +126,7 @@ func slowHandler(c *kruda.Ctx) error {
 // ---------------------------------------------------------------------------
 
 func main() {
-	app := kruda.New(kruda.NetHTTP())
+	app := kruda.New()
 
 	// -----------------------------------------------------------------------
 	// Global middleware — applied to ALL routes in registration order.

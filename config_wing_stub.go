@@ -9,6 +9,6 @@ import (
 )
 
 func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
-	logger.Warn("wing not available on this platform, falling back to fasthttp")
+	logger.Warn("wing not available on this platform, falling back to default transport")
 	return newFastHTTPTransport(cfg, logger)
 }

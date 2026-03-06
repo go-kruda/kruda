@@ -157,7 +157,7 @@ func TestCheckKrudaDependency(t *testing.T) {
 	}
 
 	// go.mod without kruda dependency.
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test\n\ngo 1.24\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test\n\ngo 1.25\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,7 +167,7 @@ func TestCheckKrudaDependency(t *testing.T) {
 	}
 
 	// go.mod with kruda dependency.
-	content := "module test\n\ngo 1.24\n\nrequire github.com/go-kruda/kruda v0.1.0\n"
+	content := "module test\n\ngo 1.25\n\nrequire github.com/go-kruda/kruda v0.1.0\n"
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1,12 +1,12 @@
 # Security
 
-Kruda is secure by default. All security features are enabled out of the box with no configuration required.
+Kruda provides security hardening features that can be enabled with a single option. Use `WithSecureHeaders()` to enable all default security headers.
 
 For vulnerability reporting, see [SECURITY.md](https://github.com/go-kruda/kruda/blob/main/SECURITY.md).
 
-## Secure Default Headers
+## Security Headers
 
-Every response includes these security headers automatically:
+When enabled via `WithSecureHeaders()`, every response includes these headers:
 
 | Header | Default Value | Purpose |
 |--------|--------------|---------|
@@ -32,7 +32,7 @@ Kruda assumes:
 
 - The application is exposed to untrusted network traffic (the internet).
 - Request paths, headers, query parameters, and body content are attacker-controlled.
-- The framework must protect against common web vulnerabilities by default.
+- The framework provides layered protections. Core protections (path normalization, header injection prevention, body size limits) are always active. Security response headers are opt-in via `WithSecureHeaders()`.
 
 | Threat | Severity | Status |
 |--------|----------|--------|
@@ -84,7 +84,7 @@ Applies to `SetHeader`, `AddHeader`, and `SetCookie`.
 
 ## DoS Protection
 
-**Source:** `config.go`, `transport/nethttp.go`
+**Source:** `config.go`, `transport/nethttp.go`, `transport/wing/transport.go`
 
 | Setting | Default | Option |
 |---------|---------|--------|

@@ -2,7 +2,10 @@ module github.com/go-kruda/kruda/bench
 
 go 1.25.7
 
-replace github.com/go-kruda/kruda => ..
+replace (
+	github.com/go-kruda/kruda => ..
+	github.com/go-kruda/kruda/transport/wing => ../transport/wing
+)
 
 require (
 	github.com/go-kruda/kruda v0.0.0-00010101000000-000000000000

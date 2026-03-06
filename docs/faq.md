@@ -6,7 +6,7 @@ Kruda fills the gap between raw performance frameworks (Fiber, Fasthttp) and typ
 
 - Type-safe handlers with `C[T]` — body, params, and query in one struct, validated at compile time
 - Auto-everything — validation, error mapping, OpenAPI generation, CRUD endpoints
-- Pluggable transport — fasthttp for Linux performance, net/http for compatibility
+- Pluggable transport — Wing (epoll+eventfd) on Linux, fasthttp, or net/http
 - Built-in DI — no codegen, no reflection, just `Give` and `Use`
 - 60-70% less boilerplate than Gin or Fiber
 
@@ -34,20 +34,24 @@ Services are singletons by default — registered via `Give` and resolved via `M
 
 See the [DI Container guide](/guide/di-container) for details.
 
-## fasthttp vs net/http — which transport should I use?
+## Which transport should I use?
 
-| | fasthttp | net/http |
-|---|---------|----------|
-| Platform | Linux only | All platforms |
-| Performance | Higher throughput, lower latency | Good, standard Go performance |
-| HTTP/2 | Not supported | Supported via TLS |
-| Maturity | Production-ready (used by ByteDance) | Go stdlib, battle-tested |
+| | Wing | fasthttp | net/http |
+|---|------|---------|----------|
+| Platform | Linux only | All platforms | All platforms |
+| Performance | Highest (846K req/s) | High | Good |
+| HTTP/2 | No | No | Yes (via TLS) |
+| Set-Cookie | Limited (fast path skips) | Yes | Yes |
+| SSE / WebSocket | No | No | Yes |
+| Default on | Linux | macOS | Windows |
 
-Kruda auto-selects the transport:
-- Linux with fasthttp available → fasthttp
-- Windows/macOS or fasthttp unavailable → net/http
+Kruda auto-selects:
+- Linux → Wing (epoll+eventfd)
+- macOS → fasthttp
+- Windows → net/http
+- TLS configured → net/http (auto-fallback)
 
-You can force a specific transport via configuration.
+Override with `kruda.Wing()`, `kruda.FastHTTP()`, or `kruda.NetHTTP()`. See [Transport Guide](/guide/transport) for details.
 
 ## How do I test my Kruda app?
 
@@ -88,7 +92,7 @@ Go 1.25 or later is required for generic type aliases used by `C[T]` typed handl
 
 ## Is Kruda production-ready?
 
-Kruda is approaching v1.0.0-rc1. The core framework (routing, context, middleware, DI, CRUD, error handling, health checks) is implemented and tested. Security hardening, comprehensive documentation, and CI/CD are part of the Phase 5 production readiness effort.
+Kruda has completed Phases 1-7 (Foundation through TechEmpower Domination). The core framework, type system, performance optimization, ecosystem (DI, CRUD), security hardening, and Wing transport are all implemented and tested. Phase 8 (Launch) is the v1.0.0 release milestone.
 
 ## How do I contribute?
 

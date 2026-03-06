@@ -12,5 +12,5 @@ import (
 // to use net/http transport for WebSocket. fasthttp WebSocket support will be
 // added in a future version.
 func (u *Upgrader) upgradeFastHTTP(c *kruda.Ctx, acceptKey string, handler func(*Conn)) error {
-	return fmt.Errorf("ws: WebSocket upgrade on fasthttp transport is not yet supported in v1 — use net/http transport (kruda.NetHTTP())")
+	return fmt.Errorf("ws: WebSocket upgrade requires net/http transport — add kruda.NetHTTP() option to kruda.New() (macOS defaults to fasthttp which does not support WebSocket)")
 }

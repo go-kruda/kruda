@@ -22,7 +22,7 @@ features:
     details: Auto-validation, auto-error-mapping, auto-OpenAPI 3.1, auto-CRUD. 60-70% less boilerplate than Gin or Fiber.
   - icon: 🚀
     title: Blazing Fast
-    details: Pluggable transport with fasthttp and net/http. Zero-alloc hot paths, pooled contexts, radix tree router.
+    details: Wing transport (raw epoll+eventfd) beats Fiber by 26% and Actix (Rust) by 4%. Pluggable — Wing, fasthttp, or net/http.
   - icon: 📦
     title: Built-in DI
     details: Optional dependency injection with Give/Use pattern. No codegen, no reflection. Modules, lifecycle management, and auto-wiring.

@@ -1,6 +1,6 @@
 # Coming from Fiber
 
-Fiber users will feel right at home — Kruda shares the same fasthttp foundation and Express-like API.
+Fiber users will feel right at home — Kruda has the same Express-like API, but with Wing transport (epoll+eventfd) that's 26% faster.
 
 ## Quick Comparison
 
@@ -108,9 +108,15 @@ type CreateUser struct {
     Email string `json:"email" validate:"required,email"`
 }
 
-app.Post("/users", func(c *kruda.C[CreateUser]) error {
-    return c.JSON(createUser(c.In)) // parsed + validated
+app.Post("/users", func(c *kruda.Ctx) error {
+    var input CreateUser
+    if err := c.Bind(&input); err != nil {
+        return err
+    }
+    return c.JSON(createUser(input))
 })
+// Or use typed handlers for compile-time safety:
+// kruda.Post[CreateUser, User](app, "/users", handler)
 ```
 
 ### 3. Pluggable Transport
@@ -118,8 +124,12 @@ app.Post("/users", func(c *kruda.C[CreateUser]) error {
 Fiber is locked to fasthttp (no HTTP/2, no TLS 1.3). Kruda lets you switch:
 
 ```go
-// Default: fasthttp (max performance)
+// Default on Linux: Wing transport (epoll+eventfd, fastest)
+// Default on macOS: fasthttp
 app := kruda.New()
+
+// Explicit fasthttp:
+app := kruda.New(kruda.FastHTTP())
 
 // Need HTTP/2 or TLS? Switch to net/http:
 app := kruda.New(kruda.NetHTTP())
@@ -151,11 +161,11 @@ app.Group("/api/v1").
 
 | Fiber | Kruda |
 |-------|-------|
-| `fiber.Logger()` (built-in) | `kruda.Logger()` (built-in) |
-| `fiber.Recover()` | `kruda.Recovery()` |
-| `fiber.CORS()` (built-in) | `kruda.CORS()` (built-in) |
-| `fiber.RequestID()` | `kruda.RequestID()` (built-in) |
-| `fiber.Timeout()` | `kruda.Timeout()` (built-in) |
+| `fiber.Logger()` (built-in) | `middleware.Logger()` (built-in) |
+| `fiber.Recover()` | `middleware.Recovery()` (built-in) |
+| `fiber.CORS()` (built-in) | `middleware.CORS()` (built-in) |
+| `fiber.RequestID()` | `middleware.RequestID()` (built-in) |
+| `fiber.Timeout()` | `middleware.Timeout()` (built-in) |
 | `jwtware.New()` (contrib) | `jwt.New()` (contrib) |
 | `websocket.New()` (contrib) | `ws.New()` (contrib) |
 | `limiter.New()` (contrib) | `ratelimit.New()` (contrib) |
@@ -163,6 +173,7 @@ app.Group("/api/v1").
 
 ## What You Gain
 
+- **Wing transport** — raw epoll+eventfd on Linux, 26% faster than Fiber (846K vs 670K req/s plaintext)
 - **Type-safe handlers** — no more `BodyParser` + manual validation
 - **No context reuse bugs** — safe string copies by default
 - **HTTP/2 support** — switch to net/http when needed

@@ -105,7 +105,6 @@ func main() {
 	container.Give(cache)
 
 	app := kruda.New(
-		kruda.NetHTTP(),
 		kruda.WithContainer(container),
 	)
 	app.Use(middleware.Recovery())

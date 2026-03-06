@@ -206,7 +206,7 @@ func homeHandler(c *kruda.Ctx) error {
 // ---------------------------------------------------------------------------
 
 func main() {
-	app := kruda.New(kruda.NetHTTP())
+	app := kruda.New()
 
 	app.Use(middleware.Recovery())
 	app.Use(middleware.Logger())

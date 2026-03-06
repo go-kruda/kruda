@@ -62,7 +62,7 @@ type Config struct {
 
 // SecurityConfig controls security headers and behavior.
 type SecurityConfig struct {
-	// Security headers (all enabled by default)
+	// Security header values (applied when WithSecureHeaders() or WithSecurity() is used)
 	XSSProtection         string // default: "0" (disabled per modern best practice)
 	ContentTypeNosniff    string // default: "nosniff"
 	XFrameOptions         string // default: "DENY"

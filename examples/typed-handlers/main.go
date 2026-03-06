@@ -172,7 +172,6 @@ func main() {
 	// Create app with validation enabled.
 	// NewValidator() provides built-in rules: required, min, max, email, etc.
 	app := kruda.New(
-		kruda.NetHTTP(),
 		kruda.WithValidator(kruda.NewValidator()),
 	)
 

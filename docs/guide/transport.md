@@ -41,7 +41,7 @@ KRUDA_TRANSPORT=fasthttp ./myapp   # force fasthttp
 
 - Wing + TLS config → auto-falls back to net/http (for HTTP/2)
 - Wing on Windows → auto-falls back to net/http
-- Wing on unsupported OS → auto-falls back to fasthttp
+- Unsupported OS → defaults to fasthttp (macOS) or net/http (Windows)
 
 ## Wing limitations
 

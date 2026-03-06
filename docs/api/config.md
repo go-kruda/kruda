@@ -215,4 +215,4 @@ Adds an OpenAPI tag definition.
 | DevMode | false |
 | SecurityHeaders | false |
 | TrustProxy | false |
-| TransportName | "fasthttp" |
+| TransportName | "wing" (Linux), "fasthttp" (macOS), "nethttp" (Windows) |

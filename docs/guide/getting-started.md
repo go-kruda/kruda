@@ -60,5 +60,5 @@ See [Config API](/api/config) for all available options.
 - [Error Handling](/guide/error-handling) — error mapping and custom handlers
 - [DI Container](/guide/di-container) — dependency injection with Give/Use
 - [Auto CRUD](/guide/auto-crud) — automatic CRUD endpoints
-- [Security](/guide/security) — secure defaults and best practices
+- [Security](/guide/security) — hardening options and best practices
 - [API Reference](/api/app) — complete API documentation

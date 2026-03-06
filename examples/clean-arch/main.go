@@ -14,7 +14,7 @@ func main() {
 	svc := domain.NewUserService(repo)
 	h := handler.NewUserHandler(svc)
 
-	app := kruda.New(kruda.NetHTTP())
+	app := kruda.New()
 
 	app.Get("/users", h.List)
 	app.Get("/users/:id", h.Get)

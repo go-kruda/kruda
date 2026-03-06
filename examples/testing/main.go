@@ -75,7 +75,7 @@ func (s *TodoStore) Create(title string) Todo {
 // NewApp creates the Kruda app with all routes registered.
 // Extracting this into a function makes it easy to test.
 func NewApp() *kruda.App {
-	app := kruda.New(kruda.NetHTTP())
+	app := kruda.New()
 	store := NewTodoStore()
 
 	app.Use(middleware.Recovery())

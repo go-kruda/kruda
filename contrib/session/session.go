@@ -172,10 +172,9 @@ func New(config ...Config) kruda.HandlerFunc {
 		cfg.Store = NewMemoryStore()
 	}
 
-	// HTTPOnly is always true for security. Session cookies should never
-	// be accessible to JavaScript. The CookieHTTPOnly config field is
-	// kept for documentation but this default cannot be overridden.
-	httpOnly := true
+	// HTTPOnly defaults to true for security. We use CookieHTTPOnly from
+	// config (set to true via defaults() if user didn't specify it).
+	httpOnly := cfg.CookieHTTPOnly
 
 	return func(c *kruda.Ctx) error {
 		// Skip if custom skip function returns true.

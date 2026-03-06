@@ -35,7 +35,7 @@ func New(config ...Config) kruda.HandlerFunc {
 	// Create or use provided store
 	store := cfg.Store
 	if store == nil {
-		store = NewMemoryStore(cfg.CleanupInterval)
+		store = NewMemoryStore(cfg.CleanupInterval, 2*cfg.Window)
 	}
 
 	// Select algorithm function

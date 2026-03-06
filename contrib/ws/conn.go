@@ -209,6 +209,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 func (c *Conn) handleControl(f *frame) error {
 	switch f.opcode {
 	case 0x9: // Ping → respond with Pong
+		c.mu.Lock()
 		if c.maxPingPerSec > 0 {
 			now := time.Now()
 			if now.Sub(c.pingWindowStart) >= time.Second {
@@ -217,19 +218,29 @@ func (c *Conn) handleControl(f *frame) error {
 			}
 			c.pingCount++
 			if int(c.pingCount) > c.maxPingPerSec {
-				_ = c.Close(ClosePolicyViolation, "ping rate exceeded")
+				// Exceeded — close directly under lock (avoid double-lock via Close).
+				if !c.closed.Load() {
+					c.closed.Store(true)
+					if c.writeTimeout > 0 {
+						_ = c.rwc.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+					}
+					_ = writeCloseFrame(c.bw, ClosePolicyViolation, "ping rate exceeded")
+					_ = c.bw.Flush()
+					_ = c.rwc.Close()
+				}
+				c.mu.Unlock()
 				return fmt.Errorf("ws: ping rate exceeded (%d/s)", c.maxPingPerSec)
 			}
 		}
-		c.mu.Lock()
-		defer c.mu.Unlock()
 		if c.writeTimeout > 0 {
 			_ = c.rwc.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 		}
-		if err := writeFrame(c.bw, true, 0xA, f.payload); err != nil {
-			return err
+		err := writeFrame(c.bw, true, 0xA, f.payload)
+		if err == nil {
+			err = c.bw.Flush()
 		}
-		return c.bw.Flush()
+		c.mu.Unlock()
+		return err
 
 	case 0xA: // Pong — no action needed
 		return nil

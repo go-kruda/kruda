@@ -265,8 +265,12 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 			}
 			files := make([]*FileUpload, len(headers))
 			for i, header := range headers {
+				safeName := filepath.Base(header.Filename)
+				if safeName == "." || safeName == ".." {
+					safeName = "upload"
+				}
 				files[i] = &FileUpload{
-					Name:        header.Filename,
+					Name:        safeName,
 					Size:        header.Size,
 					ContentType: header.Header.Get("Content-Type"),
 					Header:      header,

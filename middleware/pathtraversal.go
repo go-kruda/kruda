@@ -40,12 +40,20 @@ func containsDotOrPercent(s string) bool {
 	return false
 }
 
-// isPathTraversal decodes percent-encoding and checks if the path
-// contains ".." segments that escape above the root directory.
+// isPathTraversal decodes percent-encoding (including double/triple encoding)
+// and checks if the path contains ".." segments that escape above the root directory.
 func isPathTraversal(raw string) bool {
-	decoded, err := url.PathUnescape(raw)
-	if err != nil {
-		return true
+	decoded := raw
+	// Decode iteratively to catch double/triple percent-encoding (e.g. %252e%252e).
+	for i := 0; i < 3; i++ {
+		next, err := url.PathUnescape(decoded)
+		if err != nil {
+			return true
+		}
+		if next == decoded {
+			break
+		}
+		decoded = next
 	}
 	// Normalize backslashes to forward slashes (Windows-style traversal)
 	decoded = strings.ReplaceAll(decoded, "\\", "/")

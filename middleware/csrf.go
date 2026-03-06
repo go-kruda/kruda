@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -125,7 +126,10 @@ func CSRF(config ...CSRFConfig) kruda.HandlerFunc {
 
 		// Safe methods: generate/refresh token, no validation required.
 		if isSafeMethod(method) {
-			token := generateCSRFToken(cfg.TokenLength)
+			token, err := generateCSRFToken(cfg.TokenLength)
+			if err != nil {
+				return kruda.NewError(500, "failed to generate CSRF token")
+			}
 			setCSRFCookie(c, &cfg, token)
 			c.Set(csrfTokenKey, token)
 			// Vary by Cookie so CDNs don't cache responses with different CSRF tokens.
@@ -151,7 +155,10 @@ func CSRF(config ...CSRFConfig) kruda.HandlerFunc {
 		}
 
 		// Token valid — refresh with new token for next request.
-		newToken := generateCSRFToken(cfg.TokenLength)
+		newToken, err := generateCSRFToken(cfg.TokenLength)
+		if err != nil {
+			return kruda.NewError(500, "failed to generate CSRF token")
+		}
 		setCSRFCookie(c, &cfg, newToken)
 		c.Set(csrfTokenKey, newToken)
 		c.AddHeader("Vary", "Cookie")
@@ -194,11 +201,11 @@ func csrfError(c *kruda.Ctx, cfg *CSRFConfig) error {
 }
 
 // generateCSRFToken generates a cryptographically random token.
-// Panics if crypto/rand fails — an empty token would defeat CSRF protection.
-func generateCSRFToken(length int) string {
+// Returns an empty string if crypto/rand fails (caller must check).
+func generateCSRFToken(length int) (string, error) {
 	b := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		panic("kruda: crypto/rand failed: " + err.Error())
+		return "", fmt.Errorf("kruda: crypto/rand failed: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }

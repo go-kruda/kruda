@@ -24,8 +24,14 @@ type Config struct {
 	CookieSecure bool
 
 	// CookieHTTPOnly sets the HttpOnly flag on the session cookie.
-	// Default: true (prevents JavaScript access)
+	// Default: true (prevents JavaScript access).
+	// Set DisableHTTPOnly to true to explicitly disable HttpOnly.
 	CookieHTTPOnly bool
+
+	// DisableHTTPOnly explicitly disables the HttpOnly flag on the session cookie.
+	// This is needed because the zero value of CookieHTTPOnly (false) is
+	// indistinguishable from "not set". Use this when JavaScript access is required.
+	DisableHTTPOnly bool
 
 	// CookieSameSite sets the SameSite attribute of the session cookie.
 	// Default: http.SameSiteLaxMode
@@ -67,6 +73,7 @@ func (c *Config) defaults() {
 		c.IdleTimeout = 30 * time.Minute
 	}
 	// HTTPOnly defaults to true for security.
-	// We track this via a separate flag since Go's zero value for bool is false.
-	// Config users must explicitly set CookieHTTPOnly=false to disable.
+	if !c.DisableHTTPOnly {
+		c.CookieHTTPOnly = true
+	}
 }

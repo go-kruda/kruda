@@ -6,6 +6,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-kruda/kruda/transport"
@@ -79,8 +80,12 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 			path = cfg.index
 		}
 
-		// Security: prevent path traversal
-		if strings.Contains(path, "..") {
+		// Security: prevent path traversal — clean and reject escapes.
+		path = filepath.ToSlash(filepath.Clean("/" + path))[1:]
+		if path == "" {
+			path = cfg.index
+		}
+		if strings.HasPrefix(path, "..") || strings.Contains(path, "/../") {
 			return c.Status(403).Text("Forbidden")
 		}
 
@@ -112,7 +117,10 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 				return c.Status(404).Text("Not Found")
 			}
 			defer f.Close()
-			stat, _ = f.Stat()
+			stat, err = f.Stat()
+			if err != nil {
+				return c.Status(500).Text("Internal Server Error")
+			}
 		}
 
 		// Content-Type from extension
@@ -123,7 +131,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		}
 
 		if cfg.maxAge > 0 {
-			c.Set("Cache-Control", "public, max-age="+strings.Repeat("0", cfg.maxAge)) // TODO: proper itoa
+			c.Set("Cache-Control", "public, max-age="+strconv.Itoa(cfg.maxAge))
 		}
 
 		// Try sendfile zero-copy path (Wing transport).
@@ -137,7 +145,9 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 
 		// Fallback: read file and send.
 		data := make([]byte, stat.Size())
-		io.ReadFull(f.(interface{ Read([]byte) (int, error) }), data)
+		if _, err := io.ReadFull(f.(io.Reader), data); err != nil {
+			return c.Status(500).Text("Internal Server Error")
+		}
 		c.contentType = ct
 		return c.sendBytes(data)
 	}

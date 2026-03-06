@@ -32,15 +32,25 @@ type entry struct {
 
 // MemoryStore is an in-memory rate limit store using sync.Map.
 type MemoryStore struct {
-	entries sync.Map // map[string]*entry
-	stopped atomic.Bool
-	done    chan struct{}
+	entries    sync.Map // map[string]*entry
+	stopped    atomic.Bool
+	done       chan struct{}
+	maxIdleAge time.Duration // entries idle longer than this are cleaned up
 }
 
 // NewMemoryStore creates a new in-memory store with background cleanup.
-func NewMemoryStore(cleanupInterval time.Duration) *MemoryStore {
+// maxIdleAge controls how long an idle entry is kept (defaults to 2× cleanupInterval, minimum 2 minutes).
+func NewMemoryStore(cleanupInterval time.Duration, maxIdleAge ...time.Duration) *MemoryStore {
+	idle := 2 * cleanupInterval
+	if len(maxIdleAge) > 0 && maxIdleAge[0] > idle {
+		idle = maxIdleAge[0]
+	}
+	if idle < 2*time.Minute {
+		idle = 2 * time.Minute
+	}
 	s := &MemoryStore{
-		done: make(chan struct{}),
+		done:       make(chan struct{}),
+		maxIdleAge: idle,
 	}
 	go s.cleanup(cleanupInterval)
 	return s
@@ -65,8 +75,8 @@ func (s *MemoryStore) cleanup(interval time.Duration) {
 			s.entries.Range(func(key, value any) bool {
 				e := value.(*entry)
 				e.mu.Lock()
-				// Remove if idle for 2x window (conservative)
-				if now.Sub(e.last) > 2*time.Minute {
+				// Remove if idle longer than maxIdleAge
+				if now.Sub(e.last) > s.maxIdleAge {
 					e.mu.Unlock()
 					s.entries.Delete(key)
 				} else {

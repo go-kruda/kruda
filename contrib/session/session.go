@@ -172,20 +172,9 @@ func New(config ...Config) kruda.HandlerFunc {
 		cfg.Store = NewMemoryStore()
 	}
 
-	// Default HTTPOnly to true unless explicitly set to false via config.
-	httpOnly := true
-	if len(config) > 0 {
-		// If user provided a config, use their value.
-		// Since bool zero-value is false, we check if they explicitly set it.
-		// The Config struct's CookieHTTPOnly field: false means "user wants false" OR "user didn't set it".
-		// We default to true for security. To disable, user must set CookieHTTPOnly = false explicitly.
-		// This is the safer default.
-		httpOnly = cfg.CookieHTTPOnly
-		if !httpOnly && len(config) > 0 {
-			// User explicitly provided config — respect their choice.
-			httpOnly = false
-		}
-	}
+	// HTTPOnly defaults to true for security. We use CookieHTTPOnly from
+	// config (set to true via defaults() if user didn't specify it).
+	httpOnly := cfg.CookieHTTPOnly
 
 	return func(c *kruda.Ctx) error {
 		// Skip if custom skip function returns true.

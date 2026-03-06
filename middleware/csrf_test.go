@@ -11,6 +11,15 @@ import (
 	"github.com/go-kruda/kruda"
 )
 
+// mustCSRFToken is a test helper that wraps generateCSRFToken and panics on error.
+func mustCSRFToken(length int) string {
+	token, err := generateCSRFToken(length)
+	if err != nil {
+		panic("test: " + err.Error())
+	}
+	return token
+}
+
 // --- CSRF-specific mock request with cookie support ---
 
 type csrfMockRequest struct {
@@ -152,7 +161,7 @@ func TestCSRF_GET_VaryHeader(t *testing.T) {
 }
 
 func TestCSRF_POST_ValidToken(t *testing.T) {
-	token := generateCSRFToken(32) // generate a valid token
+	token := mustCSRFToken(32) // generate a valid token
 
 	handler := func(c *kruda.Ctx) error {
 		return c.JSON(kruda.Map{"ok": true})
@@ -382,7 +391,7 @@ func TestCSRF_CustomConfig(t *testing.T) {
 func TestCSRF_TokenUniqueness(t *testing.T) {
 	tokens := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		token := generateCSRFToken(32)
+		token := mustCSRFToken(32)
 		if tokens[token] {
 			t.Fatalf("duplicate token generated at iteration %d", i)
 		}
@@ -391,12 +400,12 @@ func TestCSRF_TokenUniqueness(t *testing.T) {
 }
 
 func TestCSRF_TokenLength(t *testing.T) {
-	token := generateCSRFToken(32)
+	token := mustCSRFToken(32)
 	if len(token) != 64 {
 		t.Fatalf("expected 64 hex chars for 32 bytes, got %d", len(token))
 	}
 
-	token = generateCSRFToken(16)
+	token = mustCSRFToken(16)
 	if len(token) != 32 {
 		t.Fatalf("expected 32 hex chars for 16 bytes, got %d", len(token))
 	}
@@ -418,7 +427,7 @@ func TestCSRF_PanicsOnShortToken(t *testing.T) {
 }
 
 func TestCSRF_POST_RefreshesToken(t *testing.T) {
-	token := generateCSRFToken(32)
+	token := mustCSRFToken(32)
 	var newToken any
 
 	handler := func(c *kruda.Ctx) error {
@@ -447,7 +456,7 @@ func TestCSRF_POST_RefreshesToken(t *testing.T) {
 
 func TestCSRF_ConstantTimeComparison(t *testing.T) {
 	// This test verifies that even with a partially matching token, access is denied.
-	token := generateCSRFToken(32)
+	token := mustCSRFToken(32)
 	partialMatch := token[:len(token)-2] + "xx" // change last 2 chars
 
 	handler := func(c *kruda.Ctx) error {

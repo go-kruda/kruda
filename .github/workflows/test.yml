@@ -46,14 +46,14 @@ jobs:
         shell: bash
         run: go test -v -race -tags kruda_stdjson -coverprofile=coverage.out ./...
 
-      - name: Test Wing transport (Linux only)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Test Wing transport (Linux/macOS)
+        if: matrix.os != 'windows-latest'
         run: cd transport/wing && go test -v -race ./...
 
       - name: Test contrib packages
         shell: bash
         run: |
-          for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag; do
+          for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag contrib/cache contrib/otel contrib/prometheus contrib/swagger; do
             echo "::group::Testing $dir"
             cd $dir && go test -tags kruda_stdjson ./... && cd ${{ github.workspace }}
             echo "::endgroup::"

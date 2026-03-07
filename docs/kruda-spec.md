@@ -3,7 +3,7 @@
 > **"Fast by default. Type-safe by design. Standard by nature."**
 >
 > Version: 1.0.0-draft
-> Language: Go (1.24+, recommended 1.26)
+> Language: Go (1.25+, recommended 1.26)
 > Author: Tiger
 > Last Updated: February 2026
 

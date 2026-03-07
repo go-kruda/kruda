@@ -320,14 +320,19 @@ ws.New(ws.Config{
 Uploaded filenames are automatically sanitized with `filepath.Base()` to strip directory components. Validate extensions in your handler:
 
 ```go
-app.Post("/upload", func(c *kruda.Ctx) error {
-    file := c.File("avatar")
-    ext := strings.ToLower(filepath.Ext(file.Name))
+type UploadReq struct {
+    Avatar *kruda.FileUpload `form:"avatar" validate:"required,max_size=5mb,mime=image/*"`
+}
+
+kruda.Post[UploadReq, any](app, "/upload", func(c *kruda.C[UploadReq]) (*any, error) {
+    file := c.In.Avatar
+    ext := strings.ToLower(filepath.Ext(file.Filename))
     allowed := map[string]bool{".jpg": true, ".png": true, ".webp": true}
     if !allowed[ext] {
-        return kruda.NewError(400, "unsupported file type")
+        return nil, kruda.NewError(400, "unsupported file type")
     }
-    return file.Save("./uploads/" + file.Name)
+    // file.Open() returns io.ReadCloser for processing
+    return nil, c.SendStatus(204)
 })
 ```
 

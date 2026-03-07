@@ -103,7 +103,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Custom validator registration via `app.Validator().Register()`
 - JSON engine abstraction with Sonic + stdlib fallback (`json/`)
 - `WithJSONEncoder`, `WithJSONDecoder` config options
-- File upload support with `c.FormFile()`
+- File upload support with `*FileUpload` struct binding
 - SSE helper `c.SSE(callback)` with auto headers
 - Route options `WithDescription`, `WithTags` for OpenAPI metadata
 

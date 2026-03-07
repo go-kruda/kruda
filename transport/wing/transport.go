@@ -271,6 +271,10 @@ func (p *workerPool) loop(h transport.Handler) {
 		releaseRequest(job.req)
 
 		// Direct write from pool goroutine — skip doneCh data copy + SubmitSend round-trip.
+		if len(data) == 0 {
+			p.done <- doneMsg{fd: job.fd, keepAlive: job.keepAlive}
+			continue
+		}
 		var remaining []byte
 		n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(job.fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
 		if e == 0 && int(n) == len(data) {
@@ -599,6 +603,11 @@ func (w *worker) tryParse(c *conn) {
 				releaseResponse(resp)
 				releaseRequest(req)
 				// Direct write from spawn goroutine.
+				if len(data) == 0 {
+					w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
+					w.wake()
+					return
+				}
 				n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
 				if e == 0 && int(n) == len(data) {
 					w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
@@ -876,7 +885,10 @@ func (w *worker) closeConn(fd int32) {
 func (w *worker) wake() { w.eng.PostWake() }
 
 func (w *worker) cleanup() {
-	for fd := range w.conns {
+	for fd, c := range w.conns {
+		if c.cancel != nil {
+			c.cancel()
+		}
 		closeFd(int(fd))
 	}
 	w.eng.Close()

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type MemoryStore struct {
 	maxEntries      int
 	cleanupInterval time.Duration
 	stopCleanup     chan struct{}
+	stopped         atomic.Bool
 }
 
 // NewMemoryStore creates a new in-memory cache store.
@@ -98,8 +100,11 @@ func (s *MemoryStore) Delete(key string) error {
 }
 
 // Close stops the background cleanup goroutine.
+// Safe to call multiple times.
 func (s *MemoryStore) Close() {
-	close(s.stopCleanup)
+	if s.stopped.CompareAndSwap(false, true) {
+		close(s.stopCleanup)
+	}
 }
 
 // Len returns the number of entries (including possibly expired ones).

@@ -20,7 +20,7 @@ cd examples/hello && go run .
 | Example | Description |
 |---------|-------------|
 | [typed-handlers](typed-handlers/) | `C[T]` typed input with validation |
-| [auto-crud](auto-crud/) | `app.Resource()` auto-generates 5 endpoints |
+| [auto-crud](auto-crud/) | `kruda.Resource[T, ID]()` auto-generates 5 endpoints |
 | [crud](crud/) | Manual CRUD with DI container |
 | [di-services](di-services/) | Full DI: Give, GiveLazy, GiveNamed, Modules |
 | [database](database/) | PostgreSQL with connection pooling |

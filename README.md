@@ -116,7 +116,7 @@ Full documentation at [kruda.dev](https://kruda.dev):
 
 - [Getting Started](https://kruda.dev/guide/getting-started)
 - [Routing](https://kruda.dev/guide/routing)
-- [Typed Handlers](https://kruda.dev/guide/typed-handlers)
+- [Typed Handlers](https://kruda.dev/guide/handlers)
 - [Middleware](https://kruda.dev/guide/middleware)
 - [Transport](https://kruda.dev/guide/transport) — Wing, fasthttp, net/http
 - [Performance](https://kruda.dev/guide/performance) — benchmarks & tuning

@@ -41,7 +41,6 @@ transport/wing/dev/
 # Internal planning docs
 LAUNCH_PLAN.md
 docs/architecture-analysis.md
-docs/PLAYGROUND_DEPLOYMENT.md
 docs/ux/
 docs/adr/
 docs/features/

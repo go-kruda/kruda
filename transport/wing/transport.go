@@ -570,6 +570,7 @@ func (w *worker) tryParse(c *conn) {
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
+				releaseRequest(req)
 				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: req.keepAlive}
 			}
 			// Send any buffered inline responses, then wait for pool completion.
@@ -636,6 +637,7 @@ func (w *worker) tryParse(c *conn) {
 				select {
 				case w.pool.jobs <- job:
 				default:
+					releaseRequest(req)
 					w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
 				}
 			} else {
@@ -643,6 +645,7 @@ func (w *worker) tryParse(c *conn) {
 				w.handler.ServeKruda(resp, req)
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
+				releaseRequest(req)
 				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: req.keepAlive}
 			}
 			return
@@ -710,6 +713,13 @@ func (w *worker) directSend(c *conn) {
 		for c.sendFileSize > 0 {
 			n, err := sendfile(c.fd, c.sendFileFd, nil, int(c.sendFileSize))
 			if err != nil {
+				if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+					// Socket buffer full — wait for writable notification.
+					w.eng.SubmitSend(c.fd, nil)
+					return
+				}
+				syscall.Close(int(c.sendFileFd))
+				c.sendFileFd = 0
 				w.closeConn(c.fd)
 				return
 			}

@@ -204,5 +204,5 @@ app.Group("/api/v1").
 - **Concrete context** — no interface overhead, better inlining
 - **Pluggable transport** — Wing, fasthttp, or net/http, auto-selected
 - **Auto OpenAPI** — generated from `C[T]` types
-- **Auto CRUD** — `app.Resource("/products", service)` generates full REST
+- **Auto CRUD** — `kruda.Resource[Product, string](app, "/products", service)` generates full REST
 - **Built-in DI** — optional, no codegen needed

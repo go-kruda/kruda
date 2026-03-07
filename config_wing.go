@@ -25,7 +25,13 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			poolSize = n
 		}
 	}
-	wcfg := wing.Config{Workers: workers, HandlerPoolSize: poolSize}
+	wcfg := wing.Config{
+		Workers:         workers,
+		HandlerPoolSize: poolSize,
+		ReadTimeout:     cfg.ReadTimeout,
+		WriteTimeout:    cfg.WriteTimeout,
+		IdleTimeout:     cfg.IdleTimeout,
+	}
 	if os.Getenv("KRUDA_ASYNC") == "1" {
 		wcfg.DefaultFeather = wing.Feather{Dispatch: wing.Pool}
 	}

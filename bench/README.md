@@ -76,8 +76,8 @@ BenchmarkKruda_StaticGET-8    2853681    427.5 ns/op    1320 B/op    20 allocs/o
 Go 1.26 introduces the Green Tea GC which reduces tail latency and GC pause times. To compare:
 
 ```bash
-# Run with Go 1.24
-go1.24 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go124.txt
+# Run with Go 1.25
+go1.25 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go125.txt
 
 # Run with Go 1.26
 go1.26 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go126.txt

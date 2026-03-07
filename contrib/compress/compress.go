@@ -287,7 +287,7 @@ func selectEncoding(acceptEncoding string) string {
 	}
 
 	// Prefer gzip when quality values are equal
-	if bestGzip > bestDeflate && bestGzip > 0 {
+	if bestGzip >= bestDeflate && bestGzip > 0 {
 		return "gzip"
 	}
 	if bestDeflate > 0 {

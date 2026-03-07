@@ -179,4 +179,4 @@ app.Group("/api/v1").
 - **HTTP/2 support** — switch to net/http when needed
 - **Auto OpenAPI** — generated from typed handlers
 - **Built-in DI** — optional dependency injection
-- **Auto CRUD** — `app.Resource("/products", service)` generates full REST API
+- **Auto CRUD** — `kruda.Resource[Product, string](app, "/products", service)` generates full REST API

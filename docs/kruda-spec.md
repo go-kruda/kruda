@@ -118,11 +118,11 @@ go get github.com/kruda-framework/kruda
 
 ### 2.3 Go Version Requirement
 
-- **Minimum: Go 1.24** (required for generic type aliases, cgo annotations, tool directives in go.mod)
+- **Minimum: Go 1.25** (required for generic type aliases)
 - **Recommended: Go 1.26** (Green Tea GC, self-referential generics, cgo overhead -30%, stack-allocated slices)
-- **Tested on: Go 1.24, 1.25, 1.26**
+- **Tested on: Go 1.25, 1.26**
 
-> **Why Go 1.24 minimum?** The type system relies on generic type aliases (`type T[B any] = BodyCtx[B]`) which were stabilized in Go 1.24. Older versions cannot compile the core typed handler system.
+> **Why Go 1.25 minimum?** The type system relies on generic type aliases (`type T[B any] = BodyCtx[B]`) which require Go 1.25+. Older versions cannot compile the core typed handler system.
 >
 > **Why Go 1.26 recommended?** The Green Tea GC significantly reduces tail latency under high concurrency, self-referential generics enable more complex typed patterns, and cgo overhead reduction directly benefits Sonic JSON performance.
 
@@ -2393,7 +2393,7 @@ app := kruda.New(kruda.WithStdJSON())
 
 - Linux/macOS on amd64 or arm64
 - Fallback to `encoding/json` on unsupported platforms
-- Go 1.24+ (cgo annotations for better performance on Go 1.24+, cgo overhead -30% on Go 1.26)
+- Go 1.25+ (cgo overhead -30% on Go 1.26)
 
 ---
 
@@ -3096,7 +3096,7 @@ go build -tags no_rust ./...        # Force: Sonic only, no Rust
 CGO_ENABLED=0 go build ./...        # Force: No CGO at all
 ```
 
-### Phase 8 — AI Integration & Growth (Week 23+)
+### Future — AI Integration & Growth
 
 | Task | Description | Priority |
 |------|-------------|----------|
@@ -3121,7 +3121,7 @@ Week  9-12: ░░░░░░░░░░░░░░░░░░░░██�
 Week 13-16: ████████████████░░░░░░░░  Phase 5: Production ready + AI-Friendly DX
 Week 16-18: ░░░░░░░░░░░░░░░░████████  Phase 6: Launch 🚀 (llms.txt, AI blog post)
 Week 19-22: ░░░░████████████░░░░░░░░  Phase 7: 🦀 Rust Secret Weapon
-Week 23+:   ░░░░░░░░░░░░░░░░████████  Phase 8: 🤖 MCP + Growth
+Week 23+:   ░░░░░░░░░░░░░░░░████████  Future: 🤖 MCP + Growth
 
 Key milestones:
   Week 6:  ✅ Typed handlers working (demo-able)
@@ -3923,7 +3923,7 @@ Marketing phases:
 
 **vs Gin (80K+ stars) — Win on: Modern DX + Auto-everything**
 - Gin has no generics, no auto OpenAPI, no auto CRUD — it's a 2014 design
-- Kruda is what Gin would look like if designed in 2026 with Go 1.24+ generics
+- Kruda is what Gin would look like if designed in 2026 with Go 1.25+ generics
 - Marketing angle: "Gin was great. Kruda is next."
 
 **vs Echo (30K+ stars) — Win on: Type safety + Auto CRUD**

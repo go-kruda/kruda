@@ -247,9 +247,10 @@ func TestIntegration_MixedMethodsPipeline(t *testing.T) {
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 
+	postBody := `{"a":"b"}`
 	putBody := `{"name":"updated"}`
 	pipeline := "GET /items HTTP/1.1\r\nHost: h\r\n\r\n" +
-		"POST /items HTTP/1.1\r\nHost: h\r\nContent-Length: 8\r\n\r\n{\"a\":\"b\"}" +
+		"POST /items HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(postBody)) + "\r\n\r\n" + postBody +
 		"PUT /items/1 HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(putBody)) + "\r\n\r\n" + putBody +
 		"DELETE /items/1 HTTP/1.1\r\nHost: h\r\n\r\n"
 
@@ -471,13 +472,13 @@ func TestParser_LeadingCRLFTolerance(t *testing.T) {
 		{
 			name:   "single CRLF before GET",
 			raw:    "\r\nGET /a HTTP/1.1\r\nHost: h\r\n\r\n",
-			expect: false, // current parser rejects — documents the gap
+			expect: true, // RFC 7230 §3.5: skip leading CRLF
 			path:   "/a",
 		},
 		{
 			name:   "double CRLF before GET",
 			raw:    "\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n",
-			expect: false, // current parser rejects
+			expect: true, // RFC 7230 §3.5: skip multiple leading CRLF
 			path:   "/b",
 		},
 		{
@@ -514,11 +515,8 @@ func TestParser_LeadingCRLFTolerance(t *testing.T) {
 	// Try to parse the remainder (starts with \r\n).
 	remaining := buf[consumed:]
 	_, _, ok = parseHTTPRequest(remaining, noLimits)
-	// Document current behavior: this FAILS because parser doesn't skip leading CRLF.
-	// If this starts passing, the parser has been fixed — update expect values above.
-	if ok {
-		t.Log("Parser now handles leading CRLF — update TestParser_LeadingCRLFTolerance expects!")
-	} else {
-		t.Log("Parser does NOT handle leading CRLF (RFC 7230 §3.5 SHOULD) — known gap")
+	// RFC 7230 §3.5: parser now skips leading CRLF.
+	if !ok {
+		t.Fatal("parser should handle leading CRLF (RFC 7230 §3.5)")
 	}
 }

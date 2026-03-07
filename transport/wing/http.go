@@ -33,6 +33,15 @@ var (
 // On success, consumed is the number of bytes used by the parsed request,
 // allowing callers to preserve any pipelined data that follows.
 func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
+	// RFC 7230 §3.5: skip leading CRLF before request-line.
+	skip := 0
+	for skip+1 < len(data) && data[skip] == '\r' && data[skip+1] == '\n' {
+		skip += 2
+	}
+	if skip > 0 {
+		data = data[skip:]
+	}
+
 	// Find end of headers.
 	headerEnd := bytes.Index(data, crlfcrlf)
 	if headerEnd < 0 {
@@ -215,7 +224,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 		r.extraHdrs = extraHdrs
 		r.extraN = extraN
 		r.keepAlive = keepAlive
-		return r, consumed, true
+		return r, skip + consumed, true
 	}
 
 	r := acquireRequest()
@@ -227,7 +236,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	r.extraHdrs = extraHdrs
 	r.extraN = extraN
 	r.keepAlive = keepAlive
-	return r, bodyStart, true
+	return r, skip + bodyStart, true
 }
 
 var (
@@ -491,6 +500,8 @@ func acquireResponse() *wingResponse {
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
 	r.staticResp = nil
+	r.fileFd = 0
+	r.fileSize = 0
 	return r
 }
 
@@ -498,6 +509,8 @@ func releaseResponse(r *wingResponse) {
 	r.status = 0
 	r.staticResp = nil
 	r.jsonFast = false
+	r.fileFd = 0
+	r.fileSize = 0
 	r.headers.count = 0
 	if cap(r.buf) > 65536 {
 		r.buf = make([]byte, 0, 2048)
@@ -775,7 +788,15 @@ func (h *wingHeaders) Set(key, value string) {
 	}
 }
 
-func (h *wingHeaders) Add(key, value string) { h.Set(key, value) }
+// Add appends a new key-value pair without replacing existing keys.
+// Required for multi-value headers such as Set-Cookie.
+func (h *wingHeaders) Add(key, value string) {
+	if h.count < len(h.keys) {
+		h.keys[h.count] = key
+		h.vals[h.count] = value
+		h.count++
+	}
+}
 
 func (h *wingHeaders) Get(key string) string {
 	for i := 0; i < h.count; i++ {
@@ -787,12 +808,14 @@ func (h *wingHeaders) Get(key string) string {
 }
 
 func (h *wingHeaders) Del(key string) {
-	for i := 0; i < h.count; i++ {
+	for i := 0; i < h.count; {
 		if h.keys[i] == key {
 			h.count--
 			h.keys[i] = h.keys[h.count]
 			h.vals[i] = h.vals[h.count]
-			return
+			// Don't increment — recheck swapped element.
+		} else {
+			i++
 		}
 	}
 }

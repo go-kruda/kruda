@@ -149,7 +149,7 @@ func (t *Transport) SetRouteFeather(method, path string, feather any) {
 	}
 }
 
-func (t *Transport) Shutdown(_ context.Context) error {
+func (t *Transport) Shutdown(ctx context.Context) error {
 	select {
 	case <-t.ready:
 	default:
@@ -161,8 +161,17 @@ func (t *Transport) Shutdown(_ context.Context) error {
 			w.wake()
 		}
 	}
-	t.wg.Wait()
-	return nil
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (t *Transport) cleanupWorkers(upTo int) {
@@ -651,7 +660,15 @@ func (w *worker) tryParse(c *conn) {
 				}
 			} else {
 				resp := acquireResponse()
-				w.handler.ServeKruda(resp, req)
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							resp.WriteHeader(500)
+							resp.Write([]byte("Internal Server Error\n"))
+						}
+					}()
+					w.handler.ServeKruda(resp, req)
+				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
 				releaseRequest(req)
@@ -773,6 +790,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	readN := copy(buf, leftover)
 
 	remoteAddr := first.remoteAddr
+	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
 	keepAlive := req.keepAlive
 
@@ -820,6 +838,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					readN = remaining
 					r.remoteAddr = remoteAddr
 					r.fd = fd
+					r.ctx = connCtx
 					req = r
 					keepAlive = req.keepAlive
 					goto next
@@ -844,8 +863,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 
 done:
 	takeoverBufPool.Put(bp)
-	syscall.Close(int(fd))
-	// Clean up conn map — fd already closed, closeConn's SubmitClose is a no-op.
+	// Signal worker loop to close conn and fd via closeConn → SubmitClose.
+	// Do NOT call syscall.Close here — double-close risks recycled fd corruption.
 	w.doneCh <- doneMsg{fd: fd, keepAlive: false}
 	w.wake()
 }
@@ -864,8 +883,8 @@ func (w *worker) handleSend(ev event) {
 	} else {
 		c = w.conns[ev.Fd]
 	}
-	if c == nil || len(c.sendBuf) == 0 {
-		// Remove EPOLLOUT — only listen for EPOLLIN.
+	if c == nil || (len(c.sendBuf) == 0 && c.sendFileFd == 0) {
+		// No pending data or sendfile — remove EPOLLOUT, listen for EPOLLIN.
 		if c != nil {
 			w.eng.SubmitRecv(c.fd, nil, 0)
 		}
@@ -875,8 +894,14 @@ func (w *worker) handleSend(ev event) {
 }
 
 func (w *worker) closeConn(fd int32) {
-	if c, ok := w.conns[fd]; ok && c.cancel != nil {
-		c.cancel()
+	if c, ok := w.conns[fd]; ok {
+		if c.cancel != nil {
+			c.cancel()
+		}
+		if c.sendFileFd > 0 {
+			syscall.Close(int(c.sendFileFd))
+			c.sendFileFd = 0
+		}
 	}
 	delete(w.conns, fd)
 	w.eng.SubmitClose(fd)
@@ -885,9 +910,15 @@ func (w *worker) closeConn(fd int32) {
 func (w *worker) wake() { w.eng.PostWake() }
 
 func (w *worker) cleanup() {
+	if w.pool != nil {
+		close(w.pool.jobs)
+	}
 	for fd, c := range w.conns {
 		if c.cancel != nil {
 			c.cancel()
+		}
+		if c.sendFileFd > 0 {
+			syscall.Close(int(c.sendFileFd))
 		}
 		closeFd(int(fd))
 	}

@@ -15,7 +15,7 @@ When enabled via `WithSecureHeaders()`, every response includes these headers:
 | `X-XSS-Protection` | `0` | Disabled per modern best practice (CSP preferred) |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Controls referrer information |
 
-No `Server` header is sent by default -- no version information is leaked.
+The `Server: Kruda` header is sent by default (no version number is leaked).
 
 ```go
 // Explicitly enable security headers
@@ -332,7 +332,7 @@ kruda.Post[UploadReq, any](app, "/upload", func(c *kruda.C[UploadReq]) (*any, er
         return nil, kruda.NewError(400, "unsupported file type")
     }
     // file.Open() returns io.ReadCloser for processing
-    return nil, c.SendStatus(204)
+    return nil, c.NoContent()
 })
 ```
 

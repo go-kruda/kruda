@@ -170,7 +170,7 @@ api := app.Group("/api", jwt.New(jwt.Config{
 | [contrib/ws](contrib/ws/) | `go get github.com/go-kruda/kruda/contrib/ws` | WebSocket upgrade, RFC 6455 frames, ping/pong |
 | [contrib/ratelimit](contrib/ratelimit/) | `go get github.com/go-kruda/kruda/contrib/ratelimit` | Token bucket / sliding window rate limiting |
 | [contrib/session](contrib/session/) | `go get github.com/go-kruda/kruda/contrib/session` | Session middleware with pluggable store |
-| [contrib/compress](contrib/compress/) | `go get github.com/go-kruda/kruda/contrib/compress` | Response compression (gzip, brotli) |
+| [contrib/compress](contrib/compress/) | `go get github.com/go-kruda/kruda/contrib/compress` | Response compression (gzip, deflate) |
 | [contrib/etag](contrib/etag/) | `go get github.com/go-kruda/kruda/contrib/etag` | ETag response caching |
 | [contrib/cache](contrib/cache/) | `go get github.com/go-kruda/kruda/contrib/cache` | Response cache (in-memory, Redis) |
 | [contrib/otel](contrib/otel/) | `go get github.com/go-kruda/kruda/contrib/otel` | OpenTelemetry tracing |

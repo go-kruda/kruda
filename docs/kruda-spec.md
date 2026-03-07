@@ -69,7 +69,7 @@ Kruda (ครุฑ) is a high-performance Go web framework that combines the sp
 ครุฑ (Garuda) — Symbol of power and speed in Thai mythology. Fast, strong, memorable. Easy to pronounce in both Thai and international contexts.
 
 ```
-go get github.com/kruda-framework/kruda
+go get github.com/go-kruda/kruda
 ```
 
 ---
@@ -1100,17 +1100,17 @@ kruda/                          ← core framework (zero external deps)
 │   └── static.go               ← built-in
 │
 kruda-contrib/                  ← official contrib org (separate Go modules)
-├── jwt/                        ← github.com/kruda-framework/contrib/jwt
-├── ratelimit/                  ← github.com/kruda-framework/contrib/ratelimit
-├── session/                    ← github.com/kruda-framework/contrib/session
-├── csrf/                       ← github.com/kruda-framework/contrib/csrf
-├── compress/                   ← github.com/kruda-framework/contrib/compress
-├── swagger/                    ← github.com/kruda-framework/contrib/swagger
-├── websocket/                  ← github.com/kruda-framework/contrib/websocket
-├── cache/                      ← github.com/kruda-framework/contrib/cache
-├── oauth2/                     ← github.com/kruda-framework/contrib/oauth2
-├── validator/                  ← github.com/kruda-framework/contrib/validator
-└── timeout/                    ← github.com/kruda-framework/contrib/timeout
+├── jwt/                        ← github.com/go-kruda/kruda/contrib/jwt
+├── ratelimit/                  ← github.com/go-kruda/kruda/contrib/ratelimit
+├── session/                    ← github.com/go-kruda/kruda/contrib/session
+├── csrf/                       ← github.com/go-kruda/kruda/contrib/csrf
+├── compress/                   ← github.com/go-kruda/kruda/contrib/compress
+├── swagger/                    ← github.com/go-kruda/kruda/contrib/swagger
+├── websocket/                  ← github.com/go-kruda/kruda/contrib/websocket
+├── cache/                      ← github.com/go-kruda/kruda/contrib/cache
+├── oauth2/                     ← github.com/go-kruda/kruda/contrib/oauth2
+├── validator/                  ← github.com/go-kruda/kruda/contrib/validator
+└── timeout/                    ← github.com/go-kruda/kruda/contrib/timeout
 ```
 
 ### 11.3 Why Two Tiers
@@ -1177,9 +1177,9 @@ Install only what you need:
 
 ```go
 import (
-    "github.com/kruda-framework/contrib/jwt"
-    "github.com/kruda-framework/contrib/ratelimit"
-    "github.com/kruda-framework/contrib/swagger"
+    "github.com/go-kruda/kruda/contrib/jwt"
+    "github.com/go-kruda/kruda/contrib/ratelimit"
+    "github.com/go-kruda/kruda/contrib/swagger"
 )
 
 // JWT auth
@@ -2724,7 +2724,7 @@ Kruda v2.0       680K+        1.4 μs      0 B         + Rust simd-json (v2.0)
 ### 20.1 Installation
 
 ```bash
-go install github.com/kruda-framework/cmd/kruda@latest
+go install github.com/go-kruda/kruda/cmd/kruda@latest
 ```
 
 ### 20.2 Commands
@@ -2786,7 +2786,7 @@ my-app/
 ### 21.1 Framework Source Structure
 
 ```
-kruda/                            ← core framework (github.com/kruda-framework/kruda)
+kruda/                            ← core framework (github.com/go-kruda/kruda)
 ├── kruda.go              # App struct, New(), Listen()
 ├── config.go             # Config struct, defaults, options
 ├── context.go            # Ctx struct, request/response API
@@ -2881,7 +2881,7 @@ kruda/                            ← core framework (github.com/kruda-framework
 ```
 
 ```
-kruda-contrib/                    ← official contrib (github.com/kruda-framework/contrib)
+kruda-contrib/                    ← official contrib (github.com/go-kruda/kruda/contrib)
 ├── go.mod                # separate Go module (own dependency tree)
 ├── jwt/                  # JWT authentication
 │   ├── jwt.go
@@ -3050,8 +3050,8 @@ app.Listen(":3000")
 
 | Action | Details |
 |--------|---------|
-| GitHub | `github.com/kruda-framework/kruda` |
-| go pkg | `go get github.com/kruda-framework/kruda` |
+| GitHub | `github.com/go-kruda/kruda` |
+| go pkg | `go get github.com/go-kruda/kruda` |
 | Blog post #1 | "Introducing Kruda — Type-Safe Go with Auto-Everything" |
 | Blog post #2 | "Go Framework Benchmark 2026 — Honest Numbers" |
 | Blog post #3 | "From 85 Lines to 5 — CRUD APIs in Kruda" |
@@ -4046,12 +4046,12 @@ https://kruda.dev/llms-full.txt     ← complete reference (~15K tokens)
 > zero-allocation performance, and optional Rust acceleration.
 
 ## Install
-go get github.com/kruda-framework/kruda
+go get github.com/go-kruda/kruda
 
 ## Quick Start
 package main
 
-import "github.com/kruda-framework/kruda"
+import "github.com/go-kruda/kruda"
 
 func main() {
     app := kruda.New()
@@ -4152,7 +4152,7 @@ Kruda ships ready-made configuration files in every `kruda new` scaffolded proje
 description: Kruda Go web framework conventions
 
 rules:
-  - Import path is "github.com/kruda-framework/kruda"
+  - Import path is "github.com/go-kruda/kruda"
   - Use kruda.Typed() for handlers that parse request body
   - Use kruda.Bind[T](c) for manual binding, NOT c.ShouldBindJSON (that's Gin)
   - Use kruda.Give/Use for DI, NOT wire or dig
@@ -4161,7 +4161,7 @@ rules:
   - Status code: c.Status(201).JSON(data), method chaining
   - Groups: app.Group("/api").Use(middleware).Get("/users", handler)
   - Auto CRUD: app.Resource("/path", service) creates 5 endpoints
-  - Contrib imports: "github.com/kruda-framework/contrib/jwt"
+  - Contrib imports: "github.com/go-kruda/kruda/contrib/jwt"
   - Built-in middleware: kruda.Logger(), kruda.Recovery(), kruda.CORS()
   - Context is safe in goroutines — no c.Copy() needed (unlike Fiber)
   - Middleware order: Logger → Recovery → CORS → RequestID → Auth → Handler
@@ -4173,7 +4173,7 @@ rules:
 # Kruda Framework — Claude Code Instructions
 
 ## Import
-import "github.com/kruda-framework/kruda"
+import "github.com/go-kruda/kruda"
 
 ## Route Registration
 app.Get("/path", handler)
@@ -4251,7 +4251,7 @@ func (app *App) Get(path string, handler HandlerFunc, opts ...RouteOption) *Rout
 A comprehensive examples repo that AI assistants can reference for full patterns:
 
 ```
-kruda-examples/                          ← github.com/kruda-framework/examples
+kruda-examples/                          ← github.com/go-kruda/kruda/examples
 ├── README.md                            ← AI reads this first (index + descriptions)
 ├── 01-hello-world/
 │   └── main.go                          ← minimal 10-line example
@@ -4348,7 +4348,7 @@ The Model Context Protocol (MCP) is an open standard (created by Anthropic, adop
 > No other web framework in any language offers this level of AI integration.
 
 ```go
-import "github.com/kruda-framework/contrib/mcp"
+import "github.com/go-kruda/kruda/contrib/mcp"
 
 app := kruda.New()
 app.Resource("/users", userService)
@@ -4597,8 +4597,8 @@ Kruda MCP Endpoint
 package main
 
 import (
-    "github.com/kruda-framework/kruda"
-    "github.com/kruda-framework/contrib/mcp"
+    "github.com/go-kruda/kruda"
+    "github.com/go-kruda/kruda/contrib/mcp"
 )
 
 type Todo struct {
@@ -4710,7 +4710,7 @@ app.Use(mcp.New(mcp.Config{
 
 ```
 kruda-contrib/
-└── mcp/                              ← github.com/kruda-framework/contrib/mcp
+└── mcp/                              ← github.com/go-kruda/kruda/contrib/mcp
     ├── go.mod                         ← depends on kruda core + MCP SDK
     ├── mcp.go                         ← main plugin: New(), Config
     ├── scanner.go                     ← route scanning + tool generation
@@ -4752,7 +4752,7 @@ This is a unique selling point that no competitor can easily replicate — it re
 package main
 
 import (
-    "github.com/kruda-framework/kruda"
+    "github.com/go-kruda/kruda"
     "gorm.io/gorm"
 )
 
@@ -4863,7 +4863,7 @@ package benchmarks
 
 import (
     "testing"
-    "github.com/kruda-framework/kruda"
+    "github.com/go-kruda/kruda"
 )
 
 func BenchmarkKrudaHelloWorld(b *testing.B) {

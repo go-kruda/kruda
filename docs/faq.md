@@ -92,7 +92,7 @@ Go 1.25 or later is required for generic type aliases used by `C[T]` typed handl
 
 ## Is Kruda production-ready?
 
-Kruda has completed Phases 1-7 (Foundation through TechEmpower Domination). The core framework, type system, performance optimization, ecosystem (DI, CRUD), security hardening, and Wing transport are all implemented and tested. Phase 8 (Launch) is the v1.0.0 release milestone.
+Kruda has completed Phases 1-6 (Foundation through Security Hardening). The core framework, type system, performance optimization, ecosystem (DI, CRUD), security hardening, and Wing transport are all implemented and tested. Phase 7 (Launch) is the v1.0.0 release milestone.
 
 ## How do I contribute?
 

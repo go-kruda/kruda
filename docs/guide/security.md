@@ -60,7 +60,7 @@ GET /%2e%2e/etc/passwd    -> 400 Bad Request
 GET /a/b/../c             -> normalized to /a/c, routed normally
 ```
 
-Always enabled, zero configuration required.
+Enable via `WithPathTraversal()` or `WithSecurity()`. The `Static()` file server has its own built-in traversal check independent of this setting.
 
 ## Header Injection Prevention
 

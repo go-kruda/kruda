@@ -23,7 +23,7 @@ Thank you for your interest in contributing to Kruda!
 
 ```
 kruda/
-├── *.go              # Core framework (zero external deps)
+├── *.go              # Core framework (minimal external deps)
 ├── middleware/        # Built-in middleware (Logger, Recovery, CORS, etc.)
 ├── transport/         # Transport implementations
 │   └── wing/          # Wing transport (epoll+eventfd, Linux only)
@@ -37,7 +37,7 @@ kruda/
 
 ## Code Guidelines
 
-- **Zero external deps** in core — only Go stdlib
+- **Minimal external deps** in core — Sonic JSON (opt-out via `kruda_stdjson` build tag), fasthttp transport
 - All exported types and functions must have doc comments
 - Follow standard Go conventions (`gofmt`, `go vet`)
 - Use `slog` for logging (Go 1.21+ standard)

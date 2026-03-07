@@ -14,7 +14,7 @@ Type-safe Go web framework with auto-everything.
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
 - Pluggable transport — Wing (Linux, epoll+eventfd), fasthttp, or net/http
-- Zero external deps — core uses only Go stdlib
+- Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
 - Dev mode error page — rich HTML with source code context, like Next.js
 
 ## Quick Start
@@ -169,6 +169,13 @@ api := app.Group("/api", jwt.New(jwt.Config{
 | [contrib/jwt](contrib/jwt/) | `go get github.com/go-kruda/kruda/contrib/jwt` | JWT sign, verify, refresh (HS256/384/512, RS256) |
 | [contrib/ws](contrib/ws/) | `go get github.com/go-kruda/kruda/contrib/ws` | WebSocket upgrade, RFC 6455 frames, ping/pong |
 | [contrib/ratelimit](contrib/ratelimit/) | `go get github.com/go-kruda/kruda/contrib/ratelimit` | Token bucket / sliding window rate limiting |
+| [contrib/session](contrib/session/) | `go get github.com/go-kruda/kruda/contrib/session` | Session middleware with pluggable store |
+| [contrib/compress](contrib/compress/) | `go get github.com/go-kruda/kruda/contrib/compress` | Response compression (gzip, brotli) |
+| [contrib/etag](contrib/etag/) | `go get github.com/go-kruda/kruda/contrib/etag` | ETag response caching |
+| [contrib/cache](contrib/cache/) | `go get github.com/go-kruda/kruda/contrib/cache` | Response cache (in-memory, Redis) |
+| [contrib/otel](contrib/otel/) | `go get github.com/go-kruda/kruda/contrib/otel` | OpenTelemetry tracing |
+| [contrib/prometheus](contrib/prometheus/) | `go get github.com/go-kruda/kruda/contrib/prometheus` | Prometheus metrics |
+| [contrib/swagger](contrib/swagger/) | `go get github.com/go-kruda/kruda/contrib/swagger` | Swagger UI HTML |
 
 ### Pre-release Checklist
 
@@ -185,7 +192,7 @@ govulncheck ./...
 cd transport/wing && govulncheck ./...
 ```
 
-Kruda core has zero external dependencies — all vulnerabilities will be Go stdlib issues. Upgrade to the latest Go patch release to resolve them.
+Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
 **Minimum Go version for zero stdlib vulnerabilities:** go1.25.7+
 

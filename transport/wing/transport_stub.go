@@ -118,13 +118,15 @@ func (m DispatchMode) String() string {
 func Dispatch(m DispatchMode) FeatherOption { return func(f *Feather) { f.Dispatch = m } }
 func Static(resp []byte) FeatherOption      { return func(f *Feather) { f.StaticResponse = resp } }
 
-// FeatherTable maps routes to Feathers.
-type FeatherTable struct{}
+// NOTE: Feather types above are kept in sync with feather.go — update both together.
 
-// NewFeatherTable creates a stub FeatherTable.
-func NewFeatherTable(_ map[string]Feather, _ Feather) FeatherTable { return FeatherTable{} }
-
-// RawRequest is the interface for accessing raw Wing request data.
+// RawRequest provides low-level access to Wing's request data.
+// Mirrors the real interface in raw.go so user code compiles cross-platform.
 type RawRequest interface {
-	RawBytes() []byte
+	RawMethod() string
+	RawPath() []byte
+	RawHeader(name string) []byte
+	RawBody() []byte
+	Fd() int32
+	KeepAlive() bool
 }

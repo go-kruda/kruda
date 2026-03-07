@@ -2,13 +2,13 @@
 
 ## Common Build Errors
 
-### `go: requires go >= 1.24`
+### `go: requires go >= 1.25`
 
-Kruda requires Go 1.24+ for generic type aliases. Upgrade your Go installation:
+Kruda requires Go 1.25+ for generic type aliases. Upgrade your Go installation:
 
 ```bash
-go install golang.org/dl/go1.24.0@latest
-go1.24.0 download
+go install golang.org/dl/go1.25.0@latest
+go1.25.0 download
 ```
 
 Or download from [go.dev/dl](https://go.dev/dl/).
@@ -27,7 +27,7 @@ app.Post("/users", kruda.TypedHandler[CreateUserInput](handler))
 
 ### `undefined: kruda.Give` or `undefined: kruda.Use`
 
-Ensure you're importing the correct package and using Go 1.24+:
+Ensure you're importing the correct package and using Go 1.25+:
 
 ```go
 import "github.com/go-kruda/kruda"

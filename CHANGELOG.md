@@ -52,7 +52,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Dev mode error page with source code context, stack trace, request details
 - CLI tool `cmd/kruda/` with `new`, `dev`, `generate`, `validate` commands
 - Hot reload dev server with 100ms file polling
-- 12 runnable example applications
+- 21 runnable example applications
 - GitHub Actions CI/CD: test matrix, benchmark regression, docs deployment
 - VitePress documentation site in `docs/`
 - Benchmark baseline (`bench/baseline.txt`)
@@ -84,7 +84,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.0] — Phase 3: Performance
 
 ### Added
-- fasthttp transport for maximum throughput (default at Phase 3; superseded by Wing in Phase 7)
+- fasthttp transport for maximum throughput (default on macOS; Wing is default on Linux)
 - `FastHTTP()` and `NetHTTP()` transport options
 - Transport auto-fallback: TLS or Windows → net/http
 - `WithTransport(transport.Transport)` for custom transport implementations

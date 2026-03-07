@@ -39,8 +39,11 @@ func TestPresetValues(t *testing.T) {
 	}{
 		{"Bolt", Bolt, Feather{Dispatch: Inline}},
 		{"Arrow", Arrow, Feather{Dispatch: Pool}},
+		{"Spear", Spear, Feather{Dispatch: Takeover}},
 		{"Plaintext", Plaintext, Bolt},
-		{"Query", Query, Arrow},
+		{"JSON", JSON, Bolt},
+		{"Query", Query, Spear},
+		{"Render", Render, Spear},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,6 +63,9 @@ func TestStringers(t *testing.T) {
 	}
 	if s := Spawn.String(); s != "Spawn" {
 		t.Errorf("Spawn.String() = %q", s)
+	}
+	if s := Takeover.String(); s != "Takeover" {
+		t.Errorf("Takeover.String() = %q", s)
 	}
 }
 

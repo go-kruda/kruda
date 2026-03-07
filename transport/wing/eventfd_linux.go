@@ -7,10 +7,8 @@ import (
 	"unsafe"
 )
 
-const sysEventfd2 = 290 // SYS_EVENTFD2 on amd64
-
 func createEventfd() (int, error) {
-	fd, _, errno := syscall.RawSyscall(sysEventfd2, 0, syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	fd, _, errno := syscall.RawSyscall(syscall.SYS_EVENTFD2, 0, syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
 	if errno != 0 {
 		return 0, errno
 	}

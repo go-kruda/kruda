@@ -31,7 +31,7 @@ TFB_DIR="$ROOT_DIR/frameworks/Go/kruda"
 
 [ -d "$TFB_DIR" ] || fail "TFB directory not found: $TFB_DIR"
 [ -f "$TFB_DIR/benchmark_config.json" ] || fail "Missing benchmark_config.json"
-[ -f "$TFB_DIR/kruda.dockerfile" ] || fail "Missing kruda.dockerfile"
+[ -f "$TFB_DIR/Dockerfile" ] || fail "Missing Dockerfile"
 [ -f "$TFB_DIR/src/main.go" ] || fail "Missing src/main.go"
 [ -f "$TFB_DIR/src/go.mod" ] || fail "Missing src/go.mod"
 
@@ -58,7 +58,7 @@ fi
 # Build Docker image
 log "Building TFB Docker image..."
 cd "$TFB_DIR"
-docker build -f kruda.dockerfile -t kruda-tfb . || fail "Docker build failed"
+docker build -f Dockerfile -t kruda-tfb . || fail "Docker build failed"
 ok "Docker image built successfully"
 
 # Test container startup

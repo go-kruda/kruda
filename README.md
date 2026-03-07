@@ -150,14 +150,14 @@ app := kruda.New(
 // Rate limiting — 100 req/min per IP
 app.Use(ratelimit.New(ratelimit.Config{
     Max: 100, Window: time.Minute,
-    TrustedProxies: []string{"10.0.0.0/8"},
+    TrustedProxies: []string{"10.0.0.1", "10.0.0.2"},
 }))
 
 // Stricter limit on auth endpoints
 app.Use(ratelimit.ForRoute("/api/login", 5, time.Minute))
 
 // JWT authentication on protected routes
-api := app.Group("/api", jwt.New(jwt.Config{
+api := app.Group("/api").Guard(jwt.New(jwt.Config{
     Secret: []byte(os.Getenv("JWT_SECRET")),
 }))
 ```

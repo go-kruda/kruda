@@ -282,6 +282,7 @@ func (p *workerPool) loop(h transport.Handler) {
 		// Direct write from pool goroutine — skip doneCh data copy + SubmitSend round-trip.
 		if len(data) == 0 {
 			p.done <- doneMsg{fd: job.fd, keepAlive: job.keepAlive}
+			p.wake()
 			continue
 		}
 		var remaining []byte
@@ -315,6 +316,11 @@ func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker
 			closeFd(wakeW)
 		}
 		return nil, err
+	}
+	// On darwin, kqueueEngine creates its own internal pipe — the external
+	// wakeW fd is unused. Close it to avoid a per-worker fd leak.
+	if wakeW != wakeR {
+		closeFd(wakeW)
 	}
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewFeatherTable(cfg.Feathers, cfg.DefaultFeather)

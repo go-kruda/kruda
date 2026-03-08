@@ -60,9 +60,6 @@ func createListenFd(addr string) (int, error) {
 	return fd, nil
 }
 
-// setCPUAffinity is a no-op on macOS (no sched_setaffinity).
-func setCPUAffinity(_ int) {}
-
 func setTCPQuickACK(_ int32) {}
 
 // getPeerAddr returns "ip:port" of the remote end of fd, or "" on error.

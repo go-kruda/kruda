@@ -875,13 +875,6 @@ done:
 	w.wake()
 }
 
-func (w *worker) send503(c *conn) {
-	c.sendBuf = resp503
-	c.sendN = 0
-	c.keepAlive = false
-	w.eng.SubmitSend(c.fd, nil)
-}
-
 func (w *worker) handleSend(ev event) {
 	var c *conn
 	if ev.ConnPtr != nil {

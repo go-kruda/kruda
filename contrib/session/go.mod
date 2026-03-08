@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/contrib/session
 
-go 1.25.7
+go 1.25.8
 
 replace (
 	github.com/go-kruda/kruda => ../../

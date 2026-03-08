@@ -372,10 +372,6 @@ func TestPlaintextPerformanceGuard(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("performance guard only meaningful on Linux (Wing uses epoll)")
 	}
-	if os.Getenv("CI") != "" {
-		t.Skip("skipping performance guard in CI (use dedicated hardware for perf testing)")
-	}
-
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte("Hello, World!"))
@@ -396,7 +392,10 @@ func TestPlaintextPerformanceGuard(t *testing.T) {
 	conn.Read(buf)
 
 	const iterations = 10_000
-	const minReqPerSec = 50_000 // conservative floor — any modern machine should hit this
+	minReqPerSec := 50_000.0 // conservative floor — any modern machine should hit this
+	if os.Getenv("CI") != "" {
+		minReqPerSec = 5_000.0 // CI runners + race detector = 5-10x slower
+	}
 
 	start := time.Now()
 	for range iterations {
@@ -410,7 +409,7 @@ func TestPlaintextPerformanceGuard(t *testing.T) {
 
 	reqPerSec := float64(iterations) / elapsed.Seconds()
 	if reqPerSec < minReqPerSec {
-		t.Errorf("throughput regression: got %.0f req/s, want >= %d req/s (elapsed %v)",
+		t.Errorf("throughput regression: got %.0f req/s, want >= %.0f req/s (elapsed %v)",
 			reqPerSec, minReqPerSec, elapsed)
 	}
 	t.Logf("plaintext throughput: %.0f req/s (%d reqs in %v)", reqPerSec, iterations, elapsed)

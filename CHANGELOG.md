@@ -3,7 +3,7 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.0.0] - 2026-03-07
 
 ### Added
 - Wing transport — custom epoll+eventfd engine (default on Linux)

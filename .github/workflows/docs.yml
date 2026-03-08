@@ -43,7 +43,8 @@ jobs:
         working-directory: docs
 
       - name: Build VitePress site
-        run: npx vitepress build docs
+        run: npx vitepress build
+        working-directory: docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

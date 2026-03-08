@@ -91,6 +91,25 @@ app.MapError(ErrNotFound, 404, "resource not found")
 kruda.MapErrorType[*ValidationError](app, 422, "validation failed")
 ```
 
+## Coming from Another Framework?
+
+| Concept | Gin | Fiber | Echo | stdlib | Kruda |
+|---------|-----|-------|------|--------|-------|
+| App | `gin.Default()` | `fiber.New()` | `echo.New()` | `http.NewServeMux()` | `kruda.New()` |
+| Route | `r.GET("/path", h)` | `app.Get("/path", h)` | `e.GET("/path", h)` | `mux.HandleFunc("GET /path", h)` | `app.Get("/path", h)` |
+| Typed handler | — | — | — | — | `kruda.Post[In, Out](app, "/path", h)` |
+| Group | `r.Group("/api")` | `app.Group("/api")` | `e.Group("/api")` | — | `app.Group("/api")` |
+| Middleware | `r.Use(mw)` | `app.Use(mw)` | `e.Use(mw)` | — | `app.Use(mw)` |
+| Context | `*gin.Context` | `*fiber.Ctx` | `echo.Context` | `http.ResponseWriter, *http.Request` | `*kruda.Ctx` |
+| JSON response | `c.JSON(200, obj)` | `c.JSON(obj)` | `c.JSON(200, obj)` | `json.NewEncoder(w).Encode(obj)` | `return &obj, nil` |
+| Path param | `c.Param("id")` | `c.Params("id")` | `c.Param("id")` | `r.PathValue("id")` | `c.Param("id")` |
+| Query param | `c.Query("q")` | `c.Query("q")` | `c.QueryParam("q")` | `r.URL.Query().Get("q")` | `c.Query("q")` |
+| Body binding | `c.ShouldBindJSON(&v)` | `c.BodyParser(&v)` | `c.Bind(&v)` | `json.NewDecoder(r.Body).Decode(&v)` | `c.Bind(&v)` or `C[T].In` |
+| Auto CRUD | — | — | — | — | `kruda.Resource[T, ID](app, "/path", svc)` |
+| DI | — | — | — | — | `Container.Give()` / `MustResolve[T](c)` |
+
+> Full migration guides: [Gin](docs/guide/coming-from-gin.md) · [Fiber](docs/guide/coming-from-fiber.md) · [Echo](docs/guide/coming-from-echo.md) · [stdlib](docs/guide/coming-from-stdlib.md)
+
 ## Benchmarks
 
 <p align="center">

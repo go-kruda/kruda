@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.25', 'stable']
+        go-version: ['1.25.8', 'stable']
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
@@ -37,7 +37,7 @@ jobs:
         run: go vet -tags kruda_stdjson ./...
 
       - name: Lint (golangci-lint)
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.8'
         uses: golangci/golangci-lint-action@v7
         with:
           args: --build-tags kruda_stdjson

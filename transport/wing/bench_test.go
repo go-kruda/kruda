@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -370,6 +371,9 @@ func TestPlaintextPerformanceGuard(t *testing.T) {
 	}
 	if runtime.GOOS != "linux" {
 		t.Skip("performance guard only meaningful on Linux (Wing uses epoll)")
+	}
+	if os.Getenv("CI") != "" {
+		t.Skip("skipping performance guard in CI (use dedicated hardware for perf testing)")
 	}
 
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {

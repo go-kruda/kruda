@@ -45,7 +45,7 @@ func (r *fastNetHTTPRequest) Body() ([]byte, error) {
 	if r.r.Body == nil {
 		return nil, nil
 	}
-	defer r.r.Body.Close()
+	defer func() { _ = r.r.Body.Close() }()
 
 	if r.r.ContentLength == 0 {
 		return nil, nil

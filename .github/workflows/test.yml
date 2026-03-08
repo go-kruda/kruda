@@ -45,7 +45,12 @@ jobs:
 
       - name: Run tests
         shell: bash
-        run: go test -v -race -tags kruda_stdjson -coverprofile=coverage.out ./...
+        run: |
+          COVER_FLAG=""
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            COVER_FLAG="-coverprofile=coverage.out"
+          fi
+          go test -v -race -tags kruda_stdjson $COVER_FLAG ./...
 
       - name: Test Wing transport (Linux/macOS)
         if: matrix.os != 'windows-latest'
@@ -56,7 +61,7 @@ jobs:
         run: |
           for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag contrib/cache contrib/otel contrib/prometheus contrib/swagger; do
             echo "::group::Testing $dir"
-            cd $dir && go test -tags kruda_stdjson ./... && cd ${{ github.workspace }}
+            cd $dir && go test -tags kruda_stdjson ./... && cd "$GITHUB_WORKSPACE"
             echo "::endgroup::"
           done
 

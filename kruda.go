@@ -226,7 +226,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.contentLength = len(c.body)
 		c.writeHeaders()
 		c.writer.WriteHeader(c.status)
-		c.writer.Write(c.body)
+		_, _ = c.writer.Write(c.body)
 		c.body = nil
 	}
 

@@ -41,7 +41,7 @@ jobs:
         run: cd transport/wing && go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
 
       - name: Get system information
-        uses: kenchan0130/actions-system-info@v1
+        uses: kenchan0130/actions-system-info@v1.4.0
         id: system-info
 
       - name: Get main branch SHA

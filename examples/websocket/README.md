@@ -5,7 +5,8 @@ Real-time echo server using `contrib/ws` with message size limits and an HTML te
 ## Run
 
 ```bash
-go run ./examples/websocket/
+cd examples/websocket
+go run .
 ```
 
 ## Test

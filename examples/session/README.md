@@ -5,7 +5,8 @@ Cookie-based session management using `contrib/session` with an in-memory store.
 ## Run
 
 ```bash
-go run ./examples/session/
+cd examples/session
+go run .
 ```
 
 ## Test

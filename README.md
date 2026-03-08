@@ -213,7 +213,7 @@ cd transport/wing && govulncheck ./...
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
-**Minimum Go version for zero stdlib vulnerabilities:** go1.25.7+
+**Minimum Go version for zero stdlib vulnerabilities:** go1.25.8+
 
 ## Contributing
 

@@ -5,7 +5,8 @@ Global and per-route rate limiting using `contrib/ratelimit` with skip functions
 ## Run
 
 ```bash
-go run ./examples/ratelimit/
+cd examples/ratelimit
+go run .
 ```
 
 ## Test

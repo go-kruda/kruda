@@ -2,5 +2,8 @@
 
 package wing
 
-// Pipe stubs for unsupported platforms.
-// createPipe is only called from eventfd_stub.go (darwin) and transport.go (linux || darwin).
+import "fmt"
+
+func createPipe() (r, w int, err error) {
+	return 0, 0, fmt.Errorf("wing: pipes not supported on this platform")
+}

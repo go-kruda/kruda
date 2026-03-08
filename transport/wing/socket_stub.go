@@ -2,5 +2,8 @@
 
 package wing
 
-// Socket stubs for unsupported platforms.
-// createListenFd is only called from transport.go (linux || darwin).
+import "fmt"
+
+func createListenFd(_ string) (int, error) {
+	return 0, fmt.Errorf("wing: unsupported platform; use FastHTTP or NetHTTP transport")
+}

@@ -24,7 +24,7 @@ What actually happened. Include error messages or logs if applicable.
 
 ## Environment
 
-- **Go version**: (e.g. 1.25.7)
+- **Go version**: (e.g. 1.25.8)
 - **Kruda version**: (e.g. v1.0.0)
 - **OS**: (e.g. Linux amd64, macOS arm64, Windows amd64)
 - **Transport**: (e.g. Wing, fasthttp, net/http)

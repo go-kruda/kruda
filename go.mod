@@ -1,10 +1,10 @@
 module github.com/go-kruda/kruda
 
-go 1.24.0
+go 1.25.8
 
 require (
 	github.com/bytedance/sonic v1.15.0
-	github.com/go-kruda/kruda/transport/wing v0.0.0
+	github.com/go-kruda/kruda/transport/wing v0.0.0-00010101000000-000000000000
 	github.com/valyala/fasthttp v1.69.0
 )
 

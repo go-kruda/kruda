@@ -25,7 +25,7 @@ type Config struct {
 	ShutdownTimeout time.Duration // default: 10s
 
 	Transport     transport.Transport
-	TransportName string // "fasthttp" (default), "nethttp"
+	TransportName string // "wing" (default on Linux), "fasthttp" (default on macOS), "nethttp" (default on Windows)
 	TLSCertFile   string
 	TLSKeyFile    string
 	HTTP3         bool
@@ -52,12 +52,8 @@ type Config struct {
 	ErrorHandler func(c *Ctx, err *KrudaError)
 	Validator    *Validator
 
-	// Turbo enables SO_REUSEPORT prefork mode (Linux only).
-	// Forks runtime.NumCPU() child processes, each with GOMAXPROCS(1) and its own listener.
-	Turbo bool
-
-	// TurboConfig controls CPU usage in turbo mode.
-	TurboConfig TurboConfig
+	// Views is the template engine for c.Render(). Nil = c.Render() returns error.
+	Views ViewEngine
 
 	openAPIInfo openAPIInfo
 	openAPIPath string
@@ -66,7 +62,7 @@ type Config struct {
 
 // SecurityConfig controls security headers and behavior.
 type SecurityConfig struct {
-	// Security headers (all enabled by default)
+	// Security header values (applied when WithSecureHeaders() or WithSecurity() is used)
 	XSSProtection         string // default: "0" (disabled per modern best practice)
 	ContentTypeNosniff    string // default: "nosniff"
 	XFrameOptions         string // default: "DENY"
@@ -78,17 +74,17 @@ type SecurityConfig struct {
 // defaultConfig returns the default configuration.
 func defaultConfig() Config {
 	return Config{
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     120 * time.Second,
-		BodyLimit:       4 * 1024 * 1024, // 4MB
-		HeaderLimit:     8 * 1024,        // 8KB
-		ShutdownTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		BodyLimit:         4 * 1024 * 1024, // 4MB
+		HeaderLimit:       8 * 1024,        // 8KB
+		ShutdownTimeout:   10 * time.Second,
 		JSONEncoder:       krudajson.Marshal,
 		JSONDecoder:       krudajson.Unmarshal,
 		JSONStreamEncoder: krudajson.MarshalToBuffer,
-		Logger:          slog.Default(),
-		SecurityHeaders: false,
+		Logger:            slog.Default(),
+		SecurityHeaders:   false,
 		Security: SecurityConfig{
 			XSSProtection:      "0",
 			ContentTypeNosniff: "nosniff",
@@ -184,8 +180,8 @@ func WithTransport(t transport.Transport) Option {
 	return func(a *App) { a.config.Transport = t }
 }
 
-// FastHTTP selects the fasthttp transport for maximum performance.
-// This is the default transport — calling FastHTTP() is optional but explicit.
+// FastHTTP selects the fasthttp transport.
+// Use when you need fasthttp's battle-tested HTTP/1.1 handling.
 func FastHTTP() Option {
 	return func(a *App) { a.config.TransportName = "fasthttp" }
 }
@@ -196,47 +192,11 @@ func NetHTTP() Option {
 	return func(a *App) { a.config.TransportName = "nethttp" }
 }
 
-// Wing selects the Wing transport for maximum performance.
-// Wing uses io_uring on Linux and kqueue on macOS for async I/O
-// without goroutine-per-connection overhead — 2x+ faster than fasthttp.
-// On unsupported platforms (Windows), falls back to fasthttp automatically.
+// Wing selects the Wing transport (epoll+eventfd, Linux only).
+// This is the default on Linux — calling Wing() is optional but explicit.
+// On non-Linux platforms, falls back to fasthttp.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
-}
-
-// TurboConfig controls CPU usage for turbo (prefork) mode.
-type TurboConfig struct {
-	// Processes sets the exact number of child processes to fork.
-	// Overrides CPUPercent if set. 0 = auto.
-	Processes int
-
-	// CPUPercent limits CPU usage as a percentage (1–99).
-	// e.g. 50 on an 8-core machine = 4 processes.
-	// Ignored if Processes > 0. 0 = use all available CPUs.
-	CPUPercent float64
-
-	// GoMaxProcs sets GOMAXPROCS per child process.
-	// Default (0) = 1, which is optimal for CPU-bound workloads.
-	// Set to 2 for mixed CPU+DB workloads — allows goroutine scheduling
-	// during I/O wait without the overhead of full GOMAXPROCS=NumCPU.
-	// When using GoMaxProcs > 1, reduce Processes accordingly to keep
-	// total parallelism = Processes × GoMaxProcs ≈ NumCPU.
-	GoMaxProcs int
-}
-
-// WithTurbo enables SO_REUSEPORT prefork mode with optional CPU control.
-// On non-Linux platforms turbo is silently skipped — single-process mode is used instead.
-//
-// Examples:
-//
-//	kruda.WithTurbo(kruda.TurboConfig{})                  // auto: use all CPUs
-//	kruda.WithTurbo(kruda.TurboConfig{CPUPercent: 50})    // use 50% of CPUs
-//	kruda.WithTurbo(kruda.TurboConfig{Processes: 4})      // exactly 4 processes
-func WithTurbo(cfg TurboConfig) Option {
-	return func(a *App) {
-		a.config.Turbo = true
-		a.config.TurboConfig = cfg
-	}
 }
 
 // WithLogger sets a custom logger.
@@ -417,20 +377,24 @@ func WithOpenAPITag(name, description string) Option {
 }
 
 // selectTransport chooses the transport based on config, env, and OS.
-// Priority: explicit WithTransport() > FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default (fasthttp).
-// Default is fasthttp for maximum performance. TLS or Windows auto-falls back to net/http.
-func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
+// Priority: explicit WithTransport() > Wing()/FastHTTP()/NetHTTP() > KRUDA_TRANSPORT env > default.
+// Default is Wing on Linux (epoll+eventfd), fasthttp on macOS, net/http on Windows. Falls back to net/http when TLS is needed.
+func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, string) {
 	// If user provided a concrete Transport instance, use it directly
 	if cfg.Transport != nil {
-		return cfg.Transport
+		return cfg.Transport, cfg.TransportName
 	}
 
 	name := cfg.TransportName
 	if name == "" {
 		if env := os.Getenv("KRUDA_TRANSPORT"); env != "" {
 			name = env
+		} else if runtime.GOOS == "linux" {
+			name = "wing"
+		} else if runtime.GOOS == "windows" {
+			name = "nethttp"
 		} else {
-			name = "fasthttp" // default: fasthttp for maximum performance
+			name = "fasthttp"
 		}
 	}
 
@@ -448,25 +412,22 @@ func selectTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	switch name {
 	case "nethttp":
 		logger.Debug("transport selected", "name", "nethttp")
-		return transport.NewNetHTTP(netHTTPCfg)
-	case "wing":
-		// TLS → force net/http for HTTP/2.
-		if cfg.TLSCertFile != "" {
-			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
-			return transport.NewNetHTTP(netHTTPCfg)
-		}
-		return newWingTransport(cfg, logger)
-	default: // "fasthttp" or any other value
-		// TLS → force net/http for HTTP/2 auto-negotiation.
+		return transport.NewNetHTTP(netHTTPCfg), "nethttp"
+	case "fasthttp":
 		if cfg.TLSCertFile != "" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "tls")
-			return transport.NewNetHTTP(netHTTPCfg)
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
-		// Windows → force net/http (fasthttp has build tag !windows).
 		if runtime.GOOS == "windows" {
 			logger.Debug("transport selected", "name", "nethttp", "reason", "windows")
-			return transport.NewNetHTTP(netHTTPCfg)
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
 		}
-		return newFastHTTPTransport(cfg, logger)
+		return newFastHTTPTransport(cfg, logger), "fasthttp"
+	default: // "wing" or any other value
+		if cfg.TLSCertFile != "" {
+			logger.Warn("Wing transport does not support TLS; falling back to net/http", "reason", "tls_override_wing")
+			return transport.NewNetHTTP(netHTTPCfg), "nethttp"
+		}
+		return newWingTransport(cfg, logger), "wing"
 	}
 }

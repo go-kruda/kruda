@@ -30,22 +30,3 @@ services:
       net.core.netdev_max_backlog: 65535
       net.ipv4.tcp_max_syn_backlog: 65535
       net.ipv4.tcp_fastopen: 3
-
-  kruda-turbo:
-    build:
-      context: .
-      dockerfile: kruda-turbo.dockerfile
-    ports:
-      - "8081:8080"
-    environment:
-      DATABASE_URL: "postgres://benchmarkdbuser:benchmarkdbpass@postgres:5432/hello_world?sslmode=disable"
-    depends_on:
-      - postgres
-    sysctls:
-      net.core.somaxconn: 65535
-      net.ipv4.tcp_tw_reuse: 1
-      net.ipv4.tcp_fin_timeout: 15
-      net.ipv4.ip_local_port_range: "1024 65535"
-      net.core.netdev_max_backlog: 65535
-      net.ipv4.tcp_max_syn_backlog: 65535
-      net.ipv4.tcp_fastopen: 3

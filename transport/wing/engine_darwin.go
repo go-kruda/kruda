@@ -4,22 +4,21 @@ package wing
 
 import (
 	"syscall"
+	"unsafe"
 )
 
-// kqueueEngine implements the engine interface using macOS kqueue.
 type kqueueEngine struct {
 	kqfd    int
-	changes []syscall.Kevent_t // pending kqueue changes
-	kevents []syscall.Kevent_t // reusable kevent result buffer
+	changes []syscall.Kevent_t
+	kevents []syscall.Kevent_t
 
 	recvBufs map[int32]recvInfo
 	sendBufs map[int32][]byte
 
 	listenFd int
-
-	pipeFd  int    // read end of wake pipe
-	pipeW   int    // write end of wake pipe for PostWake
-	pipeBuf []byte
+	pipeR    int
+	pipeW    int
+	pipeBuf  [8]byte
 }
 
 type recvInfo struct {
@@ -31,6 +30,8 @@ func newEngine() engine {
 	return &kqueueEngine{
 		recvBufs: make(map[int32]recvInfo, 1024),
 		sendBufs: make(map[int32][]byte, 1024),
+		pipeR:    -1,
+		pipeW:    -1,
 	}
 }
 
@@ -46,8 +47,23 @@ func (e *kqueueEngine) Init(cfg engineConfig) error {
 		sz = 4096
 	}
 	e.kevents = make([]syscall.Kevent_t, sz)
-	e.changes = make([]syscall.Kevent_t, 0, 64) // pre-allocate
-	e.pipeW = cfg.PipeW
+	e.changes = make([]syscall.Kevent_t, 0, 64)
+
+	// Internal wake pipe — not exposed to transport.
+	r, w, err := createPipe()
+	if err != nil {
+		syscall.Close(kqfd)
+		return err
+	}
+	e.pipeR = r
+	e.pipeW = w
+
+	// Register pipe read end with kqueue.
+	e.changes = append(e.changes, syscall.Kevent_t{
+		Ident:  uint64(r),
+		Filter: syscall.EVFILT_READ,
+		Flags:  syscall.EV_ADD,
+	})
 	return nil
 }
 
@@ -88,15 +104,14 @@ func (e *kqueueEngine) SubmitClose(fd int32) {
 	syscall.Close(int(fd))
 }
 
-func (e *kqueueEngine) SubmitPipeRecv(pipeFd int, buf []byte) {
-	e.pipeFd = pipeFd
-	e.pipeBuf = buf
-	e.changes = append(e.changes, syscall.Kevent_t{
-		Ident:  uint64(pipeFd),
-		Filter: syscall.EVFILT_READ,
-		Flags:  syscall.EV_ADD | syscall.EV_ONESHOT,
-	})
+func (e *kqueueEngine) Detach(fd int32) {
+	delete(e.recvBufs, fd)
+	delete(e.sendBufs, fd)
 }
+
+func (e *kqueueEngine) SubmitPipeRecv(_ int, _ []byte) {}
+
+func (e *kqueueEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
 
 func (e *kqueueEngine) Wait(events []event) (int, error) {
 	var changes []syscall.Kevent_t
@@ -129,7 +144,6 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 			continue
 		}
 
-		// Accept — listen socket readable (EV_CLEAR: stays registered).
 		if int(kev.Ident) == e.listenFd && kev.Filter == syscall.EVFILT_READ {
 			nfd, _, err := syscall.Accept(e.listenFd)
 			if err != nil {
@@ -143,15 +157,17 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 			continue
 		}
 
-		// Pipe wakeup (EV_CLEAR: stays registered).
-		if int(kev.Ident) == e.pipeFd && kev.Filter == syscall.EVFILT_READ {
-			syscall.Read(e.pipeFd, e.pipeBuf)
-			events[count] = event{Op: opWake, Fd: 0, Res: 1}
-			count++
+		// Internal wake pipe — drain and re-arm, emit nothing.
+		if int(kev.Ident) == e.pipeR && kev.Filter == syscall.EVFILT_READ {
+			syscall.Read(e.pipeR, e.pipeBuf[:])
+			e.changes = append(e.changes, syscall.Kevent_t{
+				Ident:  uint64(e.pipeR),
+				Filter: syscall.EVFILT_READ,
+				Flags:  syscall.EV_ADD,
+			})
 			continue
 		}
 
-		// Read event.
 		if kev.Filter == syscall.EVFILT_READ {
 			info, ok := e.recvBufs[fd]
 			if !ok {
@@ -172,7 +188,6 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 			continue
 		}
 
-		// Write event.
 		if kev.Filter == syscall.EVFILT_WRITE {
 			data, ok := e.sendBufs[fd]
 			if !ok {
@@ -186,12 +201,13 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 				events[count] = event{Op: opSend, Fd: fd, Res: int32(nw)}
 			}
 			count++
-			continue
 		}
 	}
 
 	return count, nil
 }
+
+func (e *kqueueEngine) WaitNonBlock(events []event) (int, error) { return e.Wait(events) }
 
 func (e *kqueueEngine) Flush() error {
 	if len(e.changes) > 0 {
@@ -203,6 +219,12 @@ func (e *kqueueEngine) Flush() error {
 }
 
 func (e *kqueueEngine) Close() {
+	if e.pipeR >= 0 {
+		syscall.Close(e.pipeR)
+	}
+	if e.pipeW >= 0 {
+		syscall.Close(e.pipeW)
+	}
 	if e.kqfd > 0 {
 		syscall.Close(e.kqfd)
 	}

@@ -19,6 +19,11 @@ var errPathTraversal = errors.New("kruda: path traversal detected")
 // and rejects any result that still contains "..".
 // This is called before route matching in ServeKruda.
 func cleanPath(raw string) (string, error) {
+	// Strip null bytes — prevents null byte injection attacks
+	if strings.ContainsRune(raw, 0) {
+		raw = strings.ReplaceAll(raw, "\x00", "")
+	}
+
 	// Decode percent-encoded sequences in a loop to prevent double-encode bypass
 	// (e.g. %252e%252e → %2e%2e → ..). Max 3 iterations to bound cost.
 	decoded := raw
@@ -133,15 +138,16 @@ type Router struct {
 // Param nodes have param set (e.g. "id") and path stores the pattern (e.g. ":id").
 // Wildcard nodes have wildcard=true and param stores the capture name.
 type node struct {
-	path     string
-	children []*node
-	indices  string // first byte of each child's path for O(1) lookup
-	handlers []HandlerFunc
-	param    string
-	wildcard bool
-	regex    *regexp.Regexp
-	optional bool
-	hits     uint32 // frequency counter for AOT sort optimization
+	path         string
+	children     []*node
+	indices      string // first byte of each child's path for O(1) lookup
+	handlers     []HandlerFunc
+	param        string
+	wildcard     bool
+	regex        *regexp.Regexp
+	optional     bool
+	hits         uint32 // frequency counter for AOT sort optimization
+	routePattern string // original route pattern (e.g. "/users/:id")
 }
 
 // standardMethods lists the HTTP methods that get pre-initialized trees.
@@ -379,6 +385,7 @@ func (r *Router) addRoute(method, path string, handlers []HandlerFunc) {
 			panic(fmt.Sprintf("kruda: duplicate route %s /", method))
 		}
 		root.handlers = handlers
+		root.routePattern = path
 		return
 	}
 
@@ -434,13 +441,62 @@ func parseOneSegment(s string) segment {
 				panic(fmt.Sprintf("kruda: invalid regex constraint in %s", s))
 			}
 			name = raw[:idx]
-			rx = regexp.MustCompile("^" + raw[idx+1:end] + "$")
+			pattern := raw[idx+1 : end]
+			if err := validateRegexSafety(pattern); err != nil {
+				panic(fmt.Sprintf("kruda: unsafe regex in route %s: %v", s, err))
+			}
+			rx = regexp.MustCompile("^" + pattern + "$")
 		} else {
 			name = raw
 		}
 		return segment{text: s, param: name, regex: rx, optional: optional}
 	}
 	return segment{text: s, static: true}
+}
+
+// validateRegexSafety rejects patterns prone to catastrophic backtracking.
+// Detects quantified groups whose contents also contain quantifiers,
+// e.g. (a+)+, (a*)+, (a+)*, (a{2,})+.
+func validateRegexSafety(pattern string) error {
+	// Track whether each group depth contains a quantifier inside it.
+	type groupInfo struct {
+		hasInnerQuantifier bool
+	}
+	var stack []groupInfo
+
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
+		switch c {
+		case '\\':
+			i++ // skip escaped char
+		case '(':
+			stack = append(stack, groupInfo{})
+		case ')':
+			if len(stack) == 0 {
+				continue
+			}
+			top := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			// Check if the closing paren is followed by a quantifier
+			if i+1 < len(pattern) && isQuantifier(pattern[i+1]) && top.hasInnerQuantifier {
+				return fmt.Errorf("nested quantifier at position %d", i+1)
+			}
+		case '+', '*':
+			// Mark the current group (if any) as containing a quantifier
+			if len(stack) > 0 {
+				stack[len(stack)-1].hasInnerQuantifier = true
+			}
+		case '{':
+			if len(stack) > 0 {
+				stack[len(stack)-1].hasInnerQuantifier = true
+			}
+		}
+	}
+	return nil
+}
+
+func isQuantifier(c byte) bool {
+	return c == '+' || c == '*' || c == '?' || c == '{'
 }
 
 // insertRoute inserts segments into the tree starting at the given node.
@@ -452,6 +508,7 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 			panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 		}
 		n.handlers = handlers
+		n.routePattern = fullPath
 		return
 	}
 
@@ -468,13 +525,15 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 					panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 				}
 				child.handlers = handlers
+				child.routePattern = fullPath
 				return
 			}
 		}
 		child := &node{
-			param:    seg.param,
-			wildcard: true,
-			handlers: handlers,
+			param:        seg.param,
+			wildcard:     true,
+			handlers:     handlers,
+			routePattern: fullPath,
 		}
 		n.children = append(n.children, child)
 		n.indices += "*"
@@ -489,11 +548,13 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 						panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 					}
 					child.handlers = handlers
+					child.routePattern = fullPath
 					// Also set on parent for the "without param" case
 					if n.handlers != nil {
 						panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 					}
 					n.handlers = handlers
+					n.routePattern = fullPath
 					return
 				}
 				insertRoute(child, segments, idx+1, handlers, method, fullPath)
@@ -510,10 +571,12 @@ func insertRoute(n *node, segments []segment, idx int, handlers []HandlerFunc, m
 
 		if seg.optional && idx == len(segments)-1 {
 			child.handlers = handlers
+			child.routePattern = fullPath
 			if n.handlers != nil {
 				panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 			}
 			n.handlers = handlers
+			n.routePattern = fullPath
 			return
 		}
 
@@ -572,14 +635,16 @@ func splitAndInsert(n *node, str string, segments []segment, segIdx int, handler
 	// Split node if needed
 	if i < len(n.path) {
 		child := &node{
-			path:     n.path[i:],
-			children: n.children,
-			indices:  n.indices,
-			handlers: n.handlers,
+			path:         n.path[i:],
+			children:     n.children,
+			indices:      n.indices,
+			handlers:     n.handlers,
+			routePattern: n.routePattern,
 		}
 		n.children = []*node{child}
 		n.indices = string(child.path[0])
 		n.handlers = nil
+		n.routePattern = ""
 		n.path = n.path[:i]
 	}
 
@@ -598,7 +663,7 @@ func splitAndInsert(n *node, str string, segments []segment, segIdx int, handler
 		}
 
 		if isLast {
-			newChild := &node{path: remaining, handlers: handlers}
+			newChild := &node{path: remaining, handlers: handlers, routePattern: fullPath}
 			n.children = append(n.children, newChild)
 			n.indices += string(remaining[0])
 		} else {
@@ -615,6 +680,7 @@ func splitAndInsert(n *node, str string, segments []segment, segIdx int, handler
 				panic(fmt.Sprintf("kruda: duplicate route %s %s", method, fullPath))
 			}
 			n.handlers = handlers
+			n.routePattern = fullPath
 		} else {
 			insertRoute(n, segments, segIdx+1, handlers, method, fullPath)
 		}
@@ -668,6 +734,7 @@ func (r *Router) find(method, path string, params *routeParams) []HandlerFunc {
 			if trackHits {
 				atomic.AddUint32(&root.hits, 1)
 			}
+			params.pattern = root.routePattern
 			return root.handlers
 		}
 		for _, child := range root.children {
@@ -676,6 +743,7 @@ func (r *Router) find(method, path string, params *routeParams) []HandlerFunc {
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
+				params.pattern = child.routePattern
 				return child.handlers
 			}
 		}
@@ -700,6 +768,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 							if trackHits {
 								atomic.AddUint32(&child.hits, 1)
 							}
+							params.pattern = child.routePattern
 							return child.handlers
 						}
 						for _, gc := range child.children {
@@ -708,6 +777,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 								if trackHits {
 									atomic.AddUint32(&gc.hits, 1)
 								}
+								params.pattern = gc.routePattern
 								return gc.handlers
 							}
 						}
@@ -723,6 +793,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 						if trackHits {
 							atomic.AddUint32(&child.hits, 1)
 						}
+						params.pattern = child.routePattern
 						return child.handlers
 					}
 					for _, gc := range child.children {
@@ -731,6 +802,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 							if trackHits {
 								atomic.AddUint32(&gc.hits, 1)
 							}
+							params.pattern = gc.routePattern
 							return gc.handlers
 						}
 					}
@@ -756,6 +828,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
+				params.pattern = child.routePattern
 				return child.handlers
 			}
 			continue
@@ -772,6 +845,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 				if trackHits {
 					atomic.AddUint32(&child.hits, 1)
 				}
+				params.pattern = child.routePattern
 				return child.handlers
 			}
 			for _, gc := range child.children {
@@ -780,6 +854,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 					if trackHits {
 						atomic.AddUint32(&gc.hits, 1)
 					}
+					params.pattern = gc.routePattern
 					return gc.handlers
 				}
 			}
@@ -802,6 +877,7 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 		if trackHits {
 			atomic.AddUint32(&child.hits, 1)
 		}
+		params.pattern = child.routePattern
 		return child.handlers
 	}
 

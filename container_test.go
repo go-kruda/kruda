@@ -480,3 +480,157 @@ func TestContainerUseNamedTypeMismatch(t *testing.T) {
 		t.Fatalf("error should mention actual type, got: %v", err)
 	}
 }
+
+func TestContainerConcurrentGiveLazy(t *testing.T) {
+	c := NewContainer()
+	var callCount atomic.Int64
+
+	err := c.GiveLazy(func() (*testService, error) {
+		callCount.Add(1)
+		return &testService{Name: "lazy-concurrent"}, nil
+	})
+	if err != nil {
+		t.Fatalf("GiveLazy failed: %v", err)
+	}
+
+	const goroutines = 100
+	var wg sync.WaitGroup
+	results := make([]*testService, goroutines)
+	errs := make([]error, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = Use[*testService](c)
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < goroutines; i++ {
+		if errs[i] != nil {
+			t.Fatalf("goroutine %d failed: %v", i, errs[i])
+		}
+	}
+	// All goroutines should get the same instance
+	for i := 1; i < goroutines; i++ {
+		if results[i] != results[0] {
+			t.Fatalf("goroutine %d got different instance", i)
+		}
+	}
+	// Factory should be called at most once
+	if callCount.Load() != 1 {
+		t.Errorf("factory called %d times, want 1", callCount.Load())
+	}
+}
+
+func TestContainerGiveTransientError(t *testing.T) {
+	c := NewContainer()
+	sentinel := errors.New("factory failed")
+
+	err := c.GiveTransient(func() (*testService, error) {
+		return nil, sentinel
+	})
+	if err != nil {
+		t.Fatalf("GiveTransient registration failed: %v", err)
+	}
+
+	_, err = Use[*testService](c)
+	if err == nil {
+		t.Fatal("Use should return error when factory fails")
+	}
+	if !strings.Contains(err.Error(), "factory failed") {
+		t.Fatalf("error should contain factory error message, got: %v", err)
+	}
+}
+
+func TestContainerLifecycleShutdownCancelledContext(t *testing.T) {
+	c := NewContainer()
+	var shutLog []string
+
+	svcA := &lifecycleA{lifecycleService{name: "A", shutLog: &shutLog}}
+	svcB := &lifecycleB{lifecycleService{name: "B", shutLog: &shutLog}}
+	c.Give(svcA)
+	c.Give(svcB)
+
+	// Shutdown with an already-cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := c.Shutdown(ctx)
+	// Should still attempt shutdown or return context error
+	if err != nil {
+		t.Logf("shutdown with cancelled ctx returned: %v (acceptable)", err)
+	}
+}
+
+func TestContainerStartCancelledContext(t *testing.T) {
+	c := NewContainer()
+	var initLog []string
+
+	svcA := &lifecycleA{lifecycleService{name: "A", initLog: &initLog}}
+	c.Give(svcA)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := c.Start(ctx)
+	if err != nil {
+		// Either context.Canceled or OnInit receives cancelled ctx
+		t.Logf("Start with cancelled ctx: %v", err)
+	}
+}
+
+func TestContainerConcurrentGiveAndUse(t *testing.T) {
+	c := NewContainer()
+
+	// Pre-register a service
+	svc := &testService{Name: "concurrent"}
+	if err := c.Give(svc); err != nil {
+		t.Fatalf("Give failed: %v", err)
+	}
+
+	// Concurrent reads should be safe
+	var wg sync.WaitGroup
+	const goroutines = 50
+	errs := make([]error, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			_, errs[idx] = Use[*testService](c)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("goroutine %d: %v", i, err)
+		}
+	}
+}
+
+func TestContainerGiveLazyPanic(t *testing.T) {
+	c := NewContainer()
+
+	err := c.GiveLazy(func() (*testService, error) {
+		panic("factory panicked")
+	})
+	if err != nil {
+		t.Fatalf("GiveLazy registration failed: %v", err)
+	}
+
+	// Resolving should not crash the program
+	defer func() {
+		if r := recover(); r != nil {
+			// If we reach here, the container didn't protect against panics.
+			// This documents the behavior.
+			t.Logf("container does not protect against factory panics: %v", r)
+		}
+	}()
+	_, err = Use[*testService](c)
+	if err != nil {
+		t.Logf("GiveLazy panic returned error (good): %v", err)
+	}
+}

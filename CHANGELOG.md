@@ -3,43 +3,63 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — TechEmpower Domination
+## [1.0.0] - 2026-03-07
 
 ### Added
+- Wing transport — custom epoll+eventfd engine (default on Linux)
+- eventfd wake mechanism replacing pipe on Linux (lower syscall overhead)
+- Feather dispatch system — per-route I/O strategy hints (`WingPlaintext`, `WingJSON`, `WingQuery`, `WingRender`)
 - `Ctx.SetBody([]byte) *Ctx` — lazy-send response body (zero-copy, chainable)
 - `Ctx.SendBytes([]byte) error` — eager-send response body (immediate flush, terminal)
+- `Ctx.SendBytesWithTypeBytes([]byte, []byte) error` — zero-alloc typed response
+- `Ctx.SendStaticWithTypeBytes([]byte, []byte) error` — zero-copy for immutable data
 - `Ctx.SetContentType(string) *Ctx` — set Content-Type header (chainable)
-- Turbo Mode (`WithTurbo`) — SO_REUSEPORT prefork with per-core child processes (Linux only)
+- sendfile(2) zero-copy support for Wing static file serving
+- Wing RawRequest interface with Fd, RawHeader, RawBody, KeepAlive
+- Wing MultipartForm support
+- Wing read/write/idle timeouts + request Context cancellation
 - TechEmpower Framework Benchmarks submission (`frameworks/Go/kruda/`)
+- HTTP parser fuzz testing with seed corpus
+- contrib/jwt — JWT authentication (HS256/384/512, RS256)
+- contrib/ws — WebSocket with RFC 6455 compliance, ping rate limiting
+- contrib/ratelimit — token bucket + sliding window rate limiting
+- Security hardening: path traversal (3-layer), header injection, ReDoS prevention, SSE injection
+- `SECURITY.md` with responsible disclosure policy (48h ack, 7d assessment, 90d disclosure)
+- Consolidated security guide at `docs/guide/security.md`
+- GC tuning documentation with GOGC/GOMEMLIMIT presets
+
+### Changed
+- Default transport: Wing on Linux, fasthttp on macOS, net/http on Windows (auto-fallback)
+- TLS auto-fallback: Wing/fasthttp → net/http when TLS is configured
+- Security headers defaults: X-Frame-Options DENY, X-XSS-Protection 0, Referrer-Policy strict-origin
+- HTML escape in fortunes uses `&#34;` for quotes (TFB spec compliance)
 
 ### Removed
-- Legacy TFB code (`cmd/techempower/`, `techempower/`, root `Dockerfile.techempower`, root `benchmark_config.json`)
+- Turbo/prefork mode (replaced by Wing transport)
+- Legacy TFB code (`cmd/techempower/`, `techempower/`, root `Dockerfile.techempower`)
+- Bone configuration axis (simplified to Feather presets)
 
-## [Unreleased] — Phase 5: Production Ready
+### Performance
+- Plaintext: 846K req/s (vs Fiber 670K, +26%; vs Actix 814K, +4%)
+- JSON: 805K req/s (vs Fiber 625K, +29%; vs Actix 790K, +2%)
+- DB: 108K req/s (vs Fiber 107K, +1%; vs Actix 37K, +190%)
+- Fortunes: 104K req/s (vs Actix 45K, +131%)
+- eventfd wake: +18% plaintext throughput vs pipe
+
+## [0.5.0] — Phase 5: Production Ready
 
 ### Added
-- Dev mode error page with source code context, stack trace, request details (`devmode.go`)
-- Security hardening: path traversal prevention, header injection prevention, DoS defaults
-- `docs/SECURITY.md` with threat model and mitigations
+- Dev mode error page with source code context, stack trace, request details
 - CLI tool `cmd/kruda/` with `new`, `dev`, `generate`, `validate` commands
 - Hot reload dev server with 100ms file polling
-- 12 runnable example applications
+- 21 runnable example applications
 - GitHub Actions CI/CD: test matrix, benchmark regression, docs deployment
 - VitePress documentation site in `docs/`
 - Benchmark baseline (`bench/baseline.txt`)
-- Cross-runtime benchmark suite (Kruda vs Elysia/Bun)
+- Cross-runtime benchmark suite (Go frameworks comparison)
 - fasthttp transport for maximum throughput
-- AI-friendly DX: `llms.txt`, `.cursor/rules`, `copilot-instructions.md`
 - Integration tests (`integration_test.go`)
 - Coverage gap tests reaching 92%+ on core package
-
-### Changed
-- Security headers defaults: X-Frame-Options DENY, X-XSS-Protection 0, Referrer-Policy strict-origin
-- Default transport: fasthttp (Linux/macOS), net/http (Windows)
-
-### Performance
-- Kruda beats Elysia (Bun) by 38% on GET routes with fasthttp transport
-- 3x faster than Echo/Gin, 5x faster than Fiber on Go benchmarks
 
 ### Security
 - Default security headers: X-Content-Type-Options, X-Frame-Options, Referrer-Policy
@@ -64,7 +84,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.0] — Phase 3: Performance
 
 ### Added
-- fasthttp transport for maximum throughput (now the default)
+- fasthttp transport for maximum throughput (default on macOS; Wing is default on Linux)
 - `FastHTTP()` and `NetHTTP()` transport options
 - Transport auto-fallback: TLS or Windows → net/http
 - `WithTransport(transport.Transport)` for custom transport implementations
@@ -83,7 +103,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Custom validator registration via `app.Validator().Register()`
 - JSON engine abstraction with Sonic + stdlib fallback (`json/`)
 - `WithJSONEncoder`, `WithJSONDecoder` config options
-- File upload support with `c.FormFile()`
+- File upload support with `*FileUpload` struct binding
 - SSE helper `c.SSE(callback)` with auto headers
 - Route options `WithDescription`, `WithTags` for OpenAPI metadata
 

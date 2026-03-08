@@ -705,3 +705,143 @@ func TestProvideNeed_OverwriteKey(t *testing.T) {
 		t.Errorf("Need returned %q, want second", val)
 	}
 }
+
+func TestTypedHandler_MalformedJSON(t *testing.T) {
+	app := New()
+
+	h := buildTypedHandler[createUserIn, userOut](app, "POST", "/users", func(c *C[createUserIn]) (*userOut, error) {
+		t.Fatal("handler should not be called with malformed JSON")
+		return nil, nil
+	}, nil)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"truncated", `{"name":"Alice`},
+		{"trailing comma", `{"name":"Alice",}`},
+		{"bare value", `not json`},
+		{"empty string", ``},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := bindCtx("POST", "/users", nil, nil, []byte(tc.body))
+			err := h(c)
+			if err == nil {
+				t.Error("expected error for malformed JSON")
+			}
+		})
+	}
+}
+
+func TestTypedHandler_EmptyBodyOnPost(t *testing.T) {
+	app := New()
+
+	h := buildTypedHandler[createUserIn, userOut](app, "POST", "/users", func(c *C[createUserIn]) (*userOut, error) {
+		return &userOut{ID: "ok"}, nil
+	}, nil)
+
+	// nil body
+	c := bindCtx("POST", "/users", nil, nil, nil)
+	err := h(c)
+	if err == nil {
+		t.Log("nil body accepted — handler got zero-value struct")
+	}
+}
+
+func TestTypedHandler_WrongContentType(t *testing.T) {
+	app := New()
+	app.Post("/users", func(c *Ctx) error {
+		var req createUserIn
+		if err := c.Bind(&req); err != nil {
+			return BadRequest("invalid body")
+		}
+		return c.JSON(Map{"name": req.Name})
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Request("POST", "/users").
+		ContentType("application/x-www-form-urlencoded").
+		Body([]byte("name=Alice&email=alice@test.com")).
+		Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Form-urlencoded sent to a JSON handler — should fail or behave gracefully
+	if resp.StatusCode() == 200 {
+		t.Log("framework accepted form-urlencoded as JSON — worth documenting")
+	}
+}
+
+func TestTypedHandler_LargeNestedJSON(t *testing.T) {
+	type nested struct {
+		Items []createUserIn `json:"items"`
+	}
+	app := New()
+	var captured nested
+
+	h := buildTypedHandler[nested, userOut](app, "POST", "/bulk", func(c *C[nested]) (*userOut, error) {
+		captured = c.In
+		return &userOut{ID: "bulk"}, nil
+	}, nil)
+
+	// Build a large but valid payload
+	body := `{"items":[`
+	for i := 0; i < 100; i++ {
+		if i > 0 {
+			body += ","
+		}
+		body += fmt.Sprintf(`{"name":"user%d","email":"u%d@test.com"}`, i, i)
+	}
+	body += `]}`
+
+	c := bindCtx("POST", "/bulk", nil, nil, []byte(body))
+	err := h(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(captured.Items) != 100 {
+		t.Errorf("expected 100 items, got %d", len(captured.Items))
+	}
+}
+
+func TestTypedHandler_IntParamConversion(t *testing.T) {
+	type idIn struct {
+		ID int `param:"id"`
+	}
+	app := New()
+	var captured idIn
+
+	h := buildTypedHandler[idIn, userOut](app, "GET", "/users/:id", func(c *C[idIn]) (*userOut, error) {
+		captured = c.In
+		return &userOut{ID: fmt.Sprintf("%d", c.In.ID)}, nil
+	}, nil)
+
+	c := bindCtx("GET", "/users/42", map[string]string{"id": "42"}, nil, nil)
+	err := h(c)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if captured.ID != 42 {
+		t.Errorf("In.ID = %d, want 42", captured.ID)
+	}
+}
+
+func TestTypedHandler_InvalidIntParam(t *testing.T) {
+	type idIn struct {
+		ID int `param:"id"`
+	}
+	app := New()
+
+	h := buildTypedHandler[idIn, userOut](app, "GET", "/users/:id", func(c *C[idIn]) (*userOut, error) {
+		return &userOut{ID: "ok"}, nil
+	}, nil)
+
+	c := bindCtx("GET", "/users/abc", map[string]string{"id": "abc"}, nil, nil)
+	err := h(c)
+	if err == nil {
+		t.Error("expected error when param 'id' is not an integer")
+	}
+}

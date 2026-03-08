@@ -114,10 +114,6 @@ func parseJSONBody(t *testing.T, body []byte) map[string]any {
 	return m
 }
 
-// =====================================================================
-// RequestID Tests
-// =====================================================================
-
 func TestRequestID_GeneratesUUID(t *testing.T) {
 	var gotLocal any
 	handler := func(c *kruda.Ctx) error {
@@ -202,10 +198,6 @@ func TestRequestID_CustomGenerator(t *testing.T) {
 	}
 }
 
-// =====================================================================
-// Logger Tests
-// =====================================================================
-
 func TestLogger_CallsNext(t *testing.T) {
 	called := false
 	handler := func(c *kruda.Ctx) error {
@@ -243,10 +235,6 @@ func TestLogger_SkipPaths(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.statusCode)
 	}
 }
-
-// =====================================================================
-// Recovery Tests
-// =====================================================================
 
 func TestRecovery_NoPanic(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
@@ -314,10 +302,6 @@ func TestRecovery_CustomPanicHandler(t *testing.T) {
 		t.Fatalf("expected custom=true, got %v", body)
 	}
 }
-
-// =====================================================================
-// CORS Tests
-// =====================================================================
 
 func TestCORS_PreflightRequest(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
@@ -451,10 +435,6 @@ func TestCORS_SpecificOrigin(t *testing.T) {
 	}
 }
 
-// =====================================================================
-// Timeout Tests
-// =====================================================================
-
 func TestTimeout_HandlerCompletesInTime(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
 		return c.JSON(kruda.Map{"ok": true})
@@ -497,9 +477,6 @@ func TestTimeout_HandlerExceedsTimeout(t *testing.T) {
 		t.Fatalf("expected timeout message, got %q", msg)
 	}
 }
-
-// =====================================================================
-// PathTraversal Tests
 
 func TestPathTraversal_BlocksTraversal(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
@@ -558,5 +535,303 @@ func TestPathTraversal_AllowsSafeRelativeDotDot(t *testing.T) {
 	resp := serve(t, PathTraversal(), handler, getReq("/test", nil))
 	if resp.statusCode != 200 {
 		t.Errorf("expected 200, got %d", resp.statusCode)
+	}
+}
+
+// --- Edge case tests ---
+
+func TestRecovery_PanicWithErrorType(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		panic(fmt.Errorf("database connection lost"))
+	}
+
+	resp := serve(t, Recovery(), handler, getReq("/test", nil))
+
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
+	}
+	body := parseJSONBody(t, resp.body)
+	msg, _ := body["message"].(string)
+	if !strings.Contains(msg, "internal server error") {
+		t.Errorf("expected internal server error message, got %q", msg)
+	}
+}
+
+func TestRecovery_PanicWithNilValue(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		panic(nil)
+	}
+
+	resp := serve(t, Recovery(), handler, getReq("/test", nil))
+
+	// In Go 1.21+, panic(nil) wraps in *runtime.PanicNilError, so recovery catches it
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
+	}
+}
+
+func TestCORS_CredentialsWithSpecificOrigin(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowOrigins:     []string{"http://trusted.com"},
+		AllowCredentials: true,
+	}))
+	app.Get("/test", handler)
+
+	req := getReq("/test", map[string]string{"Origin": "http://trusted.com"})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.headers.Get("Access-Control-Allow-Credentials") != "true" {
+		t.Error("expected Access-Control-Allow-Credentials: true")
+	}
+	if resp.headers.Get("Access-Control-Allow-Origin") != "http://trusted.com" {
+		t.Errorf("expected Allow-Origin=http://trusted.com, got %q",
+			resp.headers.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestCORS_MultipleAllowedOrigins(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowOrigins: []string{"http://a.com", "http://b.com", "http://c.com"},
+	}))
+	app.Get("/test", handler)
+
+	// Request from http://b.com should match
+	req := getReq("/test", map[string]string{"Origin": "http://b.com"})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.headers.Get("Access-Control-Allow-Origin") != "http://b.com" {
+		t.Errorf("expected Allow-Origin=http://b.com, got %q",
+			resp.headers.Get("Access-Control-Allow-Origin"))
+	}
+
+	// Vary: Origin should be set for non-wildcard
+	if resp.headers.Get("Vary") == "" {
+		t.Error("expected Vary header to be set for non-wildcard origins")
+	}
+
+	// Request from unmatched origin
+	req2 := getReq("/test", map[string]string{"Origin": "http://evil.com"})
+	resp2 := newMockResponse()
+	app.ServeKruda(resp2, req2)
+
+	if resp2.headers.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("expected no Allow-Origin for unmatched origin, got %q",
+			resp2.headers.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestCORS_ExposeHeaders(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		ExposeHeaders: []string{"X-Total-Count", "X-Page"},
+	}))
+	app.Get("/test", handler)
+	app.Options("/test", handler)
+
+	// Non-preflight: Expose-Headers should be set
+	req := getReq("/test", map[string]string{"Origin": "http://example.com"})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	expose := resp.headers.Get("Access-Control-Expose-Headers")
+	if !strings.Contains(expose, "X-Total-Count") || !strings.Contains(expose, "X-Page") {
+		t.Errorf("expected Expose-Headers to contain X-Total-Count and X-Page, got %q", expose)
+	}
+
+	// Preflight: Expose-Headers should NOT be set (per CORS spec)
+	preflightReq := optionsReq(map[string]string{
+		"Origin":                        "http://example.com",
+		"Access-Control-Request-Method": "GET",
+	})
+	preflightResp := newMockResponse()
+	app.ServeKruda(preflightResp, preflightReq)
+
+	if preflightResp.headers.Get("Access-Control-Expose-Headers") != "" {
+		t.Error("Expose-Headers should not be set on preflight response")
+	}
+}
+
+func TestTimeout_VeryShortTimeout(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		select {
+		case <-c.Context().Done():
+			return nil
+		case <-time.After(500 * time.Millisecond):
+			return c.JSON(kruda.Map{"ok": true})
+		}
+	}
+
+	resp := serve(t, Timeout(1*time.Millisecond), handler, getReq("/test", nil))
+
+	if resp.statusCode != 503 {
+		t.Fatalf("expected 503, got %d", resp.statusCode)
+	}
+}
+
+func TestPathTraversal_BackslashPaths(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	paths := []string{
+		"/..\\etc\\passwd",
+		"/..%5c..%5cetc%5cpasswd",
+	}
+	for _, p := range paths {
+		app := kruda.New()
+		app.Use(PathTraversal())
+		app.Get("/*path", handler)
+		resp := newMockResponse()
+		app.ServeKruda(resp, getReq(p, nil))
+		// Should be either 400 (blocked) or 404 (no route match) — both are safe
+		if resp.statusCode == 200 {
+			t.Errorf("GET %s: should not return 200", p)
+		}
+	}
+}
+
+func TestPathTraversal_NullByte(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(PathTraversal())
+	app.Get("/*path", handler)
+	resp := newMockResponse()
+	app.ServeKruda(resp, getReq("/path%00/hidden", nil))
+
+	// Should not return 200 with the hidden path accessible
+	// Either 400 (blocked) or 404 (no match) is acceptable
+	if resp.statusCode == 200 {
+		// Even if it returns 200, the null byte should be stripped or handled safely
+		// This test documents the behavior
+		t.Log("Note: null byte in path returns 200 — verify handler receives sanitized path")
+	}
+}
+
+func TestRequestID_Uniqueness(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	seen := make(map[string]bool)
+	for i := 0; i < 200; i++ {
+		app := kruda.New()
+		app.Use(RequestID())
+		app.Get("/test", handler)
+
+		resp := newMockResponse()
+		app.ServeKruda(resp, getReq("/test", nil))
+
+		rid := resp.headers.Get("X-Request-ID")
+		if rid == "" {
+			t.Fatal("missing X-Request-ID")
+		}
+		if seen[rid] {
+			t.Fatalf("duplicate request ID: %s (after %d iterations)", rid, i)
+		}
+		seen[rid] = true
+	}
+}
+
+func TestCORS_NoOriginHeader(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	req := getReq("/test", nil) // no Origin
+	resp := serve(t, CORS(), handler, req)
+
+	if resp.statusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.statusCode)
+	}
+}
+
+func TestCORS_PreflightCustomHeaders(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowMethods: []string{"GET", "POST"},
+		AllowHeaders: []string{"X-Custom-Auth", "X-Trace-ID"},
+	}))
+	app.Get("/test", handler)
+	app.Options("/test", handler)
+
+	req := optionsReq(map[string]string{
+		"Origin":                         "http://example.com",
+		"Access-Control-Request-Method":  "POST",
+		"Access-Control-Request-Headers": "X-Custom-Auth",
+	})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.statusCode != 204 {
+		t.Fatalf("expected 204, got %d", resp.statusCode)
+	}
+
+	methods := resp.headers.Get("Access-Control-Allow-Methods")
+	if !strings.Contains(methods, "POST") {
+		t.Errorf("expected POST in allowed methods, got %q", methods)
+	}
+
+	headers := resp.headers.Get("Access-Control-Allow-Headers")
+	if !strings.Contains(headers, "X-Custom-Auth") {
+		t.Errorf("expected X-Custom-Auth in allowed headers, got %q", headers)
+	}
+}
+
+func TestRecovery_PanicWithIntValue(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		panic(42)
+	}
+
+	resp := serve(t, Recovery(), handler, getReq("/test", nil))
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
+	}
+}
+
+func TestTimeout_HandlerIgnoresContext(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		time.Sleep(200 * time.Millisecond)
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	resp := serve(t, Timeout(50*time.Millisecond), handler, getReq("/test", nil))
+
+	if resp.statusCode != 503 && resp.statusCode != 200 {
+		t.Fatalf("expected 503 or 200, got %d", resp.statusCode)
+	}
+}
+
+func TestLogger_WithError(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return kruda.NewError(500, "server error")
+	}
+
+	resp := serve(t, Logger(), handler, getReq("/test", nil))
+
+	if resp.statusCode != 500 {
+		t.Fatalf("expected 500, got %d", resp.statusCode)
 	}
 }

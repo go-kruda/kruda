@@ -6,11 +6,9 @@ import (
 	"testing/quick"
 )
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 18: TestClient Request Round-Trip
+// Property: TestClient Request Round-Trip
 // For random ASCII header values and body, the handler receives the correct
 // method, path, header value, and body content.
-// ---------------------------------------------------------------------------
 
 func TestPropertyTestClientRequestRoundTrip(t *testing.T) {
 	f := func(headerVal string) bool {
@@ -75,11 +73,9 @@ func TestPropertyTestClientRequestRoundTrip(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 19: TestClient Query Delivery
+// Property: TestClient Query Delivery
 // For random alphanumeric query key-value pairs, c.Query(key) returns the
 // correct value.
-// ---------------------------------------------------------------------------
 
 func TestPropertyTestClientQueryDelivery(t *testing.T) {
 	f := func(key, value string) bool {
@@ -114,11 +110,9 @@ func TestPropertyTestClientQueryDelivery(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 20: TestClient Raw Body Passthrough
+// Property: TestClient Raw Body Passthrough
 // For random byte slices, the handler receives the exact bytes without
 // JSON marshaling.
-// ---------------------------------------------------------------------------
 
 func TestPropertyTestClientRawBodyPassthrough(t *testing.T) {
 	f := func(data []byte) bool {

@@ -2,38 +2,42 @@
 
 ## Common Build Errors
 
-### `go: requires go >= 1.24`
+### `go: requires go >= 1.25`
 
-Kruda requires Go 1.24+ for generic type aliases. Upgrade your Go installation:
+Kruda requires Go 1.25+ for generic type aliases. Upgrade your Go installation:
 
 ```bash
-go install golang.org/dl/go1.24.0@latest
-go1.24.0 download
+go install golang.org/dl/go1.25.0@latest
+go1.25.0 download
 ```
 
 Or download from [go.dev/dl](https://go.dev/dl/).
 
 ### `cannot use generic type C without instantiation`
 
-You're using `C[T]` without specifying the type parameter. Make sure your typed handler specifies the request struct:
+You're using `C[T]` without specifying the type parameter. Make sure your typed handler specifies both input and output types:
 
 ```go
-// Wrong
-app.Post("/users", kruda.TypedHandler(handler))
+// Wrong — missing type parameters
+app.Post("/users", handler)
 
-// Correct
-app.Post("/users", kruda.TypedHandler[CreateUserInput](handler))
+// Correct — use the generic Post function
+kruda.Post[CreateUserInput, User](app, "/users", handler)
 ```
 
 ### `undefined: kruda.Give` or `undefined: kruda.Use`
 
-Ensure you're importing the correct package and using Go 1.24+:
+The DI API uses `Container` methods. Ensure you're using the correct API:
 
 ```go
 import "github.com/go-kruda/kruda"
 
-kruda.Give(app, factory)
-svc := kruda.Use[*MyService](c)
+// Register a dependency
+container := kruda.NewContainer()
+container.Give(&MyService{})
+
+// Resolve in a handler (c is *kruda.Ctx)
+svc := kruda.MustResolve[*MyService](c)
 ```
 
 ## Transport Selection Issues

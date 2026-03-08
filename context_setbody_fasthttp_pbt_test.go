@@ -10,13 +10,10 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// Feature: techempower-domination
-// Property 12b: SetBody via ServeFastHTTP Path
+// Property: SetBody via ServeFastHTTP Path
 //
 // For any byte slice, SetBody(data) via ServeFastHTTP writes exact bytes to
 // fasthttp response body without nil writer panic (c.writer is nil in fasthttp path).
-//
-// **Validates: Requirements 18.2, 13.4**
 
 func TestPropertySetBodyViaServeFastHTTP(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 200}

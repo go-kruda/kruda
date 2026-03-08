@@ -1,11 +1,9 @@
 package kruda
 
-// Validates: Requirements 1.2, 1.3, 1.8
-//
-// Property 1: For any registered static route, find(method, path) always
+// Property: For any registered static route, find(method, path) always
 // returns the registered handler chain, and find returns nil for unregistered paths.
 //
-// Property 2: For any registered param route `/x/:name`, find returns handler
+// For any registered param route `/x/:name`, find returns handler
 // and params.get("name") equals the path segment.
 
 import (
@@ -118,11 +116,9 @@ func TestRouterParamFindProperty(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Task 3.5: PBT — AOT optimization preserves route matching correctness
-// Property: For any set of registered routes, Compile() (optimize + flatten)
+// Property: AOT optimization preserves route matching correctness.
+// For any set of registered routes, Compile() (optimize + flatten)
 // does not change which routes match or what params are extracted.
-// ---------------------------------------------------------------------------
 
 // TestPropertyAOTOptimizationPreservesRouteMatching generates random route sets,
 // verifies matching before Compile, then verifies identical matching after Compile.
@@ -327,10 +323,4 @@ func indexByte(s string, b byte) int {
 	return -1
 }
 
-func copyMap(m map[string]string) map[string]string {
-	cp := make(map[string]string, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return cp
-}
+

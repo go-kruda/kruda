@@ -8,14 +8,16 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/go-kruda/kruda/transport"
 )
 
 // TestClient provides a fluent API for testing Kruda applications
-// without starting a real HTTP server.
+// without starting a real HTTP server. It is safe for concurrent use.
 type TestClient struct {
 	app     *App
+	mu      sync.Mutex
 	headers map[string]string
 	cookies map[string]string
 }
@@ -31,13 +33,17 @@ func NewTestClient(app *App) *TestClient {
 
 // WithHeader sets a default header for all requests from this client.
 func (tc *TestClient) WithHeader(key, value string) *TestClient {
+	tc.mu.Lock()
 	tc.headers[key] = value
+	tc.mu.Unlock()
 	return tc
 }
 
 // WithCookie sets a default cookie for all requests from this client.
 func (tc *TestClient) WithCookie(name, value string) *TestClient {
+	tc.mu.Lock()
 	tc.cookies[name] = value
+	tc.mu.Unlock()
 	return tc
 }
 
@@ -177,15 +183,29 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		return nil, fmt.Errorf("kruda: test client: failed to create request: %w", err)
 	}
 
-	// Client-level headers first, request-level overrides
+	// Snapshot and reset client-level headers/cookies under lock
+	tr.client.mu.Lock()
+	clientHeaders := make(map[string]string, len(tr.client.headers))
 	for k, v := range tr.client.headers {
+		clientHeaders[k] = v
+	}
+	clientCookies := make(map[string]string, len(tr.client.cookies))
+	for k, v := range tr.client.cookies {
+		clientCookies[k] = v
+	}
+	tr.client.headers = make(map[string]string)
+	tr.client.cookies = make(map[string]string)
+	tr.client.mu.Unlock()
+
+	// Client-level headers first, request-level overrides
+	for k, v := range clientHeaders {
 		req.Header.Set(k, v)
 	}
 	for k, v := range tr.headers {
 		req.Header.Set(k, v)
 	}
 
-	for name, value := range tr.client.cookies {
+	for name, value := range clientCookies {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}
 	for name, value := range tr.cookies {
@@ -201,9 +221,6 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 		transport.NewNetHTTPResponseWriter(w),
 		transport.NewNetHTTPRequestWithLimit(req, tr.client.app.config.BodyLimit),
 	)
-
-	tr.client.headers = make(map[string]string)
-	tr.client.cookies = make(map[string]string)
 
 	return &TestResponse{recorder: w}, nil
 }

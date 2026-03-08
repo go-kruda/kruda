@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # TFB Local Benchmark: Kruda vs Fiber (SEQUENTIAL, dual-mode)
-# Runs both single-process and multi-process (Turbo/Prefork) modes.
+# Runs single-process mode.
 # Bash 3.2 compatible (no associative arrays).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -167,8 +167,8 @@ run_mode() {
     local t="$THREADS" c="$CONNS"
 
     if [ "$mode" = "multi" ]; then
-        mode_label="Multi-Process (Turbo/Prefork)"
-        kruda_env="KRUDA_TURBO=1"
+        mode_label="Multi-Process (Prefork)"
+        kruda_env=""
         fiber_env="FIBER_PREFORK=1"
         t="$MULTI_THREADS"; c="$MULTI_CONNS"
     else
@@ -190,9 +190,9 @@ run_mode() {
     echo -e "${BOLD}========== KRUDA ($mode_label) ==========${NC}"
     log "Starting Kruda on :$PORT..."
     if [ "$mode" = "multi" ]; then
-        GOGC=${GOGC:-400} KRUDA_TURBO=1 KRUDA_TURBO_GOMAXPROCS=${KRUDA_TURBO_GOMAXPROCS:-2} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
     else
-        GOGC=${GOGC:-400} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/kruda-bench" &
     fi
     SERVER_PID=$!
     wait_for_port "$PORT" "Kruda" || exit 1
@@ -217,9 +217,9 @@ run_mode() {
     echo -e "${BOLD}========== FIBER ($mode_label) ==========${NC}"
     log "Starting Fiber on :$PORT..."
     if [ "$mode" = "multi" ]; then
-        GOGC=${GOGC:-400} FIBER_PREFORK=1 FIBER_WORKERS="$(nproc)" DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} FIBER_PREFORK=1 FIBER_WORKERS="$(nproc)" DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
     else
-        GOGC=${GOGC:-400} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
+        GOGC=${GOGC:-400} GOMEMLIMIT=${GOMEMLIMIT:-512MiB} DATABASE_URL="$DATABASE_URL" PORT="$PORT" "$RESULTS_DIR/fiber-bench" &
     fi
     SERVER_PID=$!
     wait_for_port "$PORT" "Fiber" || exit 1

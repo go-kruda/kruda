@@ -86,8 +86,9 @@ type RouteParam struct {
 // routeParams is a fixed-size array of path parameters, avoiding map overhead.
 // Linear scan on ≤8 items is faster than map hash+lookup due to cache locality.
 type routeParams struct {
-	items [maxRouteParams]RouteParam
-	count int
+	items   [maxRouteParams]RouteParam
+	count   int
+	pattern string // matched route pattern (e.g. "/users/:id"), set by find()
 }
 
 // set adds or updates a param. Returns the routeParams for chaining.
@@ -134,6 +135,7 @@ func (p *routeParams) del(key string) {
 // and will be overwritten before the next read, so no GC leak risk.
 func (p *routeParams) reset() {
 	p.count = 0
+	p.pattern = ""
 }
 
 // dirtyFlags tracks which cold fields were modified during a request.
@@ -142,14 +144,14 @@ func (p *routeParams) reset() {
 type dirtyFlags uint8
 
 const (
-	dirtyHeaders    dirtyFlags = 1 << iota // c.headers was written
-	dirtyRespHdrs                          // c.respHeaders was written
-	dirtyLocals                            // c.locals was written
-	dirtyCookies                           // c.cookies was appended
-	dirtyBody                              // c.body was set (lazy response path)
-	dirtyBodyBytes                         // c.bodyBytes was read (body parsing)
-	dirtyCtx                               // c.ctx was set
-	dirtyMultipart                         // c.multipartForm was used
+	dirtyHeaders   dirtyFlags = 1 << iota // c.headers was written
+	dirtyRespHdrs                         // c.respHeaders was written
+	dirtyLocals                           // c.locals was written
+	dirtyCookies                          // c.cookies was appended
+	dirtyBody                             // c.body was set (lazy response path)
+	dirtyBodyBytes                        // c.bodyBytes was read (body parsing)
+	dirtyCtx                              // c.ctx was set
+	dirtyMultipart                        // c.multipartForm was used
 )
 
 // Hot fields accessed every request are packed into the first cache lines
@@ -226,6 +228,7 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.startTime = time.Time{}
 	c.writer = w
 	c.request = r
+	// routePattern is reset via params.reset() above
 
 	// Reset fixed-slot headers (zero-cost, no allocation)
 	c.contentType = ""
@@ -309,6 +312,15 @@ func (c *Ctx) Method() string { return c.method }
 
 // Path returns the request path.
 func (c *Ctx) Path() string { return c.path }
+
+// Route returns the matched route pattern (e.g. "/users/:id").
+// Returns the raw path if no pattern was matched (static routes).
+func (c *Ctx) Route() string {
+	if c.params.pattern != "" {
+		return c.params.pattern
+	}
+	return c.path
+}
 
 // Param returns a path parameter value by name.
 func (c *Ctx) Param(name string) string {
@@ -456,10 +468,21 @@ func (c *Ctx) JSON(v any) error {
 	}
 
 	// Ultra-fast path: fasthttp + default encoder → zero-copy via SetBodyRaw.
-	// Eliminates jsonBufPool Get/Put (pool contention) and SetBody memcpy.
-	// Safe because fasthttp handler is synchronous — data lives until response is written.
 	if c.tryFastHTTPJSONDirect(v) {
 		return nil
+	}
+
+	// Wing fast path: Marshal → SetJSON directly, skip pooled buffer.
+	if jr, ok := c.writer.(transport.JSONResponder); ok {
+		if len(c.cookies) == 0 && len(c.respHeaders) == 0 {
+			data, err := c.app.config.JSONEncoder(v)
+			if err != nil {
+				return err
+			}
+			c.responded = true
+			jr.SetJSON(c.status, data)
+			return nil
+		}
 	}
 
 	// Fast path: stream into pooled buffer (net/http transport)
@@ -507,6 +530,12 @@ func (c *Ctx) jsonSend(data []byte) error {
 	if c.tryFastHTTPJSON(data) {
 		return nil
 	}
+	// Fast path for Wing transport — bypass header interface entirely
+	if jr, ok := c.writer.(transport.JSONResponder); ok {
+		c.responded = true
+		jr.SetJSON(c.status, data)
+		return nil
+	}
 	// Fast path for net/http embedded adapter — bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
 		c.responded = true
@@ -540,6 +569,12 @@ func (c *Ctx) Text(s string) error {
 	if c.tryFastHTTPText(s) {
 		return nil
 	}
+	// Fast path for transports with pre-built static response support (e.g., Wing)
+	if sr, ok := c.writer.(transport.StaticTextResponder); ok {
+		c.responded = true
+		sr.SetStaticText(c.status, "text/plain; charset=utf-8", s)
+		return nil
+	}
 	// Fast path for net/http embedded adapter - bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
 		c.responded = true
@@ -559,10 +594,33 @@ func (c *Ctx) Text(s string) error {
 }
 
 // HTML sends an HTML response (raw string, no template).
-// For template rendering, use a template engine middleware.
+// For template rendering, use c.Render() with a ViewEngine.
 func (c *Ctx) HTML(html string) error {
 	c.contentType = "text/html; charset=utf-8"
 	return c.sendBytes([]byte(html))
+}
+
+// Render renders a named template with data using the configured ViewEngine.
+//
+//	app := kruda.New(kruda.WithViews(kruda.NewViewEngine("views/*.html")))
+//	app.Get("/", func(c *kruda.Ctx) error {
+//	    return c.Render("index", Map{"title": "Home"})
+//	})
+func (c *Ctx) Render(name string, data any, code ...int) error {
+	if c.app.config.Views == nil {
+		return NewError(500, "no view engine configured")
+	}
+	if len(code) > 0 {
+		c.status = code[0]
+	}
+	buf := viewBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer viewBufPool.Put(buf)
+	if err := c.app.config.Views.Render(buf, name, data); err != nil {
+		return err
+	}
+	c.contentType = "text/html; charset=utf-8"
+	return c.sendBytes(buf.Bytes())
 }
 
 // httpResponseWriter is an interface for transport.ResponseWriter implementations
@@ -1312,3 +1370,21 @@ func isBodyTooLarge(err error) bool {
 //
 //	c.JSON(kruda.Map{"message": "hello", "ok": true})
 type Map = map[string]any
+
+// Transport returns the transport type string: "nethttp", "fasthttp", or "wing".
+// Contrib modules use this to detect transport-specific behavior (e.g. hijack support).
+func (c *Ctx) Transport() string {
+	return c.app.transportType
+}
+
+// ResponseWriter returns the underlying transport.ResponseWriter.
+// Used by contrib modules (e.g. ws) that need direct access to the writer for hijacking.
+func (c *Ctx) ResponseWriter() transport.ResponseWriter {
+	return c.writer
+}
+
+// Request returns the underlying transport.Request.
+// Used by contrib modules that need access to the raw request.
+func (c *Ctx) Request() transport.Request {
+	return c.request
+}

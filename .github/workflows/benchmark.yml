@@ -1,0 +1,108 @@
+# CI Benchmark Pipeline — Kruda Framework
+# Tracks performance over time, alerts on regressions, publishes charts to GitHub Pages.
+# Based on Fiber's benchmark model with benchmark-action/github-action-benchmark.
+
+name: Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+
+permissions:
+  deployments: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.8'
+
+      - name: Run core benchmarks
+        run: go test -tags kruda_stdjson -benchmem -run=^$ -bench . ./... 2>&1 | tee output.txt
+
+      - name: Run Wing transport benchmarks
+        run: cd transport/wing && go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
+
+      - name: Get system information
+        uses: kenchan0130/actions-system-info@v1.4.0
+        id: system-info
+
+      - name: Get main branch SHA
+        id: get-main-sha
+        run: |
+          SHA=$(git rev-parse origin/main 2>/dev/null || echo "none")
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Restore benchmark cache from main
+        id: cache
+        if: steps.get-main-sha.outputs.sha != 'none'
+        uses: actions/cache/restore@v4
+        with:
+          path: ./cache
+          key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark
+
+      - name: Compare PR results with main
+        uses: benchmark-action/github-action-benchmark@v1
+        if: steps.cache.outputs.cache-hit == 'true'
+        with:
+          tool: 'go'
+          output-file-path: output.txt
+          external-data-json-path: ./cache/benchmark-data.json
+          save-data-file: false
+          fail-on-alert: true
+          comment-on-alert: ${{ github.event.pull_request.head.repo.fork == false }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          summary-always: true
+          alert-threshold: "150%"
+
+      - name: Store benchmark results for main
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.ref_name == 'main'
+        with:
+          tool: 'go'
+          output-file-path: output.txt
+          external-data-json-path: ./cache/benchmark-data.json
+          save-data-file: true
+          fail-on-alert: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          summary-always: true
+          alert-threshold: "150%"
+
+      - name: Publish to GitHub Pages
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.ref_name == 'main'
+        with:
+          tool: 'go'
+          output-file-path: output.txt
+          benchmark-data-dir-path: "benchmarks"
+          fail-on-alert: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-on-alert: true
+          summary-always: true
+          save-data-file: true
+          alert-threshold: "150%"
+          auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+
+      - name: Save benchmark cache
+        uses: actions/cache/save@v4
+        if: github.ref_name == 'main'
+        with:
+          path: ./cache
+          key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark

@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 
 	"github.com/go-kruda/kruda"
 	"github.com/go-kruda/kruda/middleware"
@@ -23,16 +22,11 @@ func main() {
 	routes.Register(app, handlers.NewUserHandler())
 
 	// Static file serving — serves files from ./static directory
-	app.Get("/static/*filepath", func(c *kruda.Ctx) error {
-		fp := c.Param("filepath")
-		http.ServeFile(c.ResponseWriter(), c.Request(), "static/"+fp)
-		return nil
-	})
+	app.Static("/static", "./static")
 
 	// Serve index.html for root
 	app.Get("/", func(c *kruda.Ctx) error {
-		http.ServeFile(c.ResponseWriter(), c.Request(), "static/index.html")
-		return nil
+		return c.File("static/index.html")
 	})
 
 	log.Println("Starting {{.ProjectName}} on :3000")

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/go-kruda/kruda"
@@ -32,34 +33,36 @@ func PathTraversal() kruda.HandlerFunc {
 // containsDotOrPercent is a fast byte scan for . or % characters.
 func containsDotOrPercent(s string) bool {
 	for i := 0; i < len(s); i++ {
-		if s[i] == '.' || s[i] == '%' {
+		if s[i] == '.' || s[i] == '%' || s[i] == '\\' || s[i] == 0 {
 			return true
 		}
 	}
 	return false
 }
 
-// isPathTraversal decodes percent-encoding and checks if the path
-// contains ".." segments that escape above the root directory.
+// isPathTraversal decodes percent-encoding (including double/triple encoding)
+// and checks if the path contains ".." segments that escape above the root directory.
 func isPathTraversal(raw string) bool {
-	decoded, err := url.PathUnescape(raw)
-	if err != nil {
-		// Malformed percent-encoding — treat as traversal attempt
-		return true
+	decoded := raw
+	// Decode iteratively to catch double/triple percent-encoding (e.g. %252e%252e).
+	for i := 0; i < 3; i++ {
+		next, err := url.PathUnescape(decoded)
+		if err != nil {
+			return true
+		}
+		if next == decoded {
+			break
+		}
+		decoded = next
 	}
-	depth := 0
+	// Normalize backslashes to forward slashes (Windows-style traversal)
+	decoded = strings.ReplaceAll(decoded, "\\", "/")
+	// Check for ".." in any segment before path.Clean normalizes it away
 	for _, seg := range strings.Split(decoded, "/") {
-		switch seg {
-		case "", ".":
-			// skip empty segments and current-dir references
-		case "..":
-			depth--
-			if depth < 0 {
-				return true
-			}
-		default:
-			depth++
+		if seg == ".." {
+			return true
 		}
 	}
-	return false
+	cleaned := path.Clean(decoded)
+	return strings.Contains(cleaned, "..")
 }

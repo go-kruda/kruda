@@ -1,56 +1,43 @@
+//go:build linux || darwin
+
 package wing
 
+import "unsafe"
+
 // engine abstracts the OS-specific async I/O backend.
-// On Linux: io_uring (completion-based).
+// On Linux: epoll (event-driven).
 // On macOS: kqueue (readiness-based, engine does syscall internally).
-// On Windows: IOCP (completion-based).
 type engine interface {
-	// Init sets up the I/O backend.
 	Init(cfg engineConfig) error
-
-	// SubmitAccept arms an accept on the listen fd.
 	SubmitAccept(listenFd int)
-
-	// SubmitRecv arms a read on fd into buf[offset:].
 	SubmitRecv(fd int32, buf []byte, offset int)
-
-	// SubmitSend arms a write of data to fd.
 	SubmitSend(fd int32, data []byte)
-
-	// SubmitClose arms a close on fd.
 	SubmitClose(fd int32)
-
-	// SubmitPipeRecv arms a read on the wakeup pipe fd.
-	// No-op on Windows (IOCP uses PostQueuedCompletionStatus instead).
+	Detach(fd int32) // remove fd from poll without closing it
 	SubmitPipeRecv(pipeFd int, buf []byte)
-
-	// PostWake wakes the event loop from another goroutine.
-	// On Linux/macOS: writes to the wake pipe.
-	// On Windows: calls PostQueuedCompletionStatus.
+	RegisterConn(fd int32, ptr unsafe.Pointer) // store *conn for pointer-in-epoll
 	PostWake()
-
-	// Wait blocks until at least one event completes.
-	// Writes completed events into the provided slice and returns count.
 	Wait(events []event) (int, error)
-
-	// Flush submits all pending operations to the kernel.
+	WaitNonBlock(events []event) (int, error)
 	Flush() error
-
-	// Close tears down the engine and frees resources.
 	Close()
 }
 
 // engineConfig holds engine initialization parameters.
 type engineConfig struct {
-	RingSize uint32 // io_uring: SQE entries; kqueue: initial event list capacity; IOCP: ignored
-	PipeW    int    // write end of wake pipe (-1 on Windows, which uses PostWake directly)
+	RingSize uint32
+	PipeW    int  // legacy (darwin)
+	EventFd  int  // eventfd for wake (linux)
+	RawMode  bool // use RawSyscall for epoll_wait (requires LockOSThread)
 }
 
 // event is a completed I/O event from the kernel.
 type event struct {
-	Op  uint8 // operation type
-	Fd  int32 // file descriptor
-	Res int32 // bytes transferred (>0) or negative errno
+	Op      uint8          // operation type
+	Fd      int32          // file descriptor
+	Res     int32          // bytes transferred (>0) or negative errno
+	Flags   uint32         // CQE flags (e.g. IORING_CQE_F_MORE for multishot)
+	ConnPtr unsafe.Pointer // *conn pointer (epoll data, avoids map lookup)
 }
 
 // Operation types for events.
@@ -61,3 +48,7 @@ const (
 	opClose
 	opWake
 )
+
+// cqeFMore is set in event.Flags when a multishot operation will produce more completions.
+// On non-Linux backends (kqueue) this is always 0, so re-arm happens every time.
+const cqeFMore uint32 = 1 << 1

@@ -1,6 +1,6 @@
 # CI Test Pipeline — Kruda Framework
 # Runs tests, vet, lint, and coverage on every push/PR
-# Matrix: Go 1.24 + stable × {Linux, macOS, Windows}
+# Matrix: Go 1.25 + stable × {Linux, macOS, Windows}
 
 name: Tests
 
@@ -9,6 +9,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.24', 'stable']
+        go-version: ['1.25.8', 'stable']
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
@@ -36,15 +37,36 @@ jobs:
         run: go vet -tags kruda_stdjson ./...
 
       - name: Lint (golangci-lint)
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.8'
         uses: golangci/golangci-lint-action@v7
         with:
           args: --build-tags kruda_stdjson
-          version: v2.1
+          version: latest
 
       - name: Run tests
         shell: bash
-        run: go test -v -race -tags kruda_stdjson -coverprofile=coverage.out ./...
+        run: |
+          COVER_FLAG=""
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            COVER_FLAG="-coverprofile=coverage.out"
+          fi
+          go test -v -race -tags kruda_stdjson $COVER_FLAG ./...
+
+      - name: Test Wing transport (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: cd transport/wing && go test -v -race ./...
+
+      - name: Test contrib packages
+        shell: bash
+        run: |
+          for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag contrib/cache contrib/otel contrib/prometheus contrib/swagger; do
+            echo "::group::Testing $dir"
+            cd $dir && go test -tags kruda_stdjson ./... && cd "$GITHUB_WORKSPACE"
+            echo "::endgroup::"
+          done
+
+      - name: Test CLI
+        run: cd cmd/kruda && go test -tags kruda_stdjson ./...
 
       - name: Upload coverage to Codecov
         # Upload only once per Go version (Linux) to avoid duplicates

@@ -1,6 +1,10 @@
 package kruda
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/go-kruda/kruda/transport"
+)
 
 // Group represents a collection of routes that share a common prefix
 // and scoped middleware. Groups can be nested to create hierarchical
@@ -54,51 +58,51 @@ func (g *Group) Guard(middleware ...HandlerFunc) *Group {
 }
 
 // Get registers a GET route on this group.
-func (g *Group) Get(path string, handler HandlerFunc) *Group {
-	g.addRoute("GET", path, handler)
+func (g *Group) Get(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("GET", path, handler, opts...)
 	return g
 }
 
 // Post registers a POST route on this group.
-func (g *Group) Post(path string, handler HandlerFunc) *Group {
-	g.addRoute("POST", path, handler)
+func (g *Group) Post(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("POST", path, handler, opts...)
 	return g
 }
 
 // Put registers a PUT route on this group.
-func (g *Group) Put(path string, handler HandlerFunc) *Group {
-	g.addRoute("PUT", path, handler)
+func (g *Group) Put(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("PUT", path, handler, opts...)
 	return g
 }
 
 // Delete registers a DELETE route on this group.
-func (g *Group) Delete(path string, handler HandlerFunc) *Group {
-	g.addRoute("DELETE", path, handler)
+func (g *Group) Delete(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("DELETE", path, handler, opts...)
 	return g
 }
 
 // Patch registers a PATCH route on this group.
-func (g *Group) Patch(path string, handler HandlerFunc) *Group {
-	g.addRoute("PATCH", path, handler)
+func (g *Group) Patch(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("PATCH", path, handler, opts...)
 	return g
 }
 
 // Options registers an OPTIONS route on this group.
-func (g *Group) Options(path string, handler HandlerFunc) *Group {
-	g.addRoute("OPTIONS", path, handler)
+func (g *Group) Options(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("OPTIONS", path, handler, opts...)
 	return g
 }
 
 // Head registers a HEAD route on this group.
-func (g *Group) Head(path string, handler HandlerFunc) *Group {
-	g.addRoute("HEAD", path, handler)
+func (g *Group) Head(path string, handler HandlerFunc, opts ...RouteOption) *Group {
+	g.addRoute("HEAD", path, handler, opts...)
 	return g
 }
 
 // All registers a route on all standard HTTP methods on this group.
-func (g *Group) All(path string, handler HandlerFunc) *Group {
+func (g *Group) All(path string, handler HandlerFunc, opts ...RouteOption) *Group {
 	for _, method := range standardMethods {
-		g.addRoute(method, path, handler)
+		g.addRoute(method, path, handler, opts...)
 	}
 	return g
 }
@@ -115,10 +119,22 @@ func (g *Group) Done() *App {
 }
 
 // addRoute builds the full path and pre-built handler chain, then registers it.
-func (g *Group) addRoute(method, path string, handler HandlerFunc) {
+func (g *Group) addRoute(method, path string, handler HandlerFunc, opts ...RouteOption) {
 	fullPath := joinPath(g.prefix, path)
 	chain := buildChain(g.app.middleware, g.collectMiddleware(), handler)
 	g.app.router.addRoute(method, fullPath, chain)
+
+	if len(opts) > 0 {
+		var rc routeConfig
+		for _, o := range opts {
+			o(&rc)
+		}
+		if rc.wingFeather != nil {
+			if fc, ok := g.app.transport.(transport.FeatherConfigurator); ok {
+				fc.SetRouteFeather(method, fullPath, rc.wingFeather)
+			}
+		}
+	}
 }
 
 // collectMiddleware gathers middleware from the entire parent chain,

@@ -389,10 +389,6 @@ var pgoInfoCmd = &cobra.Command{
 		if err == nil {
 			ver := strings.TrimSpace(string(goVer))
 			fmt.Printf("  Go:       %s\n", ver)
-			if strings.Contains(ver, "go1.20") || strings.Contains(ver, "go1.19") ||
-				strings.Contains(ver, "go1.18") {
-				fmt.Printf("  %s[warn]%s Go 1.21+ required for auto PGO detection\n", colorYellow, colorReset)
-			}
 		}
 
 		return nil

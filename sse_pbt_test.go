@@ -10,7 +10,7 @@ import (
 	"testing/quick"
 )
 
-// Feature: phase2b-extensions, Property 2: SSE Event Formatting
+// Property: SSE Event Formatting
 //
 // For any event name (non-empty string) and any JSON-serializable data value,
 // Event(name, data) should produce output matching "event: {name}\ndata: {json}\n\n".

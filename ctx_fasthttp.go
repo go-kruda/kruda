@@ -31,9 +31,8 @@ import (
 
 // ctxFastHTTPFields holds embedded fasthttp adapters to avoid per-request allocation.
 type ctxFastHTTPFields struct {
-	embeddedFHReq    fhReqAdapter
-	embeddedFHResp   fhRespAdapter
-	embeddedFHHeader fhHeaderAdapter
+	embeddedFHReq  fhReqAdapter
+	embeddedFHResp fhRespAdapter
 }
 
 // writeHeadersFastHTTP writes per-request response headers directly to the fasthttp

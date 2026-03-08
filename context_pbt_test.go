@@ -8,17 +8,13 @@ import (
 	"testing/quick"
 )
 
-// ---------------------------------------------------------------------------
-// Property 1: Pool Safety — No Stale Data Leak
+// Property: Pool Safety — No Stale Data Leak
 //
 // For any two consecutive requests r1 and r2 handled by the same Ctx from the
 // Pool, after r1 completes and r2 begins, the Ctx should have method and path
 // matching r2, status reset to 200, responded reset to false, empty params,
 // no stale custom headers from r1, no stale cookies from r1, no stale locals
 // from r1, and no stale body data from r1.
-//
-// **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 7.6**
-// ---------------------------------------------------------------------------
 
 // staleCheckResult captures what the second request's handler observed.
 type staleCheckResult struct {
@@ -173,17 +169,12 @@ func TestPropertyPoolSafety_NoStaleDataLeak(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Property 2: writeHeaders Completeness
+// Property: writeHeaders Completeness
 //
 // For any Ctx with a random combination of content-type, content-length,
 // custom headers, cookies, and security headers configured, after
 // writeHeaders() executes, the response writer should contain all configured
-// headers with correct values — regardless of whether the fast path or
-// complex path was taken.
-//
-// **Validates: Requirements 3.2, 3.3, 3.5**
-// ---------------------------------------------------------------------------
+// headers with correct values.
 
 // TestPropertyWriteHeadersCompleteness uses testing/quick to generate random
 // header configurations and verifies that writeHeaders() writes them all
@@ -306,16 +297,11 @@ func TestPropertyWriteHeadersCompleteness(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Property 9: Security Opt-in Isolation
+// Property: Security Opt-in Isolation
 //
-// For any App created with kruda.New() without WithSecurity, the response
-// should contain zero security headers and no path normalization should occur.
-// Conversely, for any App created with WithSecurity(), every response should
-// contain the full set of security headers.
-//
-// **Validates: Requirements 5.1, 5.2**
-// ---------------------------------------------------------------------------
+// For any App created without WithSecurity, the response should contain zero
+// security headers. With WithSecurity(), every response should contain the
+// full set of security headers.
 
 // TestPropertySecurityOptInIsolation uses testing/quick to generate random
 // request paths and verifies that:

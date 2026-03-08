@@ -7,7 +7,6 @@ import (
 	"net"
 	"syscall"
 )
-
 // SO_REUSEPORT on macOS/BSD.
 const soReusePort = syscall.SO_REUSEPORT
 
@@ -59,4 +58,21 @@ func createListenFd(addr string) (int, error) {
 		return 0, fmt.Errorf("listen: %w", err)
 	}
 	return fd, nil
+}
+
+func setTCPQuickACK(_ int32) {}
+
+// getPeerAddr returns "ip:port" of the remote end of fd, or "" on error.
+func getPeerAddr(fd int32) string {
+	sa, err := syscall.Getpeername(int(fd))
+	if err != nil {
+		return ""
+	}
+	switch v := sa.(type) {
+	case *syscall.SockaddrInet4:
+		return fmt.Sprintf("%d.%d.%d.%d:%d", v.Addr[0], v.Addr[1], v.Addr[2], v.Addr[3], v.Port)
+	case *syscall.SockaddrInet6:
+		return fmt.Sprintf("[%x]:%d", v.Addr, v.Port)
+	}
+	return ""
 }

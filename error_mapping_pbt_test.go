@@ -7,13 +7,10 @@ import (
 	"testing/quick"
 )
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 21: Error Value Mapping Format
-// For random status codes (100-599) and message strings (alphanumeric 1-30
-// chars), register MapError for a sentinel error, make handler return that
-// error via TestClient, verify JSON response has code, message, and detail
-// fields matching.
-// ---------------------------------------------------------------------------
+// Property: Error Value Mapping Format
+// For random status codes (100-599) and message strings, register MapError for
+// a sentinel error, make handler return that error via TestClient, verify JSON
+// response has code, message, and detail fields matching.
 
 func TestPropertyErrorValueMappingFormat(t *testing.T) {
 	f := func(statusCode uint16, message string) bool {
@@ -57,11 +54,9 @@ func TestPropertyErrorValueMappingFormat(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 22: Error Type Mapping
+// Property: Error Type Mapping
 // Define a custom error type. For random field values, register
 // MapErrorType, verify resolveError matches.
-// ---------------------------------------------------------------------------
 
 type pbtTypedError struct{ Val string }
 
@@ -82,12 +77,10 @@ func TestPropertyErrorTypeMapping(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 23: Error Mapping Order
+// Property: Error Mapping Order
 // Register MapError for a sentinel with status A, then MapErrorFunc for
 // same sentinel with status B. Verify resolveError returns status A
 // (errorMap wins over errorFuncs).
-// ---------------------------------------------------------------------------
 
 func TestPropertyErrorMappingOrder(t *testing.T) {
 	f := func(a, b uint16) bool {
@@ -111,11 +104,9 @@ func TestPropertyErrorMappingOrder(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Feature: phase4-ecosystem, Property 24: MapErrorFunc Transformation
+// Property: MapErrorFunc Transformation
 // For random status codes and messages, MapErrorFunc with custom fn,
 // verify resolveError returns exactly what fn returns.
-// ---------------------------------------------------------------------------
 
 func TestPropertyMapErrorFuncTransformation(t *testing.T) {
 	f := func(statusCode uint16, message string) bool {

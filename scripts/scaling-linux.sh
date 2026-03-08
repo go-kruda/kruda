@@ -98,11 +98,11 @@ declare -a FIBER_RPS=()
 for cores in "${CORE_LIST[@]}"; do
     # --- Kruda turbo ---
     log "Kruda turbo: $cores workers..."
-    GOGC=off KRUDA_TURBO=1 KRUDA_WORKERS="$cores" PORT="$PORT" \
+    GOGC=off KRUDA_WORKERS="$cores" PORT="$PORT" \
         "$RESULTS_DIR/kruda-bench" &
     SERVER_PID=$!
     wait_ready
-    out="$RESULTS_DIR/kruda_turbo_${cores}c.txt"
+    out="$RESULTS_DIR/kruda_${cores}c.txt"
     run_wrk "$cores" "http://localhost:$PORT/plaintext" "$out" >/dev/null
     k_rps=$(extract_rps "$out")
     kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null || true

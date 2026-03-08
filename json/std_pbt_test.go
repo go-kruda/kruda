@@ -8,14 +8,6 @@ import (
 	"testing/quick"
 )
 
-// Feature: phase2b-extensions, Property 1: JSON Marshal/Unmarshal Round Trip
-//
-// For any valid Go struct value (with exported fields of supported types),
-// marshaling to JSON and then unmarshaling back should produce a value
-// equal to the original.
-//
-// **Validates: Requirements 1.2, 1.3**
-
 func TestPropertyJSONRoundTripString(t *testing.T) {
 	f := func(s string) bool {
 		data, err := Marshal(s)

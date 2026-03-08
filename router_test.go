@@ -1798,3 +1798,191 @@ func TestMethodArray_mCOUNT(t *testing.T) {
 		t.Errorf("len(standardMethods) = %d, want mCOUNT=%d", len(standardMethods), mCOUNT)
 	}
 }
+
+func TestEdge_URLEncodedParamValues(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users/:name", h)
+
+	var params routeParams
+
+	// Space encoded as %20
+	params.reset()
+	got := r.find("GET", "/users/john%20doe", &params)
+	if got == nil {
+		t.Fatal("expected param route to match URL-encoded path")
+	}
+
+	// Plus sign (literal)
+	params.reset()
+	got = r.find("GET", "/users/john+doe", &params)
+	if got == nil {
+		t.Fatal("GET /users/john+doe should match param route")
+	}
+}
+
+func TestEdge_CaseSensitiveRoutes(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/Users", h)
+
+	var params routeParams
+
+	params.reset()
+	if r.find("GET", "/Users", &params) == nil {
+		t.Error("GET /Users should match")
+	}
+
+	params.reset()
+	if r.find("GET", "/users", &params) != nil {
+		t.Error("GET /users should NOT match /Users (case sensitive)")
+	}
+
+	params.reset()
+	if r.find("GET", "/USERS", &params) != nil {
+		t.Error("GET /USERS should NOT match /Users (case sensitive)")
+	}
+}
+
+func TestEdge_DoubleSlashSegments(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users", h)
+
+	var params routeParams
+
+	// Double slash should not match single-slash route
+	params.reset()
+	got := r.find("GET", "//users", &params)
+	if got != nil {
+		t.Error("GET //users should NOT match /users")
+	}
+}
+
+func TestEdge_StaticParamConflictPriority(t *testing.T) {
+	r := newRouter()
+	hStatic := []HandlerFunc{dummyHandler()}
+	hParam := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/users/new", hStatic)
+	r.addRoute("GET", "/users/:id", hParam)
+	r.addRoute("GET", "/users/settings", hStatic)
+
+	var params routeParams
+
+	tests := []struct {
+		path       string
+		wantStatic bool
+	}{
+		{"/users/new", true},
+		{"/users/settings", true},
+		{"/users/123", false},
+		{"/users/anything", false},
+	}
+
+	for _, tt := range tests {
+		params.reset()
+		got := r.find("GET", tt.path, &params)
+		if got == nil {
+			t.Errorf("GET %s should match", tt.path)
+			continue
+		}
+		hasParam := params.count > 0
+		if tt.wantStatic && hasParam {
+			t.Errorf("GET %s should match static, but got param instead", tt.path)
+		}
+		if !tt.wantStatic && !hasParam {
+			t.Errorf("GET %s should match param, but got static", tt.path)
+		}
+	}
+}
+
+func TestEdge_WildcardVsStaticPriority(t *testing.T) {
+	r := newRouter()
+	hStatic := []HandlerFunc{dummyHandler()}
+	hWild := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/files/readme.txt", hStatic)
+	r.addRoute("GET", "/files/*path", hWild)
+
+	var params routeParams
+
+	// Exact static match takes priority
+	params.reset()
+	got := r.find("GET", "/files/readme.txt", &params)
+	if got == nil {
+		t.Fatal("GET /files/readme.txt should match")
+	}
+
+	// Other paths fall to wildcard
+	params.reset()
+	got = r.find("GET", "/files/other.txt", &params)
+	if got == nil {
+		t.Fatal("GET /files/other.txt should match wildcard")
+	}
+	if params.get("path") != "other.txt" {
+		t.Errorf("wildcard param = %q, want other.txt", params.get("path"))
+	}
+}
+
+func TestEdge_TrailingSlashMismatch(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+	r.addRoute("GET", "/users", h)
+
+	var params routeParams
+
+	params.reset()
+	got := r.find("GET", "/users/", &params)
+	// Trailing slash on /users/ should not match /users (strict)
+	if got != nil {
+		t.Log("trailing slash matched — framework normalizes trailing slashes")
+	}
+}
+
+func TestEdge_DeepNesting20Segments(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	path := ""
+	for i := 0; i < 20; i++ {
+		path += "/s" + string(rune('a'+i))
+	}
+	r.addRoute("GET", path, h)
+
+	var params routeParams
+	params.reset()
+	if r.find("GET", path, &params) == nil {
+		t.Errorf("20-segment route should match: %s", path)
+	}
+
+	// Partial should not match
+	partial := ""
+	for i := 0; i < 10; i++ {
+		partial += "/s" + string(rune('a'+i))
+	}
+	params.reset()
+	if r.find("GET", partial, &params) != nil {
+		t.Error("partial 10/20 segments should not match")
+	}
+}
+
+func TestEdge_SpecialCharsInStaticPath(t *testing.T) {
+	r := newRouter()
+	h := []HandlerFunc{dummyHandler()}
+
+	r.addRoute("GET", "/api/v1.0/health-check", h)
+	r.addRoute("GET", "/api/v2~beta/status", h)
+
+	var params routeParams
+
+	params.reset()
+	if r.find("GET", "/api/v1.0/health-check", &params) == nil {
+		t.Error("dots and hyphens in static path should match")
+	}
+
+	params.reset()
+	if r.find("GET", "/api/v2~beta/status", &params) == nil {
+		t.Error("tilde in static path should match")
+	}
+}

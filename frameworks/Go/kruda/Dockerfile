@@ -13,4 +13,5 @@ FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /app /app
 EXPOSE 8080
+ENV GOGC=500 GOMEMLIMIT=512MiB
 CMD ["/app"]

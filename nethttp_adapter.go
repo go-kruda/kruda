@@ -45,7 +45,7 @@ func (r *fastNetHTTPRequest) Body() ([]byte, error) {
 	if r.r.Body == nil {
 		return nil, nil
 	}
-	defer r.r.Body.Close()
+	defer func() { _ = r.r.Body.Close() }()
 
 	if r.r.ContentLength == 0 {
 		return nil, nil
@@ -167,6 +167,18 @@ func (w *fastNetHTTPResponseWriter) SetContentLength(length string) {
 	}
 	w.contentLengthSlice[0] = length
 	w.w.Header()["Content-Length"] = w.contentLengthSlice
+}
+
+// Unwrap returns the underlying http.ResponseWriter for hijacking and http.ServeFile.
+func (w *fastNetHTTPResponseWriter) Unwrap() http.ResponseWriter {
+	return w.w
+}
+
+// Flush implements http.Flusher by delegating to the underlying ResponseWriter.
+func (w *fastNetHTTPResponseWriter) Flush() {
+	if f, ok := w.w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 type fastNetHTTPHeaderMap struct {

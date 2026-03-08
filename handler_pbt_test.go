@@ -6,7 +6,7 @@ import (
 	"testing/quick"
 )
 
-// Feature: phase2b-extensions, Property 15: Provide/Need Round Trip
+// Property: Provide/Need Round Trip
 //
 // For any key string and any value of type T, calling c.Provide(key, value)
 // followed by Need[T](c, key) should return (value, true).
@@ -51,7 +51,7 @@ func TestPropertyProvideNeedRoundTrip(t *testing.T) {
 	})
 }
 
-// Feature: phase2b-extensions, Property 16: Need Returns False for Missing or Mistyped Keys
+// Property: Need Returns False for Missing or Mistyped Keys
 //
 // For any Ctx and any key that was not set via Provide, Need[T](c, key) should
 // return (zero, false). For any key set via Provide(key, valueOfTypeA), calling
@@ -93,7 +93,7 @@ func TestPropertyNeedMissingOrMistyped(t *testing.T) {
 	})
 }
 
-// Feature: phase2b-extensions, Property 22: OnParse Hook Error Stops Pipeline
+// Property: OnParse Hook Error Stops Pipeline
 //
 // For any set of OnParse hooks where hook N returns an error, hooks N+1, N+2, ...
 // should not be called, and the user handler should not be called.
@@ -152,7 +152,7 @@ func TestPropertyOnParseErrorStopsPipeline(t *testing.T) {
 	}
 }
 
-// Feature: phase2b-extensions, Property 23: OnParse Hook Mutation Visibility
+// Property: OnParse Hook Mutation Visibility
 //
 // For any OnParse hook that modifies the input struct (via pointer), subsequent
 // hooks and the validation step should see the modified values.

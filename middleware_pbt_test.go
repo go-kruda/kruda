@@ -1,7 +1,5 @@
 package kruda
 
-// Validates: Requirements 2.2, 2.6
-//
 // Property: For any combination of global MW, group MW, and handler,
 // buildChain always produces a slice where global MW come first,
 // then group MW, then handler last.

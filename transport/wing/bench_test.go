@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -366,6 +367,9 @@ func startGuardTransport(t *testing.T, handler transport.Handler) (string, func(
 func TestPlaintextPerformanceGuard(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping performance guard in short mode")
+	}
+	if runtime.GOOS != "linux" {
+		t.Skip("performance guard only meaningful on Linux (Wing uses epoll)")
 	}
 
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {

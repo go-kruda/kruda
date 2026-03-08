@@ -41,7 +41,7 @@ jobs:
         uses: golangci/golangci-lint-action@v7
         with:
           args: --build-tags kruda_stdjson
-          version: v2.1
+          version: latest
 
       - name: Run tests
         shell: bash

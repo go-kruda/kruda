@@ -74,9 +74,7 @@ func (e *epollEngine) SubmitPipeRecv(_ int, _ []byte) {
 func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
 	e.connPtrs[fd] = ptr
 	// Edge-triggered read — fires when new data arrives. No re-arm needed.
-	ev := epollEvent{events: epollin | epollet}
-	*(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0])) = ptr
-	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+	e.epollMod(fd, epollin|epollet)
 }
 
 func (e *epollEngine) SubmitRecv(fd int32, _ []byte, _ int) {
@@ -142,8 +140,7 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 	count := 0
 	for i := 0; i < n && count < len(events); i++ {
 		ev := &e.epevs[i]
-		// Listen fd and pipe fd store int32 in data[0:4].
-		// Conn fds store unsafe.Pointer in data[0:8].
+		// All epoll_data stores fd as int32 in data[0:4].
 		fd := *(*int32)(unsafe.Pointer(&ev.data[0]))
 
 		if int(fd) == e.listenFd {
@@ -159,8 +156,8 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 			continue
 		}
 
-		// Conn fd — decode pointer from epoll data.
-		ptr := *(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0]))
+		// Conn fd — look up pointer from connPtrs map.
+		ptr := e.connPtrs[fd]
 
 		if ev.events&epollout != 0 {
 			events[count] = event{Op: opSend, ConnPtr: ptr}
@@ -219,10 +216,8 @@ func (e *epollEngine) epollMod(fd int32, events uint32) {
 }
 
 func (e *epollEngine) epollModPtr(fd int32, events uint32) {
-	ev := epollEvent{events: events}
-	ptr := e.connPtrs[fd]
-	*(*unsafe.Pointer)(unsafe.Pointer(&ev.data[0])) = ptr
-	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+	// All epoll_data now stores fd — pointer lookup via connPtrs map.
+	e.epollMod(fd, events)
 }
 
 func epollWait(epfd int, events []epollEvent, msec int, raw bool) (int, error) {

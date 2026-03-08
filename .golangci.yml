@@ -19,3 +19,6 @@ linters:
       - text: "QF"
         linters:
           - staticcheck
+      - path: transport/wing/.*_stub\.go
+        linters:
+          - unused

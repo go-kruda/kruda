@@ -323,10 +323,4 @@ func indexByte(s string, b byte) int {
 	return -1
 }
 
-func copyMap(m map[string]string) map[string]string {
-	cp := make(map[string]string, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return cp
-}
+

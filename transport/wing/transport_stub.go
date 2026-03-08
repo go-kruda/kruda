@@ -29,9 +29,7 @@ type Config struct {
 	IdleTimeout       time.Duration
 }
 
-func (c *Config) defaults()       {}
-func (c *Config) needsPool() bool  { return false }
-func (c *Config) needsAsync() bool { return false }
+
 
 // Transport is a stub on unsupported platforms.
 type Transport struct {

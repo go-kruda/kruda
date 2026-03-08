@@ -2,15 +2,6 @@
 
 package wing
 
-// setTCPNodelay is a no-op on unsupported platforms.
-func setTCPNodelay(_ int32) {}
-
-// closeFd is a no-op on unsupported platforms.
-func closeFd(_ int) {}
-
-// getPeerAddr is a no-op on unsupported platforms.
-func getPeerAddr(_ int32) string { return "" }
-
-func setCPUAffinity(_ int) {}
-
-func setTCPQuickACK(_ int32) {}
+// Socket option stubs for unsupported platforms.
+// These types/functions are only called from transport.go (linux || darwin),
+// so no function stubs are needed here — only type stubs if any.

@@ -682,7 +682,18 @@ func TestConn_ConcurrentWrites(t *testing.T) {
 			break // connection closed or error
 		}
 		if f.opcode == 0x8 {
-			break // close frame
+			// drain any buffered text frames after close
+			for {
+				wsConn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+				f2, err := readFrame(br, 0)
+				if err != nil || f2.opcode == 0x8 {
+					break
+				}
+				if f2.opcode == 0x1 {
+					received++
+				}
+			}
+			break
 		}
 		if f.opcode == 0x1 {
 			received++

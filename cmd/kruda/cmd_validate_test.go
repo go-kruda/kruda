@@ -67,7 +67,7 @@ func TestParseGoVersion(t *testing.T) {
 	}
 }
 
-func TestHandlerNameFromPath(t *testing.T) {
+func TestHandlerNameFromPath_Validate(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string

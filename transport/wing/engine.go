@@ -26,8 +26,8 @@ type engine interface {
 // engineConfig holds engine initialization parameters.
 type engineConfig struct {
 	RingSize uint32
-	PipeW    int // legacy (darwin)
-	EventFd  int // eventfd for wake (linux)
+	PipeW    int  // legacy (darwin)
+	EventFd  int  // eventfd for wake (linux)
 	RawMode  bool // use RawSyscall for epoll_wait (requires LockOSThread)
 }
 

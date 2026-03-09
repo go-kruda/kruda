@@ -74,3 +74,23 @@ func TestUnknownStringers(t *testing.T) {
 		t.Errorf("DispatchMode(99).String() = %q", s)
 	}
 }
+
+func TestStaticOption(t *testing.T) {
+	resp := []byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+	f := Bolt.With(Static(resp))
+	if !reflect.DeepEqual(f.StaticResponse, resp) {
+		t.Errorf("StaticResponse = %q, want %q", f.StaticResponse, resp)
+	}
+	// original must not be mutated
+	if Bolt.StaticResponse != nil {
+		t.Error("Static() mutated Bolt preset")
+	}
+}
+
+func TestDispatchOption(t *testing.T) {
+	f := Feather{}
+	f = f.With(Dispatch(Takeover))
+	if f.Dispatch != Takeover {
+		t.Errorf("Dispatch = %v, want Takeover", f.Dispatch)
+	}
+}

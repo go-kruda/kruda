@@ -88,7 +88,7 @@ node_modules/
 .env.*
 # Ignore compiled binaries and bench artifacts
 bench/chart.html
-frameworks/Go/kruda/src/
 sse
 static-files
 di-comparison
+CLAUDE.md

@@ -131,18 +131,11 @@ Wing transport uses raw `epoll` + `eventfd` on Linux — bypasses both fasthttp 
 
 ## Documentation
 
-Full documentation at [kruda.dev](https://kruda.dev):
-
-- [Getting Started](https://kruda.dev/guide/getting-started)
-- [Routing](https://kruda.dev/guide/routing)
-- [Typed Handlers](https://kruda.dev/guide/handlers)
-- [Middleware](https://kruda.dev/guide/middleware)
-- [Transport](https://kruda.dev/guide/transport) — Wing, fasthttp, net/http
-- [Performance](https://kruda.dev/guide/performance) — benchmarks & tuning
-- [Security](https://kruda.dev/guide/security) — headers, path traversal, rate limiting
-- [DI Container](https://kruda.dev/guide/di-container)
-- [Error Handling](https://kruda.dev/guide/error-handling)
-- [API Reference](https://kruda.dev/api/app)
+- [API Reference (pkg.go.dev)](https://pkg.go.dev/github.com/go-kruda/kruda)
+- [Examples](examples/) — 21 runnable examples
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Benchmark Charts](https://go-kruda.github.io/kruda/benchmarks/)
 
 ## AI Integration
 

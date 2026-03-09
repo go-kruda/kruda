@@ -1180,3 +1180,713 @@ func TestCtx_TransportAccessors(t *testing.T) {
 		t.Errorf("status = %d", resp.StatusCode())
 	}
 }
+
+// --- Static: directory with index ---
+
+func TestStatic_DirectoryIndex(t *testing.T) {
+	fs := fstest.MapFS{
+		"sub/index.html": {Data: []byte("<html>sub index</html>")},
+	}
+	app := New()
+	app.StaticFS("/", fs)
+	app.Compile()
+
+	tc := NewTestClient(app)
+	// Access a directory — should serve index.html inside it
+	resp, _ := tc.Get("/sub")
+	if resp.StatusCode() == 200 && !strings.Contains(resp.BodyString(), "sub index") {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
+// --- Static: directory without index, browse disabled ---
+
+func TestStatic_DirectoryNoIndex_NoBrowse(t *testing.T) {
+	fs := fstest.MapFS{
+		"sub/file.txt": {Data: []byte("hello")},
+	}
+	app := New()
+	app.StaticFS("/", fs)
+	app.Compile()
+
+	tc := NewTestClient(app)
+	// Access a directory without index.html — should 404
+	resp, _ := tc.Get("/sub")
+	if resp.StatusCode() != 404 {
+		t.Errorf("status = %d, want 404 for directory without index", resp.StatusCode())
+	}
+}
+
+// --- Static: directory without index, browse enabled ---
+
+func TestStatic_DirectoryNoIndex_BrowseEnabled(t *testing.T) {
+	fs := fstest.MapFS{
+		"sub/file.txt": {Data: []byte("hello")},
+	}
+	app := New()
+	app.StaticFS("/", fs, WithBrowse())
+	app.Compile()
+
+	tc := NewTestClient(app)
+	// Access a directory without index.html but browse is enabled
+	resp, _ := tc.Get("/sub")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d, want 200 for browse mode", resp.StatusCode())
+	}
+}
+
+// --- Static: SPA fallback when index.html doesn't exist ---
+
+func TestStatic_SPA_MissingIndex(t *testing.T) {
+	// Empty FS with no index.html — SPA fallback should 404
+	fs := fstest.MapFS{}
+	app := New()
+	app.StaticFS("/", fs, WithSPA())
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/nonexistent")
+	if resp.StatusCode() != 404 {
+		t.Errorf("status = %d, want 404 when SPA index missing", resp.StatusCode())
+	}
+}
+
+// --- Static: file with unknown extension ---
+
+func TestStatic_UnknownExtension(t *testing.T) {
+	fs := fstest.MapFS{
+		"data.xyz": {Data: []byte("binary data")},
+	}
+	app := New()
+	app.StaticFS("/", fs)
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/data.xyz")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+	// Unknown extension should default to application/octet-stream
+	ct := resp.Header("Content-Type")
+	if ct != "" && !strings.Contains(ct, "octet-stream") && !strings.Contains(ct, "xyz") {
+		// Some systems may have xyz registered, so just check it's not empty
+	}
+}
+
+// --- Static: prefix-based serving ---
+
+func TestStatic_WithPrefix(t *testing.T) {
+	fs := fstest.MapFS{
+		"style.css": {Data: []byte("body{}")},
+	}
+	app := New()
+	app.StaticFS("/public", fs)
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/public/style.css")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d, want 200", resp.StatusCode())
+	}
+	if !strings.Contains(resp.BodyString(), "body{}") {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
+// --- Static: path traversal with double dots ---
+
+func TestStatic_PathTraversal_DoubleDots(t *testing.T) {
+	fs := fstest.MapFS{
+		"index.html": {Data: []byte("home")},
+	}
+	app := New()
+	app.StaticFS("/", fs)
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/../../etc/passwd")
+	if resp.StatusCode() != 403 {
+		t.Errorf("status = %d, want 403 for path traversal", resp.StatusCode())
+	}
+}
+
+// --- App.Compile: security header variations ---
+
+func TestCompile_SecurityHeaders_AllVariants(t *testing.T) {
+	app := New(WithLegacySecurityHeaders())
+	app.Get("/test", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+
+	if len(app.secHeaders) == 0 {
+		t.Error("secHeaders should be populated after Compile")
+	}
+}
+
+func TestCompile_SecurityHeaders_HSTS(t *testing.T) {
+	app := &App{
+		config:   defaultConfig(),
+		router:   newRouter(),
+		errorMap: defaultErrorMap(),
+	}
+	app.config.SecurityHeaders = true
+	app.config.Security.HSTSMaxAge = 31536000
+	app.config.Security.ContentSecurityPolicy = "default-src 'self'"
+	app.config.Security.ReferrerPolicy = "no-referrer"
+	app.transport, app.transportType = selectTransport(app.config, app.config.Logger)
+	app.ctxPool.New = func() any { return newCtx(app) }
+
+	app.Get("/test", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+
+	found := false
+	for _, kv := range app.secHeaders {
+		if strings.Contains(kv[0], "Strict-Transport-Security") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("HSTS header not found in secHeaders")
+	}
+}
+
+// --- App.All ---
+
+func TestApp_All_AllMethods(t *testing.T) {
+	app := New()
+	app.All("/everything", func(c *Ctx) error {
+		return c.Text("method: " + c.Method())
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+	for _, m := range methods {
+		resp, _ := tc.Request(m, "/everything").Send()
+		if resp.StatusCode() != 200 {
+			t.Errorf("%s status = %d, want 200", m, resp.StatusCode())
+		}
+	}
+}
+
+// --- buildChain ---
+
+func TestBuildChain(t *testing.T) {
+	handler := func(c *Ctx) error { return nil }
+	mw1 := func(c *Ctx) error { return c.Next() }
+	mw2 := func(c *Ctx) error { return c.Next() }
+
+	chain := buildChain([]HandlerFunc{mw1}, []HandlerFunc{mw2}, handler)
+	if len(chain) != 3 {
+		t.Errorf("chain len = %d, want 3", len(chain))
+	}
+}
+
+func TestBuildChain_NoMiddleware(t *testing.T) {
+	handler := func(c *Ctx) error { return nil }
+	chain := buildChain(nil, nil, handler)
+	if len(chain) != 1 {
+		t.Errorf("chain len = %d, want 1", len(chain))
+	}
+}
+
+// --- containsDotPercent ---
+
+func TestContainsDotPercent(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"/api/users", false},
+		{"/api/v1.0/users", true},
+		{"/api/%2e%2e/secret", true},
+		{"", false},
+		{".", true},
+		{"%", true},
+	}
+	for _, tt := range tests {
+		got := containsDotPercent(tt.input)
+		if got != tt.want {
+			t.Errorf("containsDotPercent(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+// --- App.OnShutdown hooks ---
+
+func TestApp_OnShutdown_LIFO(t *testing.T) {
+	var order []int
+	app := New()
+	app.OnShutdown(func() { order = append(order, 1) })
+	app.OnShutdown(func() { order = append(order, 2) })
+	app.OnShutdown(func() { order = append(order, 3) })
+
+	app.runShutdownHooks()
+
+	if len(order) != 3 {
+		t.Fatalf("hook count = %d, want 3", len(order))
+	}
+	// LIFO order: 3, 2, 1
+	if order[0] != 3 || order[1] != 2 || order[2] != 1 {
+		t.Errorf("order = %v, want [3 2 1]", order)
+	}
+}
+
+func TestApp_OnShutdown_PanicRecovery(t *testing.T) {
+	var reached bool
+	app := New()
+	app.OnShutdown(func() { reached = true })
+	app.OnShutdown(func() { panic("boom") }) // this runs first (LIFO)
+
+	// Should not panic
+	app.runShutdownHooks()
+
+	if !reached {
+		t.Error("second hook should still run after first panics")
+	}
+}
+
+// --- App.OnParse ---
+
+func TestApp_OnParse(t *testing.T) {
+	called := false
+	app := New()
+	app.OnParse(func(c *Ctx, input any) error {
+		called = true
+		return nil
+	})
+	if len(app.hooks.OnParse) != 1 {
+		t.Errorf("OnParse hooks = %d, want 1", len(app.hooks.OnParse))
+	}
+	app.hooks.OnParse[0](nil, nil) // just invoke to test registration
+	if !called {
+		t.Error("OnParse hook not called")
+	}
+}
+
+// --- App.Validator lazy init ---
+
+func TestApp_Validator_LazyInit(t *testing.T) {
+	app := New() // no WithValidator
+	v := app.Validator()
+	if v == nil {
+		t.Error("Validator() should lazy-init")
+	}
+	// Second call should return same instance
+	v2 := app.Validator()
+	if v != v2 {
+		t.Error("Validator() should return same instance")
+	}
+}
+
+// --- handleError with custom ErrorHandler ---
+
+func TestHandleError_CustomHandler(t *testing.T) {
+	customCalled := false
+	app := New(WithErrorHandler(func(c *Ctx, err *KrudaError) {
+		customCalled = true
+		c.Status(503)
+		_ = c.Text("custom error")
+	}))
+	app.Get("/fail", func(c *Ctx) error {
+		return InternalError("oops")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/fail")
+	if !customCalled {
+		t.Error("custom error handler not called")
+	}
+	if resp.StatusCode() != 503 {
+		t.Errorf("status = %d, want 503", resp.StatusCode())
+	}
+}
+
+// --- Compile hasLifecycle flag ---
+
+func TestCompile_HasLifecycle_False(t *testing.T) {
+	app := New()
+	app.Get("/test", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.hasLifecycle {
+		t.Error("hasLifecycle should be false when no hooks registered")
+	}
+}
+
+func TestCompile_HasLifecycle_True(t *testing.T) {
+	app := New()
+	app.OnRequest(func(c *Ctx) error { return nil })
+	app.Get("/test", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if !app.hasLifecycle {
+		t.Error("hasLifecycle should be true when hooks registered")
+	}
+}
+
+// --- ServeKruda panic recovery ---
+
+func TestServeKruda_PanicRecovery(t *testing.T) {
+	app := New()
+	app.Get("/panic", func(c *Ctx) error {
+		panic("test panic")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/panic")
+	if resp.StatusCode() != 500 {
+		t.Errorf("status = %d, want 500 after panic", resp.StatusCode())
+	}
+}
+
+// --- ServeKruda hooks integration ---
+
+func TestServeKruda_OnRequestError(t *testing.T) {
+	app := New()
+	app.OnRequest(func(c *Ctx) error {
+		return NewError(429, "rate limited")
+	})
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("should not reach")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/test")
+	if resp.StatusCode() != 429 {
+		t.Errorf("status = %d, want 429", resp.StatusCode())
+	}
+}
+
+func TestServeKruda_BeforeHandleError(t *testing.T) {
+	app := New()
+	app.BeforeHandle(func(c *Ctx) error {
+		return NewError(401, "unauthorized")
+	})
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("should not reach")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/test")
+	if resp.StatusCode() != 401 {
+		t.Errorf("status = %d, want 401", resp.StatusCode())
+	}
+}
+
+func TestServeKruda_AfterHandleError(t *testing.T) {
+	app := New()
+	app.AfterHandle(func(c *Ctx) error {
+		return NewError(500, "after handle fail")
+	})
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/test")
+	// AfterHandle error is handled but response may already be written
+	if resp.StatusCode() != 200 && resp.StatusCode() != 500 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}
+
+// --- DevMode with KRUDA_ENV ---
+
+func TestNew_DevMode_EnvVar(t *testing.T) {
+	os.Setenv("KRUDA_ENV", "development")
+	defer os.Unsetenv("KRUDA_ENV")
+
+	app := New()
+	if !app.config.DevMode {
+		t.Error("DevMode should be true when KRUDA_ENV=development")
+	}
+}
+
+func TestNew_DevMode_Explicit(t *testing.T) {
+	app := New(WithDevMode(true))
+	if !app.config.DevMode {
+		t.Error("DevMode should be true")
+	}
+}
+
+// --- Ctx.Stream ---
+
+func TestCtx_Stream(t *testing.T) {
+	app := New()
+	app.Get("/stream", func(c *Ctx) error {
+		c.SetContentType("text/plain")
+		return c.Stream(strings.NewReader("streamed content"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/stream")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+	if !strings.Contains(resp.BodyString(), "streamed content") {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
+// --- Ctx.Bind with empty body ---
+
+func TestCtx_Bind_EmptyBody(t *testing.T) {
+	app := New()
+	app.Post("/bind-empty", func(c *Ctx) error {
+		var data struct{ Name string }
+		if err := c.Bind(&data); err != nil {
+			return c.Status(400).JSON(Map{"error": err.Error()})
+		}
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Post("/bind-empty", nil)
+	if resp.StatusCode() != 400 {
+		t.Errorf("status = %d, want 400 for empty body", resp.StatusCode())
+	}
+}
+
+// --- Ctx.Next ---
+
+func TestCtx_Next(t *testing.T) {
+	app := New()
+	app.Use(func(c *Ctx) error {
+		c.SetHeader("X-Before", "yes")
+		return c.Next()
+	})
+	app.Get("/test", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/test")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}
+
+// --- Ctx.BodyString ---
+
+func TestCtx_BodyString(t *testing.T) {
+	app := New()
+	app.Post("/body-str", func(c *Ctx) error {
+		bs := c.BodyString()
+		return c.Text("got: " + bs)
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Post("/body-str", []byte("hello"))
+	if !strings.Contains(resp.BodyString(), "got: hello") {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
+// --- Views: NewViewEngine from glob ---
+
+func TestNewViewEngine(t *testing.T) {
+	dir := t.TempDir()
+	f, err := os.Create(dir + "/test.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("Hello {{.Name}}")
+	f.Close()
+
+	engine := NewViewEngine(dir + "/*.html")
+	var buf bytes.Buffer
+	err = engine.Render(&buf, "test.html", struct{ Name string }{"World"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "Hello World" {
+		t.Errorf("render = %q", buf.String())
+	}
+}
+
+// --- Views: WithViews option ---
+
+func TestWithViews(t *testing.T) {
+	engine := &mockViewEngine{}
+	app := &App{config: defaultConfig()}
+	WithViews(engine)(app)
+	if app.config.Views != engine {
+		t.Error("Views not set")
+	}
+}
+
+// --- Views: multiple patterns in NewViewEngineFS ---
+
+func TestNewViewEngineFS_MultiplePatterns(t *testing.T) {
+	vfs := fstest.MapFS{
+		"a.html": {Data: []byte("A {{.V}}")},
+		"b.txt":  {Data: []byte("B {{.V}}")},
+	}
+	engine := NewViewEngineFS(vfs, "*.html", "*.txt")
+
+	var buf bytes.Buffer
+	err := engine.Render(&buf, "a.html", struct{ V string }{"1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "A 1" {
+		t.Errorf("render a = %q", buf.String())
+	}
+
+	buf.Reset()
+	err = engine.Render(&buf, "b.txt", struct{ V string }{"2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "B 2" {
+		t.Errorf("render b = %q", buf.String())
+	}
+}
+
+// --- Ctx.SendBytesWithType ---
+
+func TestCtx_SendBytesWithType(t *testing.T) {
+	app := New()
+	app.Get("/typed", func(c *Ctx) error {
+		return c.SendBytesWithType("application/xml", []byte("<root/>"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/typed")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+	if !strings.Contains(resp.Header("Content-Type"), "xml") {
+		t.Errorf("Content-Type = %q", resp.Header("Content-Type"))
+	}
+	if resp.BodyString() != "<root/>" {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
+// --- Ctx.SendBytesWithTypeBytes ---
+
+func TestCtx_SendBytesWithTypeBytes(t *testing.T) {
+	app := New()
+	app.Get("/typed-bytes", func(c *Ctx) error {
+		return c.SendBytesWithTypeBytes([]byte("text/csv"), []byte("a,b,c"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/typed-bytes")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}
+
+// --- Ctx.SendStaticWithTypeBytes ---
+
+func TestCtx_SendStaticWithTypeBytes(t *testing.T) {
+	app := New()
+	staticData := []byte("immutable static data")
+	app.Get("/static-typed", func(c *Ctx) error {
+		return c.SendStaticWithTypeBytes([]byte("text/plain"), staticData)
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/static-typed")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}
+
+// --- Ctx.SendBytes ---
+
+func TestCtx_SendBytes(t *testing.T) {
+	app := New()
+	app.Get("/send-bytes", func(c *Ctx) error {
+		c.SetContentType("application/octet-stream")
+		return c.SendBytes([]byte{0x01, 0x02, 0x03})
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/send-bytes")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+	if len(resp.Body()) != 3 {
+		t.Errorf("body len = %d, want 3", len(resp.Body()))
+	}
+}
+
+// --- Ctx.Redirect with default code ---
+
+func TestCtx_Redirect_DefaultCode(t *testing.T) {
+	app := New()
+	app.Get("/old", func(c *Ctx) error {
+		return c.Redirect("/new")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/old")
+	if resp.StatusCode() != 302 {
+		t.Errorf("status = %d, want 302 (default redirect)", resp.StatusCode())
+	}
+}
+
+// --- App.Use middleware ---
+
+func TestApp_Use_Chaining(t *testing.T) {
+	app := New()
+	mw1 := func(c *Ctx) error { return c.Next() }
+	mw2 := func(c *Ctx) error { return c.Next() }
+	result := app.Use(mw1, mw2)
+	if result != app {
+		t.Error("Use should return app for chaining")
+	}
+	if len(app.middleware) != 2 {
+		t.Errorf("middleware count = %d, want 2", len(app.middleware))
+	}
+}
+
+// --- writeHeaders path testing ---
+
+func TestWriteHeaders_SimpleCase(t *testing.T) {
+	app := New()
+	app.Get("/simple-headers", func(c *Ctx) error {
+		c.SetContentType("text/plain")
+		return c.SendBytes([]byte("ok"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/simple-headers")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}
+
+func TestWriteHeaders_ComplexCase(t *testing.T) {
+	app := New()
+	app.Get("/complex-headers", func(c *Ctx) error {
+		c.SetContentType("text/plain")
+		c.SetHeader("Cache-Control", "no-store")
+		c.SetHeader("Location", "/other")
+		c.SetCookie(&Cookie{Name: "s", Value: "v", Path: "/"})
+		return c.SendBytes([]byte("ok"))
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/complex-headers")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+}

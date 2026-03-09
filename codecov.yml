@@ -1,0 +1,16 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 5%
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "examples/**"
+  - "bench/**"
+  - "cmd/**"
+  - "coverage_boost_test.go"
+  - "devmode_pprof.go"

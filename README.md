@@ -1,6 +1,6 @@
-# Kruda (ครุฑ)
+# Kruda
 
-Type-safe Go web framework with auto-everything.
+Fast by default, type-safe by design.
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)

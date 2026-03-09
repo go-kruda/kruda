@@ -1,9 +1,16 @@
 FROM golang:1.26-alpine AS builder
 WORKDIR /build
 # Copy framework source (needed for replace directive)
-COPY . /kruda
+COPY go.mod go.sum /kruda/
+COPY *.go /kruda/
+COPY bench/ /kruda/bench/
+COPY cmd/ /kruda/cmd/
+COPY contrib/ /kruda/contrib/
+COPY internal/ /kruda/internal/
+COPY middleware/ /kruda/middleware/
+COPY transport/ /kruda/transport/
 # Copy TFB app source
-COPY src/ /build/
+COPY frameworks/Go/kruda/src/ /build/
 # Adjust replace directive to point to copied framework source
 RUN sed -i 's|../../../../|/kruda|g' /build/go.mod
 RUN cd /build && go mod download

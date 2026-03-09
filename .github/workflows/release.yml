@@ -46,9 +46,7 @@ jobs:
           go-version: stable
           
       - name: Build TFB Docker image
-        run: |
-          cd frameworks/Go/kruda
-          docker build -f Dockerfile -t kruda-tfb .
+        run: docker build -f frameworks/Go/kruda/Dockerfile -t kruda-tfb .
           
       - name: Test TFB endpoints
         run: |

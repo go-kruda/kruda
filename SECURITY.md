@@ -13,9 +13,7 @@ Security patches are applied to the latest minor release. Pre-1.0 releases recei
 
 **Please do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, report vulnerabilities via email:
-
-📧 **security@kruda.dev**
+Instead, report via [GitHub Security Advisories](https://github.com/go-kruda/kruda/security/advisories/new).
 
 Include the following in your report:
 

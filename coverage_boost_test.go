@@ -1269,7 +1269,7 @@ func TestStatic_UnknownExtension(t *testing.T) {
 	// Unknown extension should default to application/octet-stream
 	ct := resp.Header("Content-Type")
 	if ct != "" && !strings.Contains(ct, "octet-stream") && !strings.Contains(ct, "xyz") {
-		// Some systems may have xyz registered, so just check it's not empty
+		t.Logf("unexpected content-type for .xyz: %s", ct)
 	}
 }
 

@@ -692,9 +692,8 @@ func TestFhReqAdapter_Methods(t *testing.T) {
 	if adapter.Context() == nil {
 		t.Error("Context should not be nil")
 	}
-	if adapter.RemoteAddr() == "" {
-		// fasthttp RequestCtx may return empty addr in test, that's ok
-	}
+	// RemoteAddr may be empty in test context — just call it for coverage
+	_ = adapter.RemoteAddr()
 }
 
 // --- fhRespAdapter tests ---

@@ -2,26 +2,23 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Kruda',
-  description: 'Type-safe Go web framework with auto-everything',
+  description: 'Fast by default, type-safe by design — Go web framework',
   lang: 'en-US',
+  base: '/kruda/',
 
   head: [
     ['meta', { name: 'theme-color', content: '#e44d26' }],
     ['meta', { name: 'og:type', content: 'website' }],
-    ['meta', { name: 'og:title', content: 'Kruda — Type-safe Go Web Framework' }],
-    ['meta', { name: 'og:description', content: 'High-performance Go web framework combining speed with type-safety through Go generics.' }],
-    ['meta', { name: 'og:url', content: 'https://kruda.dev' }],
+    ['meta', { name: 'og:title', content: 'Kruda — Go Web Framework' }],
+    ['meta', { name: 'og:description', content: 'Fast by default, type-safe by design. High-performance Go web framework with typed handlers, auto CRUD, and custom async I/O transport.' }],
   ],
-
-  sitemap: {
-    hostname: 'https://kruda.dev',
-  },
 
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'API', link: '/api/app' },
-      { text: 'Examples', link: '/guide/getting-started#next-steps' },
+      { text: 'Benchmarks', link: 'https://go-kruda.github.io/kruda/benchmarks/' },
+      { text: 'GitHub', link: 'https://github.com/go-kruda/kruda' },
     ],
 
     sidebar: {
@@ -36,18 +33,35 @@ export default defineConfig({
           text: 'Core Concepts',
           items: [
             { text: 'Routing', link: '/guide/routing' },
-            { text: 'Handlers', link: '/guide/handlers' },
+            { text: 'Typed Handlers', link: '/guide/handlers' },
             { text: 'Middleware', link: '/guide/middleware' },
             { text: 'Error Handling', link: '/guide/error-handling' },
           ],
         },
         {
-          text: 'Advanced',
+          text: 'Features',
           items: [
-            { text: 'DI Container', link: '/guide/di-container' },
             { text: 'Auto CRUD', link: '/guide/auto-crud' },
+            { text: 'DI Container', link: '/guide/di-container' },
+            { text: 'Transport', link: '/guide/transport' },
             { text: 'Security', link: '/guide/security' },
             { text: 'Performance', link: '/guide/performance' },
+          ],
+        },
+        {
+          text: 'Ecosystem',
+          items: [
+            { text: 'Contrib Modules', link: '/guide/contrib' },
+            { text: 'AI Integration', link: '/guide/ai-integration' },
+          ],
+        },
+        {
+          text: 'Migration',
+          items: [
+            { text: 'From Gin', link: '/guide/coming-from-gin' },
+            { text: 'From Fiber', link: '/guide/coming-from-fiber' },
+            { text: 'From Echo', link: '/guide/coming-from-echo' },
+            { text: 'From stdlib', link: '/guide/coming-from-stdlib' },
           ],
         },
       ],
@@ -79,7 +93,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2026 Kruda Contributors',
+      copyright: 'Copyright 2026 Kruda Contributors',
     },
   },
 })

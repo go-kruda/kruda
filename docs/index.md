@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Kruda
-  text: Type-safe Go Web Framework
-  tagline: Auto-everything — typed handlers, validation, OpenAPI, CRUD, DI. Write less, ship faster.
+  text: Fast by default, type-safe by design
+  tagline: High-performance Go web framework with typed handlers, auto CRUD, and custom async I/O transport
   actions:
     - theme: brand
       text: Get Started
@@ -14,39 +14,22 @@ hero:
       link: https://github.com/go-kruda/kruda
 
 features:
-  - icon: 🔒
-    title: Type-Safe Handlers
-    details: Generic typed handlers C[T] with compile-time checks. Body, params, and query parsed into a single struct — zero reflection at runtime.
-  - icon: ⚡
-    title: Auto-Everything
-    details: Auto-validation, auto-error-mapping, auto-OpenAPI 3.1, auto-CRUD. 60-70% less boilerplate than Gin or Fiber.
-  - icon: 🚀
-    title: Blazing Fast
-    details: Wing transport (raw epoll+eventfd) beats Fiber by 26% and Actix (Rust) by 4%. Pluggable — Wing, fasthttp, or net/http.
-  - icon: 📦
+  - icon: "\U0001F512"
+    title: Typed Handlers C[T]
+    details: Body, params, and query parsed into one struct. Validated at compile time. No manual binding.
+  - icon: "\U000026A1"
+    title: Auto CRUD
+    details: Implement ResourceService[T] and get 5 REST endpoints. One line of code.
+  - icon: "\U0001F680"
+    title: Wing Transport
+    details: Custom epoll+eventfd on Linux, kqueue on macOS. 846K req/s plaintext — beats Fiber by 26%.
+  - icon: "\U0001F4E6"
     title: Built-in DI
-    details: Optional dependency injection with Give/Use pattern. No codegen, no reflection. Modules, lifecycle management, and auto-wiring.
+    details: Optional dependency injection with Go generics. No codegen, no reflection.
+  - icon: "\U0001F916"
+    title: AI-Friendly
+    details: Built-in MCP server for AI coding assistants. Typed API means AI generates correct code on first try.
+  - icon: "\U0001F6E1"
+    title: Minimal Dependencies
+    details: Sonic JSON (opt-out via build tag). 10 contrib modules. Pluggable transport.
 ---
-
-## Quick Start
-
-```go
-package main
-
-import "github.com/go-kruda/kruda"
-
-func main() {
-    app := kruda.New()
-
-    app.Get("/", func(c *kruda.Ctx) error {
-        return c.Status(200).JSON(map[string]string{"message": "Hello, Kruda!"})
-    })
-
-    app.Listen(":3000")
-}
-```
-
-```bash
-go get github.com/go-kruda/kruda
-go run main.go
-```

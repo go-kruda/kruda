@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,6 +46,15 @@ jobs:
       - name: Build VitePress site
         run: npx vitepress build
         working-directory: docs
+
+      - name: Copy benchmark data from gh-pages
+        run: |
+          git fetch origin gh-pages --depth=1 || true
+          if git show origin/gh-pages:benchmarks/index.html > /dev/null 2>&1; then
+            mkdir -p docs/.vitepress/dist/benchmarks
+            git show origin/gh-pages:benchmarks/index.html > docs/.vitepress/dist/benchmarks/index.html
+            git show origin/gh-pages:benchmarks/data.js > docs/.vitepress/dist/benchmarks/data.js
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -111,6 +111,10 @@ func TestValidateMin(t *testing.T) {
 		{uint(10), "5", true},
 		{3.14, "3.0", true},
 		{2.5, "3.0", false},
+		{[]int{1, 2, 3}, "2", true},     // slice len 3 >= 2
+		{[]int{1}, "2", false},           // slice len 1 < 2
+		{true, "1", false},               // unsupported type
+		{5, "invalid", false},            // invalid param
 	}
 	for _, tt := range tests {
 		if got := validateMin(tt.value, tt.param); got != tt.want {
@@ -132,6 +136,10 @@ func TestValidateMax(t *testing.T) {
 		{uint(3), "5", true},
 		{2.5, "3.0", true},
 		{3.5, "3.0", false},
+		{[]int{1, 2}, "3", true},         // slice len 2 <= 3
+		{[]int{1, 2, 3, 4}, "3", false},  // slice len 4 > 3
+		{true, "1", false},               // unsupported type
+		{5, "invalid", false},            // invalid param
 	}
 	for _, tt := range tests {
 		if got := validateMax(tt.value, tt.param); got != tt.want {
@@ -203,6 +211,9 @@ func TestValidateLen(t *testing.T) {
 		{"ab", "3", false},
 		{[]int{1, 2}, "2", true},
 		{[]int{1}, "2", false},
+		{map[string]int{"a": 1}, "1", true},
+		{42, "2", false},         // unsupported type (int)
+		{"abc", "invalid", false}, // invalid param
 	}
 	for _, tt := range tests {
 		if got := validateLen(tt.value, tt.param); got != tt.want {
@@ -237,6 +248,35 @@ func TestValidateGTE(t *testing.T) {
 	if validateGTE(4, "5") {
 		t.Error("4 >= 5 should be false")
 	}
+	// uint
+	if !validateGTE(uint(5), "5") {
+		t.Error("uint(5) >= 5 should be true")
+	}
+	if validateGTE(uint(4), "5") {
+		t.Error("uint(4) >= 5 should be false")
+	}
+	// float
+	if !validateGTE(5.0, "5.0") {
+		t.Error("5.0 >= 5.0 should be true")
+	}
+	if validateGTE(4.9, "5.0") {
+		t.Error("4.9 >= 5.0 should be false")
+	}
+	// string length
+	if !validateGTE("hello", "5") {
+		t.Error("len(hello)=5 >= 5 should be true")
+	}
+	if validateGTE("hi", "5") {
+		t.Error("len(hi)=2 >= 5 should be false")
+	}
+	// invalid param
+	if validateGTE(5, "invalid") {
+		t.Error("invalid param should return false")
+	}
+	// unsupported type
+	if validateGTE(true, "1") {
+		t.Error("bool should return false")
+	}
 }
 
 func TestValidateLT(t *testing.T) {
@@ -246,6 +286,35 @@ func TestValidateLT(t *testing.T) {
 	if validateLT(5, "5") {
 		t.Error("5 < 5 should be false")
 	}
+	// uint
+	if !validateLT(uint(3), "5") {
+		t.Error("uint(3) < 5 should be true")
+	}
+	if validateLT(uint(5), "5") {
+		t.Error("uint(5) < 5 should be false")
+	}
+	// float
+	if !validateLT(4.9, "5.0") {
+		t.Error("4.9 < 5.0 should be true")
+	}
+	if validateLT(5.0, "5.0") {
+		t.Error("5.0 < 5.0 should be false")
+	}
+	// string length
+	if !validateLT("hi", "5") {
+		t.Error("len(hi)=2 < 5 should be true")
+	}
+	if validateLT("hello", "5") {
+		t.Error("len(hello)=5 < 5 should be false")
+	}
+	// invalid param
+	if validateLT(3, "invalid") {
+		t.Error("invalid param should return false")
+	}
+	// unsupported type
+	if validateLT(true, "5") {
+		t.Error("bool should return false")
+	}
 }
 
 func TestValidateLTE(t *testing.T) {
@@ -254,6 +323,35 @@ func TestValidateLTE(t *testing.T) {
 	}
 	if validateLTE(6, "5") {
 		t.Error("6 <= 5 should be false")
+	}
+	// uint
+	if !validateLTE(uint(5), "5") {
+		t.Error("uint(5) <= 5 should be true")
+	}
+	if validateLTE(uint(6), "5") {
+		t.Error("uint(6) <= 5 should be false")
+	}
+	// float
+	if !validateLTE(5.0, "5.0") {
+		t.Error("5.0 <= 5.0 should be true")
+	}
+	if validateLTE(5.1, "5.0") {
+		t.Error("5.1 <= 5.0 should be false")
+	}
+	// string length
+	if !validateLTE("hi", "5") {
+		t.Error("len(hi)=2 <= 5 should be true")
+	}
+	if validateLTE("toolong", "5") {
+		t.Error("len(toolong)=7 <= 5 should be false")
+	}
+	// invalid param
+	if validateLTE(5, "invalid") {
+		t.Error("invalid param should return false")
+	}
+	// unsupported type
+	if validateLTE(true, "5") {
+		t.Error("bool should return false")
 	}
 }
 

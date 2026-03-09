@@ -3,6 +3,7 @@
 package json
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -140,5 +141,91 @@ func TestMarshalFloat(t *testing.T) {
 	}
 	if string(data) != "3.14" {
 		t.Fatalf("got %s, want 3.14", data)
+	}
+}
+
+func TestMarshalToBuffer_Struct(t *testing.T) {
+	type item struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, item{Name: "widget", Count: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := `{"name":"widget","count":5}`
+	if buf.String() != want {
+		t.Fatalf("got %q, want %q", buf.String(), want)
+	}
+}
+
+func TestMarshalToBuffer_NoTrailingNewline(t *testing.T) {
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, "hello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := buf.String()
+	if got[len(got)-1] == '\n' {
+		t.Fatal("output should not end with newline")
+	}
+	if got != `"hello"` {
+		t.Fatalf("got %q, want %q", got, `"hello"`)
+	}
+}
+
+func TestMarshalToBuffer_Nil(t *testing.T) {
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.String() != "null" {
+		t.Fatalf("got %q, want %q", buf.String(), "null")
+	}
+}
+
+func TestMarshalToBuffer_Map(t *testing.T) {
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, map[string]int{"a": 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.String() != `{"a":1}` {
+		t.Fatalf("got %q, want %q", buf.String(), `{"a":1}`)
+	}
+}
+
+func TestMarshalToBuffer_Error(t *testing.T) {
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, make(chan int))
+	if err == nil {
+		t.Fatal("expected error for unsupported type")
+	}
+}
+
+func TestMarshalToBuffer_Slice(t *testing.T) {
+	buf := &bytes.Buffer{}
+	err := MarshalToBuffer(buf, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.String() != "[1,2,3]" {
+		t.Fatalf("got %q, want %q", buf.String(), "[1,2,3]")
+	}
+}
+
+func TestMarshalToBuffer_ReusesBuffer(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// Write first
+	_ = MarshalToBuffer(buf, "first")
+	first := buf.String()
+	// Reset and write second
+	buf.Reset()
+	_ = MarshalToBuffer(buf, "second")
+	second := buf.String()
+	if first != `"first"` || second != `"second"` {
+		t.Fatalf("first=%q, second=%q", first, second)
 	}
 }

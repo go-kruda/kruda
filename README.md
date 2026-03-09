@@ -3,6 +3,7 @@
 Fast by default, type-safe by design.
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-kruda/kruda.svg)](https://pkg.go.dev/github.com/go-kruda/kruda)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
 [![Coverage](https://codecov.io/gh/go-kruda/kruda/branch/main/graph/badge.svg)](https://codecov.io/gh/go-kruda/kruda)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -14,7 +15,7 @@ Fast by default, type-safe by design.
 - Built-in DI — optional, no codegen, type-safe generics
 - Pluggable transport — Wing (Linux, epoll+eventfd), fasthttp, or net/http
 - Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
-- Dev mode error page — rich HTML with source code context, like Next.js
+- AI-friendly — typed API + 21 examples = AI generates correct code on first try
 
 ## Quick Start
 
@@ -142,6 +143,31 @@ Full documentation at [kruda.dev](https://kruda.dev):
 - [DI Container](https://kruda.dev/guide/di-container)
 - [Error Handling](https://kruda.dev/guide/error-handling)
 - [API Reference](https://kruda.dev/api/app)
+
+## AI Integration
+
+Kruda includes a built-in [MCP](https://modelcontextprotocol.io/) server for AI coding assistants (Claude Code, Cursor, Copilot).
+
+```bash
+# Install CLI
+go install github.com/go-kruda/kruda/cmd/kruda@latest
+
+# New projects — .mcp.json included automatically
+kruda new myapp
+
+# Existing projects
+kruda mcp init        # generates .mcp.json + .cursor/mcp.json
+kruda mcp --test      # verify it works
+```
+
+| Tool | Description |
+|------|-------------|
+| `kruda_new` | Scaffold a new project |
+| `kruda_add_handler` | Generate a typed handler with `C[T]` pattern |
+| `kruda_add_resource` | Generate a CRUD `ResourceService` |
+| `kruda_list_routes` | Scan source code and list all registered routes |
+| `kruda_suggest_wing` | Suggest Wing Feather hints for routes |
+| `kruda_docs` | Look up Kruda docs and code examples |
 
 ## Security
 

@@ -24,6 +24,7 @@ func main() {
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(mcpCmd)
 
 	// PGO commands: kruda pgo, kruda pgo info, kruda pgo strip
 	pgoCmd.AddCommand(pgoInfoCmd)

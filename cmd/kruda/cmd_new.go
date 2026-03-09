@@ -146,4 +146,8 @@ func printGettingStarted(name, tmplName string) {
 	fmt.Println("    go mod tidy")
 	fmt.Println("    go run .")
 	fmt.Println()
+	fmt.Println("  AI Integration (Claude Code / Cursor):")
+	fmt.Println("    .mcp.json included — restart your AI assistant to enable Kruda tools.")
+	fmt.Println("    Verify: kruda mcp --test")
+	fmt.Println()
 }

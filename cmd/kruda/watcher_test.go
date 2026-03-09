@@ -41,7 +41,7 @@ func TestIsWatchedFile(t *testing.T) {
 		{"readme.md", false},
 		{"config.yaml", false},
 		{"app_pbt_test.go", false},
-		{".go", true},       // edge case: just extension
+		{".go", true}, // edge case: just extension
 		{"build.sh", false},
 	}
 	for _, tt := range tests {

@@ -527,7 +527,6 @@ func TestContainer_MustUseNamed_Panics(t *testing.T) {
 	MustUseNamed[string](c, "missing")
 }
 
-
 // --- App hooks ---
 
 func TestApp_OnRequest(t *testing.T) {

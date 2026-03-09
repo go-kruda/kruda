@@ -16,9 +16,9 @@ func TestHandlerNameFromPath(t *testing.T) {
 		{"/products/:id", "Products"},
 		{"/api/v1/orders", "Orders"},
 		{"/api", "Api"},
-		{"/:id", ""},         // only params → empty
-		{"/*path", ""},       // only wildcard → empty
-		{"/", ""},            // root only → empty
+		{"/:id", ""},   // only params → empty
+		{"/*path", ""}, // only wildcard → empty
+		{"/", ""},      // root only → empty
 		{"/users/:id", "Users"},
 		{"/api/v2/items/:itemID", "Items"},
 	}

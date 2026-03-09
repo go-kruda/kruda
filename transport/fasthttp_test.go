@@ -304,7 +304,7 @@ func TestFastHTTPTransport_AllConfig(t *testing.T) {
 		TrustProxy:   true,
 	}
 	transport := NewFastHTTP(cfg)
-	
+
 	if transport.config.ReadTimeout != 5*time.Second {
 		t.Errorf("ReadTimeout = %v, want 5s", transport.config.ReadTimeout)
 	}
@@ -357,7 +357,7 @@ func TestFasthttpRequest_AllHeaders_Empty(t *testing.T) {
 func TestFastHTTPTransport_ZeroConfig(t *testing.T) {
 	cfg := FastHTTPConfig{} // All zero values
 	transport := NewFastHTTP(cfg)
-	
+
 	if transport.config.ReadTimeout != 0 {
 		t.Errorf("ReadTimeout = %v, want 0", transport.config.ReadTimeout)
 	}
@@ -382,7 +382,7 @@ func TestFastHTTPIntegration(t *testing.T) {
 	var capturedMethod, capturedPath string
 	var capturedHeaders map[string]string
 	var capturedQuery map[string]string
-	
+
 	handler := HandlerFunc(func(w ResponseWriter, r Request) {
 		capturedMethod = r.Method()
 		capturedPath = r.Path()
@@ -396,18 +396,18 @@ func TestFastHTTPIntegration(t *testing.T) {
 		w.WriteHeader(201)
 		w.Write([]byte("created"))
 	})
-	
+
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.SetMethod("POST")
 	ctx.Request.SetRequestURI("/api/test?param=value")
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Request.SetBody([]byte(`{"data":"test"}`))
-	
+
 	req := &fasthttpRequest{ctx: ctx, trustProxy: false}
 	resp := &fasthttpResponseWriter{ctx: ctx}
-	
+
 	handler.ServeKruda(resp, req)
-	
+
 	if capturedMethod != "POST" {
 		t.Errorf("expected POST, got %s", capturedMethod)
 	}

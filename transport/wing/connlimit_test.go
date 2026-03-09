@@ -21,19 +21,19 @@ type mockEngine struct {
 	flushed     int
 }
 
-func (m *mockEngine) Init(_ engineConfig) error           { return nil }
-func (m *mockEngine) SubmitAccept(_ int)                  { m.acceptArmed++ }
-func (m *mockEngine) SubmitRecv(_ int32, _ []byte, _ int) { m.recvArmed++ }
-func (m *mockEngine) SubmitSend(_ int32, _ []byte)        { m.sendArmed++ }
-func (m *mockEngine) SubmitClose(fd int32)                { m.closedFds = append(m.closedFds, fd) }
-func (m *mockEngine) Detach(_ int32)                      {}
-func (m *mockEngine) SubmitPipeRecv(_ int, _ []byte)      {}
+func (m *mockEngine) Init(_ engineConfig) error              { return nil }
+func (m *mockEngine) SubmitAccept(_ int)                     { m.acceptArmed++ }
+func (m *mockEngine) SubmitRecv(_ int32, _ []byte, _ int)    { m.recvArmed++ }
+func (m *mockEngine) SubmitSend(_ int32, _ []byte)           { m.sendArmed++ }
+func (m *mockEngine) SubmitClose(fd int32)                   { m.closedFds = append(m.closedFds, fd) }
+func (m *mockEngine) Detach(_ int32)                         {}
+func (m *mockEngine) SubmitPipeRecv(_ int, _ []byte)         {}
 func (m *mockEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
-func (m *mockEngine) PostWake()                           {}
-func (m *mockEngine) Wait(_ []event) (int, error)         { return 0, nil }
-func (m *mockEngine) WaitNonBlock(_ []event) (int, error) { return 0, nil }
-func (m *mockEngine) Flush() error                        { return nil }
-func (m *mockEngine) Close()                              {}
+func (m *mockEngine) PostWake()                              {}
+func (m *mockEngine) Wait(_ []event) (int, error)            { return 0, nil }
+func (m *mockEngine) WaitNonBlock(_ []event) (int, error)    { return 0, nil }
+func (m *mockEngine) Flush() error                           { return nil }
+func (m *mockEngine) Close()                                 {}
 
 func newTestWorker(maxConns int) (*worker, *mockEngine) {
 	eng := &mockEngine{}

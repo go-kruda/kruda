@@ -29,8 +29,6 @@ type Config struct {
 	IdleTimeout       time.Duration
 }
 
-
-
 // Transport is a stub on unsupported platforms.
 type Transport struct {
 	ready    chan struct{}

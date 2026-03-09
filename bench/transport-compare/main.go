@@ -153,9 +153,9 @@ func getFreePort() int {
 }
 
 type transportRunner struct {
-	name      string
-	addr      string
-	shutdown  func()
+	name     string
+	addr     string
+	shutdown func()
 }
 
 func startFastHTTP() *transportRunner {

@@ -4,7 +4,7 @@
 //
 //	app := kruda.New()
 //	app.Use(compress.New())
-//	
+//
 //	app.Get("/api/data", func(c *kruda.Ctx) error {
 //		return compress.CompressText(c, "large response data...")
 //	})

@@ -18,13 +18,13 @@ import (
 
 // Errors returned by JWT operations.
 var (
-	ErrInvalidToken      = errors.New("invalid_token")
-	ErrTokenExpired      = errors.New("token_expired")
-	ErrTokenNotYetValid  = errors.New("token_not_yet_valid")
-	ErrMissingToken      = errors.New("missing_token")
-	ErrAlgNone           = errors.New("jwt: algorithm \"none\" is not allowed")
-	ErrUnsupportedAlg    = errors.New("jwt: unsupported algorithm")
-	ErrInvalidKey        = errors.New("jwt: invalid signing key")
+	ErrInvalidToken     = errors.New("invalid_token")
+	ErrTokenExpired     = errors.New("token_expired")
+	ErrTokenNotYetValid = errors.New("token_not_yet_valid")
+	ErrMissingToken     = errors.New("missing_token")
+	ErrAlgNone          = errors.New("jwt: algorithm \"none\" is not allowed")
+	ErrUnsupportedAlg   = errors.New("jwt: unsupported algorithm")
+	ErrInvalidKey       = errors.New("jwt: invalid signing key")
 )
 
 // header is the JWT header.

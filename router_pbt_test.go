@@ -322,5 +322,3 @@ func indexByte(s string, b byte) int {
 	}
 	return -1
 }
-
-

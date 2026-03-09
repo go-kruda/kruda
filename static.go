@@ -38,11 +38,11 @@ func (app *App) StaticFS(prefix string, fsys fs.FS, opts ...StaticOption) *App {
 }
 
 type staticConfig struct {
-	root    string
-	index   string
-	browse  bool
-	maxAge  int
-	spa     bool // serve index.html for missing files
+	root   string
+	index  string
+	browse bool
+	maxAge int
+	spa    bool // serve index.html for missing files
 }
 
 // StaticOption configures static file serving.

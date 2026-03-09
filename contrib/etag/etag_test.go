@@ -13,14 +13,14 @@ func TestNew(t *testing.T) {
 
 	app.Get("/test", func(c *kruda.Ctx) error {
 		body := []byte("test response")
-		
+
 		// Generate and set ETag before sending response
 		etag := GenerateETag(body, true)
 		if SetETag(c, etag) {
 			// Return 304 if ETag matches
 			return nil
 		}
-		
+
 		// Send response with ETag already set
 		return c.Text(string(body))
 	})
@@ -149,7 +149,7 @@ func TestSkipExistingETag(t *testing.T) {
 
 func TestGenerateETag(t *testing.T) {
 	body := []byte("test content")
-	
+
 	// Test weak ETag
 	etag := GenerateETag(body, true)
 	if etag == "" {
@@ -200,12 +200,12 @@ func TestBasicHeaderSetting(t *testing.T) {
 	app.ServeHTTP(resp, req)
 
 	t.Logf("Response headers: %v", resp.Header())
-	
+
 	custom := resp.Header().Get("X-Custom-Header")
 	if custom != "test-value" {
 		t.Errorf("Expected X-Custom-Header to be set, got %s", custom)
 	}
-	
+
 	etag := resp.Header().Get("ETag")
 	if etag != `W/"test-etag"` {
 		t.Errorf("Expected ETag to be set, got %s", etag)
@@ -266,7 +266,7 @@ func TestIsWeakETag(t *testing.T) {
 
 func TestContainsETag(t *testing.T) {
 	list := `W/"abc123", "def456", W/"ghi789"`
-	
+
 	if !containsETag(list, `W/"abc123"`) {
 		t.Error("Expected to find first ETag in list")
 	}
@@ -347,7 +347,7 @@ func TestHEADMethod(t *testing.T) {
 		}
 		return c.Text(string(body))
 	}
-	
+
 	app.Get("/test", handler)
 	app.Head("/test", handler)
 

@@ -7,6 +7,7 @@ import (
 	"net"
 	"syscall"
 )
+
 // SO_REUSEPORT on macOS/BSD.
 const soReusePort = syscall.SO_REUSEPORT
 

@@ -13,11 +13,11 @@ type C[T any] struct {
 type RouteOption func(*routeConfig)
 
 type routeConfig struct {
-	description  string
-	tags         []string
-	inType       reflect.Type // input type T (for OpenAPI schema generation)
-	outType      reflect.Type // output type Out (for OpenAPI schema generation)
-	wingFeather  any          // wing.Feather (any to avoid import cycle)
+	description string
+	tags        []string
+	inType      reflect.Type // input type T (for OpenAPI schema generation)
+	outType     reflect.Type // output type Out (for OpenAPI schema generation)
+	wingFeather any          // wing.Feather (any to avoid import cycle)
 }
 
 // WithDescription sets a route description (used by OpenAPI in Phase 2B).

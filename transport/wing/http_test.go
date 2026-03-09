@@ -1138,10 +1138,10 @@ func TestPipelining_ConsumedEqualsInputForSingleRequest(t *testing.T) {
 func TestPipelining_ConsumedPlusTailEqualsTotal(t *testing.T) {
 	req := "GET /x HTTP/1.1\r\n\r\n"
 	tails := []string{
-		"",                  // no tail
-		"G",                 // 1 byte
-		"GET / HT",          // partial next request
-		"garbage\x00\xff",   // random bytes
+		"",                        // no tail
+		"G",                       // 1 byte
+		"GET / HT",                // partial next request
+		"garbage\x00\xff",         // random bytes
 		"GET /y HTTP/1.1\r\n\r\n", // complete next request
 	}
 	for _, tail := range tails {
@@ -1702,9 +1702,9 @@ func TestTransportSim_MixedRecvSizes(t *testing.T) {
 
 	// Deliver in 3 uneven chunks.
 	chunks := []string{
-		fullData[:20],               // partial first request
-		fullData[20:70],             // rest of first + start of second
-		fullData[70:],               // rest of second + all of third
+		fullData[:20],   // partial first request
+		fullData[20:70], // rest of first + start of second
+		fullData[70:],   // rest of second + all of third
 	}
 
 	var gotPaths []string
@@ -1827,7 +1827,6 @@ func TestTransportSim_ConnectionCloseStopsPipelining(t *testing.T) {
 	}
 	t.Error("should have returned on !keepAlive branch")
 }
-
 
 // ----------------------------- Cookie Tests -----------------------------
 

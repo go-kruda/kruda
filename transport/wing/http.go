@@ -104,7 +104,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	keepAlive := true // HTTP/1.1 default
 	headerCount := 0
 	contentLengthSeen := false
-	hasTE := false            
+	hasTE := false
 	hasCL := false
 	var extraHdrs [8]struct{ k, v string }
 	extraN := 0
@@ -415,18 +415,18 @@ type wingRequest struct {
 	ctx         context.Context
 }
 
-func (r *wingRequest) Method() string         { return r.method }
-func (r *wingRequest) Path() string           { return r.path }
-func (r *wingRequest) Body() ([]byte, error)  { return r.body, nil }
-func (r *wingRequest) RemoteAddr() string     { return r.remoteAddr }
-func (r *wingRequest) RawRequest() any        { return r }
+func (r *wingRequest) Method() string        { return r.method }
+func (r *wingRequest) Path() string          { return r.path }
+func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
+func (r *wingRequest) RemoteAddr() string    { return r.remoteAddr }
+func (r *wingRequest) RawRequest() any       { return r }
 func (r *wingRequest) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx
 	}
 	return context.Background()
 }
-func (r *wingRequest) Cookie(name string) string                      { return parseCookieValue(r.cookie, name) }
+func (r *wingRequest) Cookie(name string) string { return parseCookieValue(r.cookie, name) }
 func (r *wingRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
 	ct := r.contentType
 	if ct == "" {

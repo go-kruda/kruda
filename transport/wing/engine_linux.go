@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	epollin    = 0x1
-	epollout   = 0x4
-	epollet    = 0x80000000
+	epollin      = 0x1
+	epollout     = 0x4
+	epollet      = 0x80000000
 	epolloneshot = 0x40000000
 
 	epollCtlAdd = 1

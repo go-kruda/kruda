@@ -397,6 +397,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	}
 	w.cleanup()
 }
+
 // sweepTimeouts closes connections that have exceeded their timeout.
 // Called at most once per second — zero cost when no timeouts configured.
 func (w *worker) sweepTimeouts(now int64) {
@@ -722,7 +723,6 @@ func (w *worker) handleDone(msg doneMsg) {
 	w.eng.SubmitSend(c.fd, nil)
 }
 
-
 // directSend attempts a non-blocking write. If partial, falls back to epoll EPOLLOUT.
 func (w *worker) directSend(c *conn) {
 	for c.sendN < len(c.sendBuf) {
@@ -779,6 +779,7 @@ func (w *worker) directSend(c *conn) {
 	// kqueue/darwin SubmitRecv is required to register EVFILT_READ.
 	w.eng.SubmitRecv(c.fd, nil, 0)
 }
+
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
 

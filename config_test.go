@@ -184,4 +184,3 @@ func TestWithTLS_DefaultEmpty(t *testing.T) {
 		t.Errorf("default TLSKeyFile should be empty, got %q", cfg.TLSKeyFile)
 	}
 }
-

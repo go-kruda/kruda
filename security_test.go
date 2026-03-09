@@ -763,8 +763,8 @@ func TestPathTraversal_BackslashVariants(t *testing.T) {
 	// Backslash path traversal variants (Windows-style)
 	paths := []string{
 		"/..\\etc\\passwd",
-		"/..%5c..%5cetc%5cpasswd",   // %5c = backslash
-		"/..%5C..%5Cetc%5Cpasswd",   // uppercase %5C
+		"/..%5c..%5cetc%5cpasswd", // %5c = backslash
+		"/..%5C..%5Cetc%5Cpasswd", // uppercase %5C
 	}
 	for _, p := range paths {
 		resp, err := tc.Get(p)

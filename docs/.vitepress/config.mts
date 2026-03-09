@@ -7,13 +7,19 @@ export default defineConfig({
   base: '/kruda/',
 
   head: [
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/kruda/favicon-32x32.png' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/kruda/favicon-16x16.png' }],
+    ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: '/kruda/apple-touch-icon.png' }],
     ['meta', { name: 'theme-color', content: '#e44d26' }],
     ['meta', { name: 'og:type', content: 'website' }],
     ['meta', { name: 'og:title', content: 'Kruda — Go Web Framework' }],
     ['meta', { name: 'og:description', content: 'Fast by default, type-safe by design. High-performance Go web framework with typed handlers, auto CRUD, and custom async I/O transport.' }],
+    ['meta', { name: 'og:image', content: 'https://go-kruda.github.io/kruda/kruda-og.jpg' }],
   ],
 
   themeConfig: {
+    logo: '/kruda-mascot.jpg',
+
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'API', link: '/api/app' },

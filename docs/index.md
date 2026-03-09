@@ -12,24 +12,27 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/go-kruda/kruda
+  image:
+    src: /kruda-hero.jpg
+    alt: Kruda Garuda mascot carrying Go gopher
 
 features:
-  - icon: "\U0001F512"
+  - icon: 🔒
     title: Typed Handlers C[T]
     details: Body, params, and query parsed into one struct. Validated at compile time. No manual binding.
-  - icon: "\U000026A1"
+  - icon: ⚡
     title: Auto CRUD
     details: Implement ResourceService[T] and get 5 REST endpoints. One line of code.
-  - icon: "\U0001F680"
+  - icon: 🚀
     title: Wing Transport
     details: Custom epoll+eventfd on Linux, kqueue on macOS. 846K req/s plaintext — beats Fiber by 26%.
-  - icon: "\U0001F4E6"
+  - icon: 📦
     title: Built-in DI
     details: Optional dependency injection with Go generics. No codegen, no reflection.
-  - icon: "\U0001F916"
+  - icon: 🤖
     title: AI-Friendly
     details: Built-in MCP server for AI coding assistants. Typed API means AI generates correct code on first try.
-  - icon: "\U0001F6E1"
+  - icon: 🛡
     title: Minimal Dependencies
     details: Sonic JSON (opt-out via build tag). 10 contrib modules. Pluggable transport.
 ---

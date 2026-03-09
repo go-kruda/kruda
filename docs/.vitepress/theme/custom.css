@@ -1,0 +1,276 @@
+/* ─── Kruda Docs — Custom Theme ─── */
+
+/* Brand Colors: Deep indigo + electric orange accent */
+:root {
+  --vp-c-brand-1: #f97316;
+  --vp-c-brand-2: #ea580c;
+  --vp-c-brand-3: #c2410c;
+  --vp-c-brand-soft: rgba(249, 115, 22, 0.14);
+
+  /* Tip = brand orange */
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-tip-2: var(--vp-c-brand-2);
+  --vp-c-tip-3: var(--vp-c-brand-3);
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
+
+  /* Home hero gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #f97316 0%, #dc2626 50%, #7c3aed 100%);
+  --vp-home-hero-image-background-image: linear-gradient(135deg, rgba(249, 115, 22, 0.3) 0%, rgba(124, 58, 237, 0.3) 100%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.dark {
+  --vp-c-brand-1: #fb923c;
+  --vp-c-brand-2: #f97316;
+  --vp-c-brand-3: #ea580c;
+  --vp-c-brand-soft: rgba(251, 146, 60, 0.14);
+
+  --vp-home-hero-image-background-image: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
+}
+
+/* ─── Hero Section ─── */
+.VPHero .name {
+  font-size: 4rem !important;
+  letter-spacing: -0.02em;
+}
+
+.VPHero .text {
+  font-size: 1.5rem !important;
+  white-space: nowrap;
+  background: linear-gradient(135deg, var(--vp-c-text-1) 0%, var(--vp-c-text-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.VPHero .tagline {
+  font-size: 1.1rem !important;
+  max-width: 560px;
+  line-height: 1.6;
+}
+
+/* Hero image */
+.VPHero .VPImage {
+  max-width: 280px;
+  max-height: 280px;
+  border-radius: 24px;
+  filter: drop-shadow(0 12px 32px rgba(249, 115, 22, 0.2));
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), filter 0.4s ease;
+}
+
+.VPHero .VPImage:hover {
+  transform: scale(1.03) translateY(-4px);
+  filter: drop-shadow(0 16px 40px rgba(249, 115, 22, 0.3));
+}
+
+.dark .VPHero .VPImage {
+  filter: drop-shadow(0 12px 32px rgba(251, 146, 60, 0.15));
+}
+
+/* Hero image glow */
+.VPHero .image-container .image-bg {
+  opacity: 0.8;
+  transition: opacity 0.5s ease;
+}
+
+/* ─── Feature Cards ─── */
+.VPFeature {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--vp-c-bg-soft);
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 8px 32px rgba(249, 115, 22, 0.08);
+  transform: translateY(-2px);
+}
+
+.dark .VPFeature:hover {
+  box-shadow: 0 8px 32px rgba(249, 115, 22, 0.12);
+}
+
+.VPFeature .icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.VPFeature .title {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
+}
+
+.VPFeature .details {
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+}
+
+/* ─── Buttons ─── */
+.VPButton.brand {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  border: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.VPButton.brand:hover {
+  background: linear-gradient(135deg, #fb923c, #f97316);
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+}
+
+.VPButton.alt {
+  border: 1px solid var(--vp-c-divider);
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.VPButton.alt:hover {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+/* ─── Sidebar ─── */
+.VPSidebar .group .title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.VPSidebarItem.is-active > .item .link > .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+/* ─── Code Blocks ─── */
+.vp-doc div[class*='language-'] {
+  border-radius: 10px;
+  border: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc div[class*='language-']:hover {
+  border-color: var(--vp-c-brand-soft);
+}
+
+/* ─── Content ─── */
+.vp-doc h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--vp-c-text-1) 0%, var(--vp-c-brand-1) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.vp-doc h2 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--vp-c-brand-soft);
+}
+
+.vp-doc a {
+  text-decoration-color: var(--vp-c-brand-soft);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s ease;
+}
+
+.vp-doc a:hover {
+  text-decoration-color: var(--vp-c-brand-1);
+}
+
+/* ─── Tables ─── */
+.vp-doc table {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc tr:nth-child(2n) {
+  background-color: var(--vp-c-bg-soft);
+}
+
+.vp-doc th {
+  background: var(--vp-c-bg-soft);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Custom Container (tip/warning/danger) ─── */
+.vp-doc .custom-block {
+  border-radius: 10px;
+}
+
+.vp-doc .custom-block.tip {
+  border-color: var(--vp-c-brand-1);
+}
+
+/* ─── Footer ─── */
+.VPFooter {
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+/* ─── Nav ─── */
+.VPNavBar .title {
+  font-weight: 800 !important;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Scrollbar (Webkit) ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vp-c-divider);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vp-c-brand-1);
+}
+
+/* ─── Selection ─── */
+::selection {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-text-1);
+}
+
+/* ─── Smooth transitions ─── */
+* {
+  scroll-behavior: smooth;
+}
+
+/* ─── Badge in sidebar ─── */
+.VPBadge {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .VPHero .name {
+    font-size: 2.5rem !important;
+  }
+
+  .VPHero .text {
+    font-size: 1.1rem !important;
+    white-space: nowrap;
+  }
+
+  .VPHero .VPImage {
+    max-width: 200px;
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .VPHero .text {
+    font-size: 0.95rem !important;
+  }
+}

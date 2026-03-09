@@ -80,8 +80,17 @@ bench/run_cross_bench.sh
 
 # Node.js / Bun
 node_modules/
-.vitepress/dist/
-.vitepress/cache/
+**/.vitepress/dist/
+**/.vitepress/cache/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Screenshots
+*.screenshot.png
+
+# Source artwork (originals kept locally)
+docs/assets/
 
 # Environment
 .env

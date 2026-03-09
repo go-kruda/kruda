@@ -413,8 +413,7 @@ func TestCtx_Latency_WithMarkStart(t *testing.T) {
 	app := New()
 	app.Get("/test", func(c *Ctx) error {
 		c.MarkStart()
-		// do a tiny amount of work
-		_ = strings.Repeat("x", 100)
+		time.Sleep(2 * time.Millisecond) // Windows timer resolution needs real sleep
 		lat := c.Latency()
 		if lat == 0 {
 			return BadRequest("latency should be > 0 after MarkStart")
@@ -451,7 +450,8 @@ func TestCtx_Context_Default(t *testing.T) {
 func TestCtx_Context_WithSetContext(t *testing.T) {
 	app := New()
 	c := newCtx(app)
-	custom := context.WithValue(context.Background(), "key", "val")
+	type ctxKey string
+	custom := context.WithValue(context.Background(), ctxKey("key"), "val")
 	c.SetContext(custom)
 	if c.Context() != custom {
 		t.Error("Context() should return the custom context set via SetContext")

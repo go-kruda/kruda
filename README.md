@@ -5,7 +5,7 @@ Fast by default, type-safe by design.
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-kruda/kruda.svg)](https://pkg.go.dev/github.com/go-kruda/kruda)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
-[![Coverage](https://codecov.io/gh/go-kruda/kruda/branch/main/graph/badge.svg)](https://codecov.io/gh/go-kruda/kruda)
+[![codecov](https://codecov.io/gh/go-kruda/kruda/graph/badge.svg?token=9HIGH8L2Q7)](https://codecov.io/gh/go-kruda/kruda)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Why Kruda?

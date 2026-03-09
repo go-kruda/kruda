@@ -69,11 +69,9 @@ jobs:
         run: cd cmd/kruda && go test -tags kruda_stdjson ./...
 
       - name: Upload coverage to Codecov
-        # Upload only once per Go version (Linux) to avoid duplicates
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
         uses: codecov/codecov-action@v5
         with:
           files: coverage.out
           flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false

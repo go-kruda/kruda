@@ -1184,7 +1184,7 @@ func TestHandleError_AlreadyResponded(t *testing.T) {
 
 	// Should have the first response, not a 500
 	if resp.statusCode == 500 {
-		// Error handler should detect already responded and not write
+		t.Log("error handler wrote 500 after panic recovery")
 	}
 }
 

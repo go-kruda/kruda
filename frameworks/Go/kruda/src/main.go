@@ -79,7 +79,7 @@ func main() {
 
 	// TFB Test 4: Multiple database queries
 	app.Get("/queries", func(c *kruda.Ctx) error {
-		n := clamp(queryParam(c, "queries"), 1, 500)
+		n := clamp(queryParam(c, "n"), 1, 500)
 		worlds := make([]World, n)
 		for i := range worlds {
 			worlds[i].ID = int32(rand.IntN(10000) + 1)
@@ -118,7 +118,7 @@ func main() {
 
 	// TFB Test 6: Database updates
 	app.Get("/updates", func(c *kruda.Ctx) error {
-		n := clamp(queryParam(c, "queries"), 1, 500)
+		n := clamp(queryParam(c, "n"), 1, 500)
 		worlds := make([]World, n)
 		for i := range worlds {
 			worlds[i].ID = int32(rand.IntN(10000) + 1)
@@ -149,7 +149,7 @@ func main() {
 
 	// TFB Test 7: Cached queries
 	app.Get("/cached-queries", func(c *kruda.Ctx) error {
-		n := clamp(queryParam(c, "count"), 1, 500)
+		n := clamp(queryParam(c, "n"), 1, 500)
 		worlds := make([]World, n)
 		for i := range worlds {
 			id := int32(rand.IntN(10000) + 1)

@@ -46,7 +46,7 @@ jobs:
           go-version: stable
           
       - name: Build TFB Docker image
-        run: docker build -f frameworks/Go/kruda/Dockerfile -t kruda-tfb .
+        run: docker build -f frameworks/Go/kruda/default.dockerfile -t kruda-tfb frameworks/Go/kruda
           
       - name: Test TFB endpoints
         run: |
@@ -55,7 +55,7 @@ jobs:
           sleep 10
           
           # Test endpoints
-          endpoints=("/json" "/plaintext" "/db" "/queries?queries=20" "/fortunes" "/cached-queries?count=20" "/updates?queries=20")
+          endpoints=("/json" "/plaintext" "/db" "/queries?n=20" "/fortunes" "/cached-queries?n=20" "/updates?n=20")
           for endpoint in "${endpoints[@]}"; do
             echo "Testing $endpoint..."
             curl -f "http://localhost:8080$endpoint" || exit 1

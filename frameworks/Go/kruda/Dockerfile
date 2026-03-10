@@ -7,12 +7,13 @@ COPY bench/ /kruda/bench/
 COPY cmd/ /kruda/cmd/
 COPY contrib/ /kruda/contrib/
 COPY internal/ /kruda/internal/
+COPY json/ /kruda/json/
 COPY middleware/ /kruda/middleware/
 COPY transport/ /kruda/transport/
 # Copy TFB app source
 COPY frameworks/Go/kruda/src/ /build/
 # Adjust replace directive to point to copied framework source
-RUN sed -i 's|../../../../|/kruda|g' /build/go.mod
+RUN sed -i 's|../../../../|/kruda/|g' /build/go.mod
 RUN cd /build && go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOAMD64=v3 go build -ldflags="-s -w" -gcflags="-B" -trimpath -o /app .
 

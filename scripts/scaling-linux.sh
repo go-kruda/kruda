@@ -40,12 +40,12 @@ command -v go   >/dev/null || { fail "go not found"; exit 1; }
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 log "Building Kruda..."
-(cd "$ROOT_DIR/frameworks/Go/kruda/src" && \
+(cd "$ROOT_DIR/bench/reproducible/kruda" && \
     go build -ldflags="-s -w" -o "$RESULTS_DIR/kruda-bench" .) 2>&1
 ok "Kruda built"
 
 log "Building Fiber..."
-(cd "$ROOT_DIR/bench/tfb/fiber" && \
+(cd "$ROOT_DIR/bench/reproducible/fiber" && \
     go build -ldflags="-s -w" -o "$RESULTS_DIR/fiber-bench" .) 2>&1
 ok "Fiber built"
 

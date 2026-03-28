@@ -143,6 +143,24 @@ for file in "${FILES_TO_CHECK[@]}"; do
     fi
 done
 
+# 8b. Sub-module dependency check
+log "Checking sub-module dependencies..."
+SUBMOD_OK=true
+for modfile in contrib/*/go.mod transport/wing/go.mod; do
+    if [ -f "$modfile" ]; then
+        DEP_VER=$(grep "github.com/go-kruda/kruda v" "$modfile" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$DEP_VER" ] && [ "$DEP_VER" != "$VERSION" ]; then
+            warn "$modfile requires kruda $DEP_VER (expected $VERSION)"
+            SUBMOD_OK=false
+        fi
+    fi
+done
+if [ "$SUBMOD_OK" = true ]; then
+    ok "All sub-modules require kruda $VERSION"
+else
+    fail "Sub-module dependencies out of sync. Run: scripts/tag-submodules.sh $VERSION"
+fi
+
 # 9. Build verification
 log "Verifying builds for target platforms..."
 PLATFORMS=("linux/amd64" "darwin/arm64" "windows/amd64")

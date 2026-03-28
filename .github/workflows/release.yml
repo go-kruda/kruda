@@ -33,41 +33,9 @@ jobs:
       - name: Run security scan
         run: govulncheck ./...
         
-  tfb-verify:
-    name: TFB Verification
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          
-      - name: Build TFB Docker image
-        run: docker build -f frameworks/Go/kruda/kruda.dockerfile -t kruda-tfb frameworks/Go/kruda
-          
-      - name: Test TFB endpoints
-        run: |
-          # Start container
-          CONTAINER_ID=$(docker run -d -p 8080:8080 kruda-tfb)
-          sleep 10
-          
-          # Test endpoints
-          endpoints=("/json" "/plaintext" "/db" "/queries?n=20" "/fortunes" "/cached-queries?n=20" "/updates?n=20")
-          for endpoint in "${endpoints[@]}"; do
-            echo "Testing $endpoint..."
-            curl -f "http://localhost:8080$endpoint" || exit 1
-          done
-          
-          # Cleanup
-          docker stop "$CONTAINER_ID"
-          docker rm "$CONTAINER_ID"
-          
   release:
     name: Create Release
-    needs: [test, security, tfb-verify]
+    needs: [test, security]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

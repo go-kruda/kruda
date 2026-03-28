@@ -20,6 +20,7 @@ cd examples/hello && go run .
 | Example | Description |
 |---------|-------------|
 | [typed-handlers](typed-handlers/) | `C[T]` typed input with validation |
+| [openapi](openapi/) | Auto-generated OpenAPI 3.1 spec from typed handlers |
 | [auto-crud](auto-crud/) | `kruda.Resource[T, ID]()` auto-generates 5 endpoints |
 | [crud](crud/) | Manual CRUD with DI container |
 | [di-services](di-services/) | Full DI: Give, GiveLazy, GiveNamed, Modules |

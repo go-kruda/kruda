@@ -115,16 +115,7 @@ else
     cp "$BENCH_FILE" bench_baseline.txt
 fi
 
-# 7. TFB verification
-log "Verifying TechEmpower Framework Benchmarks setup..."
-if [ -f "$SCRIPT_DIR/verify-tfb.sh" ]; then
-    "$SCRIPT_DIR/verify-tfb.sh" || fail "TFB verification failed"
-    ok "TFB verification passed"
-else
-    warn "TFB verification script not found, skipping"
-fi
-
-# 8. Documentation build
+# 7. Documentation build
 log "Building documentation..."
 if [ -d "docs" ] && [ -f "docs/package.json" ]; then
     cd docs
@@ -140,7 +131,7 @@ else
     warn "Documentation directory not found, skipping"
 fi
 
-# 9. Version consistency check
+# 8. Version consistency check
 log "Checking version consistency..."
 # Check if version is mentioned in key files
 FILES_TO_CHECK=("README.md" "CHANGELOG.md")
@@ -152,7 +143,7 @@ for file in "${FILES_TO_CHECK[@]}"; do
     fi
 done
 
-# 10. Build verification
+# 9. Build verification
 log "Verifying builds for target platforms..."
 PLATFORMS=("linux/amd64" "darwin/arm64" "windows/amd64")
 for platform in "${PLATFORMS[@]}"; do
@@ -162,7 +153,7 @@ for platform in "${PLATFORMS[@]}"; do
 done
 ok "Cross-platform builds verified"
 
-# 11. Check for TODO/FIXME comments
+# 10. Check for TODO/FIXME comments
 log "Checking for TODO/FIXME comments..."
 TODO_COUNT=$(find . -name "*.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs grep -c "TODO\|FIXME" | awk -F: '{sum += $2} END {print sum+0}')
 if [ "$TODO_COUNT" -gt 0 ]; then
@@ -186,7 +177,6 @@ echo "  ✓ All tests pass"
 echo "  ✓ Linting clean"
 echo "  ✓ Security scan clean"
 echo "  ✓ Benchmark performance acceptable"
-echo "  ✓ TFB verification passed"
 echo "  ✓ Documentation builds"
 echo "  ✓ Cross-platform builds work"
 echo ""

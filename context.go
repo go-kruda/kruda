@@ -1100,6 +1100,12 @@ func (c *Ctx) sendBytes(data []byte) error {
 	}
 	c.responded = true
 	c.contentLength = len(data)
+
+	// Fast path: fasthttp — use embedded adapter directly (c.writer is nil)
+	if c.trySendBytesFastHTTP(data) {
+		return nil
+	}
+
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 

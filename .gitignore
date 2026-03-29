@@ -26,6 +26,8 @@ Thumbs.db
 
 # Go
 vendor/
+go.work
+go.work.sum
 
 # AI tooling
 CLAUDE.md

@@ -47,8 +47,15 @@ for mod in "${SUBMODS[@]}"; do
     fi
 done
 
+# Also update core go.mod to point to new transport/wing version
+log "Updating core go.mod to require transport/wing $VERSION..."
+if grep -q "github.com/go-kruda/kruda/transport/wing v" go.mod; then
+    sed -i '' "s|github.com/go-kruda/kruda/transport/wing v[0-9]*\.[0-9]*\.[0-9]*|github.com/go-kruda/kruda/transport/wing $VERSION|g" go.mod
+    CHANGED=true
+fi
+
 if [ "$CHANGED" = true ] && [ -n "$(git status --porcelain)" ]; then
-    git add contrib/*/go.mod transport/wing/go.mod
+    git add go.mod contrib/*/go.mod transport/wing/go.mod
     git commit -m "chore: sync sub-module deps to $VERSION"
     ok "Committed go.mod updates"
 else

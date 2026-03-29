@@ -10,5 +10,3 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.69.0 // indirect
 )
-
-replace github.com/go-kruda/kruda => ../..

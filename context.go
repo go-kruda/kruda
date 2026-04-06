@@ -1030,7 +1030,12 @@ func (c *Ctx) SSE(fn func(*SSEStream) error) error {
 		ctx:     c.Context(),
 	}
 
-	return fn(stream)
+	err := fn(stream)
+
+	// Flush after callback returns to ensure net/http sends the terminating chunk.
+	flusher.Flush()
+
+	return err
 }
 
 // Provide stores a typed value in the request context for later retrieval via Need.

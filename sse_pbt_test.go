@@ -47,8 +47,7 @@ func TestPropertySSEEventFormatting(t *testing.T) {
 			}
 
 			got := buf.String()
-			jsonData, _ := json.Marshal(data)
-			want := fmt.Sprintf("event: %s\ndata: %s\n\n", name, jsonData)
+			want := fmt.Sprintf("event: %s\ndata: %s\n\n", name, data)
 			return got == want && flushCount == 1
 		}
 		if err := quick.Check(f, cfg); err != nil {

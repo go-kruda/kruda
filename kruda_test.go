@@ -674,7 +674,7 @@ func TestIntegration_SSE_Streaming(t *testing.T) {
 	if !strings.Contains(body, "event: greeting\n") {
 		t.Error("body should contain 'event: greeting'")
 	}
-	if !strings.Contains(body, "data: \"hello\"\n") {
+	if !strings.Contains(body, "data: hello\n") {
 		t.Errorf("body should contain data hello, got: %s", body)
 	}
 	if !strings.Contains(body, "data: 42\n") {

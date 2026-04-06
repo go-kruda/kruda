@@ -45,7 +45,7 @@ func TestSSEStream_Event(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "event: ping\ndata: \"hello\"\n\n"
+	want := "event: ping\ndata: hello\n\n"
 	if got != want {
 		t.Errorf("Event output = %q, want %q", got, want)
 	}
@@ -70,7 +70,7 @@ func TestSSEStream_EventWithID(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := "id: 42\nevent: ping\ndata: \"hello\"\n\n"
+	want := "id: 42\nevent: ping\ndata: hello\n\n"
 	if got != want {
 		t.Errorf("EventWithID output = %q, want %q", got, want)
 	}
@@ -243,7 +243,8 @@ func TestSSEStream_EncodeError(t *testing.T) {
 		ctx:     context.Background(),
 	}
 
-	err := s.Event("test", "data")
+	// Strings bypass encoder, so use a struct to trigger the bad encoder
+	err := s.Event("test", struct{ X int }{1})
 	if err == nil {
 		t.Fatal("expected encode error")
 	}
@@ -251,7 +252,7 @@ func TestSSEStream_EncodeError(t *testing.T) {
 		t.Errorf("error = %q, want to contain 'SSE encode error'", err.Error())
 	}
 
-	err = s.Data("data")
+	err = s.Data(struct{ X int }{1})
 	if err == nil {
 		t.Fatal("expected encode error for Data")
 	}
@@ -336,10 +337,10 @@ func TestCtx_SSE_MultipleEvents(t *testing.T) {
 	}
 
 	body := string(fw.body)
-	if !strings.Contains(body, "event: msg\ndata: \"one\"\n\n") {
+	if !strings.Contains(body, "event: msg\ndata: one\n\n") {
 		t.Errorf("missing Event output in body: %q", body)
 	}
-	if !strings.Contains(body, "data: \"two\"\n\n") {
+	if !strings.Contains(body, "data: two\n\n") {
 		t.Errorf("missing Data output in body: %q", body)
 	}
 	if !strings.Contains(body, ": ping\n\n") {
@@ -403,7 +404,7 @@ func TestSSEStream_MultiLineData(t *testing.T) {
 		ctx:     context.Background(),
 	}
 
-	// JSON with newlines gets serialized — the data itself is single-line JSON
+	// Multiline strings must have each line prefixed with "data: " per SSE spec
 	data := "line1\nline2\nline3"
 	err := s.Data(data)
 	if err != nil {
@@ -411,11 +412,9 @@ func TestSSEStream_MultiLineData(t *testing.T) {
 	}
 
 	got := buf.String()
-	if !strings.HasPrefix(got, "data: ") {
-		t.Errorf("expected data: prefix, got %q", got)
-	}
-	if !strings.HasSuffix(got, "\n\n") {
-		t.Errorf("expected trailing \\n\\n, got %q", got)
+	want := "data: line1\ndata: line2\ndata: line3\n\n"
+	if got != want {
+		t.Errorf("MultiLineData output = %q, want %q", got, want)
 	}
 }
 

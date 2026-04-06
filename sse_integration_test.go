@@ -63,8 +63,8 @@ func TestSSE_HTTPIntegration(t *testing.T) {
 	if !strings.Contains(body, "event: greeting") {
 		t.Errorf("missing 'event: greeting' in body:\n%s", body)
 	}
-	if !strings.Contains(body, `data: "hello"`) {
-		t.Errorf("missing 'data: \"hello\"' in body:\n%s", body)
+	if !strings.Contains(body, "data: hello") {
+		t.Errorf("missing 'data: hello' in body:\n%s", body)
 	}
 	if !strings.Contains(body, "data: 42") {
 		t.Errorf("missing 'data: 42' in body:\n%s", body)

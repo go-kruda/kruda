@@ -63,6 +63,7 @@ type Cookie struct {
 	Value    string
 	Path     string
 	Domain   string
+	Expires  time.Time // optional; if set, emits Expires header for legacy client compat
 	MaxAge   int
 	Secure   bool
 	HTTPOnly bool
@@ -1299,6 +1300,10 @@ func formatCookie(cookie *Cookie) string {
 	if cookie.Domain != "" {
 		b.WriteString("; Domain=")
 		b.WriteString(sanitizeCookieValue(cookie.Domain))
+	}
+	if !cookie.Expires.IsZero() {
+		b.WriteString("; Expires=")
+		b.WriteString(cookie.Expires.UTC().Format(http.TimeFormat))
 	}
 	// MaxAge < 0 means delete cookie (set Max-Age=0)
 	if cookie.MaxAge > 0 {

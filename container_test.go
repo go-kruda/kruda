@@ -634,3 +634,137 @@ func TestContainerGiveLazyPanic(t *testing.T) {
 		t.Logf("GiveLazy panic returned error (good): %v", err)
 	}
 }
+
+func TestContainerWarmup(t *testing.T) {
+	c := NewContainer()
+	var callCount atomic.Int64
+
+	_ = c.GiveLazy(func() (*testService, error) {
+		callCount.Add(1)
+		return &testService{Name: "warmed"}, nil
+	})
+	_ = c.GiveLazy(func() (*testServiceB, error) {
+		callCount.Add(1)
+		return &testServiceB{Value: 42}, nil
+	})
+
+	// Before warmup — nothing resolved yet
+	if callCount.Load() != 0 {
+		t.Fatalf("expected 0 factory calls before warmup, got %d", callCount.Load())
+	}
+
+	// Warmup should resolve both lazies
+	if err := c.Warmup(context.Background()); err != nil {
+		t.Fatalf("Warmup failed: %v", err)
+	}
+
+	if callCount.Load() != 2 {
+		t.Fatalf("expected 2 factory calls after warmup, got %d", callCount.Load())
+	}
+
+	// Subsequent Use should return cached instances (no more factory calls)
+	svc, err := Use[*testService](c)
+	if err != nil {
+		t.Fatalf("Use after warmup failed: %v", err)
+	}
+	if svc.Name != "warmed" {
+		t.Fatalf("expected Name=warmed, got %s", svc.Name)
+	}
+
+	svcB, err := Use[*testServiceB](c)
+	if err != nil {
+		t.Fatalf("Use testServiceB after warmup failed: %v", err)
+	}
+	if svcB.Value != 42 {
+		t.Fatalf("expected Value=42, got %d", svcB.Value)
+	}
+
+	if callCount.Load() != 2 {
+		t.Fatalf("factory should not be called again after warmup, got %d", callCount.Load())
+	}
+}
+
+func TestContainerWarmupPartialFailure(t *testing.T) {
+	c := NewContainer()
+
+	_ = c.GiveLazy(func() (*testService, error) {
+		return &testService{Name: "ok"}, nil
+	})
+	_ = c.GiveLazy(func() (*testServiceB, error) {
+		return nil, errors.New("db connection failed")
+	})
+
+	err := c.Warmup(context.Background())
+	if err == nil {
+		t.Fatal("Warmup should return error when a factory fails")
+	}
+	if !strings.Contains(err.Error(), "db connection failed") {
+		t.Fatalf("error should contain factory error, got: %v", err)
+	}
+
+	// The successful one should still be resolved
+	svc, err := Use[*testService](c)
+	if err != nil {
+		t.Fatalf("successful lazy should still work after partial warmup: %v", err)
+	}
+	if svc.Name != "ok" {
+		t.Fatalf("expected Name=ok, got %s", svc.Name)
+	}
+}
+
+func TestContainerWarmupCancelledContext(t *testing.T) {
+	c := NewContainer()
+	_ = c.GiveLazy(func() (*testService, error) {
+		return &testService{Name: "should-not-resolve"}, nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	err := c.Warmup(ctx)
+	if err == nil {
+		t.Fatal("Warmup with cancelled context should return error")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("error should mention cancellation, got: %v", err)
+	}
+}
+
+func TestContainerWarmupAlreadyResolved(t *testing.T) {
+	c := NewContainer()
+	var callCount atomic.Int64
+
+	_ = c.GiveLazy(func() (*testService, error) {
+		callCount.Add(1)
+		return &testService{Name: "pre-resolved"}, nil
+	})
+
+	// Resolve before warmup
+	_, _ = Use[*testService](c)
+	if callCount.Load() != 1 {
+		t.Fatalf("expected 1 call, got %d", callCount.Load())
+	}
+
+	// Warmup should skip already-resolved lazies
+	if err := c.Warmup(context.Background()); err != nil {
+		t.Fatalf("Warmup failed: %v", err)
+	}
+
+	if callCount.Load() != 1 {
+		t.Fatalf("factory should not be called again for already-resolved lazy, got %d", callCount.Load())
+	}
+}
+
+func TestContainerWarmupEmpty(t *testing.T) {
+	c := NewContainer()
+	// No lazies — warmup should be a no-op
+	if err := c.Warmup(context.Background()); err != nil {
+		t.Fatalf("Warmup on empty container should succeed: %v", err)
+	}
+
+	// Singletons only — warmup should be a no-op
+	_ = c.Give(&testService{Name: "singleton"})
+	if err := c.Warmup(context.Background()); err != nil {
+		t.Fatalf("Warmup with only singletons should succeed: %v", err)
+	}
+}

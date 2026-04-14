@@ -445,7 +445,56 @@ func (c *Container) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// InjectMiddleware returns a middleware that makes the container available
+// Warmup eagerly resolves all lazy singletons, eliminating first-hit latency
+// during request handling. Call this after all registrations are complete
+// (e.g. after container.Start or before app.Listen).
+//
+// Lazy singletons that fail to resolve are collected and returned via errors.Join.
+// Successfully resolved services are added to initOrder for lifecycle management.
+// If ctx is cancelled, remaining lazies are skipped and ctx.Err() is included.
+//
+// This is opt-in — if not called, lazy singletons resolve on first Use[T]()
+// as before (no behavior change for existing code).
+func (c *Container) Warmup(ctx context.Context) error {
+	c.mu.RLock()
+	entries := make([]struct {
+		t     reflect.Type
+		entry *lazyEntry
+	}, 0, len(c.lazies))
+	for t, entry := range c.lazies {
+		if !entry.done.Load() {
+			entries = append(entries, struct {
+				t     reflect.Type
+				entry *lazyEntry
+			}{t, entry})
+		}
+	}
+	c.mu.RUnlock()
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("kruda: warmup cancelled: %w", err))
+			break
+		}
+		inst, first, err := e.entry.resolve()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("kruda: warmup %v failed: %w", e.t, err))
+			continue
+		}
+		if first {
+			c.mu.Lock()
+			c.initOrder = append(c.initOrder, inst)
+			c.mu.Unlock()
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // in the request context via c.Set("container", container).
 // Use with app.Use(container.InjectMiddleware()) to enable Resolve[T]()
 // lookups from the context locals (in addition to app-level fallback).

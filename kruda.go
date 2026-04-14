@@ -133,8 +133,8 @@ func containsDotPercent(s string) bool {
 	return false
 }
 
-// ServeHTTP implements http.Handler for fast net/http path.
-// Uses lightweight adapters and avoids defer overhead.
+// ServeHTTP implements http.Handler for net/http path (TLS, Windows, fallback).
+// Includes full lifecycle pipeline (matching ServeFast) and panic recovery.
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := app.ctxPool.Get().(*Ctx)
 
@@ -154,6 +154,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Minimal inline reset — ONLY hot fields
+	c.app = app
 	c.method = r.Method
 	c.path = r.URL.Path
 	c.status = 200
@@ -170,6 +171,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.cacheControl = ""
 	c.location = ""
 	c.body = nil
+	c.logger = nil
 	if len(c.respHeaders) > 0 {
 		clear(c.respHeaders)
 	}
@@ -203,24 +205,89 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.params.reset()
 	}
 
-	handlers := app.router.find(c.method, c.path, &c.params)
-	if handlers == nil {
-		if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
-			c.SetHeader("Allow", allowed)
-			app.handleError(c, NewError(405, "method not allowed"))
-		} else {
-			app.handleError(c, NotFound("not found"))
+	// Write pre-computed security headers.
+	if len(app.secHeaders) > 0 {
+		h := w.Header()
+		for _, kv := range app.secHeaders {
+			h.Set(kv[0], kv[1])
+		}
+	}
+
+	// Panic recovery — prevents unhandled panics from crashing the server.
+	// Placed here (not as a named defer) to keep the fast path overhead minimal:
+	// a single defer per request is negligible (~1-2ns on arm64).
+	defer func() {
+		if rec := recover(); rec != nil {
+			app.config.Logger.Error("unrecovered panic in ServeHTTP",
+				"panic", fmt.Sprintf("%v", rec),
+				"method", c.method,
+				"path", c.path,
+			)
+			if !c.responded {
+				c.Status(500)
+				_ = c.JSON(Map{
+					"code":    500,
+					"message": "internal server error",
+				})
+			}
 		}
 		c.shrinkMaps()
 		app.ctxPool.Put(c)
-		return
+	}()
+
+	// === Lifecycle pipeline (mirrors ServeFast exactly) ===
+
+	// OnRequest hooks — fire before route matching.
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.OnRequest {
+			if err := hook(c); err != nil {
+				app.handleError(c, err)
+				goto response
+			}
+		}
 	}
 
-	c.handlers = handlers
-	if err := c.handlers[0](c); err != nil {
-		app.handleError(c, err)
+	{
+		handlers := app.router.find(c.method, c.path, &c.params)
+		if handlers == nil {
+			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
+				c.SetHeader("Allow", allowed)
+				app.handleError(c, NewError(405, "method not allowed"))
+			} else {
+				app.handleError(c, NotFound("not found"))
+			}
+			goto response
+		}
+
+		c.handlers = handlers
+		c.routeIndex = 0
+
+		// BeforeHandle hooks — fire after middleware chain is set, before handler.
+		if app.hasLifecycle {
+			for _, hook := range app.hooks.BeforeHandle {
+				if err := hook(c); err != nil {
+					app.handleError(c, err)
+					goto afterHandle
+				}
+			}
+		}
+
+		if err := c.handlers[0](c); err != nil {
+			app.handleError(c, err)
+		}
 	}
 
+afterHandle:
+	// AfterHandle hooks — fire after handler, before response flush.
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.AfterHandle {
+			if err := hook(c); err != nil {
+				app.handleError(c, err)
+			}
+		}
+	}
+
+	// Flush lazy body before OnResponse hooks so hooks can inspect the response.
 	if c.body != nil && !c.responded {
 		c.responded = true
 		c.contentLength = len(c.body)
@@ -230,8 +297,14 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.body = nil
 	}
 
-	c.shrinkMaps()
-	app.ctxPool.Put(c)
+response:
+	// OnResponse hooks — fire after body flush.
+	// Always runs — even on 404 and OnRequest errors — so metrics/logging hooks work.
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.OnResponse {
+			_ = hook(c) // errors are logged but don't affect the response
+		}
+	}
 }
 
 // ServeKruda implements transport.Handler. Includes panic recovery to prevent

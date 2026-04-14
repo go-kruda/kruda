@@ -81,6 +81,10 @@ type schemaRef struct {
 	MinLength  *int                  `json:"minLength,omitempty"`
 	MaxLength  *int                  `json:"maxLength,omitempty"`
 	Nullable   bool                  `json:"nullable,omitempty"`
+
+	// pkgPath tracks the originating package for collision detection.
+	// Not serialized to JSON — internal bookkeeping only.
+	pkgPath string `json:"-"`
 }
 
 // routeInfo holds metadata for a single registered typed route.
@@ -130,19 +134,34 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 		name = "Anonymous"
 	}
 
-	// NOTE: uses short struct name as component key. Structs with the same name
-	// from different packages will collide. A future improvement could detect
-	// this via t.PkgPath() and suffix with the package name.
-	refPath := "#/components/schemas/" + name
-	if _, exists := components[name]; exists {
-		return &schemaRef{Ref: refPath}
+	// Detect collision: if a schema with the same short name exists but from a
+	// different package, disambiguate by appending the last segment of PkgPath.
+	componentKey := name
+	if existing, exists := components[name]; exists {
+		// Check if it's truly the same type (same PkgPath) — if so, return ref.
+		if existing.pkgPath == t.PkgPath() {
+			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+		}
+		// Different package, same name — disambiguate with package suffix.
+		pkg := t.PkgPath()
+		if idx := strings.LastIndexByte(pkg, '/'); idx >= 0 {
+			pkg = pkg[idx+1:]
+		}
+		componentKey = name + "_" + pkg
+		// If even this disambiguated key exists and matches, return ref.
+		if _, exists2 := components[componentKey]; exists2 {
+			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+		}
 	}
+
+	refPath := "#/components/schemas/" + componentKey
 
 	schema := &schemaRef{
 		Type:       "object",
 		Properties: make(map[string]*schemaRef),
+		pkgPath:    t.PkgPath(),
 	}
-	components[name] = schema
+	components[componentKey] = schema
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)

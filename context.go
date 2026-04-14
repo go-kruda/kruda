@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
@@ -42,15 +43,30 @@ var jsonBufPool = sync.Pool{
 var jsonContentType = []byte("application/json; charset=utf-8")
 
 // headerIntern caches canonical header keys to reduce allocations.
+// Capped at maxHeaderInternEntries to prevent memory DoS from adversarial
+// requests with randomized header keys.
 var headerIntern sync.Map
 
+// maxHeaderInternEntries limits the number of cached canonical header keys.
+// Typical apps use <30 unique header keys; 256 is generous headroom.
+const maxHeaderInternEntries = 256
+
+// headerInternCount tracks the number of entries in headerIntern.
+var headerInternCount atomic.Int64
+
 // internHeader returns the canonical form of a header key, using cache.
+// Once the cache reaches maxHeaderInternEntries, new keys are computed
+// on-the-fly without caching to prevent unbounded memory growth.
 func internHeader(key string) string {
 	if v, ok := headerIntern.Load(key); ok {
 		return v.(string)
 	}
 	canonical := http.CanonicalHeaderKey(key)
-	headerIntern.Store(key, canonical)
+	if headerInternCount.Load() < maxHeaderInternEntries {
+		if _, loaded := headerIntern.LoadOrStore(key, canonical); !loaded {
+			headerInternCount.Add(1)
+		}
+	}
 	return canonical
 }
 
@@ -861,13 +877,16 @@ func isTokenChar(c byte) bool {
 // to avoid map allocation on the hot path.
 // Validates key per RFC 7230 and strips CRLF from value to prevent header injection.
 func (c *Ctx) SetHeader(key, value string) *Ctx {
-	// Fast path: write directly to fasthttp response headers.
-	// Bypasses map storage, validation, and sanitization for maximum throughput.
-	if c.trySetHeaderFastHTTP(key, value) {
-		return c
-	}
+	// Validate key on all paths — fasthttp has its own removeNewLines for values,
+	// but does not reject invalid keys (it normalizes them instead).
 	if !isValidHeaderKey(key) {
 		c.app.config.Logger.Warn("kruda: invalid header key, skipping", "key", key)
+		return c
+	}
+	// Fast path: write directly to fasthttp response headers.
+	// fasthttp's Set() calls removeNewLines() internally, so CRLF injection
+	// is prevented by fasthttp itself (replaces \r\n with space).
+	if c.trySetHeaderFastHTTP(key, value) {
 		return c
 	}
 	value = sanitizeHeaderValue(value)
@@ -889,6 +908,10 @@ func (c *Ctx) SetHeader(key, value string) *Ctx {
 // On the fasthttp path this is zero-alloc (avoids []byte→string conversion).
 // Falls back to SetHeader(key, string(value)) on net/http.
 func (c *Ctx) SetHeaderBytes(key string, value []byte) *Ctx {
+	if !isValidHeaderKey(key) {
+		c.app.config.Logger.Warn("kruda: invalid header key, skipping", "key", key)
+		return c
+	}
 	if c.trySetHeaderBytesFastHTTP(key, value) {
 		return c
 	}
@@ -1115,18 +1138,9 @@ func (c *Ctx) sendBytes(data []byte) error {
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 
-	// Small responses: copy into a pooled buffer then write once.
-	// This avoids an allocation for the write path on the hot path.
-	if len(data) <= responseBufPoolThreshold {
-		bufp := responseBufPool.Get().(*[]byte)
-		buf := append((*bufp)[:0], data...)
-		_, err := c.writer.Write(buf)
-		*bufp = buf
-		responseBufPool.Put(bufp)
-		return err
-	}
-
-	// Large responses: direct write, no pool.
+	// Direct write — transport.ResponseWriter implementations copy internally.
+	// On the net/http path, http.ResponseWriter.Write already copies to its
+	// internal buffer, so a pooled intermediate buffer would be a redundant copy.
 	_, err := c.writer.Write(data)
 	return err
 }

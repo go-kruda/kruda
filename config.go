@@ -46,6 +46,7 @@ type Config struct {
 	SecurityHeaders bool
 	PathTraversal   bool
 	DevMode         bool
+	DevModeEnvVars  bool // show env vars on dev error page (opt-in)
 	devModeSet      bool
 
 	Logger       *slog.Logger
@@ -131,6 +132,16 @@ func WithDevMode(enabled bool) Option {
 	return func(a *App) {
 		a.config.DevMode = enabled
 		a.config.devModeSet = true
+	}
+}
+
+// WithDevModeEnvVars enables showing environment variables on the dev error page.
+// Default: false — environment variables are hidden even in DevMode to prevent
+// accidental exposure of secrets (DATABASE_URL, API keys, etc.).
+// Only takes effect when DevMode is also enabled.
+func WithDevModeEnvVars(enabled bool) Option {
+	return func(a *App) {
+		a.config.DevModeEnvVars = enabled
 	}
 }
 

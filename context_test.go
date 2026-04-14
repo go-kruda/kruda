@@ -264,8 +264,7 @@ func TestSendBytes_SmallResponse(t *testing.T) {
 	}
 }
 
-// TestSendBytes_LargeResponse verifies that responses >4KB use the direct
-// write path and still produce the correct body.
+// TestSendBytes_LargeResponse verifies that large responses produce the correct body.
 func TestSendBytes_LargeResponse(t *testing.T) {
 	large := make([]byte, responseBufPoolThreshold+1)
 	for i := range large {
@@ -291,7 +290,7 @@ func TestSendBytes_LargeResponse(t *testing.T) {
 }
 
 // TestSendBytes_ExactThreshold verifies that a response of exactly 4096 bytes
-// uses the pooled buffer path (boundary condition).
+// produces the correct output (boundary condition).
 func TestSendBytes_ExactThreshold(t *testing.T) {
 	exact := make([]byte, responseBufPoolThreshold)
 	for i := range exact {

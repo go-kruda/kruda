@@ -199,8 +199,9 @@ func (c *Container) isRegistered(t reflect.Type) bool {
 }
 
 // goid returns the current goroutine ID by parsing runtime.Stack() output.
-// The format "goroutine NNN [" has been stable since Go 1.0.
-// Used only for circular dependency detection — not on the hot path.
+// The format "goroutine NNN [" has been stable since Go 1.0 and is relied upon
+// by major projects (e.g. glog, grpc-go). Used only for circular dependency
+// detection — not on the request hot path.
 // Returns 0 if parsing fails (cycle detection degrades to no-op, no false positives).
 func goid() int64 {
 	var buf [64]byte
@@ -211,7 +212,10 @@ func goid() int64 {
 	}
 	s := buf[10:n]
 	for i := 0; i < len(s); i++ {
-		if s[i] == ' ' {
+		if s[i] < '0' || s[i] > '9' {
+			if i == 0 {
+				return 0 // no digits found
+			}
 			id, _ := strconv.ParseInt(string(s[:i]), 10, 64)
 			return id
 		}

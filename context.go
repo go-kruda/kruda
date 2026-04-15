@@ -18,15 +18,6 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-// responseBufPool pools []byte buffers for small responses (≤4KB).
-// Using *[]byte so we can update the slice header (append may grow it).
-var responseBufPool = sync.Pool{
-	New: func() any {
-		buf := make([]byte, 0, 4096)
-		return &buf
-	},
-}
-
 // jsonBufPool pools bytes.Buffer for JSON marshal output.
 // The streaming encoder writes directly into this buffer, avoiding the
 // fresh []byte allocation that Marshal() creates each call.

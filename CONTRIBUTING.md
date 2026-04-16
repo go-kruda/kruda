@@ -19,6 +19,10 @@ Thank you for your interest in contributing to Kruda!
 - Code must be formatted: `gofmt -s -w .`
 - Code must pass vet: `go vet ./...`
 
+## Releasing
+
+Maintainers: see [docs/RELEASING.md](docs/RELEASING.md) for the release process.
+
 ## Project Structure
 
 ```

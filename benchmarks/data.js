@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776309197793,
+  "lastUpdate": 1776309484376,
   "repoUrl": "https://github.com/go-kruda/kruda",
   "entries": {
     "Benchmark": [
@@ -20305,6 +20305,78 @@ window.BENCHMARK_DATA = {
           },
           {
             "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a.khaokom@gmail.com",
+            "name": "Adisorn",
+            "username": "wtigero"
+          },
+          "committer": {
+            "email": "a.khaokom@gmail.com",
+            "name": "Adisorn",
+            "username": "wtigero"
+          },
+          "distinct": true,
+          "id": "e9cf37716eb140097de45bd2985526612626a406",
+          "message": "chore: sync sub-module deps to v1.1.2",
+          "timestamp": "2026-04-16T10:17:45+07:00",
+          "tree_id": "84dab8f8300a088624d07bb3d532e9e97568cb59",
+          "url": "https://github.com/go-kruda/kruda/commit/e9cf37716eb140097de45bd2985526612626a406"
+        },
+        "date": 1776309484132,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkUnsafeString",
+            "value": 0.7052,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString - ns/op",
+            "value": 0.7052,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes",
+            "value": 0.941,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes - ns/op",
+            "value": 0.941,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes - allocs/op",
             "value": 0,
             "unit": "allocs/op",
             "extra": "1000000000 times\n4 procs"

@@ -21,3 +21,10 @@ require (
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 )
+
+// Retracted versions — broken releases, use v1.1.3+ instead.
+retract (
+	v1.1.2 // missing wing/go.sum entry caused CI failures
+	v1.1.1 // incomplete release, checksum issues
+	v1.1.0 // force-push re-tag caused sum DB checksum mismatch
+)

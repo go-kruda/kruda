@@ -52,10 +52,14 @@ type devRouteInfo struct {
 }
 
 // sensitiveEnvKeys contains patterns to filter from env var display.
+// Applied as case-insensitive substring matches against environment variable names.
 var sensitiveEnvKeys = []string{
 	"SECRET", "PASSWORD", "TOKEN", "KEY", "CREDENTIAL", "AUTH",
 	"PRIVATE", "CERT", "PASS", "PWD",
 	"MYSQL_PASSWORD", "POSTGRES_PASSWORD", "REDIS_PASSWORD",
+	"DATABASE_URL", "DB_URL", "DSN",
+	"AWS_ACCESS", "AWS_SECRET", "STRIPE", "SENDGRID",
+	"SMTP", "WEBHOOK", "SIGNING", "ENCRYPT",
 }
 
 // sourceCache caches file contents by path+mtime for dev mode performance.
@@ -107,7 +111,9 @@ func renderDevErrorPage(c *Ctx, err error, statusCode int) error {
 	}
 
 	data.AvailableRoutes = collectDevRoutes(c.app)
-	data.EnvVars = filterEnvVars()
+	if c.app.config.DevModeEnvVars {
+		data.EnvVars = filterEnvVars()
+	}
 	data.Suggestions = generateSuggestions(err, statusCode, c)
 
 	var buf bytes.Buffer
@@ -542,7 +548,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;ba
 </div>
 {{end}}
 
-<button class="copy-btn" onclick="copyError()">📋 Copy Error</button>
+<button class="copy-btn" onclick="copyError()"
+  data-error="{{.ErrorMessage}}"
+  data-type="{{.ErrorType}}"
+  data-status="{{.StatusCode}}"
+  data-method="{{.RequestMethod}}"
+  data-path="{{.RequestPath}}">📋 Copy Error</button>
 
 </div>
 <script>
@@ -558,12 +569,21 @@ function toggle(el){
   }
 }
 function copyError(){
-  var t="Error: {{.ErrorMessage}}\nType: {{.ErrorType}}\nStatus: {{.StatusCode}}\nMethod: {{.RequestMethod}}\nPath: {{.RequestPath}}\n";
-  {{if .StackTrace}}t+="\nStack Trace:\n";{{range .StackTrace}}t+="  {{.Function}}\n    {{.File}}:{{.Line}}\n";{{end}}{{end}}
+  var btn=document.querySelector('.copy-btn');
+  var t="Error: "+btn.dataset.error+"\nType: "+btn.dataset.type+"\nStatus: "+btn.dataset.status+"\nMethod: "+btn.dataset.method+"\nPath: "+btn.dataset.path+"\n";
+  var frames=document.querySelectorAll('.stack-frame');
+  if(frames.length>0){
+    t+="\nStack Trace:\n";
+    frames.forEach(function(f){
+      var fn=f.querySelector('.stack-func');
+      var file=f.querySelector('.stack-file');
+      var line=f.querySelector('.stack-line');
+      if(fn&&file&&line){t+="  "+fn.textContent.trim()+"\n    "+file.textContent.trim()+":"+line.textContent.trim()+"\n";}
+    });
+  }
   navigator.clipboard.writeText(t).then(function(){
-    var btn=document.querySelector('.copy-btn');
-    btn.textContent='✅ Copied!';
-    setTimeout(function(){btn.textContent='📋 Copy Error'},2000);
+    btn.textContent='\u2705 Copied!';
+    setTimeout(function(){btn.textContent='\ud83d\udccb Copy Error'},2000);
   });
 }
 </script>

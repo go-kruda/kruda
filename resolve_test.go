@@ -135,7 +135,7 @@ func TestInjectMiddlewareSetsContainer(t *testing.T) {
 
 	var got any
 	app.Get("/test", func(ctx *Ctx) error {
-		got = ctx.Get("container")
+		got = ctx.Get(containerKey)
 		return ctx.Text("ok")
 	})
 	app.Compile()

@@ -7,9 +7,11 @@
 // Key concepts:
 //   - Container — holds registered services
 //   - Give()    — register a service instance in the container
+//   - GiveLazy()  — register a factory that runs on first use
 //   - Use[T]()  — resolve a service by type from the container
 //   - Resolve[T]() — resolve from request context (in handlers)
 //   - MustResolve[T]() — like Resolve but panics on error
+//   - Warmup()  — eagerly resolve all lazy singletons at startup
 //   - Module    — groups related service registrations
 //   - app.Module() — install a module into the app
 //
@@ -226,6 +228,30 @@ func main() {
 	email := kruda.MustUse[*EmailService](c)
 	c.Give(NewUserService(repo, email))
 
+	// -----------------------------------------------------------------------
+	// GiveLazy + Warmup — deferred initialization with eager startup
+	//
+	// GiveLazy() registers a factory that runs on first Use[T]() call.
+	// This is useful for expensive resources (DB pools, external clients)
+	// that you don't want to create during registration.
+	//
+	// Warmup() eagerly resolves all lazy singletons at startup, so the
+	// first HTTP request doesn't pay the initialization cost.
+	// -----------------------------------------------------------------------
+	type DBStats struct{ Connections int }
+
+	c.GiveLazy(func() (*DBStats, error) {
+		// Simulate expensive DB pool initialization
+		slog.Info("initializing DB stats (lazy)")
+		return &DBStats{Connections: 5}, nil
+	})
+
+	// Warmup resolves all pending lazy singletons before serving traffic.
+	// If any factory fails, the error is returned (partial failures are collected).
+	if err := c.Warmup(context.Background()); err != nil {
+		panic(fmt.Sprintf("warmup failed: %v", err))
+	}
+
 	// Create the app with the container
 	app := kruda.New(kruda.WithContainer(c))
 
@@ -318,6 +344,17 @@ func main() {
 			return c.Status(503).JSON(kruda.Map{"status": "unhealthy", "error": err.Error()})
 		}
 		return c.JSON(kruda.Map{"status": "healthy"})
+	})
+
+	// -----------------------------------------------------------------------
+	// Handler 6: GET /db-stats — Lazy service resolved via Warmup
+	//
+	// DBStats was registered via GiveLazy() and eagerly resolved by Warmup().
+	// At this point it's already initialized — no first-hit latency.
+	// -----------------------------------------------------------------------
+	app.Get("/db-stats", func(c *kruda.Ctx) error {
+		stats := kruda.MustResolve[*DBStats](c)
+		return c.JSON(kruda.Map{"connections": stats.Connections})
 	})
 
 	// Start the server

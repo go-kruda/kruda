@@ -48,9 +48,13 @@ func internMethod(b []byte) string {
 			return methodStringPATCH
 		}
 	case 6:
-		return methodStringDELETE
+		if b[0] == 'D' {
+			return methodStringDELETE
+		}
 	case 7:
-		return methodStringOPTIONS
+		if b[0] == 'O' {
+			return methodStringOPTIONS
+		}
 	}
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

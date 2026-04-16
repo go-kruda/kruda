@@ -70,7 +70,8 @@ func TestDevErrorPageNotInProduction(t *testing.T) {
 }
 
 // TestDevErrorPageFilterSecrets verifies that environment variables containing
-// SECRET, PASSWORD, or TOKEN (case-insensitive) are filtered from the dev error page.
+// SECRET, PASSWORD, or TOKEN (case-insensitive) are filtered from the dev error page
+// when env var display is explicitly enabled.
 func TestDevErrorPageFilterSecrets(t *testing.T) {
 	// Set sensitive env vars for this test
 	t.Setenv("MY_SECRET_KEY", "super-secret-123")
@@ -78,7 +79,7 @@ func TestDevErrorPageFilterSecrets(t *testing.T) {
 	t.Setenv("API_TOKEN", "tok-abc")
 	t.Setenv("SAFE_VAR_DEVTEST", "visible-value")
 
-	app := New(WithDevMode(true))
+	app := New(WithDevMode(true), WithDevModeEnvVars(true))
 	app.Get("/fail", func(c *Ctx) error {
 		return errors.New("secret test error")
 	})
@@ -106,6 +107,32 @@ func TestDevErrorPageFilterSecrets(t *testing.T) {
 	// Safe var should appear
 	if !strings.Contains(body, "SAFE_VAR_DEVTEST") {
 		t.Error("non-sensitive env var key should be visible")
+	}
+}
+
+// TestDevErrorPageEnvVarsHiddenByDefault verifies that environment variables
+// are NOT shown on the dev error page by default (opt-in via WithDevModeEnvVars).
+func TestDevErrorPageEnvVarsHiddenByDefault(t *testing.T) {
+	t.Setenv("SAFE_VAR_DEVTEST2", "should-not-appear")
+
+	app := New(WithDevMode(true)) // no WithDevModeEnvVars
+	app.Get("/fail", func(c *Ctx) error {
+		return errors.New("env hidden test")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body := resp.BodyString()
+	if strings.Contains(body, "SAFE_VAR_DEVTEST2") {
+		t.Error("env vars should be hidden by default in DevMode")
+	}
+	if strings.Contains(body, "should-not-appear") {
+		t.Error("env var values should be hidden by default in DevMode")
 	}
 }
 

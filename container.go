@@ -16,6 +16,10 @@ import (
 // Stores services keyed by reflect.Type with three lifetime models:
 // singleton (Give), transient (GiveTransient), and lazy singleton (GiveLazy).
 // Thread-safe via sync.RWMutex.
+//
+// containerKey is the context locals key used by InjectMiddleware and resolveContainer.
+const containerKey = "container"
+
 type Container struct {
 	mu         sync.RWMutex
 	singletons map[reflect.Type]any
@@ -105,10 +109,10 @@ func validateFactory(factory any) (reflect.Type, error) {
 	if ft.NumIn() != 0 {
 		return nil, errors.New("kruda: factory must take no arguments")
 	}
-	if ft.NumOut() < 1 {
-		return nil, errors.New("kruda: factory must return at least one value")
+	if ft.NumOut() < 1 || ft.NumOut() > 2 {
+		return nil, errors.New("kruda: factory must return 1 or 2 values")
 	}
-	if ft.NumOut() >= 2 && !ft.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+	if ft.NumOut() == 2 && !ft.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		return nil, errors.New("kruda: factory second return value must be error")
 	}
 	return ft.Out(0), nil
@@ -199,9 +203,11 @@ func (c *Container) isRegistered(t reflect.Type) bool {
 }
 
 // goid returns the current goroutine ID by parsing runtime.Stack() output.
-// The format "goroutine NNN [" has been stable since Go 1.0.
-// Used only for circular dependency detection — not on the hot path.
-// Returns 0 if parsing fails (cycle detection degrades to no-op, no false positives).
+// The format "goroutine NNN [" has been stable since Go 1.0 and is relied upon
+// by major projects (e.g. glog, grpc-go). Used only for circular dependency
+// detection — not on the request hot path.
+// Returns 0 if parsing fails; callers must skip cycle detection when id == 0
+// to avoid false positives from multiple goroutines sharing the same key.
 func goid() int64 {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
@@ -211,7 +217,10 @@ func goid() int64 {
 	}
 	s := buf[10:n]
 	for i := 0; i < len(s); i++ {
-		if s[i] == ' ' {
+		if s[i] < '0' || s[i] > '9' {
+			if i == 0 {
+				return 0 // no digits found
+			}
 			id, _ := strconv.ParseInt(string(s[:i]), 10, 64)
 			return id
 		}
@@ -221,8 +230,13 @@ func goid() int64 {
 
 // pushResolving pushes a type onto the current goroutine's resolution stack.
 // Returns an error if the type is already on the stack (circular dependency).
+// If goid() returns 0 (parsing failed), cycle detection is skipped to avoid
+// false positives from multiple goroutines sharing the same key.
 func (c *Container) pushResolving(t reflect.Type) error {
 	id := goid()
+	if id == 0 {
+		return nil // cannot identify goroutine — skip cycle detection
+	}
 	val, _ := c.resolving.LoadOrStore(id, &[]reflect.Type{})
 	stack := val.(*[]reflect.Type)
 
@@ -247,6 +261,9 @@ func (c *Container) pushResolving(t reflect.Type) error {
 // If the stack becomes empty, the entry is deleted from the map.
 func (c *Container) popResolving() {
 	id := goid()
+	if id == 0 {
+		return // cycle detection was skipped — nothing to pop
+	}
 	val, ok := c.resolving.Load(id)
 	if !ok {
 		return
@@ -406,6 +423,12 @@ func (c *Container) Start(ctx context.Context) error {
 
 	var initialized []Shutdowner
 	for _, inst := range order {
+		if err := ctx.Err(); err != nil {
+			for i := len(initialized) - 1; i >= 0; i-- {
+				_ = initialized[i].OnShutdown(ctx)
+			}
+			return fmt.Errorf("kruda: Start cancelled: %w", err)
+		}
 		if init, ok := inst.(Initializer); ok {
 			if err := init.OnInit(ctx); err != nil {
 				for i := len(initialized) - 1; i >= 0; i-- {
@@ -441,13 +464,63 @@ func (c *Container) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// InjectMiddleware returns a middleware that makes the container available
+// Warmup eagerly resolves all lazy singletons, eliminating first-hit latency
+// during request handling. Call this after all registrations are complete
+// (e.g. after container.Start or before app.Listen).
+//
+// Lazy singletons that fail to resolve are collected and returned via errors.Join.
+// Successfully resolved services are added to initOrder for lifecycle management.
+// If ctx is cancelled, remaining lazies are skipped and ctx.Err() is included.
+//
+// This is opt-in — if not called, lazy singletons resolve on first Use[T]()
+// as before (no behavior change for existing code).
+func (c *Container) Warmup(ctx context.Context) error {
+	c.mu.RLock()
+	entries := make([]struct {
+		t     reflect.Type
+		entry *lazyEntry
+	}, 0, len(c.lazies))
+	for t, entry := range c.lazies {
+		if !entry.done.Load() {
+			entries = append(entries, struct {
+				t     reflect.Type
+				entry *lazyEntry
+			}{t, entry})
+		}
+	}
+	c.mu.RUnlock()
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	var errs []error
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("kruda: warmup cancelled: %w", err))
+			break
+		}
+		inst, first, err := e.entry.resolve()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("kruda: warmup %v failed: %w", e.t, err))
+			continue
+		}
+		if first {
+			c.mu.Lock()
+			c.initOrder = append(c.initOrder, inst)
+			c.mu.Unlock()
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// InjectMiddleware returns middleware that stores the container
 // in the request context via c.Set("container", container).
 // Use with app.Use(container.InjectMiddleware()) to enable Resolve[T]()
 // lookups from the context locals (in addition to app-level fallback).
 func (c *Container) InjectMiddleware() HandlerFunc {
 	return func(ctx *Ctx) error {
-		ctx.Set("container", c)
+		ctx.Set(containerKey, c)
 		return ctx.Next()
 	}
 }
@@ -474,7 +547,7 @@ func (app *App) Module(m Module) *App {
 
 // resolveContainer returns the DI container from the request context.
 func resolveContainer(c *Ctx) (*Container, error) {
-	if raw := c.Get("container"); raw != nil {
+	if raw := c.Get(containerKey); raw != nil {
 		container, ok := raw.(*Container)
 		if !ok {
 			return nil, errors.New("kruda: invalid container in context")

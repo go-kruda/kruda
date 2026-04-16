@@ -221,3 +221,77 @@ func BenchmarkTypedHandlerValidation(b *testing.B) {
 		app.ServeKruda(w, req)
 	}
 }
+
+// === DI Container Benchmarks ===
+
+// BenchmarkDI_UseSingleton measures resolving a singleton from the container.
+// This is the most common DI path — should be a single map lookup under RLock.
+func BenchmarkDI_UseSingleton(b *testing.B) {
+	c := NewContainer()
+	svc := &testService{Name: "bench"}
+	_ = c.Give(svc)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Use[*testService](c)
+	}
+}
+
+// BenchmarkDI_UseLazyResolved measures resolving a lazy singleton that has
+// already been initialized. After first resolve, this should be nearly as
+// fast as singleton (atomic.Bool check + type assertion).
+func BenchmarkDI_UseLazyResolved(b *testing.B) {
+	c := NewContainer()
+	_ = c.GiveLazy(func() (*testService, error) {
+		return &testService{Name: "lazy"}, nil
+	})
+	// Warm up — trigger first resolve
+	_, _ = Use[*testService](c)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Use[*testService](c)
+	}
+}
+
+// BenchmarkDI_UseTransient measures resolving a transient service.
+// Each call invokes the factory via reflection, so this is the slowest DI path.
+func BenchmarkDI_UseTransient(b *testing.B) {
+	c := NewContainer()
+	_ = c.GiveTransient(func() (*testService, error) {
+		return &testService{Name: "transient"}, nil
+	})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Use[*testService](c)
+	}
+}
+
+// BenchmarkDI_UseNamed measures resolving a named singleton.
+func BenchmarkDI_UseNamed(b *testing.B) {
+	c := NewContainer()
+	_ = c.GiveNamed("db", &testService{Name: "named"})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = UseNamed[*testService](c, "db")
+	}
+}
+
+// BenchmarkDI_MustUseSingleton measures MustUse (panic variant) for singleton.
+// Should be identical to UseSingleton + negligible panic-setup overhead.
+func BenchmarkDI_MustUseSingleton(b *testing.B) {
+	c := NewContainer()
+	_ = c.Give(&testService{Name: "must"})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = MustUse[*testService](c)
+	}
+}

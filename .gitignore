@@ -98,9 +98,9 @@ docs/assets/
 # Environment
 .env
 .env.*
+
 # Ignore compiled binaries and bench artifacts
 bench/chart.html
-sse
-static-files
-di-comparison
-CLAUDE.md
+/sse
+/static-files
+/di-comparison

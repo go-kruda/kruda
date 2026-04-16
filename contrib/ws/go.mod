@@ -7,7 +7,7 @@ replace (
 	github.com/go-kruda/kruda/transport/wing => ../../transport/wing
 )
 
-require github.com/go-kruda/kruda v1.1.1
+require github.com/go-kruda/kruda v1.1.2
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect

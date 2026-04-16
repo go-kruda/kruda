@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Tag Sub-Modules — Kruda Framework
-# Updates sub-module go.mod deps and creates version tags for all sub-modules.
+# Updates sub-module go.mod deps, syncs go.sum, and creates version tags.
 #
 # Usage:
-#   ./scripts/tag-submodules.sh v1.0.3
+#   ./scripts/tag-submodules.sh v1.1.0
 #
-# This will:
+# Flow:
 #   1. Update all sub-module go.mod to require kruda $VERSION
-#   2. Commit the changes
-#   3. Tag each sub-module (contrib/*/vX.Y.Z, transport/wing/vX.Y.Z)
-#   4. Push tags
+#   2. Update core go.mod to require transport/wing $VERSION
+#   3. Commit go.mod changes
+#   4. Tag sub-modules + push tags (so proxy can resolve them)
+#   5. Run go mod tidy to update go.sum with new hashes
+#   6. Commit go.sum changes
+#   7. Tag core $VERSION
+#   8. Push everything
 
 set -euo pipefail
 
@@ -31,11 +35,12 @@ NC='\033[0m'
 
 log() { echo -e "${CYAN}[tag-sub]${NC} $*"; }
 ok() { echo -e "${GREEN}[✓]${NC} $*"; }
+fail() { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 
 # Collect sub-modules
 SUBMODS=(contrib/cache contrib/compress contrib/etag contrib/jwt contrib/otel contrib/prometheus contrib/ratelimit contrib/session contrib/swagger contrib/ws transport/wing)
 
-# 1. Update go.mod files
+# === Step 1: Update go.mod files ===
 log "Updating sub-module go.mod to require kruda $VERSION..."
 CHANGED=false
 for mod in "${SUBMODS[@]}"; do
@@ -47,7 +52,6 @@ for mod in "${SUBMODS[@]}"; do
     fi
 done
 
-# Also update core go.mod to point to new transport/wing version
 log "Updating core go.mod to require transport/wing $VERSION..."
 if grep -q "github.com/go-kruda/kruda/transport/wing v" go.mod; then
     sed -i '' "s|github.com/go-kruda/kruda/transport/wing v[0-9]*\.[0-9]*\.[0-9]*|github.com/go-kruda/kruda/transport/wing $VERSION|g" go.mod
@@ -62,7 +66,7 @@ else
     ok "All go.mod files already up to date"
 fi
 
-# 2. Tag sub-modules
+# === Step 2: Tag sub-modules ===
 log "Creating sub-module tags..."
 TAGS=()
 for mod in "${SUBMODS[@]}"; do
@@ -76,23 +80,52 @@ for mod in "${SUBMODS[@]}"; do
     fi
 done
 
-# 3. Summary
-echo ""
-if [ ${#TAGS[@]} -eq 0 ]; then
-    echo -e "${GREEN}${BOLD}No new tags to push.${NC}"
+# === Step 3: Push sub-module tags so proxy can resolve them ===
+if [ ${#TAGS[@]} -gt 0 ]; then
+    log "Pushing sub-module tags..."
+    git push origin main "${TAGS[@]}"
+    ok "Sub-module tags pushed"
+
+    # Wait for proxy to index
+    log "Waiting for Go module proxy to index tags..."
+    sleep 5
+    GONOSUMCHECK=* GONOSUMDB=* go list -m "github.com/go-kruda/kruda/transport/wing@$VERSION" > /dev/null 2>&1 || true
+fi
+
+# === Step 4: Update go.sum with new version hashes ===
+log "Running go mod tidy to update go.sum..."
+GONOSUMCHECK=* GONOSUMDB=* GOWORK=off go mod tidy 2>&1 || fail "go mod tidy failed for core"
+(cd transport/wing && GONOSUMCHECK=* GONOSUMDB=* GOWORK=off go mod tidy 2>&1) || fail "go mod tidy failed for transport/wing"
+
+if [ -n "$(git status --porcelain -- go.sum transport/wing/go.sum)" ]; then
+    git add go.sum transport/wing/go.sum
+    git commit -m "chore: update go.sum for $VERSION"
+    ok "Committed go.sum updates"
 else
-    echo -e "${BOLD}Tags created:${NC}"
-    for tag in "${TAGS[@]}"; do
-        echo "  $tag"
-    done
+    ok "go.sum already up to date"
+fi
+
+# === Step 5: Tag core ===
+CORE_TAG="$VERSION"
+if git rev-parse "$CORE_TAG" >/dev/null 2>&1; then
+    log "Core tag $CORE_TAG already exists, skipping"
+else
+    git tag -a "$CORE_TAG" -m "$CORE_TAG"
+    ok "Tagged $CORE_TAG"
+fi
+
+# === Step 6: Push everything ===
+echo ""
+echo -e "${BOLD}Ready to push:${NC}"
+echo "  - main branch (go.sum commit)"
+echo "  - $CORE_TAG"
+echo ""
+read -p "Push now? (y/N): " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git push origin main "$CORE_TAG"
+    ok "All pushed — $VERSION released!"
     echo ""
-    echo -e "${BOLD}Push all tags:${NC}"
-    echo "  git push origin ${TAGS[*]}"
-    echo ""
-    read -p "Push now? (y/N): " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git push origin "${TAGS[@]}"
-        ok "All tags pushed"
-    fi
+    echo -e "${BOLD}Verify:${NC}"
+    echo "  curl -s https://proxy.golang.org/github.com/go-kruda/kruda/@v/$VERSION.info"
 fi

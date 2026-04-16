@@ -47,6 +47,7 @@ docs/ux/
 docs/adr/
 docs/features/
 docs/kruda-spec.md
+docs/RELEASING.md
 
 # Build output (root-level compiled binaries from examples)
 /auth

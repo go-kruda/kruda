@@ -266,7 +266,7 @@ func TestSendBytes_SmallResponse(t *testing.T) {
 
 // TestSendBytes_LargeResponse verifies that large responses produce the correct body.
 func TestSendBytes_LargeResponse(t *testing.T) {
-	large := make([]byte, responseBufPoolThreshold+1)
+	large := make([]byte, 4096+1)
 	for i := range large {
 		large[i] = 'x'
 	}
@@ -292,7 +292,7 @@ func TestSendBytes_LargeResponse(t *testing.T) {
 // TestSendBytes_ExactThreshold verifies that a response of exactly 4096 bytes
 // produces the correct output (boundary condition).
 func TestSendBytes_ExactThreshold(t *testing.T) {
-	exact := make([]byte, responseBufPoolThreshold)
+	exact := make([]byte, 4096)
 	for i := range exact {
 		exact[i] = 'a'
 	}
@@ -310,8 +310,8 @@ func TestSendBytes_ExactThreshold(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	if got := w.Body.Len(); got != responseBufPoolThreshold {
-		t.Errorf("want body length %d, got %d", responseBufPoolThreshold, got)
+	if got := w.Body.Len(); got != 4096 {
+		t.Errorf("want body length %d, got %d", 4096, got)
 	}
 }
 

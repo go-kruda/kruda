@@ -16,7 +16,7 @@ import (
 // Stores services keyed by reflect.Type with three lifetime models:
 // singleton (Give), transient (GiveTransient), and lazy singleton (GiveLazy).
 // Thread-safe via sync.RWMutex.
-
+//
 // containerKey is the context locals key used by InjectMiddleware and resolveContainer.
 const containerKey = "container"
 

@@ -1111,9 +1111,6 @@ func (c *Ctx) send() error {
 	return nil
 }
 
-// responseBufPoolThreshold is the max response size that uses a pooled buffer.
-const responseBufPoolThreshold = 4096
-
 func (c *Ctx) sendBytes(data []byte) error {
 	if c.responded {
 		return ErrAlreadyResponded

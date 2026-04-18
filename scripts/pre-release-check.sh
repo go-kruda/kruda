@@ -158,7 +158,7 @@ done
 if [ "$SUBMOD_OK" = true ]; then
     ok "All sub-modules require kruda $VERSION"
 else
-    fail "Sub-module dependencies out of sync. Run: scripts/tag-submodules.sh $VERSION"
+    fail "Sub-module dependencies out of sync — update each contrib/*/go.mod to require kruda $VERSION (single-tag flow since v1.2.0)"
 fi
 
 # 9. Build verification

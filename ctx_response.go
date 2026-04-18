@@ -836,3 +836,38 @@ func isBodyTooLarge(err error) bool {
 	var btle *transport.BodyTooLargeError
 	return errors.As(err, &btle)
 }
+
+// SSE starts a Server-Sent Events stream.
+// Sets appropriate headers and creates an SSEStream for the callback.
+// Returns when the callback returns or the client disconnects.
+func (c *Ctx) SSE(fn func(*SSEStream) error) error {
+	// Check flusher support before writing headers
+	flusher, ok := c.writer.(http.Flusher)
+	if !ok {
+		return InternalError("SSE requires a transport that supports flushing")
+	}
+
+	// Set SSE headers
+	c.SetHeader("Content-Type", "text/event-stream")
+	c.SetHeader("Cache-Control", "no-cache")
+	c.SetHeader("Connection", "keep-alive")
+
+	// Write headers immediately
+	c.writeHeaders()
+	c.writer.WriteHeader(200)
+	c.responded = true
+
+	stream := &SSEStream{
+		writer:  writerAdapter{c.writer},
+		flusher: flusher,
+		encode:  c.app.config.JSONEncoder,
+		ctx:     c.Context(),
+	}
+
+	err := fn(stream)
+
+	// Flush after callback returns to ensure net/http sends the terminating chunk.
+	flusher.Flush()
+
+	return err
+}

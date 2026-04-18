@@ -78,11 +78,15 @@ var (
 	// Go runtime auto-creates OS threads, avoiding ioLoop starvation.
 	Spear = Feather{Dispatch: Takeover}
 
-	// Semantic presets — pick by route behavior:
-	Plaintext = Bolt  // static text, health checks
-	JSON      = Bolt  // JSON encode, no I/O
-	Query     = Spear // DB/Redis short I/O
-	Render    = Spear // DB + template/HTML
+	// Plaintext is a Bolt-aliased preset for static text and health-check routes.
+	Plaintext = Bolt
+	// JSON is a Bolt-aliased preset for handlers that only encode JSON without I/O.
+	JSON = Bolt
+	// Query is a Spear-aliased preset for short DB or Redis lookups.
+	Query = Spear
+	// Render is a Spear-aliased preset for handlers that combine DB calls with
+	// HTML/template rendering.
+	Render = Spear
 )
 
 // --------------- Stringer ---------------

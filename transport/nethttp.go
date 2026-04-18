@@ -318,10 +318,16 @@ func (m *netHTTPHeaderMap) Add(key, value string) { m.h.Add(key, value) }
 // DirectHeader implements DirectHeaderAccess for direct header map access.
 func (m *netHTTPHeaderMap) DirectHeader() http.Header { return m.h }
 
+// ErrBodyTooLarge is returned when an inbound request body exceeds the
+// configured maximum size. It is a sentinel error backed by BodyTooLargeError.
 var ErrBodyTooLarge = &BodyTooLargeError{}
 
+// BodyTooLargeError is returned by transports when the inbound request body
+// exceeds the configured limit. Callers should compare with errors.Is(err,
+// ErrBodyTooLarge) rather than type-asserting.
 type BodyTooLargeError struct{}
 
+// Error implements the error interface.
 func (e *BodyTooLargeError) Error() string { return "request body too large" }
 
 // NewNetHTTPRequest wraps an *http.Request into a transport.Request.

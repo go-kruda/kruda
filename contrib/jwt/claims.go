@@ -1,5 +1,3 @@
-// Package jwt provides JWT authentication middleware for Kruda.
-// It supports HS256, HS384, HS512, and RS256 algorithms using only Go stdlib.
 package jwt
 
 // Claims represents the payload of a JWT token.

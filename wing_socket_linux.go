@@ -1,6 +1,6 @@
-//go:build darwin
+//go:build linux
 
-package wing
+package kruda
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"syscall"
 )
 
-// SO_REUSEPORT on macOS/BSD.
-const soReusePort = syscall.SO_REUSEPORT
+// SO_REUSEPORT on Linux.
+const soReusePort = 0xf
 
 func createListenFd(addr string) (int, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
@@ -22,14 +22,10 @@ func createListenFd(addr string) (int, error) {
 		family = syscall.AF_INET6
 	}
 
-	fd, err := syscall.Socket(family, syscall.SOCK_STREAM, 0)
+	fd, err := syscall.Socket(family, syscall.SOCK_STREAM|syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return 0, fmt.Errorf("socket: %w", err)
 	}
-
-	// macOS doesn't have SOCK_NONBLOCK/SOCK_CLOEXEC in socket(), set them separately.
-	syscall.SetNonblock(fd, true)
-	syscall.CloseOnExec(fd)
 
 	syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 	syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, soReusePort, 1)
@@ -61,7 +57,11 @@ func createListenFd(addr string) (int, error) {
 	return fd, nil
 }
 
-func setTCPQuickACK(_ int32) {}
+// setTCPQuickACK disables delayed ACK on Linux.
+func setTCPQuickACK(fd int32) {
+	const tcpQuickACK = 12
+	syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, tcpQuickACK, 1)
+}
 
 // getPeerAddr returns "ip:port" of the remote end of fd, or "" on error.
 func getPeerAddr(fd int32) string {

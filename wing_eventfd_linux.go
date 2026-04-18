@@ -1,6 +1,6 @@
 //go:build linux
 
-package wing
+package kruda
 
 import (
 	"syscall"

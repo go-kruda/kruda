@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"strings"

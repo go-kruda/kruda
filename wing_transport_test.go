@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"bytes"
@@ -67,7 +67,7 @@ func startTransport(t *testing.T, handler transport.Handler) (string, func()) {
 	port := getFreePort(t)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	tr := New(Config{
+	tr := NewWingTransport(WingConfig{
 		Workers:     1, // single worker for test determinism
 		RingSize:    64,
 		ReadBufSize: 4096,

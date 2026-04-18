@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"bufio"
@@ -39,12 +39,12 @@ func startWingServer(t *testing.T, handler transport.Handler) (addr string, shut
 	addr = ln.Addr().String()
 	ln.Close()
 
-	cfg := Config{
+	cfg := WingConfig{
 		Workers:     1,
 		RingSize:    256,
 		ReadBufSize: 8192,
 	}
-	tr := New(cfg)
+	tr := NewWingTransport(cfg)
 
 	errCh := make(chan error, 1)
 	go func() {

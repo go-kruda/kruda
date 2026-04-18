@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func newTestWorker(maxConns int) (*worker, *mockEngine) {
 		id:       0,
 		listenFd: 100,
 		eng:      eng,
-		config:   Config{ReadBufSize: 4096},
+		config:   WingConfig{ReadBufSize: 4096},
 		maxConns: maxConns,
 		conns:    make(map[int32]*conn, 16),
 	}
@@ -205,12 +205,12 @@ func TestHandleRecv_PanicRecoveryClosesFd(t *testing.T) {
 }
 
 func TestWorkerMaxConnsFromConfig(t *testing.T) {
-	cfg := Config{Workers: 1, MaxConnsPerWorker: 5000}
+	cfg := WingConfig{Workers: 1, MaxConnsPerWorker: 5000}
 	cfg.defaults()
 	if cfg.MaxConnsPerWorker != 5000 {
 		t.Errorf("MaxConnsPerWorker = %d, want 5000", cfg.MaxConnsPerWorker)
 	}
-	cfg2 := Config{}
+	cfg2 := WingConfig{}
 	cfg2.defaults()
 	if cfg2.MaxConnsPerWorker != 0 {
 		t.Errorf("default MaxConnsPerWorker = %d, want 0 (unlimited)", cfg2.MaxConnsPerWorker)
@@ -223,7 +223,7 @@ func TestTransportConnectionLimit(t *testing.T) {
 	port := getFreePort(t)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	tr := New(Config{
+	tr := NewWingTransport(WingConfig{
 		Workers:           1,
 		RingSize:          64,
 		ReadBufSize:       4096,

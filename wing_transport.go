@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 var _ transport.Transport = (*Transport)(nil)
 
-type Config struct {
+type WingConfig struct {
 	Workers           int
 	RingSize          uint32
 	ReadBufSize       int
@@ -33,7 +33,7 @@ type Config struct {
 	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
 }
 
-func (c *Config) defaults() {
+func (c *WingConfig) defaults() {
 	if c.Workers <= 0 {
 		c.Workers = runtime.NumCPU()
 	}
@@ -50,7 +50,7 @@ func (c *Config) defaults() {
 
 // needsPool returns true if any route uses Pool dispatch (requires pre-allocated goroutine pool).
 // Spawn dispatch uses ad-hoc goroutines and does NOT require a pool.
-func (c *Config) needsPool() bool {
+func (c *WingConfig) needsPool() bool {
 	d := c.DefaultFeather.Dispatch
 	if d == 0 {
 		d = Inline
@@ -72,7 +72,7 @@ func (c *Config) needsPool() bool {
 
 // needsAsync returns true if any route uses Pool or Spawn dispatch.
 // When true, doneCh and pipe wake are needed but LockOSThread is still safe.
-func (c *Config) needsAsync() bool {
+func (c *WingConfig) needsAsync() bool {
 	d := c.DefaultFeather.Dispatch
 	if d == 0 {
 		d = Inline
@@ -93,14 +93,14 @@ func (c *Config) needsAsync() bool {
 }
 
 type Transport struct {
-	config   Config
+	config   WingConfig
 	workers  []*worker
 	shutdown atomic.Bool
 	wg       sync.WaitGroup
 	ready    chan struct{}
 }
 
-func New(cfg Config) *Transport {
+func NewWingTransport(cfg WingConfig) *Transport {
 	cfg.defaults()
 	return &Transport{config: cfg, ready: make(chan struct{})}
 }
@@ -221,7 +221,7 @@ type worker struct {
 	listenFd     int
 	eng          engine
 	handler      transport.Handler
-	config       Config
+	config       WingConfig
 	limits       parserLimits
 	maxConns     int
 	conns        map[int32]*conn
@@ -303,7 +303,7 @@ func (p *workerPool) loop(h transport.Handler) {
 	}
 }
 
-func newWorker(id, listenFd int, cfg Config, handler transport.Handler) (*worker, error) {
+func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
 	eng := newEngine()
 	wakeR, wakeW, err := createWakeFds()
 	if err != nil {

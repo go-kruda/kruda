@@ -1,6 +1,6 @@
 //go:build !linux && !darwin
 
-package wing
+package kruda
 
 import (
 	"context"
@@ -12,9 +12,9 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-// Config for Wing transport (unsupported on this platform).
-// Fields mirror the real Config so code compiles cross-platform.
-type Config struct {
+// WingConfig for Wing transport (unsupported on this platform).
+// Fields mirror the real WingConfig so code compiles cross-platform.
+type WingConfig struct {
 	Workers           int
 	RingSize          uint32
 	ReadBufSize       int
@@ -34,11 +34,11 @@ type Transport struct {
 	ready    chan struct{}
 	shutdown chan struct{}
 	wg       sync.WaitGroup
-	config   Config
+	config   WingConfig
 }
 
-// New returns a stub Transport that errors on Listen.
-func New(cfg Config) *Transport {
+// NewWingTransport returns a stub Transport that errors on Listen.
+func NewWingTransport(cfg WingConfig) *Transport {
 	return &Transport{ready: make(chan struct{}), config: cfg}
 }
 

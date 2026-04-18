@@ -1,4 +1,4 @@
-package wing
+package kruda
 
 import (
 	"reflect"

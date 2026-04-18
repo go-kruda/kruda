@@ -1,15 +1,15 @@
-package wing
+package kruda
 
 // FeatherTable maps method+path to a Feather for per-route dispatch decisions.
 // Lookup is two map reads (method → path → Feather), zero allocation.
 //
 // Usage:
 //
-//	wing.New(wing.Config{
+//	NewWingTransport(WingConfig{
 //	    Feathers: map[string]Feather{
-//	        "GET /plaintext": wing.Bolt,
-//	        "GET /json":      wing.Bolt,
-//	        "GET /db":        wing.Arrow,
+//	        "GET /plaintext": Bolt,
+//	        "GET /json":      Bolt,
+//	        "GET /db":        Arrow,
 //	    },
 //	})
 type FeatherTable struct {
@@ -24,7 +24,7 @@ type prefixFeather struct {
 	feather Feather
 }
 
-// method index constants matching Wing's HTTP parser internMethod output.
+// method index constants matching Wing's HTTP parser wingInternMethod output.
 const (
 	mGet = iota
 	mPost
@@ -72,7 +72,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 		idx := methodIdx(method)
 		if idx >= 0 {
 			// Param route: store as prefix match
-			if colonIdx := indexByte(path, ':'); colonIdx > 0 {
+			if colonIdx := wingIndexByte(path, ':'); colonIdx > 0 {
 				ft.prefixes[idx] = append(ft.prefixes[idx], prefixFeather{
 					prefix: path[:colonIdx], feather: f,
 				})
@@ -127,7 +127,7 @@ func splitKey(key string) (string, string) {
 	return key, "/"
 }
 
-func indexByte(s string, c byte) int {
+func wingIndexByte(s string, c byte) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] == c {
 			return i

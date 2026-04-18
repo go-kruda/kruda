@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"bytes"
@@ -79,7 +79,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	}
 
 	// Safe copies via string().
-	method := internMethod(line[:sp1])
+	method := wingInternMethod(line[:sp1])
 	rawPath := line[sp1+1 : sp2]
 
 	// Request-target must start with '/' or be exactly '*'.
@@ -609,7 +609,7 @@ func init() {
 	methodTable['D'^'E'+'L'] = "DELETE"
 }
 
-func internMethod(b []byte) string {
+func wingInternMethod(b []byte) string {
 	if len(b) >= 3 {
 		if m := methodTable[b[0]^b[1]+b[2]]; m != "" && len(m) == len(b) {
 			return m

@@ -1,11 +1,11 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 // RawRequest provides low-level access to Wing's request data.
 // Obtain via transport.Request.RawRequest():
 //
-//	if raw, ok := req.RawRequest().(wing.RawRequest); ok {
+//	if raw, ok := req.RawRequest().(kruda.RawRequest); ok {
 //	    fd := raw.Fd()
 //	}
 type RawRequest interface {

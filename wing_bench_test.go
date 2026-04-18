@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 import (
 	"context"
@@ -119,7 +119,7 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 
 // startBenchTransport starts a Wing transport with the given handler and
 // returns the address and a cleanup function. Single worker for determinism.
-func startBenchTransport(b *testing.B, handler transport.Handler, cfg ...Config) (string, func()) {
+func startBenchTransport(b *testing.B, handler transport.Handler, cfg ...WingConfig) (string, func()) {
 	b.Helper()
 
 	eng := newEngine()
@@ -137,13 +137,13 @@ func startBenchTransport(b *testing.B, handler transport.Handler, cfg ...Config)
 	l.Close()
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	c := Config{Workers: 1, RingSize: 64, ReadBufSize: 4096}
+	c := WingConfig{Workers: 1, RingSize: 64, ReadBufSize: 4096}
 	if len(cfg) > 0 {
 		c = cfg[0]
 		c.defaults()
 	}
 
-	tr := New(c)
+	tr := NewWingTransport(c)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -258,7 +258,7 @@ func BenchmarkLoopbackConcurrent(b *testing.B) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte("Hello, World!"))
 	})
-	addr, cleanup := startBenchTransport(b, handler, Config{
+	addr, cleanup := startBenchTransport(b, handler, WingConfig{
 		Workers:     2,
 		RingSize:    256,
 		ReadBufSize: 4096,
@@ -335,7 +335,7 @@ func startGuardTransport(t *testing.T, handler transport.Handler) (string, func(
 	l.Close()
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	tr := New(Config{Workers: 1, RingSize: 64, ReadBufSize: 4096})
+	tr := NewWingTransport(WingConfig{Workers: 1, RingSize: 64, ReadBufSize: 4096})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package wing
+package kruda
 
 // Feather is the per-route tuning system for Wing.
 // Only axes that are actually read by the transport are kept.

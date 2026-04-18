@@ -1,6 +1,6 @@
 //go:build darwin
 
-package wing
+package kruda
 
 import (
 	"syscall"

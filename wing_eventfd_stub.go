@@ -1,6 +1,6 @@
 //go:build darwin
 
-package wing
+package kruda
 
 // createWakeFds creates a pipe pair for wake signaling on macOS.
 // Linux uses eventfd instead (eventfd_linux.go).

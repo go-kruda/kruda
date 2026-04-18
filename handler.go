@@ -17,7 +17,7 @@ type routeConfig struct {
 	tags        []string
 	inType      reflect.Type // input type T (for OpenAPI schema generation)
 	outType     reflect.Type // output type Out (for OpenAPI schema generation)
-	wingFeather any          // wing.Feather (any to avoid import cycle)
+	wingFeather any          // Feather (any to avoid import cycle, kept for compat)
 }
 
 // WithDescription sets a route description (used by OpenAPI in Phase 2B).

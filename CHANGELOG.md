@@ -3,6 +3,28 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] — 2026-04-18
+
+### Added
+- Cross-transport integration smoke test exercising nethttp/fasthttp/wing end-to-end
+- Native Go fuzz tests for router patterns + match (`FuzzRouterPattern`, `FuzzRouterMatch`), JSON binding (`FuzzBindJSON`), and validation (`FuzzValidateString`)
+- Package-level `doc.go` overview for the core package and every contrib package — appears on pkg.go.dev
+- Runnable `Example*` functions in godoc for the core API (`ExampleNew`, `ExamplePost`, `ExampleApp_Use`, `ExampleApp_Group`)
+- `app_serve.go` — extracted request-dispatch internals from `kruda.go`
+- `ctx_request.go`, `ctx_response.go`, `ctx_state.go`, `ctx_lifecycle.go` — split out from `context.go`
+- Per-symbol godoc for previously undocumented exports: `Container`, `GoViewEngine.Render`, `WingConfig`, Wing Transport, semantic Feather presets, Wing stub Transport / DispatchMode constants
+
+### Changed
+- Wing transport flattened into the core `kruda` package; `import "github.com/go-kruda/kruda/transport/wing"` continues to work as a deprecation alias.
+- Test files renamed by feature for clarity (the previous `coverage_boost*_test.go` names — which were real tests with misleading names — became files like `error_constructors_test.go`, `context_methods_test.go`, etc.)
+- Release process simplified to a single tag covering core + contrib — see [docs/release-process.md](docs/release-process.md).
+
+### Deprecated
+- `import "github.com/go-kruda/kruda/transport/wing"` — use `github.com/go-kruda/kruda` instead. The alias package continues to work and will be removed in v2.0.0.
+
+### Fixed
+- Eliminated the circular dependency between core and `transport/wing` that produced the broken v1.1.0–v1.1.2 releases (those tags are retracted in `go.mod`).
+
 ## [1.0.0] - 2026-03-07
 
 ### Added

@@ -1,15 +1,3 @@
-// Package otel provides OpenTelemetry tracing middleware for Kruda.
-//
-// Automatically creates server spans for incoming requests with standard
-// HTTP semantic conventions. Supports context propagation, custom span
-// naming, skip functions, and extra attributes.
-//
-// Usage:
-//
-//	app := kruda.New()
-//	app.Use(otel.New(otel.Config{
-//	    ServerName: "my-service",
-//	}))
 package otel
 
 import (

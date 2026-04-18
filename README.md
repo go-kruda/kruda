@@ -13,9 +13,10 @@ Fast by default, type-safe by design.
 - Typed handlers `C[T]` — body + param + query parsed into one struct, validated at compile time
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
-- Pluggable transport — Wing (Linux, epoll+eventfd), fasthttp, or net/http
+- Pluggable transport — Wing in core (Linux, epoll+eventfd; legacy `transport/wing` import path still works as a deprecated alias), fasthttp, or net/http
+- Single-tag releases — one `vX.Y.Z` covers core and contrib (no more sub-module coordination)
 - Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
-- AI-friendly — typed API + 21 examples = AI generates correct code on first try
+- AI-friendly — typed API + 22 examples = AI generates correct code on first try
 
 ## Quick Start
 
@@ -132,7 +133,7 @@ Wing transport uses raw `epoll` + `eventfd` on Linux — bypasses both fasthttp 
 ## Documentation
 
 - [API Reference (pkg.go.dev)](https://pkg.go.dev/github.com/go-kruda/kruda)
-- [Examples](examples/) — 21 runnable examples
+- [Examples](examples/) — 22 runnable examples
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
 - [Benchmark Charts](https://go-kruda.github.io/kruda/benchmarks/)

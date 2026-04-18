@@ -17,13 +17,16 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 ok "no uncommitted changes"
 
-section "no replace directives in committed go.mod files"
-violations=$(git ls-files '*go.mod' | xargs grep -l '^replace ' 2>/dev/null || true)
+section "no replace directives in committed go.mod files (released modules only)"
+# examples/ and bench/ are internal-use modules; their go.mod can keep replace
+# directives that point at the local repo. Released modules (root, transport/wing,
+# contrib/*) must NOT have replace directives.
+violations=$(git ls-files '*go.mod' | grep -vE '^(examples|bench)/' | xargs grep -l '^replace ' 2>/dev/null || true)
 if [[ -n "$violations" ]]; then
   echo "$violations"
-  fail "replace directive found in committed go.mod files"
+  fail "replace directive found in a released module's go.mod"
 fi
-ok "no replace directives in committed go.mod"
+ok "no replace directives in released go.mod"
 
 section "tests (host platform)"
 go test -race ./...

@@ -20,6 +20,3 @@ require (
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 )
-
-// Local replace during dev — removed before tagging (Phase 6.3).
-replace github.com/go-kruda/kruda => ../..

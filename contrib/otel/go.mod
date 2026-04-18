@@ -2,13 +2,8 @@ module github.com/go-kruda/kruda/contrib/otel
 
 go 1.25.8
 
-replace (
-	github.com/go-kruda/kruda => ../../
-	github.com/go-kruda/kruda/transport/wing => ../../transport/wing
-)
-
 require (
-	github.com/go-kruda/kruda v1.1.2
+	github.com/go-kruda/kruda v1.2.0
 	go.opentelemetry.io/otel v1.41.0
 	go.opentelemetry.io/otel/sdk v1.41.0
 	go.opentelemetry.io/otel/trace v1.41.0
@@ -21,7 +16,6 @@ require (
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/go-kruda/kruda/transport/wing v0.0.0-00010101000000-000000000000 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect

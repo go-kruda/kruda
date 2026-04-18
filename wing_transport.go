@@ -18,6 +18,14 @@ import (
 
 var _ transport.Transport = (*Transport)(nil)
 
+// WingConfig tunes the Wing transport: worker count, ring sizes, parser limits,
+// per-route Feather hints, and connection timeouts. Zero values trigger sensible
+// defaults (Workers=NumCPU, RingSize=4096, ReadBufSize=8192). All zero timeouts
+// disable the corresponding deadline.
+//
+// On non-Linux/non-Darwin platforms the same struct is defined as a stub so
+// cross-platform code compiles, but constructing a Wing transport there returns
+// an error from ListenAndServe.
 type WingConfig struct {
 	Workers           int
 	RingSize          uint32
@@ -92,6 +100,10 @@ func (c *WingConfig) needsAsync() bool {
 	return false
 }
 
+// Transport is the Wing async I/O transport. It pins one worker per CPU
+// (configurable via WingConfig.Workers), each running its own epoll/kqueue
+// loop on a dedicated OS thread. Implements transport.Transport and
+// transport.FeatherConfigurator.
 type Transport struct {
 	config   WingConfig
 	workers  []*worker
@@ -100,11 +112,19 @@ type Transport struct {
 	ready    chan struct{}
 }
 
+// NewWingTransport builds a Wing transport from cfg, applying defaults to any
+// zero fields. The transport does not bind a listener until ListenAndServe is
+// called.
 func NewWingTransport(cfg WingConfig) *Transport {
 	cfg.defaults()
 	return &Transport{config: cfg, ready: make(chan struct{})}
 }
 
+// ListenAndServe binds one SO_REUSEPORT listener per worker on addr, starts
+// the workers (each pinned to its own OS thread), and blocks until Shutdown
+// is called or all workers exit. Returns an error if any listener or worker
+// fails to initialize; partially started workers are torn down before
+// returning.
 func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error {
 	t.workers = make([]*worker, t.config.Workers)
 	for i := range t.workers {
@@ -133,6 +153,10 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 	return nil
 }
 
+// Serve adapts a stdlib net.Listener to Wing by extracting its address,
+// closing the supplied listener, and re-binding via ListenAndServe so each
+// worker can own a SO_REUSEPORT socket. Use ListenAndServe directly when you
+// don't already have a *net.Listener.
 func (t *Transport) Serve(ln net.Listener, handler transport.Handler) error {
 	addr := ln.Addr().String()
 	_ = ln.Close()
@@ -149,6 +173,9 @@ func (t *Transport) SetRouteFeather(method, path string, feather any) {
 	}
 }
 
+// Shutdown signals every worker to stop accepting new connections and waits
+// for the in-flight ioLoops to drain. Returns nil if the transport was never
+// started, or ctx.Err() if the context expires before workers exit.
 func (t *Transport) Shutdown(ctx context.Context) error {
 	select {
 	case <-t.ready:

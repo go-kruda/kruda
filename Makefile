@@ -19,4 +19,8 @@ fmt:
 	gofmt -w .
 
 clean:
-	go clean ./...
+	@go clean ./...
+	@rm -f *.test *.out *.prof
+	@rm -f auth auto-crud crud database di-services health-checks hello json-api sse static-files testing typed-handlers di-comparison
+	@find examples -maxdepth 2 -type f -perm -u+x ! -name '*.sh' ! -name '*.go' ! -name '*.md' -delete 2>/dev/null || true
+	@echo "clean."

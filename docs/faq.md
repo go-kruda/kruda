@@ -38,7 +38,7 @@ See the [DI Container guide](/guide/di-container) for details.
 
 | | Wing | fasthttp | net/http |
 |---|------|---------|----------|
-| Platform | Linux only | All platforms | All platforms |
+| Platform | Linux & macOS | All platforms | All platforms |
 | Performance | Highest (846K req/s) | High | Good |
 | HTTP/2 | No | No | Yes (via TLS) |
 | Set-Cookie | Limited (fast path skips) | Yes | Yes |

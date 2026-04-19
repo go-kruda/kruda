@@ -18,17 +18,6 @@ import (
 
 var _ transport.Transport = (*Transport)(nil)
 
-// WingConfig tunes the Wing transport: worker count, ring sizes, parser limits,
-// per-route Feather hints, and connection timeouts. Zero values trigger sensible
-// defaults (Workers=NumCPU, RingSize=4096, ReadBufSize=8192). All zero timeouts
-// disable the corresponding deadline.
-//
-// On non-Linux/non-Darwin platforms the same struct is defined as a stub so
-// cross-platform code compiles, but constructing a Wing transport there returns
-// an error from ListenAndServe.
-// WingConfig and its defaults() method live in wing_types_shared.go so the
-// stub build path sees the same struct without us hand-syncing fields.
-
 // needsPool returns true if any route uses Pool dispatch (requires pre-allocated goroutine pool).
 // Spawn dispatch uses ad-hoc goroutines and does NOT require a pool.
 func (c *WingConfig) needsPool() bool {

@@ -136,14 +136,27 @@ func (t *Transport) Serve(ln net.Listener, handler transport.Handler) error {
 	return t.ListenAndServe(addr, handler)
 }
 
-// SetRouteFeather implements transport.FeatherConfigurator.
+// SetRouteFeather implements transport.FeatherConfigurator. The feather
+// argument is typed as `any` at the interface boundary; route registration
+// passes a `*Feather` (so a missing hint is nil); we accept either form for
+// backward compatibility with anything still passing `Feather` by value.
 func (t *Transport) SetRouteFeather(method, path string, feather any) {
-	if f, ok := feather.(Feather); ok {
-		if t.config.Feathers == nil {
-			t.config.Feathers = make(map[string]Feather)
+	var f Feather
+	switch v := feather.(type) {
+	case *Feather:
+		if v == nil {
+			return
 		}
-		t.config.Feathers[method+" "+path] = f
+		f = *v
+	case Feather:
+		f = v
+	default:
+		return
 	}
+	if t.config.Feathers == nil {
+		t.config.Feathers = make(map[string]Feather)
+	}
+	t.config.Feathers[method+" "+path] = f
 }
 
 // Shutdown signals every worker to stop accepting new connections and waits

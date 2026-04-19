@@ -8,7 +8,7 @@ package kruda
 //	app.Get("/fortunes", handler, kruda.WingRender())
 
 func wingFeatherOpt(f Feather) RouteOption {
-	return func(rc *routeConfig) { rc.wingFeather = f }
+	return func(rc *routeConfig) { rc.wingFeather = &f }
 }
 
 // WingPlaintext — static text, health checks. Inline in ioLoop.

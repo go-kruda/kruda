@@ -43,11 +43,14 @@ jobs:
       - name: Run Wing alias module benchmarks
         # Same ephemeral local replace as the test workflow — wing alias module
         # requires kruda at the new tag, not yet on proxy during PR CI.
+        # Restore go.mod/go.sum afterwards so later steps (e.g. switching to
+        # gh-pages to publish results) don't see a dirty working tree.
         run: |
           cd transport/wing
           go mod edit -replace=github.com/go-kruda/kruda=../..
           go mod tidy
           go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
+          git checkout -- go.mod go.sum
 
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0

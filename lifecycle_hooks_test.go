@@ -45,6 +45,44 @@ func TestApp_OnResponse(t *testing.T) {
 	}
 }
 
+// TestApp_OnResponse_FiresOnPathTraversalError guards the documented "always
+// runs — even on 404 and OnRequest errors" guarantee for OnResponse. Path
+// traversal rejections used to short-circuit with an early return, skipping
+// OnResponse — broken metrics/logging hooks for any rejected request.
+func TestApp_OnResponse_FiresOnPathTraversalError(t *testing.T) {
+	var (
+		responseCalled bool
+		errorCalled    bool
+	)
+	app := New(WithPathTraversal())
+	app.OnResponse(func(c *Ctx) error {
+		responseCalled = true
+		return nil
+	})
+	app.OnError(func(c *Ctx, err error) {
+		errorCalled = true
+	})
+	app.Get("/files/*path", func(c *Ctx) error {
+		return c.Text("ok")
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/%2e%2e/etc/passwd") // url-encoded "/../etc/passwd" — escapes root
+	if err != nil {
+		t.Fatalf("test client Get: %v", err)
+	}
+	if resp.StatusCode() != 400 {
+		t.Errorf("path traversal: status = %d, want 400", resp.StatusCode())
+	}
+	if !errorCalled {
+		t.Error("OnError hook not called on path traversal rejection")
+	}
+	if !responseCalled {
+		t.Error("OnResponse hook not called on path traversal rejection")
+	}
+}
+
 func TestApp_BeforeHandle(t *testing.T) {
 	called := false
 	app := New()

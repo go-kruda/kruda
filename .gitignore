@@ -30,7 +30,6 @@ go.work
 go.work.sum
 
 # AI tooling
-CLAUDE.md
 .kiro/
 .claude/
 .plan

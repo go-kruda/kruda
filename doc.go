@@ -46,6 +46,27 @@
 // import "github.com/go-kruda/kruda/transport/wing" still works as a
 // deprecated re-export and will be removed in v2.0.0.
 //
+// # Wing dispatch tuning (advanced)
+//
+// Wing's per-route dispatch mode controls how each handler is scheduled.
+// The defaults work for typical workloads; tune only when profiling says so.
+//
+//   - [Bolt] (default) — handler runs inline in the event loop. Zero overhead;
+//     best for plaintext, JSON, and health checks where latency dominates and
+//     there is no I/O wait.
+//   - [Arrow] — handler dispatched to a bounded goroutine pool (~1µs overhead).
+//     Use for short I/O like a DB query or Redis lookup.
+//   - [Spear] — a goroutine takes over the connection with blocking syscalls,
+//     letting the Go runtime spawn extra OS threads for heavy I/O. Use for
+//     DB-heavy endpoints or template rendering.
+//
+// Apply per route with the matching helper:
+//
+//	app.Get("/ping",       handler, kruda.WingPlaintext()) // Bolt
+//	app.Get("/api/json",   handler, kruda.WingJSON())      // Bolt
+//	app.Get("/users/:id",  handler, kruda.WingQuery())     // Spear
+//	app.Get("/render/:id", handler, kruda.WingRender())    // Spear
+//
 // # Dependency injection
 //
 // An optional, zero-overhead container resolves services by type:

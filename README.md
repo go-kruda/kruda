@@ -223,12 +223,11 @@ Run vulnerability scan before every release:
 # Install govulncheck (one-time)
 go install golang.org/x/vuln/cmd/govulncheck@latest
 
-# Scan root module
+# Scan root module — covers core + Wing (since v1.2.0 Wing lives in core)
 govulncheck ./...
-
-# Scan Wing transport module
-cd transport/wing && govulncheck ./...
 ```
+
+The `transport/wing` directory is now a thin deprecation alias module — its surface is just type re-exports from core, so scanning the root is sufficient.
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 

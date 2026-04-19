@@ -39,14 +39,6 @@ func (h *echoHandler) ServeKruda(w transport.ResponseWriter, r transport.Request
 	}
 }
 
-// jsonHandler returns a static JSON response for benchmarking.
-type jsonHandler struct{}
-
-func (h *jsonHandler) ServeKruda(w transport.ResponseWriter, r transport.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"message":"Hello, World!"}`))
-}
-
 // getFreePort finds an available TCP port.
 func getFreePort(t *testing.T) int {
 	t.Helper()
@@ -77,9 +69,8 @@ func startTransport(t *testing.T, handler transport.Handler) (string, func()) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := tr.ListenAndServe(addr, handler); err != nil {
-			// Expected after shutdown.
-		}
+		// Listen errors after shutdown are expected; ignore.
+		_ = tr.ListenAndServe(addr, handler)
 	}()
 
 	// Wait for server to be ready.

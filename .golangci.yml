@@ -13,6 +13,9 @@ linters:
       - path: transport/nethttp\.go
         linters:
           - errcheck
+      - path: wing_.*\.go
+        linters:
+          - errcheck
       - path: examples/
         linters:
           - errcheck

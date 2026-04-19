@@ -1466,7 +1466,6 @@ type transportSim struct {
 	readBuf []byte // fixed-size read buffer (like conn.readBuf)
 	readN   int    // bytes in buffer (like conn.readN)
 	limits  parserLimits
-	parsed  []string // collected (method + " " + path) for verification
 }
 
 func newTransportSim(bufSize int) *transportSim {

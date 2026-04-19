@@ -18,7 +18,6 @@ type mockEngine struct {
 	recvArmed   int
 	sendArmed   int
 	closedFds   []int32
-	flushed     int
 }
 
 func (m *mockEngine) Init(_ engineConfig) error              { return nil }

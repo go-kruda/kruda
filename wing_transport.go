@@ -263,6 +263,12 @@ type worker struct {
 	writeTimeout int64
 	idleTimeout  int64
 	sweepAt      int64 // next sweep unix nano
+	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
+	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
+	// finish before closing fds. Pool goroutines are tracked separately by
+	// pool.wg. Without this barrier, a dispatch goroutine could write to an
+	// fd the kernel has already recycled.
+	dispatchWG sync.WaitGroup
 }
 
 type handlerJob struct {
@@ -639,7 +645,9 @@ func (w *worker) tryParse(c *conn) {
 			// New goroutine per request.
 			c.keepAlive = req.keepAlive
 			c.pending++
+			w.dispatchWG.Add(1)
 			go func(req *wingRequest, fd int32, ka bool) {
+				defer w.dispatchWG.Done()
 				resp := acquireResponse()
 				func() {
 					defer func() {
@@ -685,7 +693,11 @@ func (w *worker) tryParse(c *conn) {
 				copy(leftover, c.readBuf[:c.readN])
 				c.readN = 0
 			}
-			go w.takeoverLoop(req, c.fd, leftover)
+			w.dispatchWG.Add(1)
+			go func() {
+				defer w.dispatchWG.Done()
+				w.takeoverLoop(req, c.fd, leftover)
+			}()
 			return
 
 		default:
@@ -952,6 +964,8 @@ func (w *worker) cleanup() {
 		// could land on an fd the kernel has already recycled.
 		w.pool.wg.Wait()
 	}
+	// Same fd-recycling concern for Spawn/Takeover dispatch goroutines.
+	w.dispatchWG.Wait()
 	for fd, c := range w.conns {
 		if c.cancel != nil {
 			c.cancel()

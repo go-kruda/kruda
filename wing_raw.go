@@ -2,21 +2,8 @@
 
 package kruda
 
-// RawRequest provides low-level access to Wing's request data.
-// Obtain via transport.Request.RawRequest():
-//
-//	if raw, ok := req.RawRequest().(kruda.RawRequest); ok {
-//	    fd := raw.Fd()
-//	}
-type RawRequest interface {
-	RawMethod() string
-	RawPath() []byte
-	RawHeader(name string) []byte
-	RawBody() []byte
-	Fd() int32
-	KeepAlive() bool
-}
-
+// RawRequest is declared in wing_types_shared.go; this file holds the
+// linux/darwin implementation on *wingRequest.
 var _ RawRequest = (*wingRequest)(nil)
 
 func (r *wingRequest) RawMethod() string { return r.method }

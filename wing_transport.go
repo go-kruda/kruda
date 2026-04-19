@@ -26,35 +26,8 @@ var _ transport.Transport = (*Transport)(nil)
 // On non-Linux/non-Darwin platforms the same struct is defined as a stub so
 // cross-platform code compiles, but constructing a Wing transport there returns
 // an error from ListenAndServe.
-type WingConfig struct {
-	Workers           int
-	RingSize          uint32
-	ReadBufSize       int
-	MaxHeaderCount    int
-	MaxHeaderSize     int
-	MaxConnsPerWorker int
-	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
-	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
-	DefaultFeather    Feather            // fallback feather for routes not in Feathers
-	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
-	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
-	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
-}
-
-func (c *WingConfig) defaults() {
-	if c.Workers <= 0 {
-		c.Workers = runtime.NumCPU()
-	}
-	if c.RingSize == 0 {
-		c.RingSize = 4096
-	}
-	if c.ReadBufSize <= 0 {
-		c.ReadBufSize = 8192
-	}
-	if c.HandlerPoolSize <= 0 {
-		c.HandlerPoolSize = c.Workers
-	}
-}
+// WingConfig and its defaults() method live in wing_types_shared.go so the
+// stub build path sees the same struct without us hand-syncing fields.
 
 // needsPool returns true if any route uses Pool dispatch (requires pre-allocated goroutine pool).
 // Spawn dispatch uses ad-hoc goroutines and does NOT require a pool.

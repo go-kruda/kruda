@@ -276,6 +276,12 @@ type workerPool struct {
 	jobs chan handlerJob
 	done chan doneMsg
 	wake func()
+	// wg tracks the pool goroutines so cleanup() can wait for in-flight
+	// RawSyscall(SYS_WRITE) calls to finish before closing fds. Without this
+	// barrier, a pool goroutine could write to an fd that the kernel has
+	// already recycled for a new connection, leaking response bytes to the
+	// wrong client.
+	wg sync.WaitGroup
 }
 
 func newWorkerPool(size int, h transport.Handler, done chan doneMsg, wake func()) *workerPool {
@@ -284,6 +290,7 @@ func newWorkerPool(size int, h transport.Handler, done chan doneMsg, wake func()
 		done: done,
 		wake: wake,
 	}
+	p.wg.Add(size)
 	for i := 0; i < size; i++ {
 		go p.loop(h)
 	}
@@ -291,6 +298,7 @@ func newWorkerPool(size int, h transport.Handler, done chan doneMsg, wake func()
 }
 
 func (p *workerPool) loop(h transport.Handler) {
+	defer p.wg.Done()
 	for job := range p.jobs {
 		resp := acquireResponse()
 		func() {
@@ -939,6 +947,10 @@ func (w *worker) wake() { w.eng.PostWake() }
 func (w *worker) cleanup() {
 	if w.pool != nil {
 		close(w.pool.jobs)
+		// Wait for pool goroutines to finish any in-flight job's RawSyscall
+		// before we start closing fds. Otherwise a pool goroutine's write
+		// could land on an fd the kernel has already recycled.
+		w.pool.wg.Wait()
 	}
 	for fd, c := range w.conns {
 		if c.cancel != nil {

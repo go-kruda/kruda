@@ -975,8 +975,25 @@ func (w *worker) cleanup() {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
 		}
 	}
+	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave
+	// of Spawn/Takeover goroutines completing simultaneously can fill the
+	// 4096-slot doneCh buffer; the next sender blocks on the channel send
+	// before reaching its `defer dispatchWG.Done()`, and Wait deadlocks.
+	// Bounded by typical workloads but real for high-concurrency shutdowns.
+	drainStop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-w.doneCh:
+				// discard — ioLoop has stopped, nothing left to process
+			case <-drainStop:
+				return
+			}
+		}
+	}()
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()
+	close(drainStop)
 	for fd, c := range w.conns {
 		if c.cancel != nil {
 			c.cancel()

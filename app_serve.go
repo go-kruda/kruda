@@ -223,44 +223,52 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 	}
 
 	// OnRequest hooks — fire before route matching.
-	for _, hook := range app.hooks.OnRequest {
-		if err := hook(c); err != nil {
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.OnRequest {
+			if err := hook(c); err != nil {
+				app.handleError(c, err)
+				goto response
+			}
+		}
+	}
+
+	{
+		handlers := app.router.find(c.method, c.path, &c.params)
+		if handlers == nil {
+			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
+				c.SetHeader("Allow", allowed)
+				app.handleError(c, NewError(405, "method not allowed"))
+			} else {
+				app.handleError(c, NotFound("not found"))
+			}
+			goto response
+		}
+
+		c.handlers = handlers
+		c.routeIndex = 0
+
+		// BeforeHandle hooks — fire after middleware chain is set, before handler.
+		if app.hasLifecycle {
+			for _, hook := range app.hooks.BeforeHandle {
+				if err := hook(c); err != nil {
+					app.handleError(c, err)
+					goto afterHandle
+				}
+			}
+		}
+
+		if err := c.handlers[0](c); err != nil {
 			app.handleError(c, err)
-			return
 		}
-	}
-
-	handlers := app.router.find(c.method, c.path, &c.params)
-	if handlers == nil {
-		if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
-			c.SetHeader("Allow", allowed)
-			app.handleError(c, NewError(405, "method not allowed"))
-		} else {
-			app.handleError(c, NotFound("not found"))
-		}
-		goto response
-	}
-
-	c.handlers = handlers
-	c.routeIndex = 0
-
-	// BeforeHandle hooks — fire after middleware chain is set, before handler.
-	for _, hook := range app.hooks.BeforeHandle {
-		if err := hook(c); err != nil {
-			app.handleError(c, err)
-			goto afterHandle
-		}
-	}
-
-	if err := c.handlers[0](c); err != nil {
-		app.handleError(c, err)
 	}
 
 afterHandle:
 	// AfterHandle hooks — fire after handler, before response flush.
-	for _, hook := range app.hooks.AfterHandle {
-		if err := hook(c); err != nil {
-			app.handleError(c, err)
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.AfterHandle {
+			if err := hook(c); err != nil {
+				app.handleError(c, err)
+			}
 		}
 	}
 
@@ -271,8 +279,11 @@ afterHandle:
 
 response:
 	// OnResponse hooks — fire after body flush.
-	for _, hook := range app.hooks.OnResponse {
-		_ = hook(c)
+	// Always runs — even on 404 and OnRequest errors — so metrics/logging hooks work.
+	if app.hasLifecycle {
+		for _, hook := range app.hooks.OnResponse {
+			_ = hook(c) // errors are logged but don't affect the response
+		}
 	}
 }
 

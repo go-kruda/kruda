@@ -24,6 +24,29 @@ func containsDotPercent(s string) bool {
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := app.ctxPool.Get().(*Ctx)
 
+	// Panic recovery — registered FIRST so it covers reset, path traversal,
+	// hooks, router, and handler. A single defer per request is negligible
+	// (~1-2ns on arm64) and prevents handleError panics during pre-pipeline
+	// stages from crashing the server.
+	defer func() {
+		if rec := recover(); rec != nil {
+			app.config.Logger.Error("unrecovered panic in ServeHTTP",
+				"panic", fmt.Sprintf("%v", rec),
+				"method", c.method,
+				"path", c.path,
+			)
+			if !c.responded {
+				c.Status(500)
+				_ = c.JSON(Map{
+					"code":    500,
+					"message": "internal server error",
+				})
+			}
+		}
+		c.shrinkMaps()
+		app.ctxPool.Put(c)
+	}()
+
 	c.embeddedReq.r = r
 	c.embeddedReq.maxBody = app.config.BodyLimit
 	c.embeddedReq.bodyRead = false
@@ -75,16 +98,16 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.path = "/"
 	}
 
-	// Path traversal prevention (opt-in via WithPathTraversal or WithSecurity)
+	// Path traversal prevention (opt-in via WithPathTraversal or WithSecurity).
+	// Errors goto response so OnResponse hooks still fire (matches the
+	// "always runs" guarantee documented below).
 	if app.config.PathTraversal && len(c.path) > 1 && containsDotPercent(c.path) {
-		if cleaned, err := cleanPath(c.path); err != nil {
+		cleaned, err := cleanPath(c.path)
+		if err != nil {
 			app.handleError(c, NewError(400, "bad request: "+err.Error()))
-			c.shrinkMaps()
-			app.ctxPool.Put(c)
-			return
-		} else {
-			c.path = cleaned
+			goto response
 		}
+		c.path = cleaned
 	}
 
 	if c.params.count > 0 {
@@ -98,28 +121,6 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.Set(kv[0], kv[1])
 		}
 	}
-
-	// Panic recovery — prevents unhandled panics from crashing the server.
-	// Placed here (not as a named defer) to keep the fast path overhead minimal:
-	// a single defer per request is negligible (~1-2ns on arm64).
-	defer func() {
-		if rec := recover(); rec != nil {
-			app.config.Logger.Error("unrecovered panic in ServeHTTP",
-				"panic", fmt.Sprintf("%v", rec),
-				"method", c.method,
-				"path", c.path,
-			)
-			if !c.responded {
-				c.Status(500)
-				_ = c.JSON(Map{
-					"code":    500,
-					"message": "internal server error",
-				})
-			}
-		}
-		c.shrinkMaps()
-		app.ctxPool.Put(c)
-	}()
 
 	// === Lifecycle pipeline (mirrors ServeFast exactly) ===
 
@@ -212,12 +213,15 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 		c.cleanup()
 		app.ctxPool.Put(c)
 	}()
-	if app.config.PathTraversal {
+	// Path traversal prevention. Mirrors ServeHTTP: fast-path skip when path
+	// has no '.' or '%' to clean; on error route through handleError so
+	// OnError hooks + slog + custom ErrorHandler all fire; goto response so
+	// OnResponse hooks still run (matches the "always runs" guarantee).
+	if app.config.PathTraversal && len(c.path) > 1 && containsDotPercent(c.path) {
 		cleaned, err := cleanPath(c.path)
 		if err != nil {
-			w.WriteHeader(400)
-			_, _ = w.Write([]byte("Bad Request"))
-			return
+			app.handleError(c, NewError(400, "bad request: "+err.Error()))
+			goto response
 		}
 		c.path = cleaned
 	}

@@ -69,6 +69,21 @@ cd contrib/ws && go test ./...
 cd contrib/ratelimit && go test ./...
 ```
 
+**Cross-module dev tip:** contrib `go.mod` files require the latest tagged
+core (e.g. `kruda v1.2.0`). When you change core and want a contrib package
+to see those changes locally — before the next core tag exists on the proxy
+— set up a Go workspace:
+
+```bash
+go work init . transport/wing contrib/cache contrib/compress contrib/etag \
+              contrib/jwt contrib/otel contrib/prometheus contrib/ratelimit \
+              contrib/session contrib/swagger contrib/ws
+```
+
+`go.work` is gitignored on purpose — it's a local-dev convenience and should
+not be committed. CI uses an ephemeral `go mod edit -replace=...` per
+module test step instead (see `.github/workflows/test.yml`).
+
 ## Commit Messages
 
 Use clear, descriptive commit messages:

@@ -74,7 +74,7 @@ ok "all examples build"
 section "CHANGELOG has an entry for the next version"
 # This check is informational — it doesn't know what version is being tagged,
 # so it just verifies CHANGELOG.md was updated recently.
-if [[ $(git log -1 --format=%ct CHANGELOG.md) -lt $(date -d '30 days ago' +%s 2>/dev/null || date -v-30d +%s) ]]; then
+if [[ $(git log -1 --format=%ct CHANGELOG.md) -lt $(date -d '30 days ago' +%s 2>/dev/null || date -v-30d +%s 2>/dev/null || echo 0) ]]; then
   echo "  warning: CHANGELOG.md hasn't been updated in 30+ days"
 fi
 ok "CHANGELOG checked"

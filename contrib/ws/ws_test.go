@@ -584,7 +584,34 @@ func dialWS(t *testing.T, rawURL string) net.Conn {
 		t.Fatalf("expected 101, got %d: %s", resp.StatusCode, body)
 	}
 
+	// http.ReadResponse may have over-read past the handshake response into
+	// br's buffer — those bytes are server-sent WebSocket frames that arrived
+	// immediately after the upgrade. If we returned the bare conn, callers
+	// would lose those bytes. Wrap conn so the buffered bytes are served first.
+	if buffered := br.Buffered(); buffered > 0 {
+		peek, _ := br.Peek(buffered)
+		head := make([]byte, buffered)
+		copy(head, peek)
+		return &prebufConn{Conn: conn, prebuf: head}
+	}
 	return conn
+}
+
+// prebufConn wraps a net.Conn so that Read returns prebuf first, then falls
+// through to the underlying Conn. Used by dialWS to handle bytes that the
+// http.ReadResponse bufio.Reader greedily read past the handshake response.
+type prebufConn struct {
+	net.Conn
+	prebuf []byte
+}
+
+func (p *prebufConn) Read(b []byte) (int, error) {
+	if len(p.prebuf) > 0 {
+		n := copy(b, p.prebuf)
+		p.prebuf = p.prebuf[n:]
+		return n, nil
+	}
+	return p.Conn.Read(b)
 }
 
 // sendClientFrame writes a masked frame (client-to-server per RFC 6455).

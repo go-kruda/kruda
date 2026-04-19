@@ -1,8 +1,3 @@
-// Package ratelimit provides rate limiting middleware for Kruda.
-//
-// Supports token bucket (default) and sliding window algorithms.
-// Identifies clients by IP address (default) or custom key function.
-// Fully opt-in — user must app.Use() to enable.
 package ratelimit
 
 import (

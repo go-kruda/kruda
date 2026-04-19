@@ -1,14 +1,3 @@
-// Package swagger serves Swagger UI HTML that points to an existing OpenAPI JSON endpoint.
-//
-// Usage:
-//
-//	app := kruda.New()
-//	app.Get("/docs", swagger.New())
-//	app.Get("/docs", swagger.New(swagger.Config{
-//	    SpecURL:  "/api/v1/openapi.json",
-//	    Title:    "My API",
-//	    DarkMode: true,
-//	}))
 package swagger
 
 import (

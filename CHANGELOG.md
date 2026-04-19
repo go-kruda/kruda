@@ -3,6 +3,34 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] — 2026-04-19
+
+### Added
+- Cross-transport integration smoke test exercising nethttp/fasthttp/wing end-to-end
+- Native Go fuzz tests for router patterns + match (`FuzzRouterPattern`, `FuzzRouterMatch`), JSON binding (`FuzzBindJSON`), and validation (`FuzzValidateString`)
+- Package-level `doc.go` overview for the core package and every contrib package — appears on pkg.go.dev
+- Runnable `Example*` functions in godoc for the core API (`ExampleNew`, `ExamplePost`, `ExampleApp_Use`, `ExampleApp_Group`)
+- `app_serve.go` — extracted request-dispatch internals from `kruda.go`
+- `ctx_request.go`, `ctx_response.go`, `ctx_state.go`, `ctx_lifecycle.go` — split out from `context.go`
+- Per-symbol godoc for previously undocumented exports: `Container`, `GoViewEngine.Render`, `WingConfig`, Wing Transport, semantic Feather presets, Wing stub Transport / DispatchMode constants
+- `scripts/pre-release.sh` — gating validator (clean tree, no dev replace directives, all builds + tests + fuzz suites + godoc + examples)
+
+### Changed
+- Wing transport flattened into the core `kruda` package; `import "github.com/go-kruda/kruda/transport/wing"` continues to work as a deprecation alias.
+- Test files renamed by feature for clarity (the previous `coverage_boost*_test.go` names — which were real tests with misleading names — became files like `error_constructors_test.go`, `context_methods_test.go`, etc.)
+- Release process simplified to a single tag covering core + contrib — see [docs/release-process.md](docs/release-process.md). Old `scripts/tag-submodules.sh` removed.
+
+### Deprecated
+- `import "github.com/go-kruda/kruda/transport/wing"` — use `github.com/go-kruda/kruda` instead. The alias package continues to work and will be removed in v2.0.0.
+
+### Fixed
+- Eliminated the circular dependency between core and `transport/wing` that produced the broken v1.1.0–v1.1.2 releases (those tags are retracted in `go.mod`).
+- **Wing fd-recycling race in `worker.cleanup()`** — pool, Spawn, and Takeover dispatch goroutines are now tracked via `sync.WaitGroup` (`pool.wg` for the pool, `worker.dispatchWG` for Spawn/Takeover). Cleanup waits for in-flight `RawSyscall(SYS_WRITE)` calls to finish before closing fds, preventing writes from landing on fds the kernel has already recycled to a new connection.
+- **Wing shutdown deadlock with Takeover dispatch** — Takeover goroutines that block on `syscall.Read` are now unblocked by `syscall.Shutdown(fd, SHUT_RD)` before `dispatchWG.Wait()`. SHUT_RD returns EOF without freeing the fd number, so concurrent Spawn writes still target the right connection.
+- **Wing shutdown `doneCh` saturation deadlock** — a drain goroutine consumes `doneCh` while `dispatchWG.Wait()` runs, preventing a wave of completing Spawn/Takeover goroutines from blocking their channel sends and never reaching `Done()`.
+- **`ServeKruda` lifecycle now mirrors `ServeHTTP`** — `OnRequest` hook errors `goto response` (was `return`) so `OnResponse` hooks always fire for metrics/logging consistency. All hook iterations gated by `if app.hasLifecycle { … }` for zero-cost when no hooks are registered.
+- WebSocket `dialWS` test helper preserves bytes the bufio.Reader greedily read past the handshake response, fixing a flaky `TestConn_ConcurrentWrites` (visible on macOS CI runners).
+
 ## [1.0.0] - 2026-03-07
 
 ### Added

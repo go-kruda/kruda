@@ -1,16 +1,3 @@
-// Package compress provides gzip and deflate compression middleware for Kruda.
-//
-// Usage:
-//
-//	app := kruda.New()
-//	app.Use(compress.New())
-//
-//	app.Get("/api/data", func(c *kruda.Ctx) error {
-//		return compress.CompressText(c, "large response data...")
-//	})
-//
-// The middleware parses Accept-Encoding headers and stores compression preferences.
-// Use the Compress* helper functions to compress responses that meet the criteria.
 package compress
 
 import (

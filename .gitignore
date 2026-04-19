@@ -30,7 +30,6 @@ go.work
 go.work.sum
 
 # AI tooling
-CLAUDE.md
 .kiro/
 .claude/
 .plan
@@ -62,8 +61,27 @@ docs/RELEASING.md
 /typed-handlers
 /kruda
 cmd/kruda/kruda
-examples/websocket/websocket
+
+# Per-example compiled binaries (each example builds an executable named after the directory)
+examples/auth/auth
+examples/auto-crud/auto-crud
+examples/crud/crud
+examples/database/database
+examples/di-services/di-services
+examples/error-handling/error-handling
+examples/flat/flat
+examples/health-checks/health-checks
+examples/hello/hello
+examples/json-api/json-api
+examples/middleware/middleware
+examples/openapi/openapi
 examples/ratelimit/ratelimit
+examples/session/session
+examples/sse/sse
+examples/static-files/static-files
+examples/testing/testing
+examples/typed-handlers/typed-handlers
+examples/websocket/websocket
 
 # Bench artifacts
 bench/*.txt

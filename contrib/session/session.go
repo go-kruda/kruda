@@ -1,20 +1,3 @@
-// Package session provides session management middleware for Kruda.
-//
-// Usage:
-//
-//	app.Use(session.New())
-//
-//	app.Get("/profile", func(c *kruda.Ctx) error {
-//	    sess := session.GetSession(c)
-//	    name := sess.Get("name")
-//	    return c.JSON(kruda.Map{"name": name})
-//	})
-//
-//	app.Post("/login", func(c *kruda.Ctx) error {
-//	    sess := session.GetSession(c)
-//	    sess.Set("user_id", 42)
-//	    return c.JSON(kruda.Map{"ok": true})
-//	})
 package session
 
 import (

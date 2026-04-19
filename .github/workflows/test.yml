@@ -55,16 +55,31 @@ jobs:
           fi
           go test -v -race -tags kruda_stdjson $COVER_FLAG ./...
 
-      - name: Test Wing transport (Linux/macOS)
+      - name: Test Wing alias module (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        run: cd transport/wing && go test -v -race ./...
+        # Wing alias module's go.mod requires kruda at the new tag version, which
+        # doesn't exist on the proxy until release. For PR CI we add a local
+        # replace so tests can resolve kruda from the working tree. The replace
+        # is ephemeral (CI runner only) — never committed.
+        run: |
+          cd transport/wing
+          go mod edit -replace=github.com/go-kruda/kruda=../..
+          go mod tidy
+          go test -v -race ./...
 
       - name: Test contrib packages
         shell: bash
+        # Same ephemeral-replace dance as wing — contrib modules require the new
+        # kruda tag which doesn't exist until release.
         run: |
           for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag contrib/cache contrib/otel contrib/prometheus contrib/swagger; do
             echo "::group::Testing $dir"
-            cd $dir && go test -tags kruda_stdjson ./... && cd "$GITHUB_WORKSPACE"
+            (
+              cd "$dir"
+              go mod edit -replace=github.com/go-kruda/kruda=../..
+              go mod tidy
+              go test -tags kruda_stdjson ./...
+            )
             echo "::endgroup::"
           done
 

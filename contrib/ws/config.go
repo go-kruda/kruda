@@ -1,12 +1,3 @@
-// Package ws provides WebSocket support for Kruda.
-//
-// It implements RFC 6455 WebSocket protocol with support for text/binary frames,
-// fragmented messages, ping/pong, close handshake, and origin validation.
-//
-// Transport compatibility:
-//   - net/http: ✅ (via http.Hijacker)
-//   - fasthttp: ✅ (via RequestCtx.Hijack)
-//   - Wing: ❌ v1 (no hijack API — Wing manages fd directly via epoll/kqueue)
 package ws
 
 import "time"

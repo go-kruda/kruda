@@ -12,7 +12,7 @@ Kruda defaults to **Wing** transport on Linux for maximum performance — raw `e
 | fasthttp | `kruda.New(kruda.FastHTTP())` (default on macOS) | Broad compatibility |
 | net/http | `kruda.New(kruda.NetHTTP())` (default on Windows) | HTTP/2, TLS |
 
-Auto-fallback: TLS config automatically selects net/http. Wing is Linux only.
+Auto-fallback: TLS config automatically selects net/http. Wing runs on Linux (epoll) and macOS (kqueue).
 
 ## Context Pool Tuning
 
@@ -177,7 +177,7 @@ You should see your package listed as using PGO.
 
 ## Wing Transport Tuning
 
-Wing is Kruda's high-performance epoll+eventfd transport (Linux only). Enable explicitly with `kruda.Wing()` or use `kruda.New()` on Linux (auto-selected).
+Wing is Kruda's high-performance transport using epoll+eventfd on Linux and kqueue on macOS. It is built into core since v1.2.0. Enable explicitly with `kruda.Wing()` or use `kruda.New()` on Linux (auto-selected).
 
 ### Wing Types (Feather)
 

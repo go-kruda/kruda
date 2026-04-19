@@ -42,6 +42,10 @@ func NewViewEngineFS(fsys fs.FS, patterns ...string) *GoViewEngine {
 	return &GoViewEngine{tmpl: t}
 }
 
+// Render executes the named template against data and writes the result to w.
+// The template must have been loaded via NewViewEngine or NewViewEngineFS.
+// Returns an error if the template is undefined or execution fails (e.g.
+// missing field reference).
 func (e *GoViewEngine) Render(w io.Writer, name string, data any) error {
 	return e.tmpl.ExecuteTemplate(w, name, data)
 }

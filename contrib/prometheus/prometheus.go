@@ -1,14 +1,3 @@
-// Package prometheus provides Prometheus metrics middleware for the Kruda web framework.
-//
-// It tracks HTTP request count, duration, in-flight requests, and response size
-// using standard Prometheus metric types. The path label uses the route pattern
-// (e.g. "/users/:id") by default to prevent cardinality explosion.
-//
-// Usage:
-//
-//	app := kruda.New()
-//	app.Use(prometheus.New())
-//	app.Get("/metrics", prometheus.Handler())
 package prometheus
 
 import (

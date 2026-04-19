@@ -1,27 +1,3 @@
-// Package cache provides response caching middleware for Kruda.
-//
-// The middleware checks for cached responses on incoming requests and serves
-// them directly on cache hits. On cache misses, it stores caching metadata
-// in the request context. Handlers use the CacheJSON or CacheBytes helper
-// functions to send the response and store it in the cache simultaneously.
-//
-// Usage:
-//
-//	app := kruda.New()
-//	app.Use(cache.New())
-//
-//	app.Get("/api/data", func(c *kruda.Ctx) error {
-//	    data := fetchExpensiveData()
-//	    return cache.CacheJSON(c, data)
-//	})
-//
-// With custom config:
-//
-//	app.Use(cache.New(cache.Config{
-//	    TTL:     10 * time.Minute,
-//	    Methods: []string{"GET"},
-//	    Store:   cache.NewMemoryStore(5000),
-//	}))
 package cache
 
 import (

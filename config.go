@@ -203,9 +203,9 @@ func NetHTTP() Option {
 	return func(a *App) { a.config.TransportName = "nethttp" }
 }
 
-// Wing selects the Wing transport (epoll+eventfd, Linux only).
+// Wing selects the Wing transport (epoll+eventfd on Linux, kqueue on macOS).
 // This is the default on Linux — calling Wing() is optional but explicit.
-// On non-Linux platforms, falls back to fasthttp.
+// On unsupported platforms (Windows), falls back to fasthttp.
 func Wing() Option {
 	return func(a *App) { a.config.TransportName = "wing" }
 }

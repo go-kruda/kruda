@@ -12,14 +12,18 @@ import (
 	"sync/atomic"
 )
 
-// Container is the dependency injection container.
-// Stores services keyed by reflect.Type with three lifetime models:
-// singleton (Give), transient (GiveTransient), and lazy singleton (GiveLazy).
-// Thread-safe via sync.RWMutex.
-//
 // containerKey is the context locals key used by InjectMiddleware and resolveContainer.
 const containerKey = "container"
 
+// Container is the dependency injection container. It stores services keyed
+// by reflect.Type with three lifetime models — singleton (Give), transient
+// (GiveTransient), and lazy singleton (GiveLazy) — plus a separate name-keyed
+// store for sibling instances of the same type (GiveNamed).
+//
+// All Give* and Use* operations are safe for concurrent use; resolution of
+// transients and lazies also performs per-goroutine cycle detection so a
+// circular factory graph fails fast with a chained error rather than
+// deadlocking or stack-overflowing.
 type Container struct {
 	mu         sync.RWMutex
 	singletons map[reflect.Type]any

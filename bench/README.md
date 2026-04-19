@@ -154,7 +154,7 @@ were not justified.
 
 ```bash
 # Micro benchmarks
-cd transport/wing && go test -bench=. -benchmem -count=3 ./...
+go test -bench=BenchmarkWing -benchmem -count=3 ./...
 
 # wrk benchmark (build servers, then use wrk)
 # See bench/transport-compare/ for standalone bench servers

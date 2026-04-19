@@ -40,8 +40,14 @@ jobs:
       - name: Run core benchmarks
         run: go test -tags kruda_stdjson -benchmem -run=^$ -bench . ./... 2>&1 | tee output.txt
 
-      - name: Run Wing transport benchmarks
-        run: cd transport/wing && go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
+      - name: Run Wing alias module benchmarks
+        # Same ephemeral local replace as the test workflow — wing alias module
+        # requires kruda at the new tag, not yet on proxy during PR CI.
+        run: |
+          cd transport/wing
+          go mod edit -replace=github.com/go-kruda/kruda=../..
+          go mod tidy
+          go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
 
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0

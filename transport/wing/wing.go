@@ -86,6 +86,12 @@ const (
 
 // Feather presets.
 //
+// These are init-time COPIES of the corresponding kruda values, not
+// reference aliases. For const-like Feather presets this is the correct
+// semantics — mutating wing.Bolt cannot accidentally affect kruda.Bolt
+// (and vice versa). If you need the always-fresh value from core, read
+// kruda.Bolt directly.
+//
 // Deprecated: use kruda.Bolt, kruda.Arrow, kruda.Spear, kruda.Plaintext,
 // kruda.JSON, kruda.Query, kruda.Render directly.
 var (

@@ -47,6 +47,61 @@ func TestMemoryStore_SaveAndGet(t *testing.T) {
 	}
 }
 
+func TestMemoryStore_GetReturnsCopy(t *testing.T) {
+	store := NewMemoryStore()
+	defer store.Close()
+
+	original := &SessionData{
+		Values:    map[string]any{"user": "alice"},
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := store.Save("sess-1", original, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.Get("sess-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Values["user"] = "mallory"
+	got.Values["admin"] = true
+
+	again, err := store.Get("sess-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Values["user"] != "alice" {
+		t.Fatalf("stored user = %v, want alice", again.Values["user"])
+	}
+	if again.Values["admin"] != nil {
+		t.Fatalf("stored admin = %v, want nil", again.Values["admin"])
+	}
+}
+
+func TestMemoryStore_SaveStoresCopy(t *testing.T) {
+	store := NewMemoryStore()
+	defer store.Close()
+
+	data := &SessionData{
+		Values:    map[string]any{"user": "alice"},
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := store.Save("sess-1", data, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	data.Values["user"] = "mallory"
+
+	got, err := store.Get("sess-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Values["user"] != "alice" {
+		t.Fatalf("stored user = %v, want alice", got.Values["user"])
+	}
+}
+
 func TestMemoryStore_SaveOverwrite(t *testing.T) {
 	store := NewMemoryStore()
 	defer store.Close()

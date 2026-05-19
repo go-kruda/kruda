@@ -76,4 +76,4 @@ Kruda's typed API makes AI code generation more reliable:
 - **Typed handlers** — AI generates a struct, gets compile-time validation for free
 - **Auto CRUD** — AI says "create CRUD for Product" → one line of code
 - **Struct tags** — validation rules are explicit, not hidden in handler logic
-- **21 examples** — AI reads patterns and generates consistent code
+- **22 examples** — AI reads patterns and generates consistent code

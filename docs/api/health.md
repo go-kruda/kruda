@@ -1,44 +1,43 @@
 # Health
 
-Health check endpoint with pluggable health checkers.
+Health check endpoint backed by services registered in the app container.
 
 ## HealthChecker Interface
 
 ```go
 type HealthChecker interface {
-    Name() string
     Check(ctx context.Context) error
 }
 ```
 
-Implement this interface for each service dependency:
-
-```go
-type DBHealthChecker struct {
-    db *sql.DB
-}
-
-func (h *DBHealthChecker) Name() string { return "database" }
-
-func (h *DBHealthChecker) Check(ctx context.Context) error {
-    return h.db.PingContext(ctx)
-}
-```
+Kruda discovers `HealthChecker` implementations from `WithContainer(...)`.
+Singletons, named singletons, and already-resolved lazy singletons are included.
+Checker names are derived from the registered type name, or from the named
+registration key for `GiveNamed`.
 
 ## HealthHandler
 
 ```go
-func HealthHandler(checkers ...HealthChecker) HandlerFunc
+func HealthHandler(opts ...HealthOption) HandlerFunc
 ```
 
-Creates a handler that runs all health checkers and returns the aggregate status.
+Creates a handler that runs discovered health checkers in parallel.
 
 ```go
-app.Get("/health", kruda.HealthHandler(
-    &DBHealthChecker{db: db},
-    &RedisHealthChecker{client: rdb},
-))
+c := kruda.NewContainer()
+c.Give(&DBHealthChecker{db: db})
+
+app := kruda.New(kruda.WithContainer(c))
+app.Get("/health", kruda.HealthHandler())
 ```
+
+### Options
+
+```go
+func WithHealthTimeout(d time.Duration) HealthOption
+```
+
+Sets the timeout for all health checks. The default is 5 seconds.
 
 ### Response Format
 
@@ -46,10 +45,9 @@ All healthy (HTTP 200):
 
 ```json
 {
-  "status": "healthy",
+  "status": "ok",
   "checks": {
-    "database": { "status": "healthy" },
-    "redis": { "status": "healthy" }
+    "DBHealthChecker": "ok"
   }
 }
 ```
@@ -60,9 +58,17 @@ One or more unhealthy (HTTP 503):
 {
   "status": "unhealthy",
   "checks": {
-    "database": { "status": "healthy" },
-    "redis": { "status": "unhealthy", "error": "connection refused" }
+    "DBHealthChecker": "connection refused"
   }
+}
+```
+
+No registered health checkers returns HTTP 200:
+
+```json
+{
+  "status": "ok",
+  "checks": {}
 }
 ```
 
@@ -73,18 +79,20 @@ package main
 
 import (
     "context"
+
     "github.com/go-kruda/kruda"
 )
 
 type AppChecker struct{}
 
-func (c *AppChecker) Name() string                    { return "app" }
 func (c *AppChecker) Check(ctx context.Context) error { return nil }
 
 func main() {
-    app := kruda.New()
+    container := kruda.NewContainer()
+    container.Give(&AppChecker{})
 
-    app.Get("/health", kruda.HealthHandler(&AppChecker{}))
+    app := kruda.New(kruda.WithContainer(container))
+    app.Get("/health", kruda.HealthHandler())
 
     app.Listen(":3000")
 }

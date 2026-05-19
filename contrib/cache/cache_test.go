@@ -19,18 +19,25 @@ type mockRequest struct {
 	method  string
 	path    string
 	headers map[string]string
+	query   map[string]string
 	body    []byte
 }
 
-func (r *mockRequest) Method() string               { return r.method }
-func (r *mockRequest) Path() string                 { return r.path }
-func (r *mockRequest) Header(key string) string     { return r.headers[key] }
-func (r *mockRequest) Body() ([]byte, error)        { return r.body, nil }
-func (r *mockRequest) QueryParam(key string) string { return "" }
-func (r *mockRequest) RemoteAddr() string           { return "127.0.0.1" }
-func (r *mockRequest) RawRequest() any              { return nil }
-func (r *mockRequest) Context() context.Context     { return context.Background() }
-func (r *mockRequest) Cookie(name string) string    { return "" }
+func (r *mockRequest) Method() string           { return r.method }
+func (r *mockRequest) Path() string             { return r.path }
+func (r *mockRequest) Header(key string) string { return r.headers[key] }
+func (r *mockRequest) Body() ([]byte, error)    { return r.body, nil }
+func (r *mockRequest) QueryParam(key string) string {
+	if r.query == nil {
+		return ""
+	}
+	return r.query[key]
+}
+func (r *mockRequest) RemoteAddr() string          { return "127.0.0.1" }
+func (r *mockRequest) RawRequest() any             { return nil }
+func (r *mockRequest) Context() context.Context    { return context.Background() }
+func (r *mockRequest) Cookie(name string) string   { return "" }
+func (r *mockRequest) AllQuery() map[string]string { return r.query }
 
 func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) {
 	return nil, fmt.Errorf("not supported")
@@ -38,6 +45,7 @@ func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) {
 
 // Compile-time interface check.
 var _ transport.Request = (*mockRequest)(nil)
+var _ transport.AllQueryProvider = (*mockRequest)(nil)
 
 // mockResponseWriter implements transport.ResponseWriter for testing.
 type mockResponseWriter struct {
@@ -91,6 +99,12 @@ func newReq(method, path string) *mockRequest {
 		path:    path,
 		headers: make(map[string]string),
 	}
+}
+
+func newReqWithQuery(method, path string, query map[string]string) *mockRequest {
+	req := newReq(method, path)
+	req.query = query
+	return req
 }
 
 // --- Tests ---
@@ -149,6 +163,34 @@ func TestCache_Miss_ThenHit(t *testing.T) {
 
 	if len(resp2.body) == 0 {
 		t.Fatal("expected non-empty body on cache hit")
+	}
+}
+
+func TestCache_DefaultKeySeparatesQuery(t *testing.T) {
+	store := NewMemoryStore(100)
+	defer store.Close()
+
+	var calls int
+	app := kruda.New()
+	app.Use(New(Config{Store: store, TTL: 5 * time.Minute}))
+	app.Get("/api/data", func(c *kruda.Ctx) error {
+		calls++
+		return CacheJSON(c, kruda.Map{"calls": calls})
+	})
+
+	resp1 := newMockResponse()
+	app.ServeKruda(resp1, newReqWithQuery("GET", "/api/data", map[string]string{"page": "1"}))
+	if resp1.headers.Get("X-Cache") != "MISS" {
+		t.Fatalf("first request cache header = %q, want MISS", resp1.headers.Get("X-Cache"))
+	}
+
+	resp2 := newMockResponse()
+	app.ServeKruda(resp2, newReqWithQuery("GET", "/api/data", map[string]string{"page": "2"}))
+	if resp2.headers.Get("X-Cache") != "MISS" {
+		t.Fatalf("different query cache header = %q, want MISS", resp2.headers.Get("X-Cache"))
+	}
+	if calls != 2 {
+		t.Fatalf("handler calls = %d, want 2", calls)
 	}
 }
 

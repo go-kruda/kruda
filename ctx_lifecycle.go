@@ -136,8 +136,7 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.cacheControl = ""
 	c.location = ""
 
-	// Only set context if the request provides one
-	c.ctx = nil
+	c.ctx = r.Context()
 
 	// Reset params (inline array, zero-alloc)
 	if c.params.count > 0 {

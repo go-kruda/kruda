@@ -72,11 +72,14 @@ kruda.Resource[User, string](app, "/users", userService,
 func WithResourceOnly(methods ...string) ResourceOption
 ```
 
-Limits which CRUD actions are generated. Values are uppercased: `"LIST"`, `"GET"`, `"CREATE"`, `"UPDATE"`, `"DELETE"`.
+Limits which CRUD actions are generated. Values are uppercased HTTP methods:
+`"GET"`, `"POST"`, `"PUT"`, `"DELETE"`. `"GET"` registers both list and
+get-by-id routes. Use `"LIST"` for only `GET /path` or `"GET_BY_ID"` for only
+`GET /path/:id`.
 
 ```go
 kruda.Resource[User, string](app, "/users", userService,
-    kruda.WithResourceOnly("LIST", "GET"),
+    kruda.WithResourceOnly("LIST", "POST"),
 )
 ```
 

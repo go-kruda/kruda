@@ -101,7 +101,8 @@ Registers a handler for all HTTP methods.
 func (app *App) Use(middleware ...HandlerFunc) *App
 ```
 
-Registers global middleware that runs on every request.
+Registers middleware for routes registered after this call. Routes registered
+before `Use` keep the middleware chain they had at registration time.
 
 ```go
 app.Use(middleware.Logger(), middleware.Recovery())
@@ -112,16 +113,17 @@ app.Use(middleware.Logger(), middleware.Recovery())
 ### Group
 
 ```go
-func (app *App) Group(prefix string, middleware ...HandlerFunc) *Group
+func (app *App) Group(prefix string) *Group
 ```
 
-Creates a route group with a shared prefix and optional middleware.
+Creates a route group with a shared prefix. Add group middleware with `Use` or
+`Guard` on the returned group.
 
 ```go
 api := app.Group("/api/v1")
 api.Get("/users", listUsers)
 
-admin := app.Group("/admin", authMiddleware)
+admin := app.Group("/admin").Use(authMiddleware)
 admin.Get("/stats", getStats)
 ```
 

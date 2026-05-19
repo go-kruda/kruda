@@ -1,8 +1,11 @@
 package jwt
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +14,23 @@ import (
 
 	"github.com/go-kruda/kruda"
 )
+
+func signEmptyHMACTokenForTest(t *testing.T, claims Claims) string {
+	t.Helper()
+
+	headerJSON := []byte(`{"alg":"HS256","typ":"JWT"}`)
+	payloadJSON, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headerB64 := base64.RawURLEncoding.EncodeToString(headerJSON)
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payloadJSON)
+	signingInput := headerB64 + "." + payloadB64
+	mac := hmac.New(sha256.New, nil)
+	mac.Write([]byte(signingInput))
+	sigB64 := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return signingInput + "." + sigB64
+}
 
 // newJWTTestApp creates a Kruda app with JWT middleware and a simple protected handler.
 func newJWTTestApp(cfg ...Config) (*kruda.App, *httptest.Server) {
@@ -57,6 +77,46 @@ func TestMiddleware_ValidBearerToken(t *testing.T) {
 	}
 	if body["iss"] != "kruda-test" {
 		t.Errorf("issuer = %q, want %q", body["iss"], "kruda-test")
+	}
+}
+
+func TestMiddleware_RejectsDefaultEmptyHMACSecret(t *testing.T) {
+	_, srv := newJWTTestApp()
+	defer srv.Close()
+
+	token := signEmptyHMACTokenForTest(t, Claims{Subject: "user123"})
+	req, _ := http.NewRequest("GET", srv.URL+"/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		t.Fatal("middleware with empty default HMAC secret must not accept a token")
+	}
+}
+
+func TestMiddleware_EnforcesConfiguredAlgorithm(t *testing.T) {
+	_, srv := newJWTTestApp(Config{Secret: testSecret, Algorithm: "HS512"})
+	defer srv.Close()
+
+	token, err := Sign(Claims{Subject: "user123"}, testSecret, "HS256")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, _ := http.NewRequest("GET", srv.URL+"/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 401 {
+		t.Fatalf("expected 401 for mismatched algorithm, got %d", resp.StatusCode)
 	}
 }
 

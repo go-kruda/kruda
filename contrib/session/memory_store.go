@@ -62,14 +62,14 @@ func (s *MemoryStore) Get(id string) (*SessionData, error) {
 		return nil, nil
 	}
 
-	return entry.data, nil
+	return cloneSessionData(entry.data), nil
 }
 
 // Save persists session data with the given TTL.
 func (s *MemoryStore) Save(id string, data *SessionData, ttl time.Duration) error {
 	s.mu.Lock()
 	s.entries[id] = memoryEntry{
-		data:      data,
+		data:      cloneSessionData(data),
 		expiresAt: time.Now().Add(ttl),
 	}
 	s.mu.Unlock()
@@ -123,4 +123,21 @@ func (s *MemoryStore) removeExpired() {
 		}
 	}
 	s.mu.Unlock()
+}
+
+func cloneSessionData(data *SessionData) *SessionData {
+	if data == nil {
+		return nil
+	}
+	clone := &SessionData{
+		CreatedAt: data.CreatedAt,
+		ExpiresAt: data.ExpiresAt,
+	}
+	if data.Values != nil {
+		clone.Values = make(map[string]any, len(data.Values))
+		for k, v := range data.Values {
+			clone.Values[k] = v
+		}
+	}
+	return clone
 }

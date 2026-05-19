@@ -38,6 +38,13 @@ func TestSignVerifyRoundTrip_HS256(t *testing.T) {
 	}
 }
 
+func TestSignRejectsEmptyHMACSecret(t *testing.T) {
+	_, err := Sign(Claims{Subject: "user123"}, []byte{})
+	if err != ErrInvalidKey {
+		t.Fatalf("Sign with empty HMAC secret error = %v, want ErrInvalidKey", err)
+	}
+}
+
 func TestSignVerifyRoundTrip_HS384(t *testing.T) {
 	claims := Claims{Subject: "user384"}
 	token, err := Sign(claims, testSecret, "HS384")

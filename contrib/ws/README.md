@@ -13,25 +13,26 @@ go get github.com/go-kruda/kruda/contrib/ws
 ```go
 import "github.com/go-kruda/kruda/contrib/ws"
 
-app.Get("/ws", ws.New(ws.Config{}))
+upgrader := ws.New(ws.Config{})
 
-// In handler
-conn, err := ws.Upgrade(c)
-if err != nil {
-    return err
-}
-defer conn.Close()
-
-// Read/write messages
-msg, err := conn.ReadMessage()
-err = conn.WriteMessage(ws.TextMessage, []byte("hello"))
+app.Get("/ws", func(c *kruda.Ctx) error {
+    return upgrader.Upgrade(c, func(conn *ws.Conn) {
+        msg, err := conn.ReadMessage()
+        if err == nil {
+            _ = conn.WriteMessage(ws.TextMessage, msg)
+        }
+    })
+})
 ```
 
 ## Config
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| CheckOrigin | func | nil | Origin validation function |
-| Subprotocols | []string | nil | Supported subprotocols |
+| AllowedOrigins | []string | nil | Allowed origin values; nil allows all origins |
+| StrictOrigin | bool | false | Require Origin when AllowedOrigins is set |
+| MaxMessageSize | int64 | 1048576 | Maximum message size |
 | ReadBufferSize | int | 4096 | Read buffer size |
 | WriteBufferSize | int | 4096 | Write buffer size |
+| MessageTimeout | time.Duration | 30s | Fragmented message assembly timeout |
+| MaxPingPerSecond | int | 10 | Ping frame rate limit |

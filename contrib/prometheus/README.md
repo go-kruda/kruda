@@ -31,5 +31,5 @@ app.Get("/api/users", func(c *kruda.Ctx) error {
 |--------|------|---------|-------------|
 | Namespace | string | "kruda" | Metric namespace |
 | Subsystem | string | "http" | Metric subsystem |
-| Skipper | func(*kruda.Ctx) bool | nil | Skip metrics condition |
+| Skip | func(*kruda.Ctx) bool | nil | Skip metrics condition |
 | Buckets | []float64 | prometheus.DefBuckets | Duration histogram buckets |

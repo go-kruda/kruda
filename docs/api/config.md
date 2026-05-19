@@ -128,7 +128,8 @@ Enables TLS with the given certificate and key files.
 func WithHTTP3(certFile, keyFile string) Option
 ```
 
-Enables HTTP/3 dual-stack (QUIC + TCP) with TLS.
+Configures HTTP/3 certificate settings. HTTP/3 serving depends on the selected
+transport and must be verified in the target deployment before release.
 
 ### WithTrustProxy
 

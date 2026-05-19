@@ -76,4 +76,13 @@ func (c *Config) defaults() {
 	if c.WriteBufferSize <= 0 {
 		c.WriteBufferSize = 4096
 	}
+	if c.MaxMessageSize <= 0 {
+		c.MaxMessageSize = 1 << 20
+	}
+	if c.MessageTimeout <= 0 {
+		c.MessageTimeout = 30 * time.Second
+	}
+	if c.MaxPingPerSecond <= 0 {
+		c.MaxPingPerSecond = 10
+	}
 }

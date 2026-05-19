@@ -42,6 +42,10 @@ type App struct {
 	// transportType identifies the active transport: "nethttp", "fasthttp", or "wing".
 	// Set once during New() based on the resolved transport selection.
 	transportType string
+
+	startupMu         sync.Mutex
+	openAPIRegistered bool
+	containerStarted  bool
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -82,8 +86,43 @@ func New(opts ...Option) *App {
 // Called automatically by Listen(). Useful for benchmarks and tests
 // that call ServeKruda directly without Listen().
 func (app *App) Compile() {
-	app.router.Compile()
+	if err := app.compile(); err != nil {
+		panic(err)
+	}
+}
 
+func (app *App) compile() error {
+	if err := app.registerOpenAPI(); err != nil {
+		return err
+	}
+
+	app.router.Compile()
+	app.prepareCompiledState()
+	return nil
+}
+
+func (app *App) registerOpenAPI() error {
+	app.startupMu.Lock()
+	defer app.startupMu.Unlock()
+
+	if app.openAPIRegistered || app.config.openAPIInfo.Title == "" {
+		return nil
+	}
+
+	specJSON, err := app.buildOpenAPISpec()
+	if err != nil {
+		return fmt.Errorf("kruda: failed to build OpenAPI spec: %w", err)
+	}
+	app.Get(app.config.openAPIPath, func(c *Ctx) error {
+		c.SetHeader("Content-Type", "application/json")
+		c.SetHeader("Cache-Control", "public, max-age=3600")
+		return c.sendBytes(specJSON)
+	})
+	app.openAPIRegistered = true
+	return nil
+}
+
+func (app *App) prepareCompiledState() {
 	// Precompute security headers with canonical keys
 	if app.config.SecurityHeaders {
 		sec := app.config.Security
@@ -118,6 +157,24 @@ func (app *App) Compile() {
 		len(app.hooks.BeforeHandle) > 0 ||
 		len(app.hooks.AfterHandle) > 0 ||
 		len(app.hooks.OnError) > 0
+}
+
+func (app *App) startContainer(ctx context.Context) error {
+	if app.container == nil {
+		return nil
+	}
+
+	app.startupMu.Lock()
+	defer app.startupMu.Unlock()
+
+	if app.containerStarted {
+		return nil
+	}
+	if err := app.container.Start(ctx); err != nil {
+		return err
+	}
+	app.containerStarted = true
+	return nil
 }
 
 // Get registers a GET route.
@@ -200,26 +257,20 @@ func (app *App) Use(middleware ...HandlerFunc) *App {
 // Listen compiles the router, starts the transport in a goroutine,
 // and blocks waiting for SIGINT or SIGTERM to initiate graceful shutdown.
 func (app *App) Listen(addr string) error {
-	// Build and serve OpenAPI spec if configured (must be before Compile)
-	if app.config.openAPIInfo.Title != "" {
-		specJSON, err := app.buildOpenAPISpec()
-		if err != nil {
-			return fmt.Errorf("kruda: failed to build OpenAPI spec: %w", err)
-		}
-		app.Get(app.config.openAPIPath, func(c *Ctx) error {
-			c.SetHeader("Content-Type", "application/json")
-			c.SetHeader("Cache-Control", "public, max-age=3600")
-			return c.sendBytes(specJSON)
-		})
+	if err := app.compile(); err != nil {
+		return err
 	}
-
-	app.router.Compile()
 
 	// Use optimized listener (TCP_DEFER_ACCEPT + TCP_FASTOPEN on Linux,
 	// plain net.Listen on other platforms), then hand it to the transport.
 	ln, err := optimizedListener(addr)
 	if err != nil {
 		return fmt.Errorf("kruda: listen: %w", err)
+	}
+
+	if err := app.startContainer(context.Background()); err != nil {
+		_ = ln.Close()
+		return err
 	}
 
 	errCh := make(chan error, 1)

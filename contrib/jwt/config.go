@@ -38,7 +38,11 @@ type Config struct {
 // defaults returns a Config with default values applied.
 func (cfg Config) defaults() Config {
 	if cfg.Algorithm == "" {
-		cfg.Algorithm = "HS256"
+		if cfg.PublicKey != nil || cfg.PrivateKey != nil {
+			cfg.Algorithm = "RS256"
+		} else {
+			cfg.Algorithm = "HS256"
+		}
 	}
 	if cfg.Lookup == "" {
 		cfg.Lookup = "header:Authorization"

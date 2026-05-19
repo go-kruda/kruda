@@ -90,7 +90,9 @@ func WithResourceMiddleware(mw ...HandlerFunc) ResourceOption
 func WithResourceOnly(methods ...string) ResourceOption
 ```
 
-Only generate specified actions (uppercased: `"LIST"`, `"GET"`, `"CREATE"`, `"UPDATE"`, `"DELETE"`).
+Only generate specified actions. Use HTTP methods (`"GET"`, `"POST"`,
+`"PUT"`, `"DELETE"`). `"GET"` includes both list and get-by-id routes; use
+`"LIST"` or `"GET_BY_ID"` to select only one GET shape.
 
 ### WithResourceExcept
 

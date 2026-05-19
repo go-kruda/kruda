@@ -26,6 +26,9 @@
 package kruda
 
 import (
+	"context"
+
+	"github.com/go-kruda/kruda/transport"
 	"github.com/valyala/fasthttp"
 )
 
@@ -33,6 +36,27 @@ import (
 type ctxFastHTTPFields struct {
 	embeddedFHReq  fhReqAdapter
 	embeddedFHResp fhRespAdapter
+}
+
+func (c *Ctx) fastHTTPContext() context.Context {
+	if c.embeddedFHReq.ctx != nil {
+		return c.embeddedFHReq.Context()
+	}
+	return nil
+}
+
+func (c *Ctx) fastHTTPResponseWriter() transport.ResponseWriter {
+	if c.embeddedFHResp.ctx != nil {
+		return &c.embeddedFHResp
+	}
+	return nil
+}
+
+func (c *Ctx) fastHTTPRequest() transport.Request {
+	if c.embeddedFHReq.ctx != nil {
+		return &c.embeddedFHReq
+	}
+	return nil
 }
 
 // writeHeadersFastHTTP writes per-request response headers directly to the fasthttp

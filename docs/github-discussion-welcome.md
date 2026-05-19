@@ -1,6 +1,6 @@
 # 👋 Welcome to Kruda Discussions!
 
-สวัสดีครับ/ค่ะ! Welcome to the Kruda community.
+Welcome to the Kruda community.
 
 This is the place to ask questions, share ideas, and show off what you've built with Kruda.
 

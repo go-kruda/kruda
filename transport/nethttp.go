@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net"
@@ -203,7 +204,19 @@ func (r *netHTTPRequest) Cookie(name string) string {
 func (r *netHTTPRequest) RawRequest() any { return r.r }
 
 func (r *netHTTPRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if maxBytes > 0 {
+		if r.r.ContentLength > maxBytes {
+			return nil, ErrBodyTooLarge
+		}
+		if r.r.Body != nil {
+			r.r.Body = http.MaxBytesReader(nil, r.r.Body, maxBytes)
+		}
+	}
 	if err := r.r.ParseMultipartForm(maxBytes); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, ErrBodyTooLarge
+		}
 		return nil, err
 	}
 	return r.r.MultipartForm, nil

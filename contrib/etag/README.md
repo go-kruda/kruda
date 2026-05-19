@@ -24,6 +24,5 @@ etag.GenerateAndSetETag(c, responseBody)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Weak | bool | false | Generate weak ETags |
-| Skipper | func | nil | Skip ETag function |
-| Generator | func | nil | Custom ETag generator |
+| Weak | bool | true | Generate weak ETags |
+| Skip | func(*kruda.Ctx) bool | nil | Skip ETag function |

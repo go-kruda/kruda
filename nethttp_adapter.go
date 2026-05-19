@@ -109,7 +109,19 @@ func (r *fastNetHTTPRequest) RawRequest() any { return r.r }
 func (r *fastNetHTTPRequest) Context() context.Context { return r.r.Context() }
 
 func (r *fastNetHTTPRequest) MultipartForm(maxBytes int64) (*multipart.Form, error) {
+	if maxBytes > 0 {
+		if r.r.ContentLength > maxBytes {
+			return nil, ErrBodyTooLarge
+		}
+		if r.r.Body != nil {
+			r.r.Body = http.MaxBytesReader(nil, r.r.Body, maxBytes)
+		}
+	}
 	if err := r.r.ParseMultipartForm(maxBytes); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, ErrBodyTooLarge
+		}
 		return nil, err
 	}
 	return r.r.MultipartForm, nil

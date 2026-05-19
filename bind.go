@@ -231,6 +231,9 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 	maxBytes := int64(c.app.config.BodyLimit)
 	form, err := c.request.MultipartForm(maxBytes)
 	if err != nil {
+		if isBodyTooLarge(err) {
+			return NewError(413, "request entity too large", err)
+		}
 		return BadRequest("failed to parse multipart form")
 	}
 	c.dirty |= dirtyMultipart

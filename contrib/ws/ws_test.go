@@ -850,15 +850,39 @@ func TestConfig_Defaults(t *testing.T) {
 	if cfg.WriteBufferSize != 4096 {
 		t.Errorf("WriteBufferSize = %d, want 4096", cfg.WriteBufferSize)
 	}
+	if cfg.MaxMessageSize != 1<<20 {
+		t.Errorf("MaxMessageSize = %d, want 1048576", cfg.MaxMessageSize)
+	}
+	if cfg.MessageTimeout != 30*time.Second {
+		t.Errorf("MessageTimeout = %v, want 30s", cfg.MessageTimeout)
+	}
+	if cfg.MaxPingPerSecond != 10 {
+		t.Errorf("MaxPingPerSecond = %d, want 10", cfg.MaxPingPerSecond)
+	}
 
 	// Non-zero values should be preserved
-	cfg2 := Config{ReadBufferSize: 8192, WriteBufferSize: 16384}
+	cfg2 := Config{
+		ReadBufferSize:   8192,
+		WriteBufferSize:  16384,
+		MaxMessageSize:   2048,
+		MessageTimeout:   time.Minute,
+		MaxPingPerSecond: 3,
+	}
 	cfg2.defaults()
 	if cfg2.ReadBufferSize != 8192 {
 		t.Errorf("ReadBufferSize = %d, want 8192 (preserved)", cfg2.ReadBufferSize)
 	}
 	if cfg2.WriteBufferSize != 16384 {
 		t.Errorf("WriteBufferSize = %d, want 16384 (preserved)", cfg2.WriteBufferSize)
+	}
+	if cfg2.MaxMessageSize != 2048 {
+		t.Errorf("MaxMessageSize = %d, want 2048 (preserved)", cfg2.MaxMessageSize)
+	}
+	if cfg2.MessageTimeout != time.Minute {
+		t.Errorf("MessageTimeout = %v, want 1m (preserved)", cfg2.MessageTimeout)
+	}
+	if cfg2.MaxPingPerSecond != 3 {
+		t.Errorf("MaxPingPerSecond = %d, want 3 (preserved)", cfg2.MaxPingPerSecond)
 	}
 }
 

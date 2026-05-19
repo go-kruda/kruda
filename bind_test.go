@@ -2,12 +2,15 @@ package kruda
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"reflect"
 	"testing"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 type bindMockRequest struct {
@@ -662,6 +665,36 @@ func TestParse_MultipartSingleFile(t *testing.T) {
 	}
 	if in.Avatar.Size != int64(len("PNG data")) {
 		t.Errorf("Avatar.Size = %d, want %d", in.Avatar.Size, len("PNG data"))
+	}
+}
+
+func TestParse_MultipartTooLargeReturns413(t *testing.T) {
+	type Input struct {
+		Avatar *FileUpload `form:"avatar"`
+	}
+	p := buildInputParser[Input]()
+
+	httpReq := createMultipartRequest(t, nil, map[string][]fileEntry{
+		"avatar": {{
+			filename:    "large.txt",
+			contentType: "text/plain",
+			content:     bytes.Repeat([]byte("x"), 256),
+		}},
+	})
+
+	app := New(WithBodyLimit(64))
+	c := newCtx(app)
+	c.reset(newMockResponse(), transport.NewNetHTTPRequestWithLimit(httpReq, app.config.BodyLimit))
+	c.method = "POST"
+	c.path = "/upload"
+
+	_, err := p.parse(c)
+	var krudaErr *KrudaError
+	if !errors.As(err, &krudaErr) {
+		t.Fatalf("parse error = %v, want KrudaError", err)
+	}
+	if krudaErr.Code != 413 {
+		t.Fatalf("error code = %d, want 413", krudaErr.Code)
 	}
 }
 

@@ -3,6 +3,26 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.1] — 2026-05-19
+
+### Fixed
+- `App.Listen` now uses the full compile path, including lifecycle flag preparation and OpenAPI route registration.
+- App-level DI containers now run `OnInit` before serving requests through `Listen`.
+- `Ctx.Context()` now uses the underlying request context for net/http, test, and FastHTTP paths.
+- FastHTTP direct serving now exposes `Ctx.Request()` and `Ctx.ResponseWriter()` for contrib middleware.
+- Multipart parsing now enforces the configured body limit as a hard cap and maps oversized requests to HTTP 413.
+- JWT HMAC signing and middleware reject empty secrets, and middleware enforces the configured algorithm.
+- Session memory store now copies session data on save and get to avoid shared mutable map state.
+- Cache default keys now include query parameters and hashed Authorization/Cookie headers to avoid cross-request leakage.
+
+### Changed
+- WebSocket defaults now set a 1 MiB max message size, 30 second fragmented message timeout, and 10 ping frames per second.
+- `scripts/pre-release.sh` now tests standalone contrib modules, the Wing alias module, and the CLI module with temporary local replaces.
+
+### Documentation
+- Corrected API docs for `Use`, `Group`, DI lifecycle, health checks, resource route filters, HTTP/3 configuration, contrib README tables, and example metadata.
+- Removed stale internal launch planning docs from public documentation.
+
 ## [1.2.0] — 2026-04-19
 
 ### Added

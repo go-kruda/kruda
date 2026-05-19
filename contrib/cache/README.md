@@ -22,7 +22,7 @@ app.Get("/data", func(c *kruda.Ctx) error {
 
 app.Get("/file", func(c *kruda.Ctx) error {
     content := []byte("file content")
-    return cache.CacheBytes(c, content, "text/plain")
+    return cache.CacheBytes(c, "text/plain", content)
 })
 ```
 
@@ -30,7 +30,9 @@ app.Get("/file", func(c *kruda.Ctx) error {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| TTL | time.Duration | 1*time.Hour | Cache expiration time |
-| Skipper | func(*kruda.Ctx) bool | nil | Skip caching condition |
-| KeyGenerator | func(*kruda.Ctx) string | URL+Method | Cache key function |
+| TTL | time.Duration | 5*time.Minute | Cache expiration time |
+| KeyFunc | func(*kruda.Ctx) string | method + path + query + auth/cookie hash | Cache key function |
+| Methods | []string | ["GET"] | HTTP methods eligible for caching |
+| StatusCodes | []int | [200] | Status codes eligible for caching |
 | Store | Store | MemoryStore | Cache storage backend |
+| Skip | func(*kruda.Ctx) bool | nil | Skip caching condition |

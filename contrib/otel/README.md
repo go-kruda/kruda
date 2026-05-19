@@ -28,6 +28,6 @@ app.Get("/users", func(c *kruda.Ctx) error {
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | ServiceName | string | "kruda-app" | Service name in traces |
-| Skipper | func(*kruda.Ctx) bool | nil | Skip tracing condition |
+| Skip | func(*kruda.Ctx) bool | nil | Skip tracing condition |
 | SpanNameFormatter | func(*kruda.Ctx) string | "METHOD /path" | Custom span names |
 | ExtraAttributes | []attribute.KeyValue | nil | Additional span attributes |

@@ -164,24 +164,26 @@ app.Module(&UserModule{})
 
 ## Lifecycle
 
-Services implementing `Initializer` or `Shutdowner` are managed automatically:
+Services implementing `Initializer` or `Shutdowner` are managed by the
+container lifecycle. `App.Listen` starts the app container before serving and
+`App.Shutdown`/graceful shutdown call shutdown hooks.
 
 ```go
 type Initializer interface {
-    Init(ctx context.Context) error
+    OnInit(ctx context.Context) error
 }
 
 type Shutdowner interface {
-    Shutdown(ctx context.Context) error
+    OnShutdown(ctx context.Context) error
 }
 ```
 
 ```go
-func (db *DBPool) Init(ctx context.Context) error {
+func (db *DBPool) OnInit(ctx context.Context) error {
     return db.Ping(ctx)
 }
 
-func (db *DBPool) Shutdown(ctx context.Context) error {
+func (db *DBPool) OnShutdown(ctx context.Context) error {
     return db.Close()
 }
 ```

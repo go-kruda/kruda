@@ -401,8 +401,8 @@ func TestInternMethod(t *testing.T) {
 		{[]byte("PATCH"), "PATCH"},
 		{[]byte("DELETE"), "DELETE"},
 		{[]byte("OPTIONS"), "OPTIONS"},
-		{[]byte("XX"), "XX"},                  // 2 bytes, no match in switch
-		{[]byte("ABCDEFGHI"), "ABCDEFGHI"},    // 9 bytes, no match in switch
+		{[]byte("XX"), "XX"},               // 2 bytes, no match in switch
+		{[]byte("ABCDEFGHI"), "ABCDEFGHI"}, // 9 bytes, no match in switch
 	}
 
 	for _, tt := range tests {
@@ -431,6 +431,31 @@ func TestServeFastHTTP_Interface(t *testing.T) {
 	}
 	if string(fctx.Response.Body()) != "world" {
 		t.Errorf("body = %q, want world", fctx.Response.Body())
+	}
+}
+
+func TestServeFastExposesRequestAndResponseWriter(t *testing.T) {
+	app := New()
+	var requestSeen bool
+	var writerSeen bool
+	app.Get("/hello", func(c *Ctx) error {
+		requestSeen = c.Request() != nil
+		writerSeen = c.ResponseWriter() != nil
+		return c.Text("world")
+	})
+	app.Compile()
+
+	fctx := &fasthttp.RequestCtx{}
+	fctx.Request.Header.SetMethod("GET")
+	fctx.Request.SetRequestURI("/hello")
+
+	app.ServeFast(fctx)
+
+	if !requestSeen {
+		t.Fatal("Ctx.Request should be populated in ServeFast")
+	}
+	if !writerSeen {
+		t.Fatal("Ctx.ResponseWriter should be populated in ServeFast")
 	}
 }
 

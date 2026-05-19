@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -138,29 +139,49 @@ func TestHandleAccept_AtExactLimit(t *testing.T) {
 
 func TestHandleRecv_CloseOnEOF(t *testing.T) {
 	w, eng := newTestWorker(10)
-	w.conns[5] = newTestConn(5)
-
-	w.handleRecv(event{Op: opRecv, Fd: 5, Res: 0})
-
-	if _, has := w.conns[5]; has {
-		t.Error("fd 5 should be removed on EOF")
+	readFile, writeFile, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
 	}
-	if len(eng.closedFds) != 1 || eng.closedFds[0] != 5 {
-		t.Errorf("closedFds = %v, want [5]", eng.closedFds)
+	if err := writeFile.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	defer readFile.Close()
+	fd := int32(readFile.Fd())
+	w.conns[fd] = newTestConn(fd)
+
+	w.handleRecv(event{Op: opRecv, Fd: fd, Res: 0})
+
+	if _, has := w.conns[fd]; has {
+		t.Errorf("fd %d should be removed on EOF", fd)
+	}
+	if len(eng.closedFds) != 1 || eng.closedFds[0] != fd {
+		t.Errorf("closedFds = %v, want [%d]", eng.closedFds, fd)
 	}
 }
 
 func TestHandleRecv_CloseOnNegativeResult(t *testing.T) {
 	w, eng := newTestWorker(10)
-	w.conns[7] = newTestConn(7)
-
-	w.handleRecv(event{Op: opRecv, Fd: 7, Res: -1})
-
-	if _, has := w.conns[7]; has {
-		t.Error("fd 7 should be removed on read error")
+	readFile, writeFile, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
 	}
-	if len(eng.closedFds) != 1 || eng.closedFds[0] != 7 {
-		t.Errorf("closedFds = %v, want [7]", eng.closedFds)
+	if err := writeFile.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	fd := int32(readFile.Fd())
+	if err := readFile.Close(); err != nil {
+		t.Fatalf("close pipe reader: %v", err)
+	}
+	w.conns[fd] = newTestConn(fd)
+
+	w.handleRecv(event{Op: opRecv, Fd: fd, Res: -1})
+
+	if _, has := w.conns[fd]; has {
+		t.Errorf("fd %d should be removed on read error", fd)
+	}
+	if len(eng.closedFds) != 1 || eng.closedFds[0] != fd {
+		t.Errorf("closedFds = %v, want [%d]", eng.closedFds, fd)
 	}
 }
 

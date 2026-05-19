@@ -74,6 +74,16 @@ func Sign(claims Claims, secret any, alg ...string) (string, error) {
 // For HMAC algorithms, pass []byte as the secret.
 // For RSA algorithms, pass *rsa.PublicKey as the secret.
 func Verify(tokenStr string, secret any) (*Claims, error) {
+	return verifyToken(tokenStr, secret, "", 0)
+}
+
+// VerifyWithAlgorithm parses and validates a JWT string and requires the
+// header algorithm to match expectedAlg.
+func VerifyWithAlgorithm(tokenStr string, secret any, expectedAlg string) (*Claims, error) {
+	return verifyToken(tokenStr, secret, expectedAlg, 0)
+}
+
+func verifyToken(tokenStr string, secret any, expectedAlg string, gracePeriod time.Duration) (*Claims, error) {
 	parts := strings.SplitN(tokenStr, ".", 3)
 	if len(parts) != 3 {
 		return nil, ErrInvalidToken
@@ -92,6 +102,9 @@ func Verify(tokenStr string, secret any) (*Claims, error) {
 	// R9.12: reject alg:none
 	if strings.EqualFold(h.Alg, "none") {
 		return nil, ErrAlgNone
+	}
+	if expectedAlg != "" && h.Alg != expectedAlg {
+		return nil, ErrInvalidToken
 	}
 
 	signingInput := parts[0] + "." + parts[1]
@@ -118,6 +131,9 @@ func Verify(tokenStr string, secret any) (*Claims, error) {
 
 	// Check expiration
 	if claims.ExpiresAt > 0 && now > claims.ExpiresAt {
+		if gracePeriod > 0 && now <= claims.ExpiresAt+int64(gracePeriod.Seconds()) {
+			return &claims, nil
+		}
 		return nil, ErrTokenExpired
 	}
 
@@ -132,60 +148,21 @@ func Verify(tokenStr string, secret any) (*Claims, error) {
 // VerifyWithGrace parses and validates a JWT, allowing expired tokens within gracePeriod.
 // Returns the claims and whether the token was expired (but within grace).
 func VerifyWithGrace(tokenStr string, secret any, gracePeriod time.Duration) (*Claims, bool, error) {
-	parts := strings.SplitN(tokenStr, ".", 3)
-	if len(parts) != 3 {
-		return nil, false, ErrInvalidToken
-	}
-
-	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	claims, err := verifyToken(tokenStr, secret, "", gracePeriod)
 	if err != nil {
-		return nil, false, ErrInvalidToken
+		return nil, false, err
 	}
+	expiredWithinGrace := claims.ExpiresAt > 0 && time.Now().Unix() > claims.ExpiresAt
+	return claims, expiredWithinGrace, nil
+}
 
-	var h header
-	if err := json.Unmarshal(headerJSON, &h); err != nil {
-		return nil, false, ErrInvalidToken
-	}
-
-	if strings.EqualFold(h.Alg, "none") {
-		return nil, false, ErrAlgNone
-	}
-
-	signingInput := parts[0] + "." + parts[1]
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+func verifyWithGraceAndAlgorithm(tokenStr string, secret any, gracePeriod time.Duration, expectedAlg string) (*Claims, bool, error) {
+	claims, err := verifyToken(tokenStr, secret, expectedAlg, gracePeriod)
 	if err != nil {
-		return nil, false, ErrInvalidToken
+		return nil, false, err
 	}
-
-	if err := verify(h.Alg, signingInput, signature, secret); err != nil {
-		return nil, false, ErrInvalidToken
-	}
-
-	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, false, ErrInvalidToken
-	}
-
-	var claims Claims
-	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
-		return nil, false, ErrInvalidToken
-	}
-
-	now := time.Now().Unix()
-	if claims.ExpiresAt > 0 && now > claims.ExpiresAt {
-		// Expired — check grace period
-		if gracePeriod > 0 && now <= claims.ExpiresAt+int64(gracePeriod.Seconds()) {
-			return &claims, true, nil
-		}
-		return nil, false, ErrTokenExpired
-	}
-
-	// Check not-before
-	if claims.NotBefore > 0 && now < claims.NotBefore {
-		return nil, false, ErrTokenNotYetValid
-	}
-
-	return &claims, false, nil
+	expiredWithinGrace := claims.ExpiresAt > 0 && time.Now().Unix() > claims.ExpiresAt
+	return claims, expiredWithinGrace, nil
 }
 
 // Refresh issues a new token with updated expiration from an existing token.
@@ -250,6 +227,9 @@ func verify(alg, input string, signature []byte, key any) error {
 func signHMAC(hashFunc func() hash.Hash, input string, key any) ([]byte, error) {
 	secret, ok := key.([]byte)
 	if !ok {
+		return nil, ErrInvalidKey
+	}
+	if len(secret) == 0 {
 		return nil, ErrInvalidKey
 	}
 	mac := hmac.New(hashFunc, secret)

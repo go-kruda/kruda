@@ -834,7 +834,14 @@ func isBodyTooLarge(err error) bool {
 		return false
 	}
 	var btle *transport.BodyTooLargeError
-	return errors.As(err, &btle)
+	if errors.As(err, &btle) {
+		return true
+	}
+	if errors.Is(err, ErrBodyTooLarge) {
+		return true
+	}
+	var maxErr *http.MaxBytesError
+	return errors.As(err, &maxErr)
 }
 
 // SSE starts a Server-Sent Events stream.

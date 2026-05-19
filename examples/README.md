@@ -1,6 +1,7 @@
 # Examples
 
-All examples use `kruda.NetHTTP()` and run on every OS.
+Examples use Kruda's default transport unless a specific transport is part of
+the example.
 
 ```bash
 cd examples/hello && go run .

@@ -52,6 +52,9 @@ func (c *Ctx) Context() context.Context {
 	if c.ctx != nil {
 		return c.ctx
 	}
+	if ctx := c.fastHTTPContext(); ctx != nil {
+		return ctx
+	}
 	// Return cached background context — no allocation.
 	return bgCtx
 }
@@ -108,11 +111,17 @@ func (c *Ctx) Transport() string {
 // ResponseWriter returns the underlying transport.ResponseWriter.
 // Used by contrib modules (e.g. ws) that need direct access to the writer for hijacking.
 func (c *Ctx) ResponseWriter() transport.ResponseWriter {
+	if c.writer == nil {
+		return c.fastHTTPResponseWriter()
+	}
 	return c.writer
 }
 
 // Request returns the underlying transport.Request.
 // Used by contrib modules that need access to the raw request.
 func (c *Ctx) Request() transport.Request {
+	if c.request == nil {
+		return c.fastHTTPRequest()
+	}
 	return c.request
 }

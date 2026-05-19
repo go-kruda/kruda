@@ -1,9 +1,14 @@
 package cache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/transport"
 )
 
 // Config holds configuration for the cache middleware.
@@ -49,7 +54,48 @@ func (c *Config) defaults() {
 	}
 }
 
-// defaultKeyFunc generates a cache key from method and path.
+// defaultKeyFunc generates a cache key from method, path, query, and
+// authenticated request identity headers.
 func defaultKeyFunc(c *kruda.Ctx) string {
-	return c.Method() + ":" + c.Path()
+	var b strings.Builder
+	b.WriteString(c.Method())
+	b.WriteByte(':')
+	b.WriteString(c.Path())
+
+	if req := c.Request(); req != nil {
+		if p, ok := req.(transport.AllQueryProvider); ok {
+			query := p.AllQuery()
+			if len(query) > 0 {
+				keys := make([]string, 0, len(query))
+				for k := range query {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				b.WriteByte('?')
+				for i, k := range keys {
+					if i > 0 {
+						b.WriteByte('&')
+					}
+					b.WriteString(k)
+					b.WriteByte('=')
+					b.WriteString(query[k])
+				}
+			}
+		}
+	}
+
+	appendHeaderHash(&b, "auth", c.Header("Authorization"))
+	appendHeaderHash(&b, "cookie", c.Header("Cookie"))
+	return b.String()
+}
+
+func appendHeaderHash(b *strings.Builder, name, value string) {
+	if value == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(value))
+	b.WriteByte('|')
+	b.WriteString(name)
+	b.WriteByte('=')
+	b.WriteString(hex.EncodeToString(sum[:8]))
 }

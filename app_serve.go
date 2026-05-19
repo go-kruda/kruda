@@ -75,6 +75,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.handlers = nil
 	c.writer = &c.embeddedResp
 	c.request = &c.embeddedReq
+	c.ctx = r.Context()
 	c.contentType = ""
 	c.contentLength = -1
 	c.cacheControl = ""

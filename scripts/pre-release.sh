@@ -10,12 +10,24 @@ ok() { printf "\033[32m ✓\033[0m %s\n" "$*"; }
 fail() { printf "\033[31m ✗\033[0m %s\n" "$*" >&2; exit 1; }
 section() { printf "\n\033[1m== %s ==\033[0m\n" "$*"; }
 
-section "working tree clean"
-if [[ -n "$(git status --porcelain)" ]]; then
-  git status --porcelain
-  fail "working tree has uncommitted changes"
+# Homebrew Go can report GOROOT as the formula root when invoked from some
+# non-interactive shells. The actual toolchain is under libexec.
+if ! go tool vet -h >/dev/null 2>&1; then
+  goroot=$(go env GOROOT)
+  if [[ -d "$goroot/libexec/pkg/tool" ]]; then
+    export GOROOT="$goroot/libexec"
+  fi
 fi
-ok "no uncommitted changes"
+
+section "tracked working tree clean"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git status --short --untracked-files=no
+  fail "tracked working tree has uncommitted changes"
+fi
+if [[ -n "$(git status --porcelain --untracked-files=normal | grep '^??' || true)" ]]; then
+  echo "  warning: untracked local files are present but ignored by release checks"
+fi
+ok "no tracked uncommitted changes"
 
 section "no replace directives in committed go.mod files (released modules only)"
 # examples/ and bench/ are internal-use modules; their go.mod can keep replace
@@ -29,13 +41,63 @@ fi
 ok "no replace directives in released go.mod"
 
 section "tests (host platform)"
-go test -race ./...
+go test -race -tags kruda_stdjson ./...
 ok "tests passed"
 
+section "standalone module tests"
+test_replaced_module() {
+  local module_dir=$1
+  local gomod_backup gosum_backup
+
+  gomod_backup=$(mktemp)
+  cp "$module_dir/go.mod" "$gomod_backup"
+  if [[ -f "$module_dir/go.sum" ]]; then
+    gosum_backup=$(mktemp)
+    cp "$module_dir/go.sum" "$gosum_backup"
+  else
+    gosum_backup=""
+  fi
+
+  (
+    set -euo pipefail
+    cd "$module_dir"
+    trap 'cp "$gomod_backup" go.mod; if [[ -n "$gosum_backup" ]]; then cp "$gosum_backup" go.sum; else rm -f go.sum; fi' EXIT
+    go mod edit -replace github.com/go-kruda/kruda="$ROOT"
+    go mod tidy
+    go test -tags kruda_stdjson ./...
+  )
+
+  rm -f "$gomod_backup"
+  if [[ -n "$gosum_backup" ]]; then
+    rm -f "$gosum_backup"
+  fi
+}
+
+test_plain_module() {
+  local module_dir=$1
+  (cd "$module_dir" && go test -tags kruda_stdjson ./...)
+}
+
+for dir in contrib/*/; do
+  if [[ -f "$dir/go.mod" ]]; then
+    test_replaced_module "${dir%/}"
+    ok "${dir%/}"
+  fi
+done
+
+test_replaced_module "transport/wing"
+ok "transport/wing"
+
+test_plain_module "cmd/kruda"
+ok "cmd/kruda"
+
 section "cross-platform builds"
-GOOS=linux go build ./... && ok "linux build"
-GOOS=darwin go build ./... && ok "darwin build"
-GOOS=windows go build ./... && ok "windows build"
+GOOS=linux go build ./...
+ok "linux build"
+GOOS=darwin go build ./...
+ok "darwin build"
+GOOS=windows go build ./...
+ok "windows build"
 
 section "fuzz suites (30s each)"
 for fuzz in FuzzRouterPattern FuzzRouterMatch FuzzBindJSON FuzzValidateString; do

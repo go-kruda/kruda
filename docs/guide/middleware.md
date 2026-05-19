@@ -91,12 +91,12 @@ Apply middleware to specific route groups:
 app.Get("/health", healthHandler)
 
 // Protected routes — auth required
-api := app.Group("/api", AuthMiddleware)
+api := app.Group("/api").Use(AuthMiddleware)
 api.Get("/users", listUsers)
 api.Get("/profile", getProfile)
 
 // Admin routes — auth + admin check
-admin := api.Group("/admin", AdminMiddleware)
+admin := api.Group("/admin").Use(AdminMiddleware)
 admin.Get("/stats", getStats)
 ```
 

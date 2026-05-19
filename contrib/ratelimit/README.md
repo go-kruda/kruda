@@ -29,6 +29,6 @@ app.Use(ratelimit.ForRoute("/api/login", 5, time.Minute))
 |-------|------|---------|-------------|
 | Max | int | 100 | Maximum requests |
 | Window | time.Duration | time.Minute | Time window |
-| KeyGenerator | func | IP-based | Custom key function |
+| KeyFunc | func(*kruda.Ctx) string | IP-based | Custom key function |
 | Algorithm | string | "token_bucket" | Algorithm type |
 | TrustedProxies | []string | nil | Trusted proxy IPs |

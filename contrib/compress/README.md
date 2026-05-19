@@ -25,7 +25,7 @@ compress.Compress(c, data, "application/json")
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Level | int | 6 | Compression level (1-9) |
-| MinLength | int | 1024 | Minimum response size |
+| Level | int | -1 | Compression level; -1 uses the stdlib default |
+| MinSize | int | 1024 | Minimum response size |
 | Types | []string | text/html, etc. | MIME types to compress |
-| Skipper | func | nil | Skip compression function |
+| Skip | func(*kruda.Ctx) bool | nil | Skip compression function |

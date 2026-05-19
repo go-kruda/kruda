@@ -13,7 +13,7 @@ import (
 // Property: SetBody via ServeFastHTTP Path
 //
 // For any byte slice, SetBody(data) via ServeFastHTTP writes exact bytes to
-// fasthttp response body without nil writer panic (c.writer is nil in fasthttp path).
+// fasthttp response body while request and writer adapters are available.
 
 func TestPropertySetBodyViaServeFastHTTP(t *testing.T) {
 	cfg := &quick.Config{MaxCount: 200}
@@ -40,13 +40,12 @@ func TestPropertySetBodyViaServeFastHTTP(t *testing.T) {
 		}
 	})
 
-	t.Run("NoPanicOnNilWriter", func(t *testing.T) {
+	t.Run("AdaptersAvailable", func(t *testing.T) {
 		f := func(data []byte) bool {
 			app := New()
 			app.Get("/test", func(c *Ctx) error {
-				// Verify c.writer is nil in fasthttp path
-				if c.writer != nil {
-					return nil // not the fasthttp path
+				if c.ResponseWriter() == nil || c.Request() == nil {
+					return nil
 				}
 				c.SetBody(data)
 				return nil
@@ -57,7 +56,6 @@ func TestPropertySetBodyViaServeFastHTTP(t *testing.T) {
 			ctx.Request.SetRequestURI("/test")
 			ctx.Request.Header.SetMethod("GET")
 
-			// Should not panic despite c.writer being nil
 			app.ServeFast(ctx)
 
 			return bytes.Equal(ctx.Response.Body(), data)

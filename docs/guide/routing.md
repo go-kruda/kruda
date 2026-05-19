@@ -55,7 +55,7 @@ admin.Get("/stats", getStats)
 Apply middleware to all routes in a group:
 
 ```go
-api := app.Group("/api", authMiddleware)
+api := app.Group("/api").Use(authMiddleware)
 
 api.Get("/profile", getProfile)   // requires auth
 api.Get("/settings", getSettings) // requires auth

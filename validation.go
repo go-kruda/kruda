@@ -259,7 +259,7 @@ func validateRequired(value any, _ string) bool {
 		return v.Len() > 0
 	case reflect.Slice, reflect.Map, reflect.Array:
 		return v.Len() > 0
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return !v.IsNil()
 	default:
 		return !v.IsZero()

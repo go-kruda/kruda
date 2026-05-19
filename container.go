@@ -86,7 +86,7 @@ func (c *Container) GiveAs(instance any, ifacePtr any) error {
 		return errors.New("kruda: ifacePtr must be a non-nil pointer to an interface")
 	}
 	t := reflect.TypeOf(ifacePtr)
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Interface {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Interface {
 		return errors.New("kruda: ifacePtr must be a pointer to an interface (e.g. (*MyInterface)(nil))")
 	}
 	ifaceType := t.Elem()

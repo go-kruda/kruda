@@ -67,7 +67,7 @@ func discoverHealthCheckers(c *Container) []namedChecker {
 		seen[inst] = true
 		if hc, ok := inst.(HealthChecker); ok {
 			name := t.String()
-			if t.Kind() == reflect.Ptr {
+			if t.Kind() == reflect.Pointer {
 				name = t.Elem().Name()
 			}
 			if name == "" {

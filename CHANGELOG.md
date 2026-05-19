@@ -3,6 +3,11 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.2] — 2026-05-20
+
+### Fixed
+- Replaced deprecated `reflect.Ptr` aliases with `reflect.Pointer` so the Linux Go 1.25.8 CI lint gate passes with current `golangci-lint`.
+
 ## [1.2.1] — 2026-05-19
 
 ### Fixed

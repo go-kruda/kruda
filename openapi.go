@@ -99,7 +99,7 @@ type routeInfo struct {
 
 // generateSchema converts a Go reflect.Type to a JSON Schema.
 func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		inner := generateSchema(t.Elem(), components)
 		inner.Nullable = true
 		return inner

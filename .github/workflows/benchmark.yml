@@ -52,6 +52,12 @@ jobs:
           go test -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
           git checkout -- go.mod go.sum
 
+      - name: Normalize benchmark output
+        # github-action-benchmark treats larger ratios as worse. For Go
+        # benchmark MB/s metrics, larger is better, so keep latency and
+        # allocation metrics for regression gating.
+        run: sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' output.txt > benchmark.txt
+
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0
         id: system-info
@@ -114,7 +120,7 @@ jobs:
         if: steps.cache.outputs.cache-hit == 'true' || steps.pages-baseline.outputs.available == 'true'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           external-data-json-path: ./cache/benchmark-data.json
           save-data-file: false
           fail-on-alert: true
@@ -128,7 +134,7 @@ jobs:
         if: github.ref_name == 'main'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           external-data-json-path: ./cache/benchmark-data.json
           save-data-file: true
           fail-on-alert: false
@@ -141,7 +147,7 @@ jobs:
         if: github.ref_name == 'main'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           benchmark-data-dir-path: "benchmarks"
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -26,7 +26,7 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] Cross-platform builds: `GOOS=linux go build ./...`, `GOOS=windows go build ./...`, `GOOS=darwin go build ./...`
 - [ ] Wing tests pass: covered by the same `go test ./...` since v1.2.0 (flattened into core)
 - [ ] Native fuzz tests don't crash within 30s each: `go test -fuzz=FuzzRouterPattern -fuzztime=30s -run=^$ .` (and FuzzRouterMatch, FuzzBindJSON, FuzzValidateString)
-- [ ] PR benchmark check has no regression alert (>10% on hot path)
+- [ ] PR benchmark check has no same-runner `benchstat` regression above 10% on the hot path
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `transport/wing/go.mod` or any `contrib/*/go.mod`
 - [ ] Every contrib package's `go.mod` requires the new core version (not the previous one)

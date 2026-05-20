@@ -37,6 +37,25 @@ jobs:
         with:
           go-version: '1.25.8'
 
+      - name: Install benchstat
+        if: github.event_name == 'pull_request'
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run main benchmarks
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+
+          git worktree add ../kruda-main origin/main
+
+          cd ../kruda-main
+          go test -tags kruda_stdjson -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee "$GITHUB_WORKSPACE/main-output.txt"
+
+          cd transport/wing
+          go mod edit -replace=github.com/go-kruda/kruda=../..
+          go mod tidy
+          go test -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/main-output.txt"
+
       - name: Run core benchmarks
         run: go test -tags kruda_stdjson -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee output.txt
 
@@ -56,7 +75,36 @@ jobs:
         # github-action-benchmark treats larger ratios as worse. For Go
         # benchmark MB/s metrics, larger is better, so keep latency and
         # allocation metrics for regression gating.
-        run: sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' output.txt > benchmark.txt
+        run: |
+          sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' output.txt > benchmark.txt
+          if [ -f main-output.txt ]; then
+            sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' main-output.txt > main-benchmark.txt
+          fi
+
+      - name: Compare PR benchmarks with same-runner main
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+
+          benchstat main-benchmark.txt benchmark.txt | tee benchstat.txt
+
+          awk '
+            /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ && $0 !~ /~$/ {
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^\+[0-9.]+%$/) {
+                  change = $i
+                  gsub(/^\+|%$/, "", change)
+                  if ((change + 0) > 10) bad = 1
+                }
+              }
+            }
+            END {
+              if (bad) {
+                print "::error::Benchmark regression above 10% detected by same-runner benchstat."
+                exit 1
+              }
+            }
+          ' benchstat.txt
 
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0
@@ -109,12 +157,6 @@ jobs:
 
           echo "available=true" >> "$GITHUB_OUTPUT"
 
-      - name: Require PR benchmark baseline
-        if: github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true' && steps.pages-baseline.outputs.available != 'true'
-        run: |
-          echo "::error::No benchmark baseline found for origin/main. Run the Benchmark workflow on main before merging performance-sensitive changes."
-          exit 1
-
       - name: Compare PR results with main
         uses: benchmark-action/github-action-benchmark@v1
         if: steps.cache.outputs.cache-hit == 'true' || steps.pages-baseline.outputs.available == 'true'
@@ -123,8 +165,8 @@ jobs:
           output-file-path: benchmark.txt
           external-data-json-path: ./cache/benchmark-data.json
           save-data-file: false
-          fail-on-alert: true
-          comment-on-alert: ${{ github.event.pull_request.head.repo.fork == false }}
+          fail-on-alert: false
+          comment-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
           alert-threshold: "110%"

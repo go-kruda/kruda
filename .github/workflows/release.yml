@@ -8,6 +8,7 @@ on:
     tags: ['v*']
 
 permissions:
+  actions: read
   contents: write
   packages: write
 
@@ -15,10 +16,58 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  release-preflight:
+    name: Release Preflight
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag was cut from green main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          TAG_SHA="$(git rev-parse "${TAG_NAME}^{commit}")"
+          echo "Tag ${TAG_NAME} points to ${TAG_SHA}"
+
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "::error::Release tags must point to a commit that is already on origin/main."
+            exit 1
+          fi
+
+          require_green_workflow() {
+            local workflow=$1
+            local count
+            count="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow "$workflow" \
+              --branch main \
+              --commit "$TAG_SHA" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq 'length')"
+            if [ "$count" != "1" ]; then
+              echo "::error::No successful ${workflow} run found on main for ${TAG_SHA}. Merge a PR, wait for green main checks, then tag."
+              exit 1
+            fi
+          }
+
+          require_green_workflow "test.yml"
+          require_green_workflow "benchmark.yml"
+
   test:
+    needs: release-preflight
     uses: ./.github/workflows/test.yml
     
   security:
+    needs: release-preflight
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
@@ -38,7 +87,7 @@ jobs:
         
   release:
     name: Create Release
-    needs: [test, security]
+    needs: [release-preflight, test, security]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

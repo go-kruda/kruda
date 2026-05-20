@@ -37,8 +37,27 @@ jobs:
         with:
           go-version: '1.25.8'
 
+      - name: Install benchstat
+        if: github.event_name == 'pull_request'
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run main benchmarks
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+
+          git worktree add ../kruda-main origin/main
+
+          cd ../kruda-main
+          go test -tags kruda_stdjson -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee "$GITHUB_WORKSPACE/main-output.txt"
+
+          cd transport/wing
+          go mod edit -replace=github.com/go-kruda/kruda=../..
+          go mod tidy
+          go test -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/main-output.txt"
+
       - name: Run core benchmarks
-        run: go test -tags kruda_stdjson -benchmem -run=^$ -bench . ./... 2>&1 | tee output.txt
+        run: go test -tags kruda_stdjson -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee output.txt
 
       - name: Run Wing alias module benchmarks
         # Same ephemeral local replace as the test workflow — wing alias module
@@ -49,8 +68,43 @@ jobs:
           cd transport/wing
           go mod edit -replace=github.com/go-kruda/kruda=../..
           go mod tidy
-          go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
+          go test -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
           git checkout -- go.mod go.sum
+
+      - name: Normalize benchmark output
+        # github-action-benchmark treats larger ratios as worse. For Go
+        # benchmark MB/s metrics, larger is better, so keep latency and
+        # allocation metrics for regression gating.
+        run: |
+          sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' output.txt > benchmark.txt
+          if [ -f main-output.txt ]; then
+            sed -E 's/[[:space:]]+[0-9.]+ MB\/s//g' main-output.txt > main-benchmark.txt
+          fi
+
+      - name: Compare PR benchmarks with same-runner main
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+
+          benchstat main-benchmark.txt benchmark.txt | tee benchstat.txt
+
+          awk '
+            /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ && $0 !~ /~$/ {
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^\+[0-9.]+%$/) {
+                  change = $i
+                  gsub(/^\+|%$/, "", change)
+                  if ((change + 0) > 10) bad = 1
+                }
+              }
+            }
+            END {
+              if (bad) {
+                print "::error::Benchmark regression above 10% detected by same-runner benchstat."
+                exit 1
+              }
+            }
+          ' benchstat.txt
 
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0
@@ -70,46 +124,79 @@ jobs:
           path: ./cache
           key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark
 
+      - name: Seed benchmark baseline from GitHub Pages
+        id: pages-baseline
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p ./cache
+
+          if ! git show origin/gh-pages:benchmarks/data.js > ./cache/data.js 2>/dev/null; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No published benchmark baseline found on gh-pages."
+            exit 0
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const source = fs.readFileSync('./cache/data.js', 'utf8').trim();
+          const prefix = 'window.BENCHMARK_DATA =';
+          if (!source.startsWith(prefix)) {
+            throw new Error('Unexpected benchmark data format');
+          }
+
+          let json = source.slice(prefix.length).trim();
+          if (json.endsWith(';')) {
+            json = json.slice(0, -1).trim();
+          }
+
+          JSON.parse(json);
+          fs.writeFileSync('./cache/benchmark-data.json', `${json}\n`);
+          NODE
+
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
       - name: Compare PR results with main
         uses: benchmark-action/github-action-benchmark@v1
-        if: steps.cache.outputs.cache-hit == 'true'
+        if: steps.cache.outputs.cache-hit == 'true' || steps.pages-baseline.outputs.available == 'true'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           external-data-json-path: ./cache/benchmark-data.json
           save-data-file: false
-          fail-on-alert: true
-          comment-on-alert: ${{ github.event.pull_request.head.repo.fork == false }}
+          fail-on-alert: false
+          comment-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
 
       - name: Store benchmark results for main
         uses: benchmark-action/github-action-benchmark@v1
         if: github.ref_name == 'main'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           external-data-json-path: ./cache/benchmark-data.json
           save-data-file: true
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
 
       - name: Publish to GitHub Pages
         uses: benchmark-action/github-action-benchmark@v1
         if: github.ref_name == 'main'
         with:
           tool: 'go'
-          output-file-path: output.txt
+          output-file-path: benchmark.txt
           benchmark-data-dir-path: "benchmarks"
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           comment-on-alert: true
           summary-always: true
           save-data-file: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
           auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
       - name: Save benchmark cache

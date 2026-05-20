@@ -13,7 +13,7 @@ Fast by default, type-safe by design.
 - Typed handlers `C[T]` — body + param + query parsed into one struct, validated at compile time
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
-- Pluggable transport — Wing in core (Linux, epoll+eventfd; legacy `transport/wing` import path still works as a deprecated alias), fasthttp, or net/http
+- Pluggable transport — Wing in core (Linux, epoll+eventfd), fasthttp, or net/http
 - Single-tag releases — one `vX.Y.Z` covers core and contrib (no more sub-module coordination)
 - Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
 - AI-friendly — typed API + 22 examples = AI generates correct code on first try
@@ -227,7 +227,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
 ```
 
-The `transport/wing` directory is now a thin deprecation alias module — its surface is just type re-exports from core, so scanning the root is sufficient.
+The legacy `transport/wing` import path is a compatibility shim. Its surface is type re-exports from core, so scanning the root covers Wing's runtime implementation.
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 

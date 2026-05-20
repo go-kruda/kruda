@@ -42,9 +42,10 @@
 // (via [WithTLS] / [WithHTTP3]) auto-falls back to net/http on every
 // platform.
 //
-// Wing is built into core since v1.2.0; the legacy
-// import "github.com/go-kruda/kruda/transport/wing" still works as a
-// deprecated re-export and will be removed in v2.0.0.
+// Wing is built into core since v1.2.0. New code should import
+// github.com/go-kruda/kruda directly and use the kruda.Wing option/helpers.
+// The legacy github.com/go-kruda/kruda/transport/wing import path remains a
+// compatibility shim for older v1.x consumers.
 //
 // # Wing dispatch tuning (advanced)
 //

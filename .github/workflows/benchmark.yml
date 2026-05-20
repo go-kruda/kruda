@@ -70,15 +70,48 @@ jobs:
           path: ./cache
           key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark
 
-      - name: Require PR benchmark baseline
-        if: github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+      - name: Seed benchmark baseline from GitHub Pages
+        id: pages-baseline
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          echo "::error::No benchmark baseline cache found for origin/main. Run the Benchmark workflow on main before merging performance-sensitive changes."
+          set -euo pipefail
+          mkdir -p ./cache
+
+          if ! git show origin/gh-pages:benchmarks/data.js > ./cache/data.js 2>/dev/null; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No published benchmark baseline found on gh-pages."
+            exit 0
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const source = fs.readFileSync('./cache/data.js', 'utf8').trim();
+          const prefix = 'window.BENCHMARK_DATA =';
+          if (!source.startsWith(prefix)) {
+            throw new Error('Unexpected benchmark data format');
+          }
+
+          let json = source.slice(prefix.length).trim();
+          if (json.endsWith(';')) {
+            json = json.slice(0, -1).trim();
+          }
+
+          JSON.parse(json);
+          fs.writeFileSync('./cache/benchmark-data.json', `${json}\n`);
+          NODE
+
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Require PR benchmark baseline
+        if: github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true' && steps.pages-baseline.outputs.available != 'true'
+        run: |
+          echo "::error::No benchmark baseline found for origin/main. Run the Benchmark workflow on main before merging performance-sensitive changes."
           exit 1
 
       - name: Compare PR results with main
         uses: benchmark-action/github-action-benchmark@v1
-        if: steps.cache.outputs.cache-hit == 'true'
+        if: steps.cache.outputs.cache-hit == 'true' || steps.pages-baseline.outputs.available == 'true'
         with:
           tool: 'go'
           output-file-path: output.txt

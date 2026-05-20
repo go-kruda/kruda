@@ -8,14 +8,18 @@ Kruda follows a **single-tag release model** since v1.2.0. One tag, one release.
 
 Every release must go through the same guardrail:
 
-1. Create a release or hotfix branch.
+1. Create a descriptive release or hotfix branch.
 2. Open a pull request.
 3. Wait for the PR test and benchmark checks to pass.
 4. Merge the PR.
 5. Wait for `main` to finish green `Tests` and `Benchmark` runs for the merge commit.
-6. Tag that green `main` commit.
+6. Tag that green `main` commit only when the change justifies a new version.
 
 The release workflow refuses to publish if the tag is not on `origin/main` or if no successful `Tests` and `Benchmark` workflow runs exist for the tagged commit.
+
+Docs-only, CI-only, and maintainer-process changes can merge without a new tag.
+Cut a version when users receive a framework fix, security fix, compatibility
+fix, or feature that is worth asking them to upgrade for.
 
 ## Pre-release checklist
 
@@ -29,7 +33,7 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] PR benchmark check has no same-runner `benchstat` regression above 10% on the hot path
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `transport/wing/go.mod` or any `contrib/*/go.mod`
-- [ ] Every contrib package's `go.mod` requires the new core version (not the previous one)
+- [ ] Every released submodule's `go.mod` requires the intended core version
 - [ ] Public API surface diff reviewed — additions OK, removals require a major bump
 
 ## Tagging

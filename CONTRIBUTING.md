@@ -27,7 +27,7 @@ kruda/
 ├── wing_*.go          # Wing transport (epoll on Linux / kqueue on macOS) — flattened into core since v1.2.0
 ├── middleware/        # Built-in middleware (Logger, Recovery, CORS, etc.)
 ├── transport/         # Transport adapter interfaces (nethttp, fasthttp)
-│   └── wing/          # Deprecation alias — re-exports Wing symbols from core (will be removed in v2.0.0)
+│   └── wing/          # Compatibility shim for the old Wing import path
 ├── contrib/           # Optional modules (JWT, WebSocket, RateLimit, …)
 ├── json/              # JSON engine abstraction
 ├── examples/          # Example applications
@@ -71,8 +71,8 @@ cd contrib/ratelimit && go test ./...
 
 **Cross-module dev tip:** contrib `go.mod` files require the latest tagged
 core (e.g. `kruda v1.2.0`). When you change core and want a contrib package
-to see those changes locally — before the next core tag exists on the proxy
-— set up a Go workspace:
+or the legacy Wing compatibility shim to see those changes locally — before
+the next core tag exists on the proxy — set up a Go workspace:
 
 ```bash
 go work init . transport/wing contrib/cache contrib/compress contrib/etag \

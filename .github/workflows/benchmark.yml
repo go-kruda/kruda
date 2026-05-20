@@ -38,7 +38,7 @@ jobs:
           go-version: '1.25.8'
 
       - name: Run core benchmarks
-        run: go test -tags kruda_stdjson -benchmem -run=^$ -bench . ./... 2>&1 | tee output.txt
+        run: go test -tags kruda_stdjson -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee output.txt
 
       - name: Run Wing alias module benchmarks
         # Same ephemeral local replace as the test workflow — wing alias module
@@ -49,7 +49,7 @@ jobs:
           cd transport/wing
           go mod edit -replace=github.com/go-kruda/kruda=../..
           go mod tidy
-          go test -benchmem -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
+          go test -benchmem -count=3 -run=^$ -bench . ./... 2>&1 | tee -a "$GITHUB_WORKSPACE/output.txt"
           git checkout -- go.mod go.sum
 
       - name: Get system information
@@ -70,6 +70,12 @@ jobs:
           path: ./cache
           key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark
 
+      - name: Require PR benchmark baseline
+        if: github.event_name == 'pull_request' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::error::No benchmark baseline cache found for origin/main. Run the Benchmark workflow on main before merging performance-sensitive changes."
+          exit 1
+
       - name: Compare PR results with main
         uses: benchmark-action/github-action-benchmark@v1
         if: steps.cache.outputs.cache-hit == 'true'
@@ -82,7 +88,7 @@ jobs:
           comment-on-alert: ${{ github.event.pull_request.head.repo.fork == false }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
 
       - name: Store benchmark results for main
         uses: benchmark-action/github-action-benchmark@v1
@@ -95,7 +101,7 @@ jobs:
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
 
       - name: Publish to GitHub Pages
         uses: benchmark-action/github-action-benchmark@v1
@@ -109,7 +115,7 @@ jobs:
           comment-on-alert: true
           summary-always: true
           save-data-file: true
-          alert-threshold: "150%"
+          alert-threshold: "110%"
           auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
       - name: Save benchmark cache

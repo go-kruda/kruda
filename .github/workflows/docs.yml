@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+  pull_request:
+    paths:
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -67,6 +70,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -8,11 +8,21 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
+    paths:
+      - "**/*.go"
+      - "**/go.mod"
+      - "**/go.sum"
+      - ".github/workflows/benchmark.yml"
+      - "bench/**"
+      - "scripts/**"
   pull_request:
-    paths-ignore:
-      - "**/*.md"
+    paths:
+      - "**/*.go"
+      - "**/go.mod"
+      - "**/go.sum"
+      - ".github/workflows/benchmark.yml"
+      - "bench/**"
+      - "scripts/**"
 
 permissions:
   deployments: write

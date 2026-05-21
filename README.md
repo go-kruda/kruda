@@ -2,7 +2,7 @@
 
 Fast by default, type-safe by design.
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.25.10+-00ADD8?logo=go)](https://go.dev)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-kruda/kruda.svg)](https://pkg.go.dev/github.com/go-kruda/kruda)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/go-kruda/kruda/graph/badge.svg?token=9HIGH8L2Q7)](https://codecov.io/gh/go-kruda/kruda)
@@ -231,7 +231,7 @@ The legacy `transport/wing` import path is a compatibility shim. Its surface is 
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
-**Minimum Go version for zero stdlib vulnerabilities:** go1.25.8+
+**Minimum Go patch release for zero known standard-library vulnerabilities:** go1.25.10+ or go1.26.3+
 
 ## Contributing
 

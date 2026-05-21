@@ -2,7 +2,7 @@
 // The real implementation lives in github.com/go-kruda/kruda since v1.2.0.
 module github.com/go-kruda/kruda/transport/wing
 
-go 1.25.8
+go 1.25.10
 
 require github.com/go-kruda/kruda v1.2.0
 

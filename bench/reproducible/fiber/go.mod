@@ -1,6 +1,6 @@
 module fiber-bench
 
-go 1.25.8
+go 1.25.10
 
 require github.com/gofiber/fiber/v2 v2.52.6
 

@@ -21,8 +21,8 @@ app.Use(jwt.New(jwt.Config{
 // Sign token
 token, err := jwt.Sign(claims, secret)
 
-// Verify token
-claims, err := jwt.Verify(token, secret)
+// Verify token at an auth/security boundary
+claims, err := jwt.VerifyWithAlgorithm(token, secret, "HS256")
 ```
 
 ## Config
@@ -39,3 +39,7 @@ claims, err := jwt.Verify(token, secret)
 
 HMAC algorithms reject empty secrets. Configure a non-empty secret before using
 the middleware or signing tokens.
+
+Use `VerifyWithAlgorithm` at authentication boundaries so verification requires
+the algorithm your application configured. The middleware already enforces the
+configured algorithm.

@@ -62,9 +62,9 @@ test_replaced_module() {
     set -euo pipefail
     cd "$module_dir"
     trap 'cp "$gomod_backup" go.mod; if [[ -n "$gosum_backup" ]]; then cp "$gosum_backup" go.sum; else rm -f go.sum; fi' EXIT
-    go mod edit -replace github.com/go-kruda/kruda="$ROOT"
-    go mod tidy
-    go test -tags kruda_stdjson ./...
+    GOWORK=off go mod edit -replace github.com/go-kruda/kruda="$ROOT"
+    GOWORK=off go mod tidy
+    GOWORK=off go test -tags kruda_stdjson ./...
   )
 
   rm -f "$gomod_backup"
@@ -75,7 +75,7 @@ test_replaced_module() {
 
 test_plain_module() {
   local module_dir=$1
-  (cd "$module_dir" && go test -tags kruda_stdjson ./...)
+  (cd "$module_dir" && GOWORK=off go test -tags kruda_stdjson ./...)
 }
 
 for dir in contrib/*/; do
@@ -126,7 +126,7 @@ fi
 section "examples build"
 for dir in examples/*/; do
   if [[ -f "$dir/main.go" ]]; then
-    if ! (cd "$dir" && go build ./... >/dev/null 2>&1); then
+    if ! (cd "$dir" && GOWORK=off go build ./... >/dev/null 2>&1); then
       fail "example failed to build: $dir"
     fi
   fi

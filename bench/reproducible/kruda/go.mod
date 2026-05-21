@@ -1,6 +1,6 @@
 module bench-kruda
 
-go 1.25.8
+go 1.25.10
 
 require github.com/go-kruda/kruda v0.0.0
 

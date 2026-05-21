@@ -88,7 +88,7 @@ go test -tags kruda_stdjson ./...
 
 ## What Go version do I need?
 
-Go 1.25 or later is required for generic type aliases used by `C[T]` typed handlers and stdlib security fixes. Go 1.26+ is recommended for the Green Tea GC and self-referential generics support.
+Go 1.25.10+ or Go 1.26.3+ is required for generic type aliases used by `C[T]` typed handlers and current stdlib security fixes. Go 1.26.3+ is recommended for the Green Tea GC and self-referential generics support.
 
 ## Is Kruda production-ready?
 

@@ -21,8 +21,9 @@
 // 401 response. The Skip function lets callers bypass auth on public
 // routes (e.g. health checks) with zero allocations on the skip path.
 //
-// Token signing ([Sign]) and refresh ([Refresh]) helpers are also exported
-// for handlers that issue tokens themselves.
+// Token signing ([Sign]), algorithm-pinned verification
+// ([VerifyWithAlgorithm]), and refresh ([Refresh]) helpers are also exported
+// for handlers that issue or validate tokens themselves.
 //
 // # Configuration
 //

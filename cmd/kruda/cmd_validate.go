@@ -19,7 +19,7 @@ var validateCmd = &cobra.Command{
 	Long: `Check Go version compatibility, required dependencies, and project setup.
 
 Validates:
-  • Go version is 1.25 or higher
+  • Go version is 1.25.10+ or 1.26.3+
   • go.mod exists and contains the kruda dependency
   • Project structure is correct
 
@@ -73,7 +73,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("validation failed: %d issue(s) found", countFailed(results))
 }
 
-// checkGoVersion verifies Go >= 1.25 is installed.
+// checkGoVersion verifies a patched Go release is installed.
 func checkGoVersion() validationResult {
 	out, err := exec.Command("go", "version").Output()
 	if err != nil {
@@ -86,7 +86,7 @@ func checkGoVersion() validationResult {
 	}
 
 	versionStr := string(out)
-	major, minor, ok := parseGoVersion(versionStr)
+	major, minor, patch, ok := parseGoVersion(versionStr)
 	if !ok {
 		return validationResult{
 			name:    "Go Version",
@@ -96,11 +96,11 @@ func checkGoVersion() validationResult {
 		}
 	}
 
-	if major < 1 || (major == 1 && minor < 25) {
+	if !meetsMinimumGoVersion(major, minor, patch) {
 		return validationResult{
 			name:    "Go Version",
 			passed:  false,
-			message: fmt.Sprintf("Go %d.%d found, but Kruda requires Go 1.25+", major, minor),
+			message: fmt.Sprintf("Go %d.%d.%d found, but Kruda requires Go 1.25.10+ or 1.26.3+", major, minor, patch),
 			suggest: "Upgrade Go: https://go.dev/dl/",
 		}
 	}
@@ -108,25 +108,42 @@ func checkGoVersion() validationResult {
 	return validationResult{
 		name:    "Go Version",
 		passed:  true,
-		message: fmt.Sprintf("Go %d.%d detected (>= 1.25 required)", major, minor),
+		message: fmt.Sprintf("Go %d.%d.%d detected (patched baseline satisfied)", major, minor, patch),
 	}
 }
 
 // goVersionRe matches "go1.XX" or "go1.XX.Y" in `go version` output.
-var goVersionRe = regexp.MustCompile(`go(\d+)\.(\d+)`)
+var goVersionRe = regexp.MustCompile(`go(\d+)\.(\d+)(?:\.(\d+))?`)
 
-// parseGoVersion extracts major and minor version from `go version` output.
-func parseGoVersion(output string) (major, minor int, ok bool) {
+// parseGoVersion extracts major, minor, and patch version from `go version` output.
+func parseGoVersion(output string) (major, minor, patch int, ok bool) {
 	matches := goVersionRe.FindStringSubmatch(output)
 	if len(matches) < 3 {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	major, err1 := strconv.Atoi(matches[1])
 	minor, err2 := strconv.Atoi(matches[2])
-	if err1 != nil || err2 != nil {
-		return 0, 0, false
+	if len(matches) > 3 && matches[3] != "" {
+		patch, _ = strconv.Atoi(matches[3])
 	}
-	return major, minor, true
+	if err1 != nil || err2 != nil {
+		return 0, 0, 0, false
+	}
+	return major, minor, patch, true
+}
+
+func meetsMinimumGoVersion(major, minor, patch int) bool {
+	if major != 1 {
+		return major > 1
+	}
+	switch minor {
+	case 25:
+		return patch >= 10
+	case 26:
+		return patch >= 3
+	default:
+		return minor > 26
+	}
 }
 
 // checkGoMod verifies that go.mod exists in the current directory.

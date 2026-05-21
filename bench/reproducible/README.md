@@ -44,7 +44,7 @@ bench/reproducible/
 ## Prerequisites
 
 ```bash
-# Go 1.25+
+# Go 1.25.10+
 go version
 
 # Rust (for Actix)

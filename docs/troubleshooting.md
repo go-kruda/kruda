@@ -2,13 +2,13 @@
 
 ## Common Build Errors
 
-### `go: requires go >= 1.25`
+### `go: requires go >= 1.25.10`
 
-Kruda requires Go 1.25+ for generic type aliases. Upgrade your Go installation:
+Kruda requires Go 1.25.10+ on the Go 1.25 release line or Go 1.26.3+ on the Go 1.26 release line for generic type aliases and current standard-library security fixes. Upgrade your Go installation:
 
 ```bash
-go install golang.org/dl/go1.25.0@latest
-go1.25.0 download
+go install golang.org/dl/go1.25.10@latest
+go1.25.10 download
 ```
 
 Or download from [go.dev/dl](https://go.dev/dl/).

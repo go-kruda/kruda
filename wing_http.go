@@ -145,8 +145,8 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 			return nil, 0, false
 		}
 
-		key := bytes.TrimSpace(hline[:colon])
-		val := bytes.TrimSpace(hline[colon+1:])
+		key := trimHTTPSpaces(hline[:colon])
+		val := trimHTTPSpaces(hline[colon+1:])
 
 		// Validate header name characters (RFC 7230 token set).
 		if !isValidTokenName(key) {
@@ -315,6 +315,20 @@ func btoi(b []byte) int {
 		}
 	}
 	return n
+}
+
+func trimHTTPSpaces(b []byte) []byte {
+	for len(b) > 0 && (b[0] == ' ' || b[0] == '\t') {
+		b = b[1:]
+	}
+	for len(b) > 0 {
+		last := b[len(b)-1]
+		if last != ' ' && last != '\t' {
+			break
+		}
+		b = b[:len(b)-1]
+	}
+	return b
 }
 
 // isValidTokenName checks that every byte in name is a valid RFC 7230 token character.

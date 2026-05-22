@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 )
@@ -84,6 +85,45 @@ func TestStaticOption(t *testing.T) {
 	// original must not be mutated
 	if Bolt.StaticResponse != nil {
 		t.Error("Static() mutated Bolt preset")
+	}
+}
+
+func TestWingStaticTextOption(t *testing.T) {
+	var rc routeConfig
+	WingStaticText(200, "text/plain", "ready")(&rc)
+
+	if rc.wingFeather == nil {
+		t.Fatal("WingStaticText did not set a Wing feather")
+	}
+	if rc.wingFeather.Dispatch != Inline {
+		t.Fatalf("Dispatch = %v, want Inline", rc.wingFeather.Dispatch)
+	}
+	if !bytes.HasPrefix(rc.wingFeather.StaticResponse, []byte("HTTP/1.1 200 OK\r\n")) {
+		t.Fatalf("static response has wrong status line: %q", rc.wingFeather.StaticResponse)
+	}
+	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte("ready")) {
+		t.Fatalf("static response missing body: %q", rc.wingFeather.StaticResponse)
+	}
+	if Bolt.StaticResponse != nil {
+		t.Fatal("WingStaticText mutated Bolt preset")
+	}
+}
+
+func TestWingStaticJSONOption(t *testing.T) {
+	var rc routeConfig
+	WingStaticJSON(200, `{"ok":true}`)(&rc)
+
+	if rc.wingFeather == nil {
+		t.Fatal("WingStaticJSON did not set a Wing feather")
+	}
+	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
+		t.Fatalf("static JSON response missing content type: %q", rc.wingFeather.StaticResponse)
+	}
+	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte(`{"ok":true}`)) {
+		t.Fatalf("static JSON response missing body: %q", rc.wingFeather.StaticResponse)
+	}
+	if JSON.StaticResponse != nil {
+		t.Fatal("WingStaticJSON mutated JSON preset")
 	}
 }
 

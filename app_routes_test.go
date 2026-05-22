@@ -85,6 +85,30 @@ func TestGroup_AddRoute_WithWingOption(t *testing.T) {
 	}
 }
 
+func TestApp_AddRoute_WingStaticOptionNormalHandlerFallback(t *testing.T) {
+	app := New(NetHTTP())
+	app.Use(func(c *Ctx) error {
+		c.SetHeader("X-Middleware-Ran", "yes")
+		return c.Next()
+	})
+	app.Get("/healthz", func(c *Ctx) error {
+		return c.Text("handler")
+	}, WingStaticText(200, "text/plain; charset=utf-8", "static"))
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/healthz")
+	if resp.StatusCode() != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode())
+	}
+	if resp.Header("X-Middleware-Ran") != "yes" {
+		t.Fatalf("middleware header = %q, want yes", resp.Header("X-Middleware-Ran"))
+	}
+	if resp.BodyString() != "handler" {
+		t.Fatalf("body = %q, want handler", resp.BodyString())
+	}
+}
+
 // --- App.Use middleware chaining ---
 
 func TestApp_Use_Chaining(t *testing.T) {

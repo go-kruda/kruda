@@ -123,8 +123,7 @@ type AllQueryProvider interface {
 var staticCache sync.Map // key → *staticEntry
 
 type staticEntry struct {
-	resp       []byte
-	dateOffset int
+	resp []byte
 }
 
 // Pre-computed status lines for static responses.
@@ -140,29 +139,19 @@ func init() {
 		c := p[0].(int)
 		staticStatusLines[c] = []byte("HTTP/1.1 " + strconv.Itoa(c) + " " + p[1].(string) + "\r\n")
 	}
-	// Start date updater.
-	go func() {
-		for range time.Tick(time.Second) {
-			dateBytes := []byte(time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
-			staticCache.Range(func(_, v any) bool {
-				e := v.(*staticEntry)
-				copy(e.resp[e.dateOffset:], dateBytes)
-				return true
-			})
-		}
-	}()
 }
 
 // GetStaticResponse returns a cached pre-built HTTP response.
-// The Date header is auto-patched every second.
+// The Date header is captured when the response is first built. Cached response
+// bytes are immutable so they can be shared safely across workers.
 func GetStaticResponse(status int, contentType string, body []byte) []byte {
-	key := contentType + ":" + string(body)
+	key := strconv.Itoa(status) + "\x00" + contentType + "\x00" + string(body)
 	return getStaticByKey(status, contentType, key, body)
 }
 
 // GetStaticResponseString is like GetStaticResponse but avoids []byte(s) allocation.
 func GetStaticResponseString(status int, contentType, body string) []byte {
-	key := contentType + ":" + body
+	key := strconv.Itoa(status) + "\x00" + contentType + "\x00" + body
 	return getStaticByKey(status, contentType, key, []byte(body))
 }
 
@@ -179,7 +168,6 @@ func getStaticByKey(status int, contentType, key string, body []byte) []byte {
 		b = append(b, " OK\r\n"...)
 	}
 	b = append(b, "Date: "...)
-	dateOffset := len(b)
 	b = append(b, time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")...)
 	b = append(b, "\r\n"...)
 	if contentType != "" {
@@ -191,7 +179,7 @@ func getStaticByKey(status int, contentType, key string, body []byte) []byte {
 	b = strconv.AppendInt(b, int64(len(body)), 10)
 	b = append(b, "\r\n\r\n"...)
 	b = append(b, body...)
-	entry := &staticEntry{resp: b, dateOffset: dateOffset}
+	entry := &staticEntry{resp: b}
 	actual, _ := staticCache.LoadOrStore(key, entry)
 	return actual.(*staticEntry).resp
 }

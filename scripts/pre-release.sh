@@ -45,51 +45,8 @@ go test -race -tags kruda_stdjson ./...
 ok "tests passed"
 
 section "standalone module tests"
-test_replaced_module() {
-  local module_dir=$1
-  local gomod_backup gosum_backup
-
-  gomod_backup=$(mktemp)
-  cp "$module_dir/go.mod" "$gomod_backup"
-  if [[ -f "$module_dir/go.sum" ]]; then
-    gosum_backup=$(mktemp)
-    cp "$module_dir/go.sum" "$gosum_backup"
-  else
-    gosum_backup=""
-  fi
-
-  (
-    set -euo pipefail
-    cd "$module_dir"
-    trap 'cp "$gomod_backup" go.mod; if [[ -n "$gosum_backup" ]]; then cp "$gosum_backup" go.sum; else rm -f go.sum; fi' EXIT
-    GOWORK=off go mod edit -replace github.com/go-kruda/kruda="$ROOT"
-    GOWORK=off go mod tidy
-    GOWORK=off go test -tags kruda_stdjson ./...
-  )
-
-  rm -f "$gomod_backup"
-  if [[ -n "$gosum_backup" ]]; then
-    rm -f "$gosum_backup"
-  fi
-}
-
-test_plain_module() {
-  local module_dir=$1
-  (cd "$module_dir" && GOWORK=off go test -tags kruda_stdjson ./...)
-}
-
-for dir in contrib/*/; do
-  if [[ -f "$dir/go.mod" ]]; then
-    test_replaced_module "${dir%/}"
-    ok "${dir%/}"
-  fi
-done
-
-test_replaced_module "transport/wing"
-ok "transport/wing"
-
-test_plain_module "cmd/kruda"
-ok "cmd/kruda"
+scripts/test-standalone-modules.sh
+ok "standalone modules"
 
 section "cross-platform builds"
 GOOS=linux go build ./...

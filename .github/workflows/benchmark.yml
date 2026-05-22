@@ -167,7 +167,7 @@ jobs:
 
           echo "available=true" >> "$GITHUB_OUTPUT"
 
-      - name: Compare PR results with main
+      - name: Compare PR results with published history
         uses: benchmark-action/github-action-benchmark@v1
         if: steps.cache.outputs.cache-hit == 'true' || steps.pages-baseline.outputs.available == 'true'
         with:
@@ -179,7 +179,9 @@ jobs:
           comment-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "110%"
+          # Historical chart data is useful context, but noisy across runners.
+          # The merge-blocking 10% gate is the same-runner benchstat step above.
+          alert-threshold: "200%"
 
       - name: Store benchmark results for main
         uses: benchmark-action/github-action-benchmark@v1
@@ -192,7 +194,9 @@ jobs:
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
-          alert-threshold: "110%"
+          # Keep stored history informational; same-runner benchstat owns the
+          # 10% regression gate for PRs.
+          alert-threshold: "200%"
 
       - name: Publish to GitHub Pages
         uses: benchmark-action/github-action-benchmark@v1
@@ -203,10 +207,12 @@ jobs:
           benchmark-data-dir-path: "benchmarks"
           fail-on-alert: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-on-alert: true
+          comment-on-alert: false
           summary-always: true
           save-data-file: true
-          alert-threshold: "110%"
+          # Avoid noisy alert annotations/comments from historical chart
+          # comparisons. Same-runner benchstat remains the strict gate.
+          alert-threshold: "200%"
           auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
       - name: Save benchmark cache

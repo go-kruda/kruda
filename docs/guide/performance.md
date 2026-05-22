@@ -100,6 +100,19 @@ go test -bench=. -benchmem -count=5 ./... > new.txt
 benchstat bench/baseline.txt new.txt
 ```
 
+### Reading Benchmark Changes
+
+Go microbenchmarks are noisy. Treat `allocs/op` and `B/op` changes on hot paths as stronger signals than a single `ns/op` movement, and compare repeated runs on the same runner whenever possible.
+
+Kruda's CI uses a 10% regression threshold for benchmark warnings. Borderline `ns/op` changes should be reviewed with `benchstat`, recent main-branch results, and the PR's code path impact before they are treated as real regressions.
+
+Maintainer checklist for performance-sensitive PRs:
+
+- Confirm the changed code runs on the measured hot path.
+- Compare against same-runner `main` results, not only an older local baseline.
+- Block releases on new allocations or bytes in hot-path benchmarks unless the change is explicitly opt-in.
+- Treat security or correctness work that adds cost only when enabled as acceptable when the default path is unchanged.
+
 ## Profile-Guided Optimization (PGO)
 
 Go 1.21+ supports PGO — the compiler uses a CPU profile of your app to make better inlining, devirtualization, and layout decisions. This gives **2-7% free performance** with zero code changes.

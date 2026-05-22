@@ -45,6 +45,37 @@ func TestTransportSmoke_NetHTTP(t *testing.T) {
 	})
 }
 
+func TestTransportSecurityHeadersAndCookies_NetHTTP(t *testing.T) {
+	newApp := func() *App {
+		app := New(NetHTTP(), WithSecureHeaders())
+		app.Get("/headers/json", func(c *Ctx) error {
+			c.SetCookie(&Cookie{Name: "sid", Value: "abc", Path: "/", HTTPOnly: true})
+			return c.JSON(Map{"ok": true})
+		})
+		app.Get("/headers/text", func(c *Ctx) error {
+			c.SetCookie(&Cookie{Name: "sid", Value: "abc", Path: "/", HTTPOnly: true})
+			return c.Text("ok")
+		})
+		app.Compile()
+		return app
+	}
+
+	t.Run("ServeHTTP via httptest", func(t *testing.T) {
+		srv := httptest.NewServer(newApp())
+		defer srv.Close()
+		requireSecurityCookieGet(t, srv.URL+"/headers/json")
+		requireSecurityCookieGet(t, srv.URL+"/headers/text")
+	})
+
+	t.Run("Transport.Serve on TCP listener", func(t *testing.T) {
+		app := newApp()
+		addr, shutdown := startSmokeApp(t, app)
+		defer shutdown()
+		requireSecurityCookieGet(t, "http://"+addr+"/headers/json")
+		requireSecurityCookieGet(t, "http://"+addr+"/headers/text")
+	})
+}
+
 // TestTransportSmoke_FastHTTP verifies the fasthttp transport can serve a
 // basic request through the App's normal route registration path. The
 // fasthttp transport requires a real TCP listener (no httptest equivalent),
@@ -144,5 +175,30 @@ func requireSmokeGet(t *testing.T, url, want string) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), want) {
 		t.Errorf("GET %s body=%q want contains %q", url, body, want)
+	}
+}
+
+func requireSecurityCookieGet(t *testing.T, url string) {
+	t.Helper()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET %s status=%d want=200", url, resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("GET %s X-Content-Type-Options=%q", url, got)
+	}
+	if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("GET %s X-Frame-Options=%q", url, got)
+	}
+	if got := resp.Header.Get("Set-Cookie"); !strings.Contains(got, "sid=abc") || !strings.Contains(got, "HttpOnly") {
+		t.Fatalf("GET %s Set-Cookie=%q", url, got)
+	}
+	if got := resp.Header.Get("Server"); got != "" {
+		t.Fatalf("GET %s Server header should not be set, got %q", url, got)
 	}
 }

@@ -31,6 +31,7 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] Wing tests pass: covered by the same `go test ./...` since v1.2.0 (flattened into core)
 - [ ] Native fuzz tests don't crash within 30s each: `go test -fuzz=FuzzRouterPattern -fuzztime=30s -run=^$ .` (and FuzzRouterMatch, FuzzBindJSON, FuzzValidateString)
 - [ ] PR benchmark check has no same-runner `benchstat` regression above 10% on the hot path
+- [ ] Any `ns/op` movement is reviewed against `B/op`, `allocs/op`, same-runner `main`, and whether the changed code is on the default hot path
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `transport/wing/go.mod` or any `contrib/*/go.mod`
 - [ ] Every released submodule's `go.mod` requires the intended core version

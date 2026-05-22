@@ -132,23 +132,25 @@ func (c *Ctx) jsonSend(data []byte) error {
 	}
 	// Fast path for net/http embedded adapter — bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
-		c.responded = true
-		h := w.w.Header()
-		if w.contentTypeSlice == nil {
-			w.contentTypeSlice = make([]string, 1)
+		if c.canBypassHeaderWrite(false) {
+			c.responded = true
+			h := w.w.Header()
+			if w.contentTypeSlice == nil {
+				w.contentTypeSlice = make([]string, 1)
+			}
+			w.contentTypeSlice[0] = "application/json; charset=utf-8"
+			h["Content-Type"] = w.contentTypeSlice
+			cl := len(data)
+			if cl < len(contentLengthStrings) {
+				h["Content-Length"] = []string{contentLengthStrings[cl]}
+			} else {
+				h["Content-Length"] = []string{strconv.Itoa(cl)}
+			}
+			w.w.WriteHeader(c.status)
+			w.written = true
+			_, _ = w.w.Write(data)
+			return nil
 		}
-		w.contentTypeSlice[0] = "application/json; charset=utf-8"
-		h["Content-Type"] = w.contentTypeSlice
-		cl := len(data)
-		if cl < len(contentLengthStrings) {
-			h["Content-Length"] = []string{contentLengthStrings[cl]}
-		} else {
-			h["Content-Length"] = []string{strconv.Itoa(cl)}
-		}
-		w.w.WriteHeader(c.status)
-		w.written = true
-		_, _ = w.w.Write(data)
-		return nil
 	}
 	c.contentType = "application/json; charset=utf-8"
 	return c.sendBytes(data)
@@ -173,17 +175,19 @@ func (c *Ctx) Text(s string) error {
 	}
 	// Fast path for net/http embedded adapter - bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
-		c.responded = true
-		h := w.w.Header()
-		if w.contentTypeSlice == nil {
-			w.contentTypeSlice = make([]string, 1)
+		if c.canBypassHeaderWrite(false) {
+			c.responded = true
+			h := w.w.Header()
+			if w.contentTypeSlice == nil {
+				w.contentTypeSlice = make([]string, 1)
+			}
+			w.contentTypeSlice[0] = "text/plain; charset=utf-8"
+			h["Content-Type"] = w.contentTypeSlice
+			w.w.WriteHeader(c.status)
+			w.written = true
+			_, _ = io.WriteString(w.w, s)
+			return nil
 		}
-		w.contentTypeSlice[0] = "text/plain; charset=utf-8"
-		h["Content-Type"] = w.contentTypeSlice
-		w.w.WriteHeader(c.status)
-		w.written = true
-		_, _ = io.WriteString(w.w, s)
-		return nil
 	}
 	c.contentType = "text/plain; charset=utf-8"
 	return c.sendBytes([]byte(s))

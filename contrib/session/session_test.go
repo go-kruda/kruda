@@ -545,6 +545,63 @@ func TestSession_Destroy(t *testing.T) {
 	}
 }
 
+func TestSession_DestroyPreservesCookieAttributes(t *testing.T) {
+	store := NewMemoryStore()
+	defer store.Close()
+	cfg := Config{
+		Store:          store,
+		CookiePath:     "/app",
+		CookieDomain:   "example.com",
+		CookieSecure:   true,
+		CookieSameSite: http.SameSiteStrictMode,
+	}
+
+	var sessionID string
+	app := kruda.New()
+	app.Use(New(cfg))
+	app.Get("/test", func(c *kruda.Ctx) error {
+		sess := GetSession(c)
+		sess.Set("user", "alice")
+		sessionID = sess.ID()
+		c.SetContentType("application/json").SetBody(okBody)
+		return nil
+	})
+
+	resp := newMockResponse()
+	app.ServeKruda(resp, newReq("GET", "/test", nil))
+	if sessionID == "" {
+		t.Fatal("expected session ID")
+	}
+
+	app2 := kruda.New()
+	app2.Use(New(cfg))
+	app2.Get("/test", func(c *kruda.Ctx) error {
+		GetSession(c).Destroy()
+		c.SetContentType("application/json").SetBody(okBody)
+		return nil
+	})
+
+	resp2 := newMockResponse()
+	app2.ServeKruda(resp2, newReq("GET", "/test", map[string]string{
+		"_session": sessionID,
+	}))
+
+	setCookie := resp2.headers.Get("Set-Cookie")
+	checks := []string{
+		"Path=/app",
+		"Domain=example.com",
+		"Max-Age=0",
+		"Secure",
+		"HttpOnly",
+		"SameSite=Strict",
+	}
+	for _, want := range checks {
+		if !strings.Contains(setCookie, want) {
+			t.Fatalf("expected destroy Set-Cookie to contain %q, got %q", want, setCookie)
+		}
+	}
+}
+
 func TestSession_SkipFunction(t *testing.T) {
 	cfg := Config{
 		Skip: func(method, path string) bool {

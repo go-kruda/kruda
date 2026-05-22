@@ -113,22 +113,19 @@ kruda.MapErrorType[*ValidationError](app, 422, "validation failed")
 
 ## Benchmarks
 
-<p align="center">
-  <img src="docs/assets/benchmark-chart.png" alt="Kruda vs Fiber vs Actix Web benchmark" width="800">
-</p>
+Kruda is built for high-performance, low-latency, high-throughput CPU-bound routes. Public comparison claims use the reproducible harness in [`bench/reproducible/`](bench/reproducible/) and must report throughput, p50/p90/p99/max latency, socket errors, and non-2xx responses.
 
-Measured with `wrk -t4 -c256 -d5s` on Linux i5-13500 (8P cores), GOGC=400.
+Default CPU-bound routes:
 
-| Test | Kruda (Go) | Fiber (Go) | Actix (Rust) | vs Fiber | vs Actix |
-|------|--:|--:|--:|--:|--:|
-| plaintext | **846,622** | 670,240 | 814,652 | +26% | +4% |
-| JSON | **805,124** | 625,839 | 790,362 | +29% | +2% |
-| db | **108,468** | 107,450 | 37,373 | +1% | +190% |
-| fortunes | 104,144 | **106,623** | 45,078 | -2% | +131% |
+| Route | What it measures |
+|------|------------------|
+| `/plaintext-handler` | Normal handler path returning plaintext |
+| `/json-static` | Normal handler path returning constant JSON bytes, no serialization |
+| `/json-serialize` | Normal handler path performing real JSON serialization |
 
-Wing transport uses raw `epoll` + `eventfd` on Linux — bypasses both fasthttp and net/http. macOS defaults to fasthttp.
+The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as "faster than Actix" only when median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero errors. Otherwise, use "same ballpark as Actix."
 
-- See [`bench/reproducible/`](bench/reproducible/) for full source code of all 3 frameworks and reproduction steps
+Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 
 ## Documentation
 

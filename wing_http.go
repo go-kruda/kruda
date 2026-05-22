@@ -496,7 +496,7 @@ var respPool = sync.Pool{
 func acquireResponse() *wingResponse {
 	r := respPool.Get().(*wingResponse)
 	r.status = 200
-	r.headers.count = 0
+	r.headers.reset()
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
 	r.staticResp = nil
@@ -511,7 +511,7 @@ func releaseResponse(r *wingResponse) {
 	r.jsonFast = false
 	r.fileFd = 0
 	r.fileSize = 0
-	r.headers.count = 0
+	r.headers.reset()
 	if cap(r.buf) > 65536 {
 		r.buf = make([]byte, 0, 2048)
 	} else {
@@ -678,6 +678,15 @@ func (r *wingResponse) buildZeroCopy() []byte {
 			hasCL = true
 		}
 	}
+	for i := 0; i < len(r.headers.extra); i++ {
+		b = append(b, r.headers.extra[i].key...)
+		b = append(b, ": "...)
+		b = append(b, r.headers.extra[i].val...)
+		b = append(b, "\r\n"...)
+		if !hasCL && r.headers.extra[i].key == "Content-Length" {
+			hasCL = true
+		}
+	}
 	if !hasCL {
 		b = append(b, "Content-Length: "...)
 		b = strconv.AppendInt(b, int64(len(r.body)), 10)
@@ -715,6 +724,12 @@ func (r *wingResponse) buildHeadersOnly() []byte {
 		b = append(b, r.headers.vals[i]...)
 		b = append(b, "\r\n"...)
 	}
+	for i := 0; i < len(r.headers.extra); i++ {
+		b = append(b, r.headers.extra[i].key...)
+		b = append(b, ": "...)
+		b = append(b, r.headers.extra[i].val...)
+		b = append(b, "\r\n"...)
+	}
 	b = append(b, "Content-Length: "...)
 	b = strconv.AppendInt(b, r.fileSize, 10)
 	b = append(b, "\r\n\r\n"...)
@@ -728,7 +743,21 @@ func (r *wingResponse) buildHeadersOnly() []byte {
 type wingHeaders struct {
 	keys  [8]string
 	vals  [8]string
+	extra []wingHeader
 	count int
+}
+
+type wingHeader struct {
+	key string
+	val string
+}
+
+func (h *wingHeaders) reset() {
+	h.count = 0
+	for i := range h.extra {
+		h.extra[i] = wingHeader{}
+	}
+	h.extra = h.extra[:0]
 }
 
 func (h *wingHeaders) Set(key, value string) {
@@ -738,11 +767,19 @@ func (h *wingHeaders) Set(key, value string) {
 			return
 		}
 	}
+	for i := 0; i < len(h.extra); i++ {
+		if h.extra[i].key == key {
+			h.extra[i].val = value
+			return
+		}
+	}
 	if h.count < len(h.keys) {
 		h.keys[h.count] = key
 		h.vals[h.count] = value
 		h.count++
+		return
 	}
+	h.extra = append(h.extra, wingHeader{key: key, val: value})
 }
 
 // Add appends a new key-value pair without replacing existing keys.
@@ -752,13 +789,20 @@ func (h *wingHeaders) Add(key, value string) {
 		h.keys[h.count] = key
 		h.vals[h.count] = value
 		h.count++
+		return
 	}
+	h.extra = append(h.extra, wingHeader{key: key, val: value})
 }
 
 func (h *wingHeaders) Get(key string) string {
 	for i := 0; i < h.count; i++ {
 		if h.keys[i] == key {
 			return h.vals[i]
+		}
+	}
+	for i := 0; i < len(h.extra); i++ {
+		if h.extra[i].key == key {
+			return h.extra[i].val
 		}
 	}
 	return ""
@@ -771,6 +815,16 @@ func (h *wingHeaders) Del(key string) {
 			h.keys[i] = h.keys[h.count]
 			h.vals[i] = h.vals[h.count]
 			// Don't increment — recheck swapped element.
+		} else {
+			i++
+		}
+	}
+	for i := 0; i < len(h.extra); {
+		if h.extra[i].key == key {
+			last := len(h.extra) - 1
+			h.extra[i] = h.extra[last]
+			h.extra[last] = wingHeader{}
+			h.extra = h.extra[:last]
 		} else {
 			i++
 		}

@@ -1,42 +1,26 @@
 # Benchmark Reproduction
 
-Source code for all 3 frameworks used in the Kruda benchmark comparison.
-Anyone can clone this repo and reproduce the results.
+This directory contains the source code and harness for Kruda, Fiber, and Actix CPU-bound benchmark comparisons.
 
-## Results (2026-03-05)
+The default benchmark does not require PostgreSQL. It measures framework overhead for high-performance, low-latency, high-throughput CPU-bound routes and records throughput, latency percentiles, socket errors, and non-2xx responses.
 
-| Test | Kruda (Go) | Fiber (Go) | Actix (Rust) | vs Fiber | vs Actix |
-|------|--:|--:|--:|--:|--:|
-| plaintext | **846,622** | 670,240 | 814,652 | +26% | +4% |
-| JSON | **805,124** | 625,839 | 790,362 | +29% | +2% |
-| db | **108,468** | 107,450 | 37,373 | +1% | +190% |
-| fortunes | 104,144 | **106,623** | 45,078 | -2% | +131% |
+## Default Routes
 
-## Hardware & Environment
+| Route | Workload |
+|------|----------|
+| `/plaintext-handler` | Normal handler path returning plaintext |
+| `/json-static` | Normal handler path returning constant JSON bytes, no serialization |
+| `/json-serialize` | Normal handler path performing real JSON serialization |
 
-- **CPU:** Intel i5-13500 (8P cores)
-- **OS:** Ubuntu Linux
-- **Go:** 1.25.7
-- **Rust:** stable (latest)
-- **DB:** PostgreSQL 16 (localhost)
-- **Load tool:** `wrk -t4 -c256 -d5s`
-- **GC tuning:** `GOGC=400`
+DB, queries, fortunes, and updates are out of scope for the default comparison. Enable them explicitly with `BENCH_ENABLE_DB=1` when you want to study database-heavy workloads.
 
 ## Directory Structure
 
 ```
 bench/reproducible/
-├── kruda/          # Kruda (Wing transport — epoll + eventfd)
-│   ├── main.go
-│   ├── go.mod
-│   └── go.sum
-├── fiber/          # Fiber v2 (fasthttp transport)
-│   ├── main.go
-│   ├── go.mod
-│   └── go.sum
-├── actix/          # Actix Web 4 (tokio + actix-rt)
-│   ├── Cargo.toml
-│   └── src/main.rs
+├── kruda/          # Kruda using Wing transport
+├── fiber/          # Fiber v2 using fasthttp
+├── actix/          # Actix Web 4
 ├── bench.sh        # Automated benchmark script
 └── README.md
 ```
@@ -44,107 +28,60 @@ bench/reproducible/
 ## Prerequisites
 
 ```bash
-# Go 1.25.10+
 go version
-
-# Rust (for Actix)
 rustc --version
-
-# wrk (load testing tool)
+cargo --version
 wrk --version
-
-# PostgreSQL with TFB schema
-psql -c "SELECT COUNT(*) FROM world" hello_world
+curl --version
 ```
 
-## Database Setup
+The harness builds all three benchmark apps from their own directories.
+
+## Run
 
 ```bash
-# Create database and tables (TFB standard schema)
-createdb hello_world
-psql hello_world <<'SQL'
-CREATE TABLE world (
-  id integer NOT NULL,
-  randomnumber integer NOT NULL DEFAULT 0,
-  PRIMARY KEY (id)
-);
-INSERT INTO world (id, randomnumber)
-  SELECT x.id, floor(random() * 10000 + 1)
-  FROM generate_series(1, 10000) AS x(id);
-
-CREATE TABLE fortune (
-  id integer NOT NULL,
-  message varchar(2048) NOT NULL,
-  PRIMARY KEY (id)
-);
-INSERT INTO fortune (id, message) VALUES
-  (1, 'fortune: No such file or directory'),
-  (2, 'A computer scientist is someone who fixes things that aren''t broken.'),
-  (3, 'After all is said and done, more is said than done.'),
-  (4, 'Any sufficiently advanced technology is indistinguishable from magic.'),
-  (5, 'A SQL query walks into a bar, sees two tables and asks... Can I join you?'),
-  (6, 'Change is inevitable, except from a vending machine.'),
-  (7, 'Don''t worry about the world coming to an end today. It is already tomorrow in Australia.'),
-  (8, 'Computers make very fast, very accurate mistakes.'),
-  (9, 'Debugging is twice as hard as writing the code in the first place.'),
-  (10, 'Feature: A bug with seniority.'),
-  (11, 'フレームワークのベンチマーク'),
-  (12, 'Premature optimization is the root of all evil.');
-SQL
+cd bench/reproducible
+./bench.sh
 ```
 
-## How to Reproduce
-
-### 1. Build all frameworks
+Run one route:
 
 ```bash
-# Kruda
-cd kruda && go build -o kruda-bench . && cd ..
-
-# Fiber
-cd fiber && go build -o fiber-bench . && cd ..
-
-# Actix
-cd actix && cargo build --release && cd ..
+./bench.sh json-static
 ```
 
-### 2. Run benchmarks
+Run opt-in DB routes:
 
 ```bash
-# Start each server and test with wrk
-# Kruda (port 3000)
-GOMAXPROCS=8 ./kruda/kruda-bench &
-wrk -t4 -c256 -d5s http://localhost:3000/       # plaintext
-wrk -t4 -c256 -d5s http://localhost:3000/json    # JSON
-wrk -t4 -c256 -d5s http://localhost:3000/db      # single DB query
-wrk -t4 -c256 -d5s http://localhost:3000/fortunes # fortunes
-
-# Fiber (port 3002)
-GOMAXPROCS=8 ./fiber/fiber-bench &
-wrk -t4 -c256 -d5s http://localhost:3002/
-wrk -t4 -c256 -d5s http://localhost:3002/json
-wrk -t4 -c256 -d5s http://localhost:3002/db
-wrk -t4 -c256 -d5s http://localhost:3002/fortunes
-
-# Actix (port 3003)
-./actix/target/release/actix-bench &
-wrk -t4 -c256 -d5s http://localhost:3003/
-wrk -t4 -c256 -d5s http://localhost:3003/json
-wrk -t4 -c256 -d5s http://localhost:3003/db
-wrk -t4 -c256 -d5s http://localhost:3003/fortunes
+BENCH_ENABLE_DB=1 ./bench.sh db fortunes
 ```
 
-Or use the automated script:
+The DB mode expects a TechEmpower-style PostgreSQL database and uses `DATABASE_URL` when set.
 
-```bash
-bash bench.sh
-```
+## Profiles
 
-## Notes
+The script runs both profiles for every framework and route:
 
-- All 3 apps use the same PostgreSQL database, same schema, same `pool_max_conns=64`
-- Kruda uses Wing transport (raw epoll + eventfd) — not fasthttp
-- Fiber uses fasthttp transport (its default)
-- Actix uses tokio + actix-rt (Rust async runtime)
-- Actix DB numbers are lower likely due to `deadpool-postgres` vs `pgx` pool differences
-- Results vary by hardware — the relative percentages are more meaningful than absolute numbers
+| Profile | wrk command shape |
+|---------|-------------------|
+| `latency` | `wrk --latency -t4 -c128 -d15s` |
+| `throughput` | `wrk --latency -t4 -c256 -d15s` |
+
+Each framework/route/profile combination gets one warmup run and five measured rounds.
+
+## Output
+
+Results are written to `bench/reproducible/results/<timestamp>/`:
+
+| File | Purpose |
+|------|---------|
+| `environment.txt` | CPU, OS, toolchain, route, profile, and worker metadata |
+| `summary.csv` | Machine-readable per-round RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
+| `summary.md` | Markdown table for PR evidence |
+| `raw/*.txt` | Raw `wrk --latency` output and server logs |
+
+## Claim Rule
+
+Use "faster than Actix" only when Kruda median RPS is at least 3% higher than Actix and p99 is no worse than 10% above Actix with zero socket errors and zero non-2xx responses.
+
+When those conditions are not met, use "same ballpark as Actix." Do not make RPS-only claims.

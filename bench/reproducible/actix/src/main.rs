@@ -11,6 +11,11 @@ struct JsonBody {
 }
 
 #[derive(Serialize)]
+struct JsonMessage {
+    message: &'static str,
+}
+
+#[derive(Serialize)]
 struct World {
     id: i32,
     #[serde(rename = "randomNumber")]
@@ -28,10 +33,16 @@ async fn plaintext() -> HttpResponse {
         .body("Hello, World!")
 }
 
-async fn json_get() -> HttpResponse {
+async fn json_static() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("application/json")
         .body(r#"{"message":"Hello, World!"}"#)
+}
+
+async fn json_serialize() -> HttpResponse {
+    HttpResponse::Ok().json(JsonMessage {
+        message: "Hello, World!",
+    })
 }
 
 async fn param(path: web::Path<String>) -> HttpResponse {
@@ -92,8 +103,16 @@ async fn fortunes(pool: web::Data<Pool>) -> HttpResponse {
         .body(buf)
 }
 
-async fn updates(pool: web::Data<Pool>, query: web::Query<std::collections::HashMap<String, String>>) -> HttpResponse {
-    let n: i32 = query.get("q").and_then(|v| v.parse().ok()).unwrap_or(1).max(1).min(500);
+async fn updates(
+    pool: web::Data<Pool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> HttpResponse {
+    let n: i32 = query
+        .get("q")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+        .max(1)
+        .min(500);
     let client = pool.get().await.unwrap();
     let mut worlds = Vec::with_capacity(n as usize);
     let mut rng = rand::thread_rng();
@@ -136,26 +155,40 @@ async fn main() -> std::io::Result<()> {
         .parse()
         .unwrap_or(3003);
 
-    let dsn = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://benchmarkdbuser:benchmarkdbpass@localhost:5433/hello_world".to_string());
+    let enable_db = std::env::var("BENCH_ENABLE_DB").ok().as_deref() == Some("1");
+    let pool_data = if enable_db {
+        let dsn = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://benchmarkdbuser:benchmarkdbpass@localhost:5433/hello_world".to_string()
+        });
 
-    let mut cfg = Config::new();
-    cfg.url = Some(dsn);
-    cfg.pool = Some(deadpool_postgres::PoolConfig::new(64));
-    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
-
-    let pool_data = web::Data::new(pool);
+        let mut cfg = Config::new();
+        cfg.url = Some(dsn);
+        cfg.pool = Some(deadpool_postgres::PoolConfig::new(64));
+        Some(web::Data::new(
+            cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap(),
+        ))
+    } else {
+        None
+    };
 
     HttpServer::new(move || {
-        App::new()
-            .app_data(pool_data.clone())
+        let app = App::new()
             .route("/", web::get().to(plaintext))
-            .route("/json", web::get().to(json_get))
+            .route("/plaintext-handler", web::get().to(plaintext))
+            .route("/json", web::get().to(json_serialize))
+            .route("/json-static", web::get().to(json_static))
+            .route("/json-serialize", web::get().to(json_serialize))
             .route("/users/{id}", web::get().to(param))
-            .route("/json", web::post().to(json_post))
-            .route("/db", web::get().to(db))
-            .route("/fortunes", web::get().to(fortunes))
-            .route("/updates", web::get().to(updates))
+            .route("/json", web::post().to(json_post));
+
+        if let Some(pool) = &pool_data {
+            app.app_data(pool.clone())
+                .route("/db", web::get().to(db))
+                .route("/fortunes", web::get().to(fortunes))
+                .route("/updates", web::get().to(updates))
+        } else {
+            app
+        }
     })
     .bind(("0.0.0.0", port))?
     .run()

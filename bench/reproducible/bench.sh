@@ -1,69 +1,298 @@
-#!/bin/bash
-# Cross-runtime benchmark: Kruda vs Fiber
+#!/usr/bin/env bash
+# Reproducible CPU-bound benchmark: Kruda vs Fiber vs Actix.
+#
+# Default routes avoid PostgreSQL and measure handler CPU paths only:
+#   /plaintext-handler, /json-static, /json-serialize
+#
 # Usage:
-#   bash bench_all.sh                    # run all routes
-#   bash bench_all.sh plaintext          # run only plaintext
-#   bash bench_all.sh db queries         # run db + queries
+#   ./bench.sh                         # run default CPU-bound routes
+#   ./bench.sh json-static             # run one route
+#   BENCH_ENABLE_DB=1 ./bench.sh db    # opt in to DB routes
 
-set -e
-WRK="wrk -t4 -c256 -d5s"
-CORES="taskset -c 0-7"
-LUA="/tmp/post_json.lua"
-DATABASE_URL="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
-export DATABASE_URL
+set -euo pipefail
 
-cat > $LUA << 'EOF'
-wrk.method = "POST"
-wrk.body   = '{"name":"bench","value":42.5}'
-wrk.headers["Content-Type"] = "application/json"
-EOF
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TIMESTAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
+RESULT_DIR="${RESULT_DIR:-"$SCRIPT_DIR/results/$TIMESTAMP"}"
+RAW_DIR="$RESULT_DIR/raw"
+SUMMARY_CSV="$RESULT_DIR/summary.csv"
+SUMMARY_MD="$RESULT_DIR/summary.md"
+META_FILE="$RESULT_DIR/environment.txt"
 
-pkill -9 -f kruda-bench 2>/dev/null || true
-pkill -9 -f fiber-bench 2>/dev/null || true
-sleep 1
+GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
+KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-$GOMAXPROCS_VALUE}"
+BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
+BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
+BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
+DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
 
-ROUTES="${@:-plaintext param postjson json db queries fortunes updates}"
+FRAMEWORKS=(kruda fiber actix)
+KRUDA_PID=""
+FIBER_PID=""
+ACTIX_PID=""
 
-run_route() {
-    local port=$1 route=$2
-    case $route in
-        plaintext) printf "  %-12s" "plaintext:"; $WRK http://localhost:$port/ 2>&1 | grep 'Requests/sec' ;;
-        param)     printf "  %-12s" "param GET:"; $WRK http://localhost:$port/users/42 2>&1 | grep 'Requests/sec' ;;
-        postjson)  printf "  %-12s" "POST JSON:"; $WRK -s $LUA http://localhost:$port/json 2>&1 | grep 'Requests/sec' ;;
-        json)      printf "  %-12s" "JSON GET:";  $WRK http://localhost:$port/json 2>&1 | grep 'Requests/sec' ;;
-        db)        printf "  %-12s" "db:";        $WRK http://localhost:$port/db 2>&1 | grep 'Requests/sec' ;;
-        queries)   printf "  %-12s" "queries:";   $WRK "http://localhost:$port/queries?q=20" 2>&1 | grep 'Requests/sec' ;;
-        fortunes)  printf "  %-12s" "fortunes:";  $WRK http://localhost:$port/fortunes 2>&1 | grep 'Requests/sec' ;;
-        updates)   printf "  %-12s" "updates:";   $WRK "http://localhost:$port/updates?q=20" 2>&1 | grep 'Requests/sec' ;;
-    esac
+PROFILES=(
+  "latency:-t4 -c128 -d$BENCH_DURATION_VALUE"
+  "throughput:-t4 -c256 -d$BENCH_DURATION_VALUE"
+)
+
+if [ "$#" -gt 0 ]; then
+  ROUTES=("$@")
+else
+  ROUTES=(plaintext-handler json-static json-serialize)
+fi
+
+mkdir -p "$RAW_DIR"
+
+cleanup() {
+  for fw in "${FRAMEWORKS[@]}"; do
+    stop_server "$fw"
+  done
+}
+trap cleanup EXIT INT TERM
+
+port_for() {
+  case "$1" in
+    kruda) echo "${KRUDA_PORT:-3000}" ;;
+    fiber) echo "${FIBER_PORT:-3002}" ;;
+    actix) echo "${ACTIX_PORT:-3003}" ;;
+    *) echo "unknown framework: $1" >&2; exit 1 ;;
+  esac
 }
 
-run_all() {
-    local port=$1
-    for route in $ROUTES; do
-        run_route $port $route
+pid_for() {
+  case "$1" in
+    kruda) echo "$KRUDA_PID" ;;
+    fiber) echo "$FIBER_PID" ;;
+    actix) echo "$ACTIX_PID" ;;
+    *) echo "unknown framework: $1" >&2; exit 1 ;;
+  esac
+}
+
+set_pid() {
+  case "$1" in
+    kruda) KRUDA_PID="$2" ;;
+    fiber) FIBER_PID="$2" ;;
+    actix) ACTIX_PID="$2" ;;
+    *) echo "unknown framework: $1" >&2; exit 1 ;;
+  esac
+}
+
+clear_pid() {
+  case "$1" in
+    kruda) KRUDA_PID="" ;;
+    fiber) FIBER_PID="" ;;
+    actix) ACTIX_PID="" ;;
+    *) echo "unknown framework: $1" >&2; exit 1 ;;
+  esac
+}
+
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+build_all() {
+  require_cmd go
+  require_cmd cargo
+  require_cmd wrk
+  require_cmd curl
+
+  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags kruda_stdjson -o kruda-bench .)
+  (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
+  (cd "$SCRIPT_DIR/actix" && cargo build --release)
+}
+
+write_environment() {
+  {
+    echo "timestamp_utc=$TIMESTAMP"
+    echo "script_dir=$SCRIPT_DIR"
+    echo "result_dir=$RESULT_DIR"
+    echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
+    echo "gomaxprocs=$GOMAXPROCS_VALUE"
+    echo "kruda_workers=$KRUDA_WORKERS_VALUE"
+    echo "bench_rounds=$BENCH_ROUNDS_VALUE"
+    echo "bench_duration=$BENCH_DURATION_VALUE"
+    echo "routes=${ROUTES[*]}"
+    echo "profiles=${PROFILES[*]}"
+    echo
+    echo "== CPU =="
+    if command -v lscpu >/dev/null 2>&1; then
+      lscpu
+    elif command -v sysctl >/dev/null 2>&1; then
+      sysctl -n machdep.cpu.brand_string 2>/dev/null || true
+      sysctl -n hw.physicalcpu hw.logicalcpu 2>/dev/null || true
+    fi
+    echo
+    echo "== OS =="
+    uname -a
+    echo
+    echo "== Toolchain =="
+    go version
+    rustc --version
+    cargo --version
+    wrk --version 2>&1 || true
+  } > "$META_FILE"
+}
+
+start_server() {
+  local fw="$1"
+  local port
+  port="$(port_for "$fw")"
+  local log="$RAW_DIR/server-$fw.log"
+
+  case "$fw" in
+    kruda)
+      (
+        cd "$SCRIPT_DIR/kruda"
+        env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
+          PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$DATABASE_URL_VALUE" \
+          ./kruda-bench
+      ) > "$log" 2>&1 &
+      ;;
+    fiber)
+      (
+        cd "$SCRIPT_DIR/fiber"
+        env GOMAXPROCS="$GOMAXPROCS_VALUE" PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
+          DATABASE_URL="$DATABASE_URL_VALUE" ./fiber-bench
+      ) > "$log" 2>&1 &
+      ;;
+    actix)
+      (
+        cd "$SCRIPT_DIR/actix"
+        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$DATABASE_URL_VALUE" \
+          ./target/release/actix-bench
+      ) > "$log" 2>&1 &
+      ;;
+    *)
+      echo "unknown framework: $fw" >&2
+      exit 1
+      ;;
+  esac
+
+  set_pid "$fw" "$!"
+  wait_ready "$fw" "$port" "$log"
+}
+
+stop_server() {
+  local fw="$1"
+  local pid
+  pid="$(pid_for "$fw")"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  clear_pid "$fw"
+}
+
+wait_ready() {
+  local fw="$1"
+  local port="$2"
+  local log="$3"
+  local url="http://127.0.0.1:$port/plaintext-handler"
+
+  for _ in $(seq 1 100); do
+    if ! kill -0 "$(pid_for "$fw")" 2>/dev/null; then
+      echo "$fw exited before it became ready on port $port" >&2
+      cat "$log" >&2 || true
+      exit 1
+    fi
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  echo "$fw did not become ready on port $port" >&2
+  cat "$log" >&2 || true
+  exit 1
+}
+
+extract_summary() {
+  local raw="$1"
+  awk '
+    function to_ms(v, num, unit) {
+      num = v
+      unit = v
+      gsub(/[a-zA-Z]+/, "", num)
+      gsub(/[0-9.]+/, "", unit)
+      if (unit == "us") return num / 1000
+      if (unit == "s") return num * 1000
+      if (unit == "m") return num * 60000
+      return num
+    }
+    $1 == "50%" { p50 = to_ms($2) }
+    $1 == "90%" { p90 = to_ms($2) }
+    $1 == "99%" { p99 = to_ms($2) }
+    $1 == "Latency" && max == "" { max = to_ms($4) }
+    /Requests\/sec:/ { rps = $2 }
+    /Socket errors:/ {
+      gsub(/,/, "")
+      socket_errors = $4 + $6 + $8 + $10
+    }
+    /Non-2xx/ { non2xx = $NF }
+    END {
+      printf "%.2f,%.3f,%.3f,%.3f,%.3f,%d,%d", rps+0, p50+0, p90+0, p99+0, max+0, socket_errors+0, non2xx+0
+    }
+  ' "$raw"
+}
+
+run_wrk() {
+  local fw="$1"
+  local route="$2"
+  local profile="$3"
+  local wrk_args="$4"
+  local round="$5"
+  local port
+  port="$(port_for "$fw")"
+  local url="http://127.0.0.1:$port/$route"
+  local raw="$RAW_DIR/$fw-$profile-$route-round-$round.txt"
+
+  wrk --latency $wrk_args "$url" > "$raw" 2>&1
+  local values
+  values="$(extract_summary "$raw")"
+  echo "$TIMESTAMP,$profile,$fw,$route,$round,$wrk_args,$values,$raw" >> "$SUMMARY_CSV"
+  echo "| $profile | $fw | $route | $round | ${values//,/ | } | $raw |" >> "$SUMMARY_MD"
+}
+
+init_summary() {
+  echo "timestamp_utc,profile,framework,route,round,wrk_args,rps,p50_ms,p90_ms,p99_ms,max_ms,socket_errors,non_2xx,raw_file" > "$SUMMARY_CSV"
+  {
+    echo "# Benchmark Summary"
+    echo
+    echo "Environment: \`$META_FILE\`"
+    echo
+    echo "| Profile | Framework | Route | Round | RPS | p50 ms | p90 ms | p99 ms | max ms | Socket errors | Non-2xx | Raw file |"
+    echo "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"
+  } > "$SUMMARY_MD"
+}
+
+echo "== Building benchmark binaries =="
+build_all
+write_environment
+init_summary
+
+for fw in "${FRAMEWORKS[@]}"; do
+  echo "== $fw =="
+  start_server "$fw"
+  for profile_def in "${PROFILES[@]}"; do
+    profile="${profile_def%%:*}"
+    wrk_args="${profile_def#*:}"
+    for route in "${ROUTES[@]}"; do
+      port="$(port_for "$fw")"
+      echo "warmup: $fw $profile /$route"
+      wrk --latency $wrk_args "http://127.0.0.1:$port/$route" \
+        > "$RAW_DIR/$fw-$profile-$route-warmup.txt" 2>&1
+      for round in $(seq 1 "$BENCH_ROUNDS_VALUE"); do
+        echo "round $round: $fw $profile /$route"
+        run_wrk "$fw" "$route" "$profile" "$wrk_args" "$round"
+      done
     done
-}
+  done
+  stop_server "$fw"
+done
 
-echo "============================================"
-echo "  Kruda vs Fiber"
-echo "============================================"
-
-echo ""
-echo "--- Kruda ---"
-$CORES env GOMAXPROCS=8 KRUDA_WORKERS=8 PORT=3000 DATABASE_URL="$DATABASE_URL" ~/kruda/bench/cross-runtime/kruda/kruda-bench &
-sleep 2
-run_all 3000
-pkill -9 -f kruda-bench 2>/dev/null; sleep 1
-
-echo ""
-echo "--- Fiber ---"
-$CORES env GOMAXPROCS=8 PORT=3002 DATABASE_URL="$DATABASE_URL" ~/kruda/bench/cross-runtime/fiber/fiber-bench &
-sleep 2
-run_all 3002
-pkill -9 -f fiber-bench 2>/dev/null; sleep 1
-
-echo ""
-echo "============================================"
-echo "  Done — $(date '+%Y-%m-%d %H:%M:%S %Z')"
-echo "============================================"
+echo "summary: $SUMMARY_MD"
+echo "raw: $RAW_DIR"

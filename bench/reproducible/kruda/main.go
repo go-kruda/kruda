@@ -32,6 +32,11 @@ type JSONMessage struct {
 	Message string `json:"message"`
 }
 
+var (
+	staticJSONContentType = []byte("application/json; charset=utf-8")
+	staticJSONBody        = []byte(`{"message":"Hello, World!"}`)
+)
+
 // bench types
 type JSONBody struct {
 	Name  string  `json:"name"`
@@ -63,18 +68,21 @@ func main() {
 
 	fmt.Printf("[kruda] JSON encoder: %s\n", krudajson.EncoderName)
 
-	var err error
-	cfg, _ := pgxpool.ParseConfig(dsn)
-	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		conn.Prepare(ctx, "worldSelect", "SELECT randomnumber FROM world WHERE id=$1")
-		conn.Prepare(ctx, "fortuneSelect", "SELECT id, message FROM fortune")
-		conn.Prepare(ctx, "worldUpdate", "UPDATE world SET randomnumber=$1 WHERE id=$2")
-		return nil
-	}
-	pool, err = pgxpool.NewWithConfig(context.Background(), cfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "pgxpool: %v\n", err)
-		os.Exit(1)
+	enableDB := os.Getenv("BENCH_ENABLE_DB") == "1"
+	if enableDB {
+		var err error
+		cfg, _ := pgxpool.ParseConfig(dsn)
+		cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+			conn.Prepare(ctx, "worldSelect", "SELECT randomnumber FROM world WHERE id=$1")
+			conn.Prepare(ctx, "fortuneSelect", "SELECT id, message FROM fortune")
+			conn.Prepare(ctx, "worldUpdate", "UPDATE world SET randomnumber=$1 WHERE id=$2")
+			return nil
+		}
+		pool, err = pgxpool.NewWithConfig(context.Background(), cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pgxpool: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	go func() {
@@ -84,14 +92,21 @@ func main() {
 
 	app := kruda.New(kruda.Wing())
 
-	app.Get("/", func(c *kruda.Ctx) error {
+	plaintext := func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
-	}, kruda.WingPlaintext())
+	}
+	app.Get("/", plaintext, kruda.WingPlaintext())
+	app.Get("/plaintext-handler", plaintext, kruda.WingPlaintext())
 
-	// TFB: JSON serialization
-	app.Get("/json", func(c *kruda.Ctx) error {
-		return c.JSON(JSONMessage{Message: "Hello, World!"})
+	app.Get("/json-static", func(c *kruda.Ctx) error {
+		return c.SendStaticWithTypeBytes(staticJSONContentType, staticJSONBody)
 	}, kruda.WingJSON())
+
+	jsonSerialize := func(c *kruda.Ctx) error {
+		return c.JSON(JSONMessage{Message: "Hello, World!"})
+	}
+	app.Get("/json", jsonSerialize, kruda.WingJSON())
+	app.Get("/json-serialize", jsonSerialize, kruda.WingJSON())
 
 	app.Get("/users/:id", func(c *kruda.Ctx) error {
 		id, _ := c.ParamInt("id")
@@ -106,6 +121,17 @@ func main() {
 		return c.JSON(JSONResponse{Message: "received", Data: body})
 	}, kruda.WingJSON())
 
+	if enableDB {
+		registerDBRoutes(app)
+	}
+
+	if err := app.Listen(":" + port); err != nil {
+		fmt.Fprintf(os.Stderr, "kruda listen: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func registerDBRoutes(app *kruda.App) {
 	// TFB: single DB query
 	app.Get("/db", func(c *kruda.Ctx) error {
 		w := World{ID: int32(rand.IntN(10000) + 1)}
@@ -181,8 +207,6 @@ func main() {
 		)
 		return c.JSON(worlds)
 	}, kruda.WingQuery())
-
-	app.Listen(":" + port)
 }
 
 func queryCount(c *kruda.Ctx) int {

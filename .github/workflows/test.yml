@@ -58,30 +58,16 @@ jobs:
         # doesn't exist on the proxy until release. For PR CI we add a local
         # replace so tests can resolve kruda from the working tree. The replace
         # is ephemeral (CI runner only) — never committed.
-        run: |
-          cd transport/wing
-          go mod edit -replace=github.com/go-kruda/kruda=../..
-          go mod tidy
-          go test -v -race ./...
+        run: scripts/test-standalone-modules.sh --verbose --race transport/wing
 
       - name: Test contrib packages
         shell: bash
-        # Same ephemeral-replace dance as wing — contrib modules require the new
-        # kruda tag which doesn't exist until release.
-        run: |
-          for dir in contrib/jwt contrib/ws contrib/ratelimit contrib/session contrib/compress contrib/etag contrib/cache contrib/otel contrib/prometheus contrib/swagger; do
-            echo "::group::Testing $dir"
-            (
-              cd "$dir"
-              go mod edit -replace=github.com/go-kruda/kruda=../..
-              go mod tidy
-              go test -tags kruda_stdjson ./...
-            )
-            echo "::endgroup::"
-          done
+        # Dynamically discovers contrib modules so new modules cannot be missed
+        # by a stale hardcoded CI list.
+        run: scripts/test-standalone-modules.sh contrib
 
       - name: Test CLI
-        run: cd cmd/kruda && go test -tags kruda_stdjson ./...
+        run: scripts/test-standalone-modules.sh cmd/kruda
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'

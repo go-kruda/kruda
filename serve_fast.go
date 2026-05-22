@@ -310,6 +310,9 @@ func (h *fhHeaderAdapter) Add(key, value string) { h.ctx.Response.Header.Add(key
 // Returns true if successful (fasthttp context available), false otherwise.
 func (c *Ctx) tryFastHTTPText(s string) bool {
 	if c.embeddedFHResp.ctx != nil {
+		if !c.canBypassHeaderWrite(false) {
+			return false
+		}
 		c.responded = true
 		ctx := c.embeddedFHResp.ctx
 		ctx.SetStatusCode(c.status)
@@ -333,6 +336,9 @@ func (c *Ctx) tryFastHTTPJSONDirect(v any) bool {
 	if c.embeddedFHResp.ctx == nil {
 		return false
 	}
+	if !c.canBypassHeaderWrite(false) {
+		return false
+	}
 	enc := c.app.config.JSONEncoder
 	if enc == nil {
 		return false
@@ -354,6 +360,9 @@ func (c *Ctx) tryFastHTTPJSONDirect(v any) bool {
 // Returns true if successful (fasthttp context available), false otherwise.
 func (c *Ctx) tryFastHTTPJSON(data []byte) bool {
 	if c.embeddedFHResp.ctx != nil {
+		if !c.canBypassHeaderWrite(false) {
+			return false
+		}
 		c.responded = true
 		ctx := c.embeddedFHResp.ctx
 		ctx.SetStatusCode(c.status)

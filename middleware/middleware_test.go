@@ -405,6 +405,23 @@ func TestCORS_AllowCredentialsPanicOnWildcard(t *testing.T) {
 	})
 }
 
+func TestCORS_InvalidOriginPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for invalid origin")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "invalid origin") {
+			t.Fatalf("expected panic about invalid origin, got %v", r)
+		}
+	}()
+
+	CORS(CORSConfig{
+		AllowOrigins: []string{"https://"},
+	})
+}
+
 func TestCORS_SpecificOrigin(t *testing.T) {
 	handler := func(c *kruda.Ctx) error {
 		return c.JSON(kruda.Map{"ok": true})
@@ -432,6 +449,9 @@ func TestCORS_SpecificOrigin(t *testing.T) {
 
 	if resp2.headers.Get("Access-Control-Allow-Origin") != "" {
 		t.Fatalf("expected no Allow-Origin for non-matching origin, got %q", resp2.headers.Get("Access-Control-Allow-Origin"))
+	}
+	if resp2.headers.Get("Vary") != "Origin" {
+		t.Fatalf("expected Vary=Origin for non-matching origin, got %q", resp2.headers.Get("Vary"))
 	}
 }
 
@@ -797,6 +817,68 @@ func TestCORS_PreflightCustomHeaders(t *testing.T) {
 	headers := resp.headers.Get("Access-Control-Allow-Headers")
 	if !strings.Contains(headers, "X-Custom-Auth") {
 		t.Errorf("expected X-Custom-Auth in allowed headers, got %q", headers)
+	}
+}
+
+func TestCORS_PreflightDisallowedOriginFallsThroughWithoutCORSHeaders(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowOrigins: []string{"https://allowed.example"},
+	}))
+	app.Options("/test", handler)
+
+	req := optionsReq(map[string]string{
+		"Origin":                        "https://evil.example",
+		"Access-Control-Request-Method": "POST",
+	})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.statusCode != 200 {
+		t.Fatalf("expected fallthrough handler status 200, got %d", resp.statusCode)
+	}
+	if resp.headers.Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("expected no Allow-Origin for disallowed origin, got %q", resp.headers.Get("Access-Control-Allow-Origin"))
+	}
+	if resp.headers.Get("Access-Control-Allow-Methods") != "" {
+		t.Fatalf("expected no Allow-Methods for disallowed origin, got %q", resp.headers.Get("Access-Control-Allow-Methods"))
+	}
+	if resp.headers.Get("Vary") != "Origin" {
+		t.Fatalf("expected Vary=Origin for disallowed origin, got %q", resp.headers.Get("Vary"))
+	}
+}
+
+func TestCORS_PreflightCredentialsWithSpecificOrigin(t *testing.T) {
+	handler := func(c *kruda.Ctx) error {
+		return c.JSON(kruda.Map{"ok": true})
+	}
+
+	app := kruda.New()
+	app.Use(CORS(CORSConfig{
+		AllowOrigins:     []string{"https://trusted.example"},
+		AllowCredentials: true,
+	}))
+	app.Options("/test", handler)
+
+	req := optionsReq(map[string]string{
+		"Origin":                        "https://trusted.example",
+		"Access-Control-Request-Method": "POST",
+	})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.statusCode != 204 {
+		t.Fatalf("expected 204, got %d", resp.statusCode)
+	}
+	if resp.headers.Get("Access-Control-Allow-Origin") != "https://trusted.example" {
+		t.Fatalf("expected trusted Allow-Origin, got %q", resp.headers.Get("Access-Control-Allow-Origin"))
+	}
+	if resp.headers.Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("expected Allow-Credentials=true, got %q", resp.headers.Get("Access-Control-Allow-Credentials"))
 	}
 }
 

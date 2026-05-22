@@ -66,7 +66,7 @@ func (c *Ctx) JSON(v any) error {
 
 	// Wing fast path: Marshal → SetJSON directly, skip pooled buffer.
 	if jr, ok := c.writer.(transport.JSONResponder); ok {
-		if len(c.cookies) == 0 && len(c.respHeaders) == 0 {
+		if c.canBypassHeaderWrite(true) {
 			data, err := c.app.config.JSONEncoder(v)
 			if err != nil {
 				return err
@@ -124,9 +124,11 @@ func (c *Ctx) jsonSend(data []byte) error {
 	}
 	// Fast path for Wing transport — bypass header interface entirely
 	if jr, ok := c.writer.(transport.JSONResponder); ok {
-		c.responded = true
-		jr.SetJSON(c.status, data)
-		return nil
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			jr.SetJSON(c.status, data)
+			return nil
+		}
 	}
 	// Fast path for net/http embedded adapter — bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
@@ -163,9 +165,11 @@ func (c *Ctx) Text(s string) error {
 	}
 	// Fast path for transports with pre-built static response support (e.g., Wing)
 	if sr, ok := c.writer.(transport.StaticTextResponder); ok {
-		c.responded = true
-		sr.SetStaticText(c.status, "text/plain; charset=utf-8", s)
-		return nil
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			sr.SetStaticText(c.status, "text/plain; charset=utf-8", s)
+			return nil
+		}
 	}
 	// Fast path for net/http embedded adapter - bypass transport interface
 	if w := &c.embeddedResp; w.w != nil {
@@ -183,6 +187,13 @@ func (c *Ctx) Text(s string) error {
 	}
 	c.contentType = "text/plain; charset=utf-8"
 	return c.sendBytes([]byte(s))
+}
+
+func (c *Ctx) canBypassHeaderWrite(includeSecurityHeaders bool) bool {
+	if c.cacheControl != "" || c.location != "" || len(c.respHeaders) != 0 || len(c.cookies) != 0 {
+		return false
+	}
+	return !includeSecurityHeaders || c.app == nil || len(c.app.secHeaders) == 0
 }
 
 // HTML sends an HTML response (raw string, no template).

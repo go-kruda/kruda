@@ -4,12 +4,12 @@ package kruda
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
@@ -39,7 +39,7 @@ func TestTransportSmoke_NetHTTP(t *testing.T) {
 		app := New(NetHTTP())
 		app.Get("/ping", func(c *Ctx) error { return c.Text("pong") })
 		app.Compile()
-		addr, shutdown := startSmokeApp(t, app)
+		addr, shutdown := startSmokeApp(t, app, "/ping")
 		defer shutdown()
 		requireSmokeGet(t, "http://"+addr+"/ping", "pong")
 	})
@@ -69,7 +69,7 @@ func TestTransportSecurityHeadersAndCookies_NetHTTP(t *testing.T) {
 
 	t.Run("Transport.Serve on TCP listener", func(t *testing.T) {
 		app := newApp()
-		addr, shutdown := startSmokeApp(t, app)
+		addr, shutdown := startSmokeApp(t, app, "/headers/json")
 		defer shutdown()
 		requireSecurityCookieGet(t, "http://"+addr+"/headers/json")
 		requireSecurityCookieGet(t, "http://"+addr+"/headers/text")
@@ -89,7 +89,7 @@ func TestTransportSmoke_FastHTTP(t *testing.T) {
 		t.Skipf("fasthttp transport not selected on this platform (got %q)", app.transportType)
 	}
 
-	addr, shutdown := startSmokeApp(t, app)
+	addr, shutdown := startSmokeApp(t, app, "/ping")
 	defer shutdown()
 	requireSmokeGet(t, "http://"+addr+"/ping", "pong")
 }
@@ -115,15 +115,15 @@ func TestTransportSmoke_Wing(t *testing.T) {
 		t.Skipf("wing transport not selected on this platform (got %q)", app.transportType)
 	}
 
-	addr, shutdown := startSmokeApp(t, app)
+	addr, shutdown := startSmokeApp(t, app, "/ping")
 	defer shutdown()
 	requireSmokeGet(t, "http://"+addr+"/ping", `"msg":"pong"`)
 }
 
 // startSmokeApp binds the App's transport to a random TCP port, starts
-// Serve in a goroutine, and waits until the port accepts connections.
+// Serve in a goroutine, and waits until the app serves an HTTP request.
 // Returns the bound addr and a shutdown closure that the caller must defer.
-func startSmokeApp(t *testing.T, app *App) (string, func()) {
+func startSmokeApp(t *testing.T, app *App, readyPath string) (string, func()) {
 	t.Helper()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -132,31 +132,47 @@ func startSmokeApp(t *testing.T, app *App) (string, func()) {
 	}
 	addr := ln.Addr().String()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	done := make(chan struct{})
 	go func() {
-		defer wg.Done()
+		defer close(done)
 		_ = app.transport.Serve(ln, app) // returns ErrServerClosed on Shutdown
 	}()
-
-	// Wait for the server to accept.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		conn, dErr := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-		if dErr == nil {
-			conn.Close()
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 
 	shutdown := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = app.transport.Shutdown(ctx)
-		wg.Wait()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Errorf("transport shutdown timed out: %v", ctx.Err())
+		}
 	}
-	return addr, shutdown
+
+	// Wait until the app can serve an actual HTTP request. A bare TCP dial can
+	// succeed before an async transport has registered its read loop.
+	client := &http.Client{Timeout: 250 * time.Millisecond}
+	readyURL := "http://" + addr + readyPath
+	var lastErr error
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, getErr := client.Get(readyURL)
+		if getErr == nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return addr, shutdown
+			}
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		} else {
+			lastErr = getErr
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	shutdown()
+	t.Fatalf("server did not become ready at %s: %v", readyURL, lastErr)
+	return "", func() {}
 }
 
 // requireSmokeGet performs a GET against url and fails the test unless the

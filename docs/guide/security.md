@@ -1,6 +1,6 @@
 # Security
 
-Kruda provides security hardening features that can be enabled with a single option. Use `WithSecureHeaders()` to enable all default security headers.
+Kruda keeps behavior-affecting hardening explicit so applications can choose the security/performance tradeoff they need. Use `WithSecureHeaders()` to enable default security response headers, or `WithSecurity()` to enable both security headers and app-level path traversal prevention.
 
 For vulnerability reporting, see [SECURITY.md](https://github.com/go-kruda/kruda/blob/main/SECURITY.md).
 
@@ -34,7 +34,7 @@ Kruda assumes:
 
 - The application is exposed to untrusted network traffic (the internet).
 - Request paths, headers, query parameters, and body content are attacker-controlled.
-- The framework provides layered protections. Core protections (path normalization, header injection prevention, body size limits) are always active. Security response headers are opt-in via `WithSecureHeaders()`.
+- The framework provides layered protections. Header injection prevention, body size limits, and timeouts are active by default. Security response headers are opt-in via `WithSecureHeaders()`, and app-level path traversal prevention is opt-in via `WithPathTraversal()` or `WithSecurity()`.
 
 | Threat | Severity | Status |
 |--------|----------|--------|
@@ -49,7 +49,7 @@ Kruda assumes:
 
 **Source:** `router.go` -- `cleanPath()`
 
-All request paths are normalized before route matching:
+When enabled, request paths containing `.` or percent-encoded segments are normalized before route matching:
 
 1. Decodes percent-encoded sequences (`%2e%2e%2f` -> `../`)
 2. Normalizes via `path.Clean()` to resolve `.` and `..` segments

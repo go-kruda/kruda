@@ -336,6 +336,51 @@ func TestCORS_PreflightRequest(t *testing.T) {
 	}
 }
 
+func TestCORS_PreflightWithSecureHeadersPreservesBothHeaderSets(t *testing.T) {
+	app := kruda.New(kruda.WithSecureHeaders())
+	app.Use(CORS(CORSConfig{
+		AllowOrigins:     []string{"https://app.example.com"},
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           3600,
+	}))
+	app.Options("/test", func(c *kruda.Ctx) error { return c.NoContent() })
+	app.Compile()
+
+	req := optionsReq(map[string]string{
+		"Origin":                        "https://app.example.com",
+		"Access-Control-Request-Method": "POST",
+	})
+	resp := newMockResponse()
+	app.ServeKruda(resp, req)
+
+	if resp.statusCode != 204 {
+		t.Fatalf("expected 204, got %d", resp.statusCode)
+	}
+	if got := resp.headers.Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Fatalf("Allow-Origin = %q", got)
+	}
+	if got := resp.headers.Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("Allow-Credentials = %q", got)
+	}
+	if got := resp.headers.Get("Vary"); got != "Origin" {
+		t.Fatalf("Vary = %q", got)
+	}
+	if got := resp.headers.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q", got)
+	}
+	if got := resp.headers.Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("X-Frame-Options = %q", got)
+	}
+	if got := resp.headers.Get("Referrer-Policy"); got != "strict-origin-when-cross-origin" {
+		t.Fatalf("Referrer-Policy = %q", got)
+	}
+	if got := resp.headers.Get("Server"); got != "" {
+		t.Fatalf("Server header should not be set, got %q", got)
+	}
+}
+
 func TestCORS_NonPreflightRequest(t *testing.T) {
 	called := false
 	handler := func(c *kruda.Ctx) error {

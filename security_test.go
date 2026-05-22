@@ -632,6 +632,40 @@ func TestDoSDefaultBodyLimit(t *testing.T) {
 	}
 }
 
+func TestSecurityOptionsDefaultToExplicitOptIn(t *testing.T) {
+	app := New()
+	if app.config.SecurityHeaders {
+		t.Fatal("SecurityHeaders should default to false")
+	}
+	if app.config.PathTraversal {
+		t.Fatal("PathTraversal should default to false")
+	}
+
+	headersOnly := New(WithSecureHeaders())
+	if !headersOnly.config.SecurityHeaders {
+		t.Fatal("WithSecureHeaders should enable SecurityHeaders")
+	}
+	if headersOnly.config.PathTraversal {
+		t.Fatal("WithSecureHeaders should not enable PathTraversal")
+	}
+
+	pathOnly := New(WithPathTraversal())
+	if pathOnly.config.SecurityHeaders {
+		t.Fatal("WithPathTraversal should not enable SecurityHeaders")
+	}
+	if !pathOnly.config.PathTraversal {
+		t.Fatal("WithPathTraversal should enable PathTraversal")
+	}
+
+	allSecurity := New(WithSecurity())
+	if !allSecurity.config.SecurityHeaders {
+		t.Fatal("WithSecurity should enable SecurityHeaders")
+	}
+	if !allSecurity.config.PathTraversal {
+		t.Fatal("WithSecurity should enable PathTraversal")
+	}
+}
+
 func TestDoSMaxBodySize(t *testing.T) {
 	app := New(WithMaxBodySize(1024)) // 1KB limit for fast test
 	app.Post("/upload", func(c *Ctx) error {
@@ -815,6 +849,45 @@ func TestSecureCookieFlags(t *testing.T) {
 	}
 	if !contains(setCookie, "SameSite=Strict") {
 		t.Errorf("Set-Cookie should contain SameSite=Strict, got: %q", setCookie)
+	}
+}
+
+func TestSecureHeadersPreserveCookiesOnNormalResponse(t *testing.T) {
+	app := New(WithSecureHeaders())
+	app.Get("/setcookie", func(c *Ctx) error {
+		c.SetCookie(&Cookie{
+			Name:     "session",
+			Value:    "abc123",
+			Path:     "/",
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		return c.JSON(Map{"ok": true})
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, err := tc.Get("/setcookie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode())
+	}
+
+	setCookie := resp.Header("Set-Cookie")
+	if !contains(setCookie, "session=abc123") {
+		t.Fatalf("Set-Cookie missing session value: %q", setCookie)
+	}
+	if got := resp.Header("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q", got)
+	}
+	if got := resp.Header("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("X-Frame-Options = %q", got)
+	}
+	if got := resp.Header("Server"); got != "" {
+		t.Fatalf("Server header should not be set, got %q", got)
 	}
 }
 

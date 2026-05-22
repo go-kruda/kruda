@@ -31,6 +31,28 @@ app.Get("/profile", func(c *kruda.Ctx) error {
 })
 ```
 
+## Production Cookie Settings
+
+For HTTPS deployments, enable the `Secure` flag and choose a `SameSite` mode
+that matches your app's cross-site flow. Keep `CookieHTTPOnly` enabled unless
+JavaScript must read the session cookie.
+
+```go
+app.Use(session.New(session.Config{
+    CookieSecure:   true,
+    CookieHTTPOnly: true,
+    CookieSameSite: http.SameSiteLaxMode,
+}))
+```
+
+Use `http.SameSiteStrictMode` for same-site apps that do not need cross-site
+login or callback flows. If you set `http.SameSiteNoneMode`, browsers require
+`CookieSecure: true`.
+
+Call `sess.Destroy()` on logout. The delete cookie keeps the configured path,
+domain, `Secure`, `HttpOnly`, and `SameSite` attributes so browsers remove the
+same cookie that was issued.
+
 ## Config
 
 | Option | Type | Default | Description |

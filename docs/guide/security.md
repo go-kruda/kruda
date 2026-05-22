@@ -259,6 +259,18 @@ app.Use(session.New(session.Config{
 }))
 ```
 
+Production guidance:
+
+- Keep `CookieHTTPOnly` enabled so browser JavaScript cannot read session IDs.
+- Set `CookieSecure: true` on HTTPS deployments.
+- Use `http.SameSiteLaxMode` for most browser apps, or `http.SameSiteStrictMode`
+  when cross-site login and callback flows are not needed.
+- If `http.SameSiteNoneMode` is required, also set `CookieSecure: true`.
+- Use a shared persistent `Store` for multi-instance deployments; the default
+  memory store is single-process only.
+- Call `sess.Destroy()` on logout. Kruda expires the cookie using the configured
+  path, domain, `Secure`, `HttpOnly`, and `SameSite` attributes.
+
 **Custom store:** Implement the `Store` interface for Redis, database, or other backends:
 
 ```go

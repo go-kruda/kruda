@@ -796,6 +796,20 @@ func TestTryFastHTTPText_NoCtx(t *testing.T) {
 	}
 }
 
+func TestTryFastHTTPText_PendingHeadersFallback(t *testing.T) {
+	app := New()
+	c, _ := newFastHTTPCtx(app)
+	c.AddHeader("Vary", "Origin")
+
+	ok := c.tryFastHTTPText("hello")
+	if ok {
+		t.Fatal("expected false when headers still need generic flush")
+	}
+	if c.responded {
+		t.Fatal("responded should remain false")
+	}
+}
+
 // --- tryFastHTTPJSON ---
 
 func TestTryFastHTTPJSON(t *testing.T) {
@@ -822,6 +836,20 @@ func TestTryFastHTTPJSON_NoCtx(t *testing.T) {
 	ok := c.tryFastHTTPJSON([]byte("{}"))
 	if ok {
 		t.Fatal("expected false")
+	}
+}
+
+func TestTryFastHTTPJSON_PendingCookieFallback(t *testing.T) {
+	app := New()
+	c, _ := newFastHTTPCtx(app)
+	c.SetCookie(&Cookie{Name: "sid", Value: "abc"})
+
+	ok := c.tryFastHTTPJSON([]byte("{}"))
+	if ok {
+		t.Fatal("expected false when cookies still need generic flush")
+	}
+	if c.responded {
+		t.Fatal("responded should remain false")
 	}
 }
 

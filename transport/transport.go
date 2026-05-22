@@ -181,7 +181,7 @@ func getStaticByKey(status int, contentType, key string, body []byte) []byte {
 	b = append(b, "Date: "...)
 	dateOffset := len(b)
 	b = append(b, time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")...)
-	b = append(b, "\r\nServer: Kruda\r\n"...)
+	b = append(b, "\r\n"...)
 	if contentType != "" {
 		b = append(b, "Content-Type: "...)
 		b = append(b, contentType...)

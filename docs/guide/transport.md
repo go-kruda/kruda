@@ -8,7 +8,7 @@ Kruda ships with three transports. The default is **Wing** on Linux, **fasthttp*
 |---------------|-----------|-----|
 | Maximum throughput (plaintext, JSON, DB) | **Wing** (default on Linux) | epoll+eventfd, zero-copy, no goroutine-per-conn |
 | SSE (Server-Sent Events) | **net/http** | SSE requires `http.Flusher` streaming |
-| Session cookies / Set-Cookie headers | **net/http** | Wing's fast path skips custom headers |
+| Session cookies / Set-Cookie headers | **Wing** or **net/http** | Wing keeps headers by falling back from its zero-copy fast path when needed |
 | HTTP/2, TLS termination | **net/http** | Wing is HTTP/1.1 only |
 | WebSocket | **net/http** | WebSocket upgrade needs full HTTP semantics |
 | Battle-tested HTTP/1.1 (chunked, expect-100) | **fasthttp** | Mature, widely deployed |
@@ -47,7 +47,7 @@ KRUDA_TRANSPORT=fasthttp ./myapp   # force fasthttp
 
 Wing is optimized for raw throughput. It intentionally skips some HTTP features:
 
-- **No `Set-Cookie` in JSON fast path** — Wing's JSON response builder bypasses custom headers for speed. Use `kruda.NetHTTP()` if your routes need cookies.
+- **Prebuilt static responses bypass middleware** — route-level prebuilt responses are written directly. Use normal handlers when a response needs CORS, cookies, or `WithSecureHeaders()`.
 - **No `http.Flusher`** — SSE streaming requires flushing, which Wing doesn't support.
 - **No HTTP/2** — Wing speaks HTTP/1.1 only. Use `kruda.NetHTTP()` with TLS for HTTP/2.
 - **No chunked transfer encoding** — Wing pre-computes Content-Length.

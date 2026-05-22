@@ -6,7 +6,7 @@ For vulnerability reporting, see [SECURITY.md](https://github.com/go-kruda/kruda
 
 ## Security Headers
 
-When enabled via `WithSecureHeaders()`, every response includes these headers:
+When enabled via `WithSecureHeaders()`, normal handler responses include these headers:
 
 | Header | Default Value | Purpose |
 |--------|--------------|---------|
@@ -15,7 +15,9 @@ When enabled via `WithSecureHeaders()`, every response includes these headers:
 | `X-XSS-Protection` | `0` | Disabled per modern best practice (CSP preferred) |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Controls referrer information |
 
-The `Server: Kruda` header is sent by default (no version number is leaked).
+Kruda does not emit a `Server` header by default, so framework identity and version details are not exposed by normal responses.
+
+Prebuilt Wing static responses are written directly for maximum throughput and bypass middleware/header injection. Prefer normal handlers when a response needs CORS, cookies, or `WithSecureHeaders()`.
 
 ```go
 // Explicitly enable security headers

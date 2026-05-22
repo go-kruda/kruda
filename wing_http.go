@@ -619,11 +619,11 @@ func wingInternMethod(b []byte) string {
 }
 
 func updateDateHdr() {
-	b := []byte("Date: " + time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT") + "\r\nServer: Kruda\r\n")
+	b := []byte("Date: " + time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT") + "\r\n")
 	cachedDateHdr.Store(&b)
 }
 
-// dateHdr returns the cached Date+Server header chunk.
+// dateHdr returns the cached Date header chunk.
 func dateHdr() []byte {
 	return *cachedDateHdr.Load()
 }
@@ -639,7 +639,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 	b := r.buf[:0]
 
-	// JSON fast path — status + Date+Server + Content-Type:json + Content-Length + body
+	// JSON fast path — status + Date + Content-Type:json + Content-Length + body
 	if r.jsonFast {
 		if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
 			b = append(b, statusLines[r.status]...)
@@ -664,7 +664,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		b = append(b, " Unknown\r\n"...)
 	}
 
-	// Fixed headers: Date + Server (combined in dateHdr)
+	// Fixed headers: Date.
 	b = append(b, dateHdr()...)
 
 	// Headers — check for Content-Length in the same loop.

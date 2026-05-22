@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -233,6 +234,26 @@ func TestResponseBuild(t *testing.T) {
 	}
 	if !strings.HasSuffix(s, "\r\n\r\nhello") {
 		t.Errorf("response doesn't end with body: %q", s[len(s)-20:])
+	}
+}
+
+func TestResponseBuildIncludesHeadersBeyondInlineCapacity(t *testing.T) {
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	resp.WriteHeader(204)
+	for i := 0; i < 10; i++ {
+		resp.Header().Set(fmt.Sprintf("X-Test-%02d", i), fmt.Sprintf("value-%02d", i))
+	}
+
+	data := resp.build()
+	s := string(data)
+
+	for i := 0; i < 10; i++ {
+		want := fmt.Sprintf("X-Test-%02d: value-%02d\r\n", i, i)
+		if !strings.Contains(s, want) {
+			t.Fatalf("response is missing header %q\nresponse:\n%s", want, s)
+		}
 	}
 }
 

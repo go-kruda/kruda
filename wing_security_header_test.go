@@ -49,6 +49,45 @@ func TestWingAppJSONWithSecureHeadersDoesNotEmitServerAndKeepsSecurityHeaders(t 
 	}
 }
 
+func TestWingPreflightWithSecureHeadersKeepsAllHeaders(t *testing.T) {
+	app := New(Wing(), WithSecureHeaders())
+	app.Use(func(c *Ctx) error {
+		if c.Method() == "OPTIONS" {
+			c.AddHeader("Vary", "Origin")
+			c.SetHeader("Access-Control-Allow-Origin", "https://example.com")
+			c.SetHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			c.SetHeader("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+			c.SetHeader("Access-Control-Max-Age", "86400")
+			c.SetHeader("Access-Control-Allow-Credentials", "true")
+			return c.NoContent()
+		}
+		return c.Next()
+	})
+	app.Options("/resource", func(c *Ctx) error { return c.NoContent() })
+	app.Get("/resource", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+
+	resp := serveWingResponse(t, app, "OPTIONS", "/resource")
+
+	expected := map[string]string{
+		"Vary":                             "Origin",
+		"Access-Control-Allow-Origin":      "https://example.com",
+		"Access-Control-Allow-Methods":     "GET, POST, OPTIONS",
+		"Access-Control-Allow-Headers":     "Origin, Content-Type, Authorization",
+		"Access-Control-Max-Age":           "86400",
+		"Access-Control-Allow-Credentials": "true",
+		"X-Content-Type-Options":           "nosniff",
+		"X-Frame-Options":                  "DENY",
+		"X-Xss-Protection":                 "0",
+		"Referrer-Policy":                  "strict-origin-when-cross-origin",
+	}
+	for key, want := range expected {
+		if got := resp.headers.Get(key); got != want {
+			t.Fatalf("%s = %q, want %q\nresponse:\n%s", key, got, want, string(resp.build()))
+		}
+	}
+}
+
 func serveWingResponse(t *testing.T, app *App, method, path string) *wingResponse {
 	t.Helper()
 

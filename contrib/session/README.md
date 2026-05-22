@@ -35,10 +35,10 @@ app.Get("/profile", func(c *kruda.Ctx) error {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| CookieName | string | "session_id" | Session cookie name |
-| MaxAge | time.Duration | 24*time.Hour | Session expiration |
+| CookieName | string | "_session" | Session cookie name |
+| MaxAge | int | 86400 | Session cookie max-age in seconds |
 | CookiePath | string | "/" | Cookie path |
 | CookieSecure | bool | false | HTTPS only cookie |
 | CookieHTTPOnly | bool | true | HTTP only cookie |
-| CookieSameSite | http.SameSite | SameSiteLax | SameSite policy |
+| CookieSameSite | http.SameSite | http.SameSiteLaxMode | SameSite policy |
 | Store | Store | MemoryStore | Session storage backend |

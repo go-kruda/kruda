@@ -227,11 +227,14 @@ func New(config ...Config) kruda.HandlerFunc {
 
 		if sess.destroy {
 			c.SetCookie(&kruda.Cookie{
-				Name:   cfg.CookieName,
-				Value:  "",
-				Path:   cfg.CookiePath,
-				Domain: cfg.CookieDomain,
-				MaxAge: -1,
+				Name:     cfg.CookieName,
+				Value:    "",
+				Path:     cfg.CookiePath,
+				Domain:   cfg.CookieDomain,
+				MaxAge:   -1,
+				Secure:   cfg.CookieSecure,
+				HTTPOnly: httpOnly,
+				SameSite: cfg.CookieSameSite,
 			})
 		}
 

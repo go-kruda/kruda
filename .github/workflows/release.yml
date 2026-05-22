@@ -16,6 +16,7 @@ jobs:
   release-preflight:
     name: Release Preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout tag
         uses: actions/checkout@v6
@@ -67,6 +68,7 @@ jobs:
     needs: release-preflight
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -86,6 +88,7 @@ jobs:
     name: Create Release
     needs: [release-preflight, test, security]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

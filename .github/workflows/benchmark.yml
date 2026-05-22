@@ -29,21 +29,18 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.25.10'
 
@@ -129,7 +126,7 @@ jobs:
       - name: Restore benchmark cache from main
         id: cache
         if: steps.get-main-sha.outputs.sha != 'none'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ./cache
           key: ${{ steps.get-main-sha.outputs.sha }}-${{ runner.os }}-${{ steps.system-info.outputs.cpu-model }}-benchmark
@@ -216,7 +213,7 @@ jobs:
           auto-push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
       - name: Save benchmark cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: github.ref_name == 'main'
         with:
           path: ./cache

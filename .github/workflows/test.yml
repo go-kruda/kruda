@@ -18,6 +18,7 @@ jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

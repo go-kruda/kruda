@@ -852,6 +852,20 @@ func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
 	return b
 }
 
+func (r *wingResponse) appendJSONTo(b []byte) []byte {
+	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
+		b = append(b, statusLines[r.status]...)
+	} else {
+		b = append(b, "HTTP/1.1 200 OK\r\n"...)
+	}
+	b = append(b, dateHdr()...)
+	b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
+	b = appendContentLengthValue(b, len(r.body))
+	b = append(b, "\r\n\r\n"...)
+	b = append(b, r.body...)
+	return b
+}
+
 func appendContentLengthValue(b []byte, n int) []byte {
 	if n >= 0 && n < len(contentLengthStrings) {
 		return append(b, contentLengthStrings[n]...)

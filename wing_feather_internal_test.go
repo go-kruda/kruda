@@ -198,6 +198,24 @@ func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
 	}
 }
 
+func TestWingResponseJSONAppendMatchesBuildZeroCopy(t *testing.T) {
+	body := []byte(`{"message":"ok"}`)
+
+	builtResp := acquireResponse()
+	builtResp.SetJSON(201, body)
+	built := append([]byte(nil), builtResp.buildZeroCopy()...)
+	releaseResponse(builtResp)
+
+	directResp := acquireResponse()
+	defer releaseResponse(directResp)
+	directResp.SetJSON(201, body)
+	direct := directResp.appendJSONTo(nil)
+
+	if !bytes.Equal(direct, built) {
+		t.Fatalf("direct JSON response differs from buildZeroCopy:\ndirect:\n%s\nbuilt:\n%s", direct, built)
+	}
+}
+
 func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool

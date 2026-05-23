@@ -27,6 +27,16 @@ var rawGET = []byte("GET /users/42?page=1 HTTP/1.1\r\nHost: localhost\r\nAccept:
 
 var rawPOST = []byte("POST /users HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 42\r\nConnection: keep-alive\r\n\r\n{\"name\":\"John\",\"email\":\"john@example.com\"}")
 
+var rawJSONStaticGET = []byte("GET /json-static HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\nConnection: keep-alive\r\n\r\n")
+
+var rawJSONSerializeGET = []byte("GET /json-serialize HTTP/1.1\r\nHost: localhost\r\nAccept: application/json\r\nConnection: keep-alive\r\n\r\n")
+
+var benchStaticJSONBody = []byte(`{"message":"Hello, World!"}`)
+
+type benchJSONMessage struct {
+	Message string `json:"message"`
+}
+
 func BenchmarkCPUParseGET(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
@@ -136,6 +146,54 @@ func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
 		resp.responseMode = responsePlaintext
 		app.serveKrudaRoute(resp, req, f.handlers)
 		out = resp.appendPlaintextTo(out[:0])
+		releaseResponse(resp)
+		releaseRequest(req)
+	}
+	runtime.KeepAlive(out)
+}
+
+func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
+	app := New(Wing())
+	app.Get("/json-static", func(c *Ctx) error {
+		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
+	}, WingJSON())
+	app.Compile()
+	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	w := &worker{handler: app}
+
+	b.ReportAllocs()
+	out := make([]byte, 0, 256)
+	for b.Loop() {
+		req, _, _ := parseHTTPRequestFast(rawJSONStaticGET, noLimits)
+		finalizeRequestPath(req, f)
+		resp := acquireResponse()
+		resp.responseMode = f.ResponseMode
+		w.serveRoute(resp, req, f)
+		out = append(out[:0], resp.buildZeroCopy()...)
+		releaseResponse(resp)
+		releaseRequest(req)
+	}
+	runtime.KeepAlive(out)
+}
+
+func BenchmarkCPUHandlerJSONSerializeFeather(b *testing.B) {
+	app := New(Wing())
+	app.Get("/json-serialize", func(c *Ctx) error {
+		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
+	}, WingJSON())
+	app.Compile()
+	f := app.transport.(*Transport).config.Feathers["GET /json-serialize"]
+	w := &worker{handler: app}
+
+	b.ReportAllocs()
+	out := make([]byte, 0, 256)
+	for b.Loop() {
+		req, _, _ := parseHTTPRequestFast(rawJSONSerializeGET, noLimits)
+		finalizeRequestPath(req, f)
+		resp := acquireResponse()
+		resp.responseMode = f.ResponseMode
+		w.serveRoute(resp, req, f)
+		out = append(out[:0], resp.buildZeroCopy()...)
 		releaseResponse(resp)
 		releaseRequest(req)
 	}

@@ -327,7 +327,7 @@ func (p *workerPool) loop(h transport.Handler) {
 }
 
 func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
-	if f.ResponseMode == responsePlaintext && len(f.handlers) > 0 && !containsDotPercent(req.path) {
+	if len(f.handlers) > 0 && !containsDotPercent(req.path) {
 		if h, ok := w.handler.(wingRouteHandler); ok {
 			h.serveKrudaRoute(resp, req, f.handlers)
 			return

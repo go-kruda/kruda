@@ -314,6 +314,9 @@ func (c *Ctx) SendBytesWithType(contentType string, data []byte) error {
 	if c.trySendBytesWithTypeFastHTTP(contentType, data) {
 		return nil
 	}
+	if contentType == "application/json; charset=utf-8" && c.tryJSONResponder(data) {
+		return nil
+	}
 
 	// net/http and generic transport paths
 	c.contentType = contentType
@@ -334,6 +337,9 @@ func (c *Ctx) SendBytesWithTypeBytes(contentType []byte, data []byte) error {
 
 	// Ultra-fast path: fasthttp — zero-alloc content-type write
 	if c.trySendBytesWithTypeBytesFastHTTP(contentType, data) {
+		return nil
+	}
+	if bytes.Equal(contentType, jsonContentType) && c.tryJSONResponder(data) {
 		return nil
 	}
 
@@ -361,6 +367,9 @@ func (c *Ctx) SendStaticWithTypeBytes(contentType []byte, data []byte) error {
 
 	// Ultra-fast path: fasthttp — zero-copy body (no memcopy)
 	if c.trySendStaticWithTypeBytesFastHTTP(contentType, data) {
+		return nil
+	}
+	if bytes.Equal(contentType, jsonContentType) && c.tryJSONResponder(data) {
 		return nil
 	}
 
@@ -600,6 +609,15 @@ func (c *Ctx) sendBytes(data []byte) error {
 	// internal buffer, so a pooled intermediate buffer would be a redundant copy.
 	_, err := c.writer.Write(data)
 	return err
+}
+
+func (c *Ctx) tryJSONResponder(data []byte) bool {
+	jr, ok := c.writer.(transport.JSONResponder)
+	if !ok || !c.canBypassHeaderWrite(true) {
+		return false
+	}
+	jr.SetJSON(c.status, data)
+	return true
 }
 
 // contentLengthStrings is a pre-computed lookup table for common Content-Length

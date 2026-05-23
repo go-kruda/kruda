@@ -159,3 +159,115 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 		t.Fatalf("generic fallback missing custom header:\n%s", data)
 	}
 }
+
+func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
+	app := New(Wing())
+	var handlerRan bool
+	app.Get("/json-static", func(c *Ctx) error {
+		handlerRan = true
+		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-static"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/json-static", keepAlive: true}, f.handlers)
+
+	if !handlerRan {
+		t.Fatal("handler did not run")
+	}
+	if !resp.jsonFast {
+		t.Fatal("static JSON bytes did not use Wing JSON responder")
+	}
+	data := resp.buildZeroCopy()
+	if !bytes.Contains(data, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
+		t.Fatalf("JSON fast response missing content type:\n%s", data)
+	}
+	if !bytes.Contains(data, []byte("\r\n\r\n{\"message\":\"ok\"}")) {
+		t.Fatalf("JSON fast response missing body:\n%s", data)
+	}
+}
+
+func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+	app := New(Wing())
+	var middlewareRan, beforeRan, handlerRan, afterRan bool
+	app.Use(func(c *Ctx) error {
+		middlewareRan = true
+		return c.Next()
+	})
+	app.BeforeHandle(func(c *Ctx) error {
+		beforeRan = true
+		return nil
+	})
+	app.AfterHandle(func(c *Ctx) error {
+		afterRan = true
+		return nil
+	})
+	app.Get("/json-static", func(c *Ctx) error {
+		handlerRan = true
+		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-static"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	w := &worker{handler: app}
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/json-static", keepAlive: true}, f)
+
+	if !middlewareRan || !beforeRan || !handlerRan || !afterRan {
+		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
+	}
+	if !resp.jsonFast {
+		t.Fatal("WingJSON static bytes did not use JSON responder")
+	}
+}
+
+func TestWingJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+	app := New(Wing())
+	app.Get("/json-static", func(c *Ctx) error {
+		c.SetHeader("X-Test", "yes")
+		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-static"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	w := &worker{handler: app}
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/json-static", keepAlive: true}, f)
+
+	if resp.jsonFast {
+		t.Fatal("custom response headers must fall back to generic JSON serialization")
+	}
+	data := resp.buildZeroCopy()
+	if !bytes.Contains(data, []byte("X-Test: yes\r\n")) {
+		t.Fatalf("generic fallback missing custom header:\n%s", data)
+	}
+}

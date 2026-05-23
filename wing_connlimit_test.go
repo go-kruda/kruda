@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -52,6 +53,13 @@ func newTestConn(fd int32) *conn {
 	return &conn{fd: fd, readBuf: make([]byte, 4096)}
 }
 
+func expectedIdleRecvArms() int {
+	if runtime.GOOS == "darwin" {
+		return 1
+	}
+	return 0
+}
+
 func TestHandleAccept_ConnectionLimitReached(t *testing.T) {
 	w, eng := newTestWorker(2)
 	w.conns[10] = newTestConn(10)
@@ -86,8 +94,9 @@ func TestHandleAccept_ConnectionLimitNotReached(t *testing.T) {
 	if len(w.conns) != 2 {
 		t.Errorf("conns count = %d, want 2", len(w.conns))
 	}
-	if eng.recvArmed != 1 {
-		t.Errorf("recvArmed = %d, want 1", eng.recvArmed)
+	wantRecvArmed := expectedIdleRecvArms()
+	if eng.recvArmed != wantRecvArmed {
+		t.Errorf("recvArmed = %d, want %d", eng.recvArmed, wantRecvArmed)
 	}
 }
 
@@ -102,8 +111,9 @@ func TestHandleAccept_UnlimitedConnections(t *testing.T) {
 	if _, has := w.conns[200]; !has {
 		t.Error("fd 200 should be in conns map (unlimited mode)")
 	}
-	if eng.recvArmed != 1 {
-		t.Errorf("recvArmed = %d, want 1", eng.recvArmed)
+	wantRecvArmed := expectedIdleRecvArms()
+	if eng.recvArmed != wantRecvArmed {
+		t.Errorf("recvArmed = %d, want %d", eng.recvArmed, wantRecvArmed)
 	}
 }
 

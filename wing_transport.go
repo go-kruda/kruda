@@ -238,6 +238,7 @@ type worker struct {
 	writeTimeout int64
 	idleTimeout  int64
 	sweepAt      int64 // next sweep unix nano
+	now          int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
 	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
 	// finish before closing fds. Pool goroutines are tracked separately by
@@ -417,13 +418,16 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 			}
 			continue
 		}
+		if hasTimeout {
+			w.now = time.Now().UnixNano()
+		}
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
 		if hasTimeout {
-			if now := time.Now().UnixNano(); now >= w.sweepAt {
-				w.sweepTimeouts(now)
-				w.sweepAt = now + int64(time.Second)
+			if w.now >= w.sweepAt {
+				w.sweepTimeouts(w.now)
+				w.sweepAt = w.now + int64(time.Second)
 			}
 		}
 	}
@@ -493,7 +497,10 @@ func (w *worker) handleAccept(ev event) {
 		cancel:     cancel,
 	}
 	if w.hasTimeout {
-		now := time.Now().UnixNano()
+		now := w.now
+		if now == 0 {
+			now = time.Now().UnixNano()
+		}
 		c.lastActive = now
 		if w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
@@ -531,7 +538,10 @@ func (w *worker) handleRecv(ev event) {
 	}
 	c.readN += int(nr)
 	if w.hasTimeout {
-		now := time.Now().UnixNano()
+		now := w.now
+		if now == 0 {
+			now = time.Now().UnixNano()
+		}
 		c.lastActive = now
 		if c.readN == int(nr) && w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout

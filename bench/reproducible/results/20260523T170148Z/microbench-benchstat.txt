@@ -1,0 +1,37 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+                                 │ /private/tmp/kruda-phase2-main-json-bench.txt │ /private/tmp/kruda-phase2-perf-json-bench.txt │
+                                 │                    sec/op                     │         sec/op          vs base               │
+CPUResponseJSON-8                                                   102.55n ± 3%              94.20n ± 1%   -8.14% (p=0.000 n=8)
+CPUFullCycle-8                                                       265.9n ± 1%              257.7n ± 1%   -3.10% (p=0.000 n=8)
+CPUHandlerPlaintextFeather-8                                         212.4n ± 4%              205.9n ± 3%   -3.06% (p=0.022 n=8)
+CPUHandlerJSONStaticFeather-8                                        342.7n ± 2%              296.4n ± 2%  -13.51% (p=0.000 n=8)
+CPUHandlerJSONSerializeFeather-8                                     380.9n ± 2%              363.4n ± 0%   -4.58% (p=0.000 n=8)
+FeatherTableLookup-8                                                 44.28n ± 7%              42.41n ± 3%        ~ (p=0.099 n=8)
+geomean                                                              179.5n                   168.4n        -6.18%
+
+                                 │ /private/tmp/kruda-phase2-main-json-bench.txt │ /private/tmp/kruda-phase2-perf-json-bench.txt │
+                                 │                     B/op                      │         B/op           vs base                │
+CPUResponseJSON-8                                                   472.0 ± 0%                472.0 ± 0%       ~ (p=1.000 n=8) ¹
+CPUFullCycle-8                                                      264.0 ± 0%                264.0 ± 0%       ~ (p=1.000 n=8) ¹
+CPUHandlerPlaintextFeather-8                                        16.00 ± 0%                16.00 ± 0%       ~ (p=1.000 n=8) ¹
+CPUHandlerJSONStaticFeather-8                                       520.0 ± 0%                488.0 ± 0%  -6.15% (p=0.000 n=8)
+CPUHandlerJSONSerializeFeather-8                                    521.0 ± 0%                521.0 ± 0%       ~ (p=1.000 n=8) ¹
+FeatherTableLookup-8                                                0.000 ± 0%                0.000 ± 0%       ~ (p=1.000 n=8) ¹
+geomean                                                                        ²                          -1.05%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                                 │ /private/tmp/kruda-phase2-main-json-bench.txt │ /private/tmp/kruda-phase2-perf-json-bench.txt │
+                                 │                   allocs/op                   │      allocs/op        vs base                 │
+CPUResponseJSON-8                                                   4.000 ± 0%               4.000 ± 0%        ~ (p=1.000 n=8) ¹
+CPUFullCycle-8                                                      7.000 ± 0%               7.000 ± 0%        ~ (p=1.000 n=8) ¹
+CPUHandlerPlaintextFeather-8                                        2.000 ± 0%               2.000 ± 0%        ~ (p=1.000 n=8) ¹
+CPUHandlerJSONStaticFeather-8                                       6.000 ± 0%               5.000 ± 0%  -16.67% (p=0.000 n=8)
+CPUHandlerJSONSerializeFeather-8                                    6.000 ± 0%               6.000 ± 0%        ~ (p=1.000 n=8) ¹
+FeatherTableLookup-8                                                0.000 ± 0%               0.000 ± 0%        ~ (p=1.000 n=8) ¹
+geomean                                                                        ²                          -2.99%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean

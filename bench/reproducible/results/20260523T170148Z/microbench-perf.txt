@@ -1,0 +1,54 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8                  	11005732	        99.83 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12846537	        93.79 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12871128	        93.99 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12810402	        93.63 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12872019	        95.05 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12788648	        93.80 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12562572	        94.76 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8                  	12722122	        94.42 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUFullCycle-8                     	 4675773	       256.5 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4601140	       258.6 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4673280	       258.7 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4638796	       259.6 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4676437	       257.1 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4683034	       257.5 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4610499	       257.8 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUFullCycle-8                     	 4709307	       255.9 ns/op	     264 B/op	       7 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5952906	       199.7 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5886205	       203.0 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5955752	       209.0 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5762004	       206.8 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5769800	       205.0 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5887696	       203.1 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5864143	       213.5 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerPlaintextFeather-8       	 5894448	       209.6 ns/op	      16 B/op	       2 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 3777782	       297.0 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 4163211	       309.5 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 3962422	       295.8 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 4157796	       292.4 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 4103784	       291.2 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 4073203	       300.7 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 4142864	       293.5 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONStaticFeather-8      	 3862590	       302.6 ns/op	     488 B/op	       5 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3326556	       362.9 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3301669	       371.0 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3332187	       362.7 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3311320	       362.5 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3300198	       364.2 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3303190	       364.0 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3283494	       364.3 ns/op	     521 B/op	       6 allocs/op
+BenchmarkCPUHandlerJSONSerializeFeather-8   	 3273787	       362.6 ns/op	     521 B/op	       6 allocs/op
+BenchmarkFeatherTableLookup-8               	28065744	        42.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	28252273	        42.05 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	28692974	        42.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	27635071	        41.79 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	28317553	        45.25 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	27467942	        42.05 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	27152289	        42.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8               	28846413	        43.59 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	58.373s

@@ -120,19 +120,21 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 }
 
 func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
-	app := New()
+	app := New(Wing())
 	app.Get("/users/42", func(c *Ctx) error {
 		return c.Text("Hello, World!")
 	}, WingPlaintext())
 	app.Compile()
+	f := app.transport.(*Transport).config.Feathers["GET /users/42"]
 
 	b.ReportAllocs()
 	out := make([]byte, 0, 256)
 	for b.Loop() {
-		req, _, _ := parseHTTPRequest(rawGET, noLimits)
+		req, _, _ := parseHTTPRequestFast(rawGET, noLimits)
+		finalizeRequestPath(req, f)
 		resp := acquireResponse()
 		resp.responseMode = responsePlaintext
-		app.ServeKruda(resp, req)
+		app.serveKrudaRoute(resp, req, f.handlers)
 		out = resp.appendPlaintextTo(out[:0])
 		releaseResponse(resp)
 		releaseRequest(req)

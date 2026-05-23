@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/go-kruda/kruda/transport"
 )
@@ -33,6 +34,14 @@ var (
 // On success, consumed is the number of bytes used by the parsed request,
 // allowing callers to preserve any pipelined data that follows.
 func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
+	return parseHTTPRequestInternal(data, limits, false)
+}
+
+func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, bool) {
+	return parseHTTPRequestInternal(data, limits, true)
+}
+
+func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
 	for skip+1 < len(data) && data[skip] == '\r' && data[skip+1] == '\n' {
@@ -89,12 +98,12 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 
 	var path, query string
 	if qi := bytes.IndexByte(rawPath, '?'); qi >= 0 {
-		path = string(rawPath[:qi])
+		path = copyOrUnsafeString(rawPath[:qi], unsafePath)
 		query = string(rawPath[qi+1:])
 	} else if len(rawPath) == 1 && rawPath[0] == '/' {
 		path = "/"
 	} else {
-		path = string(rawPath)
+		path = copyOrUnsafeString(rawPath, unsafePath)
 	}
 
 	// Parse headers (only fields we need).
@@ -232,6 +241,7 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 		r.extraHdrs = extraHdrs
 		r.extraN = extraN
 		r.keepAlive = keepAlive
+		r.pathUnsafe = unsafePath && path != "/"
 		return r, skip + consumed, true
 	}
 
@@ -246,7 +256,30 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	r.extraHdrs = extraHdrs
 	r.extraN = extraN
 	r.keepAlive = keepAlive
+	r.pathUnsafe = unsafePath && path != "/"
 	return r, skip + bodyStart, true
+}
+
+func copyOrUnsafeString(b []byte, unsafeOK bool) string {
+	if !unsafeOK {
+		return string(b)
+	}
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(&b[0], len(b))
+}
+
+func finalizeRequestPath(r *wingRequest, f Feather) {
+	if !r.pathUnsafe {
+		return
+	}
+	if f.path != "" && r.path == f.path {
+		r.path = f.path
+	} else {
+		r.path = strings.Clone(r.path)
+	}
+	r.pathUnsafe = false
 }
 
 var (
@@ -402,6 +435,7 @@ func releaseRequest(r *wingRequest) {
 	r.accept = ""
 	r.remoteAddr = ""
 	r.keepAlive = false
+	r.pathUnsafe = false
 	r.fd = 0
 	r.extraN = 0
 	r.ctx = nil
@@ -439,6 +473,7 @@ type wingRequest struct {
 	accept      string
 	remoteAddr  string
 	keepAlive   bool
+	pathUnsafe  bool
 	fd          int32 // connection fd — for RawRequest().Fd()
 	extraHdrs   [8]struct{ k, v string }
 	extraN      int

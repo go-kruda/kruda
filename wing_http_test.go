@@ -180,6 +180,34 @@ func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
 	}
 }
 
+func TestParseHTTPRequestFast_FinalizedStaticPathIsSafe(t *testing.T) {
+	raw := []byte("GET /plaintext-handler HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestPath(req, Feather{path: "/plaintext-handler"})
+
+	copy(raw[4:22], "/mutated-handler!")
+	if got := req.Path(); got != "/plaintext-handler" {
+		t.Fatalf("Path() = %q, want /plaintext-handler", got)
+	}
+}
+
+func TestParseHTTPRequestFast_FinalizedFallbackPathIsSafe(t *testing.T) {
+	raw := []byte("GET /dynamic HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestPath(req, Feather{})
+
+	copy(raw[4:12], "/mutated")
+	if got := req.Path(); got != "/dynamic" {
+		t.Fatalf("Path() = %q, want /dynamic", got)
+	}
+}
+
 // TestBtoi verifies integer parsing including overflow protection.
 func TestBtoi(t *testing.T) {
 	tests := []struct {

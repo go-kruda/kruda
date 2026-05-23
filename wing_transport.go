@@ -542,7 +542,7 @@ func (w *worker) handleRecv(ev event) {
 
 func (w *worker) tryParse(c *conn) {
 	for c.readN > 0 {
-		req, consumed, ok := parseHTTPRequest(c.readBuf[:c.readN], w.limits)
+		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
 			if c.readN >= len(c.readBuf) {
 				w.closeConn(c.fd)
@@ -560,6 +560,7 @@ func (w *worker) tryParse(c *conn) {
 		}
 
 		f := w.feathers.Lookup(req.method, req.path)
+		finalizeRequestPath(req, f)
 
 		// For async dispatch modes, only one in-flight handler per conn.
 		if f.Dispatch != Inline && c.pending > 0 {

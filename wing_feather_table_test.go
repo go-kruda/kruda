@@ -1,9 +1,6 @@
 package kruda
 
-import (
-	"reflect"
-	"testing"
-)
+import "testing"
 
 func TestFeatherTableLookupExact(t *testing.T) {
 	ft := NewFeatherTable(map[string]Feather{
@@ -13,18 +10,18 @@ func TestFeatherTableLookupExact(t *testing.T) {
 	}, Arrow)
 
 	tests := []struct {
-		method, path string
-		want         Feather
+		method, path, wantPath string
+		want                   Feather
 	}{
-		{"GET", "/plaintext", Bolt},
-		{"GET", "/json", Bolt},
-		{"POST", "/db", Arrow},
-		{"GET", "/unknown", Arrow}, // default
-		{"DELETE", "/db", Arrow},   // wrong method → default
+		{"GET", "/plaintext", "/plaintext", Bolt},
+		{"GET", "/json", "/json", Bolt},
+		{"POST", "/db", "/db", Arrow},
+		{"GET", "/unknown", "", Arrow}, // default
+		{"DELETE", "/db", "", Arrow},   // wrong method -> default
 	}
 	for _, tt := range tests {
 		got := ft.Lookup(tt.method, tt.path)
-		if !reflect.DeepEqual(got, tt.want) {
+		if got.Dispatch != tt.want.Dispatch || got.ResponseMode != tt.want.ResponseMode || got.path != tt.wantPath {
 			t.Errorf("Lookup(%q, %q) = %+v, want %+v", tt.method, tt.path, got, tt.want)
 		}
 	}
@@ -33,7 +30,7 @@ func TestFeatherTableLookupExact(t *testing.T) {
 func TestFeatherTableDefault(t *testing.T) {
 	ft := NewFeatherTable(nil, Arrow)
 	got := ft.Lookup("GET", "/anything")
-	if !reflect.DeepEqual(got, Arrow) {
+	if got.Dispatch != Arrow.Dispatch || got.ResponseMode != Arrow.ResponseMode || got.path != "" {
 		t.Errorf("empty table Lookup = %+v, want Arrow", got)
 	}
 }

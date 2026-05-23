@@ -81,6 +81,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 				if ft.routes[idx] == nil {
 					ft.routes[idx] = make(map[string]Feather, 4)
 				}
+				f.path = path
 				ft.routes[idx][path] = f
 			}
 		} else {

@@ -3,6 +3,17 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.3] — 2026-05-23
+
+### Fixed
+- Preserved response headers on fast response paths, including secure-header middleware output and net/http responses.
+- Preserved overflow Wing headers so responses with more than the fixed inline header slots still serialize all configured headers.
+- Preserved session cookie attributes when destroying sessions so deletion cookies keep the configured security policy.
+
+### Changed
+- Updated the documented Go patch baseline for currently supported secure toolchains.
+- Tightened CI and benchmark reporting guardrails, including workflow timeouts, docs-only benchmark skips, standalone module coverage, and summarized benchmark output.
+
 ## [1.2.2] — 2026-05-20
 
 ### Fixed

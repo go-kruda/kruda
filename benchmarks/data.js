@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779511867039,
+  "lastUpdate": 1779531695399,
   "repoUrl": "https://github.com/go-kruda/kruda",
   "entries": {
     "Benchmark": [
@@ -63866,6 +63866,2622 @@ window.BENCHMARK_DATA = {
             "value": 0,
             "unit": "allocs/op",
             "extra": "1000000000 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "56679729+wtigero@users.noreply.github.com",
+            "name": "WhiteTiger",
+            "username": "wtigero"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dcde670cc37df2886660299d549f6ef0f2c37b05",
+          "message": "Improve balanced CPU-bound performance evidence (#46)\n\n* docs: add balanced CPU performance design\n\n* bench: harden reproducible CPU benchmark harness\n\n* perf: add opt-in Wing static route responses\n\n* perf: reduce Wing CPU parser overhead\n\n* docs: clarify CPU-bound benchmark claims\n\n* bench: add balanced CPU evidence",
+          "timestamp": "2026-05-23T17:18:44+07:00",
+          "tree_id": "eed5ffe2b0eb2402d90753a0aaa7c337b972dd92",
+          "url": "https://github.com/go-kruda/kruda/commit/dcde670cc37df2886660299d549f6ef0f2c37b05"
+        },
+        "date": 1779531695141,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda)",
+            "value": 103,
+            "unit": "ns/op\t      16 B/op\t       1 allocs/op",
+            "extra": "11632220 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 103,
+            "unit": "ns/op",
+            "extra": "11632220 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 16,
+            "unit": "B/op",
+            "extra": "11632220 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11632220 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda)",
+            "value": 103.5,
+            "unit": "ns/op\t      16 B/op\t       1 allocs/op",
+            "extra": "11513702 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 103.5,
+            "unit": "ns/op",
+            "extra": "11513702 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 16,
+            "unit": "B/op",
+            "extra": "11513702 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11513702 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda)",
+            "value": 103.3,
+            "unit": "ns/op\t      16 B/op\t       1 allocs/op",
+            "extra": "10999290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 103.3,
+            "unit": "ns/op",
+            "extra": "10999290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 16,
+            "unit": "B/op",
+            "extra": "10999290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10999290 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda)",
+            "value": 615.1,
+            "unit": "ns/op\t     416 B/op\t       5 allocs/op",
+            "extra": "1942658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 615.1,
+            "unit": "ns/op",
+            "extra": "1942658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 416,
+            "unit": "B/op",
+            "extra": "1942658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "1942658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda)",
+            "value": 616.4,
+            "unit": "ns/op\t     416 B/op\t       5 allocs/op",
+            "extra": "1940778 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 616.4,
+            "unit": "ns/op",
+            "extra": "1940778 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 416,
+            "unit": "B/op",
+            "extra": "1940778 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "1940778 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda)",
+            "value": 666.7,
+            "unit": "ns/op\t     416 B/op\t       5 allocs/op",
+            "extra": "1949228 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 666.7,
+            "unit": "ns/op",
+            "extra": "1949228 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 416,
+            "unit": "B/op",
+            "extra": "1949228 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "1949228 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda)",
+            "value": 102.3,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "10638445 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - ns/op",
+            "value": 102.3,
+            "unit": "ns/op",
+            "extra": "10638445 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "10638445 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10638445 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda)",
+            "value": 102.2,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "11651995 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - ns/op",
+            "value": 102.2,
+            "unit": "ns/op",
+            "extra": "11651995 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "11651995 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11651995 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda)",
+            "value": 102,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "11604214 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - ns/op",
+            "value": 102,
+            "unit": "ns/op",
+            "extra": "11604214 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "11604214 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterStatic (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11604214 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda)",
+            "value": 119.1,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "9921704 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - ns/op",
+            "value": 119.1,
+            "unit": "ns/op",
+            "extra": "9921704 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "9921704 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "9921704 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda)",
+            "value": 119.9,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "10041718 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - ns/op",
+            "value": 119.9,
+            "unit": "ns/op",
+            "extra": "10041718 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "10041718 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10041718 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda)",
+            "value": 118.1,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "9930157 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - ns/op",
+            "value": 118.1,
+            "unit": "ns/op",
+            "extra": "9930157 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "9930157 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkRouterParam (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "9930157 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda)",
+            "value": 98.45,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "11935657 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 98.45,
+            "unit": "ns/op",
+            "extra": "11935657 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "11935657 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11935657 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda)",
+            "value": 98.67,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "11938149 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 98.67,
+            "unit": "ns/op",
+            "extra": "11938149 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "11938149 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "11938149 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda)",
+            "value": 98.34,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "12012144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 98.34,
+            "unit": "ns/op",
+            "extra": "12012144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "12012144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "12012144 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda)",
+            "value": 109.9,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "10791974 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - ns/op",
+            "value": 109.9,
+            "unit": "ns/op",
+            "extra": "10791974 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "10791974 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10791974 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda)",
+            "value": 109.8,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "10851756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - ns/op",
+            "value": 109.8,
+            "unit": "ns/op",
+            "extra": "10851756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "10851756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10851756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda)",
+            "value": 110.5,
+            "unit": "ns/op\t       8 B/op\t       1 allocs/op",
+            "extra": "10841164 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - ns/op",
+            "value": 110.5,
+            "unit": "ns/op",
+            "extra": "10841164 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - B/op",
+            "value": 8,
+            "unit": "B/op",
+            "extra": "10841164 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkMiddleware5 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 1,
+            "unit": "allocs/op",
+            "extra": "10841164 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda)",
+            "value": 502.2,
+            "unit": "ns/op\t      48 B/op\t       5 allocs/op",
+            "extra": "2374807 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - ns/op",
+            "value": 502.2,
+            "unit": "ns/op",
+            "extra": "2374807 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "2374807 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2374807 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda)",
+            "value": 502.2,
+            "unit": "ns/op\t      48 B/op\t       5 allocs/op",
+            "extra": "2384346 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - ns/op",
+            "value": 502.2,
+            "unit": "ns/op",
+            "extra": "2384346 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "2384346 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2384346 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda)",
+            "value": 507.1,
+            "unit": "ns/op\t      48 B/op\t       5 allocs/op",
+            "extra": "2381629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - ns/op",
+            "value": 507.1,
+            "unit": "ns/op",
+            "extra": "2381629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "2381629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandler (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2381629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda)",
+            "value": 28.12,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "42697543 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - ns/op",
+            "value": 28.12,
+            "unit": "ns/op",
+            "extra": "42697543 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "42697543 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "42697543 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda)",
+            "value": 28.09,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "42362595 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - ns/op",
+            "value": 28.09,
+            "unit": "ns/op",
+            "extra": "42362595 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "42362595 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "42362595 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda)",
+            "value": 28.14,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "42716260 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - ns/op",
+            "value": 28.14,
+            "unit": "ns/op",
+            "extra": "42716260 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "42716260 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkContextPoolAcquireRelease (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "42716260 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda)",
+            "value": 623,
+            "unit": "ns/op\t      56 B/op\t       6 allocs/op",
+            "extra": "1921002 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - ns/op",
+            "value": 623,
+            "unit": "ns/op",
+            "extra": "1921002 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - B/op",
+            "value": 56,
+            "unit": "B/op",
+            "extra": "1921002 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "1921002 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda)",
+            "value": 621.5,
+            "unit": "ns/op\t      56 B/op\t       6 allocs/op",
+            "extra": "1925629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - ns/op",
+            "value": 621.5,
+            "unit": "ns/op",
+            "extra": "1925629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - B/op",
+            "value": 56,
+            "unit": "B/op",
+            "extra": "1925629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "1925629 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda)",
+            "value": 625.1,
+            "unit": "ns/op\t      56 B/op\t       6 allocs/op",
+            "extra": "1923723 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - ns/op",
+            "value": 625.1,
+            "unit": "ns/op",
+            "extra": "1923723 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - B/op",
+            "value": 56,
+            "unit": "B/op",
+            "extra": "1923723 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkTypedHandlerValidation (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "1923723 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda)",
+            "value": 33.29,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "36560756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 33.29,
+            "unit": "ns/op",
+            "extra": "36560756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "36560756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "36560756 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda)",
+            "value": 33.07,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "34646648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 33.07,
+            "unit": "ns/op",
+            "extra": "34646648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "34646648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "34646648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda)",
+            "value": 32.86,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "36492984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 32.86,
+            "unit": "ns/op",
+            "extra": "36492984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "36492984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "36492984 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda)",
+            "value": 48.42,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "24952372 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - ns/op",
+            "value": 48.42,
+            "unit": "ns/op",
+            "extra": "24952372 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "24952372 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "24952372 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda)",
+            "value": 48.42,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "24922482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - ns/op",
+            "value": 48.42,
+            "unit": "ns/op",
+            "extra": "24922482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "24922482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "24922482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda)",
+            "value": 48.53,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "24927694 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - ns/op",
+            "value": 48.53,
+            "unit": "ns/op",
+            "extra": "24927694 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "24927694 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseLazyResolved (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "24927694 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda)",
+            "value": 10609,
+            "unit": "ns/op\t     296 B/op\t       8 allocs/op",
+            "extra": "112606 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - ns/op",
+            "value": 10609,
+            "unit": "ns/op",
+            "extra": "112606 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - B/op",
+            "value": 296,
+            "unit": "B/op",
+            "extra": "112606 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "112606 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda)",
+            "value": 10623,
+            "unit": "ns/op\t     296 B/op\t       8 allocs/op",
+            "extra": "111429 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - ns/op",
+            "value": 10623,
+            "unit": "ns/op",
+            "extra": "111429 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - B/op",
+            "value": 296,
+            "unit": "B/op",
+            "extra": "111429 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "111429 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda)",
+            "value": 10707,
+            "unit": "ns/op\t     296 B/op\t       8 allocs/op",
+            "extra": "112675 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - ns/op",
+            "value": 10707,
+            "unit": "ns/op",
+            "extra": "112675 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - B/op",
+            "value": 296,
+            "unit": "B/op",
+            "extra": "112675 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseTransient (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "112675 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda)",
+            "value": 11.9,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - ns/op",
+            "value": 11.9,
+            "unit": "ns/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda)",
+            "value": 11.88,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - ns/op",
+            "value": 11.88,
+            "unit": "ns/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda)",
+            "value": 12.03,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - ns/op",
+            "value": 12.03,
+            "unit": "ns/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_UseNamed (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "100000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda)",
+            "value": 33.23,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "36303074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 33.23,
+            "unit": "ns/op",
+            "extra": "36303074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "36303074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "36303074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda)",
+            "value": 33.12,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "34385049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 33.12,
+            "unit": "ns/op",
+            "extra": "34385049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "34385049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "34385049 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda)",
+            "value": 33.01,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "36208297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - ns/op",
+            "value": 33.01,
+            "unit": "ns/op",
+            "extra": "36208297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "36208297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDI_MustUseSingleton (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "36208297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda)",
+            "value": 1692,
+            "unit": "ns/op\t    2056 B/op\t      26 allocs/op",
+            "extra": "634752 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - ns/op",
+            "value": 1692,
+            "unit": "ns/op",
+            "extra": "634752 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - B/op",
+            "value": 2056,
+            "unit": "B/op",
+            "extra": "634752 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - allocs/op",
+            "value": 26,
+            "unit": "allocs/op",
+            "extra": "634752 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda)",
+            "value": 1699,
+            "unit": "ns/op\t    2056 B/op\t      26 allocs/op",
+            "extra": "665048 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - ns/op",
+            "value": 1699,
+            "unit": "ns/op",
+            "extra": "665048 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - B/op",
+            "value": 2056,
+            "unit": "B/op",
+            "extra": "665048 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - allocs/op",
+            "value": 26,
+            "unit": "allocs/op",
+            "extra": "665048 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda)",
+            "value": 1697,
+            "unit": "ns/op\t    2056 B/op\t      26 allocs/op",
+            "extra": "667074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - ns/op",
+            "value": 1697,
+            "unit": "ns/op",
+            "extra": "667074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - B/op",
+            "value": 2056,
+            "unit": "B/op",
+            "extra": "667074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkDevErrorPageZeroOverhead (github.com/go-kruda/kruda) - allocs/op",
+            "value": 26,
+            "unit": "allocs/op",
+            "extra": "667074 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda)",
+            "value": 320.6,
+            "unit": "ns/op\t      48 B/op\t       6 allocs/op",
+            "extra": "3732816 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - ns/op",
+            "value": 320.6,
+            "unit": "ns/op",
+            "extra": "3732816 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "3732816 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3732816 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda)",
+            "value": 320.9,
+            "unit": "ns/op\t      48 B/op\t       6 allocs/op",
+            "extra": "3732098 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - ns/op",
+            "value": 320.9,
+            "unit": "ns/op",
+            "extra": "3732098 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "3732098 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3732098 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda)",
+            "value": 321.5,
+            "unit": "ns/op\t      48 B/op\t       6 allocs/op",
+            "extra": "3705576 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - ns/op",
+            "value": 321.5,
+            "unit": "ns/op",
+            "extra": "3705576 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - B/op",
+            "value": 48,
+            "unit": "B/op",
+            "extra": "3705576 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParseGET (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3705576 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda)",
+            "value": 418.4,
+            "unit": "ns/op\t      88 B/op\t       5 allocs/op",
+            "extra": "2871600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - ns/op",
+            "value": 418.4,
+            "unit": "ns/op",
+            "extra": "2871600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - B/op",
+            "value": 88,
+            "unit": "B/op",
+            "extra": "2871600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2871600 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda)",
+            "value": 417.4,
+            "unit": "ns/op\t      88 B/op\t       5 allocs/op",
+            "extra": "2869912 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - ns/op",
+            "value": 417.4,
+            "unit": "ns/op",
+            "extra": "2869912 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - B/op",
+            "value": 88,
+            "unit": "B/op",
+            "extra": "2869912 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2869912 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda)",
+            "value": 417.5,
+            "unit": "ns/op\t      88 B/op\t       5 allocs/op",
+            "extra": "2861740 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - ns/op",
+            "value": 417.5,
+            "unit": "ns/op",
+            "extra": "2861740 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - B/op",
+            "value": 88,
+            "unit": "B/op",
+            "extra": "2861740 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUParsePOST (github.com/go-kruda/kruda) - allocs/op",
+            "value": 5,
+            "unit": "allocs/op",
+            "extra": "2861740 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda)",
+            "value": 223.5,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5395455 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - ns/op",
+            "value": 223.5,
+            "unit": "ns/op",
+            "extra": "5395455 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5395455 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5395455 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda)",
+            "value": 222.4,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5362297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - ns/op",
+            "value": 222.4,
+            "unit": "ns/op",
+            "extra": "5362297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5362297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5362297 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda)",
+            "value": 223.5,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5265572 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - ns/op",
+            "value": 223.5,
+            "unit": "ns/op",
+            "extra": "5265572 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5265572 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseBuild (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5265572 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda)",
+            "value": 208.8,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5757622 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 208.8,
+            "unit": "ns/op",
+            "extra": "5757622 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5757622 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5757622 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda)",
+            "value": 213.3,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5502727 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 213.3,
+            "unit": "ns/op",
+            "extra": "5502727 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5502727 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5502727 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda)",
+            "value": 211,
+            "unit": "ns/op\t     472 B/op\t       4 allocs/op",
+            "extra": "5694588 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 211,
+            "unit": "ns/op",
+            "extra": "5694588 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 472,
+            "unit": "B/op",
+            "extra": "5694588 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUResponseJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 4,
+            "unit": "allocs/op",
+            "extra": "5694588 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda)",
+            "value": 552.7,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2162397 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - ns/op",
+            "value": 552.7,
+            "unit": "ns/op",
+            "extra": "2162397 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2162397 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2162397 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda)",
+            "value": 553.4,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2167374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - ns/op",
+            "value": 553.4,
+            "unit": "ns/op",
+            "extra": "2167374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2167374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2167374 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda)",
+            "value": 552.4,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2163902 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - ns/op",
+            "value": 552.4,
+            "unit": "ns/op",
+            "extra": "2163902 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2163902 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUFullCycle (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2163902 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda)",
+            "value": 579.3,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2090935 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - ns/op",
+            "value": 579.3,
+            "unit": "ns/op",
+            "extra": "2090935 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2090935 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2090935 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda)",
+            "value": 571.3,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2096394 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - ns/op",
+            "value": 571.3,
+            "unit": "ns/op",
+            "extra": "2096394 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2096394 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2096394 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda)",
+            "value": 572.2,
+            "unit": "ns/op\t     264 B/op\t       9 allocs/op",
+            "extra": "2086855 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - ns/op",
+            "value": 572.2,
+            "unit": "ns/op",
+            "extra": "2086855 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "2086855 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCPUHandlerInline (github.com/go-kruda/kruda) - allocs/op",
+            "value": 9,
+            "unit": "allocs/op",
+            "extra": "2086855 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda)",
+            "value": 61405,
+            "unit": "ns/op\t     264 B/op\t       7 allocs/op",
+            "extra": "19482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 61405,
+            "unit": "ns/op",
+            "extra": "19482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "19482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 7,
+            "unit": "allocs/op",
+            "extra": "19482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda)",
+            "value": 61054,
+            "unit": "ns/op\t     264 B/op\t       7 allocs/op",
+            "extra": "19660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 61054,
+            "unit": "ns/op",
+            "extra": "19660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "19660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 7,
+            "unit": "allocs/op",
+            "extra": "19660 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda)",
+            "value": 61057,
+            "unit": "ns/op\t     264 B/op\t       7 allocs/op",
+            "extra": "19770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - ns/op",
+            "value": 61057,
+            "unit": "ns/op",
+            "extra": "19770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - B/op",
+            "value": 264,
+            "unit": "B/op",
+            "extra": "19770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackPlaintext (github.com/go-kruda/kruda) - allocs/op",
+            "value": 7,
+            "unit": "allocs/op",
+            "extra": "19770 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda)",
+            "value": 61329,
+            "unit": "ns/op\t     528 B/op\t       8 allocs/op",
+            "extra": "19456 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 61329,
+            "unit": "ns/op",
+            "extra": "19456 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 528,
+            "unit": "B/op",
+            "extra": "19456 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "19456 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda)",
+            "value": 61198,
+            "unit": "ns/op\t     528 B/op\t       8 allocs/op",
+            "extra": "19551 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 61198,
+            "unit": "ns/op",
+            "extra": "19551 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 528,
+            "unit": "B/op",
+            "extra": "19551 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "19551 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda)",
+            "value": 61045,
+            "unit": "ns/op\t     528 B/op\t       8 allocs/op",
+            "extra": "19648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - ns/op",
+            "value": 61045,
+            "unit": "ns/op",
+            "extra": "19648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - B/op",
+            "value": 528,
+            "unit": "B/op",
+            "extra": "19648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackJSON (github.com/go-kruda/kruda) - allocs/op",
+            "value": 8,
+            "unit": "allocs/op",
+            "extra": "19648 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda)",
+            "value": 168741,
+            "unit": "ns/op\t   35551 B/op\t      80 allocs/op",
+            "extra": "6759 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - ns/op",
+            "value": 168741,
+            "unit": "ns/op",
+            "extra": "6759 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - B/op",
+            "value": 35551,
+            "unit": "B/op",
+            "extra": "6759 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - allocs/op",
+            "value": 80,
+            "unit": "allocs/op",
+            "extra": "6759 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda)",
+            "value": 167240,
+            "unit": "ns/op\t   35545 B/op\t      80 allocs/op",
+            "extra": "7095 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - ns/op",
+            "value": 167240,
+            "unit": "ns/op",
+            "extra": "7095 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - B/op",
+            "value": 35545,
+            "unit": "B/op",
+            "extra": "7095 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - allocs/op",
+            "value": 80,
+            "unit": "allocs/op",
+            "extra": "7095 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda)",
+            "value": 194107,
+            "unit": "ns/op\t   35540 B/op\t      80 allocs/op",
+            "extra": "6159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - ns/op",
+            "value": 194107,
+            "unit": "ns/op",
+            "extra": "6159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - B/op",
+            "value": 35540,
+            "unit": "B/op",
+            "extra": "6159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkLoopbackConcurrent (github.com/go-kruda/kruda) - allocs/op",
+            "value": 80,
+            "unit": "allocs/op",
+            "extra": "6159 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda)",
+            "value": 57.17,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "19405917 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - ns/op",
+            "value": 57.17,
+            "unit": "ns/op",
+            "extra": "19405917 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "19405917 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "19405917 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda)",
+            "value": 57.1,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "21024890 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - ns/op",
+            "value": 57.1,
+            "unit": "ns/op",
+            "extra": "21024890 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "21024890 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "21024890 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda)",
+            "value": 57.24,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "20687696 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - ns/op",
+            "value": 57.24,
+            "unit": "ns/op",
+            "extra": "20687696 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "20687696 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkFeatherTableLookup (github.com/go-kruda/kruda) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "20687696 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda)",
+            "value": 353.8,
+            "unit": "ns/op\t     464 B/op\t       6 allocs/op",
+            "extra": "3394730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 353.8,
+            "unit": "ns/op",
+            "extra": "3394730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 464,
+            "unit": "B/op",
+            "extra": "3394730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3394730 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda)",
+            "value": 351.9,
+            "unit": "ns/op\t     464 B/op\t       6 allocs/op",
+            "extra": "3405943 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 351.9,
+            "unit": "ns/op",
+            "extra": "3405943 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 464,
+            "unit": "B/op",
+            "extra": "3405943 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3405943 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda)",
+            "value": 355.8,
+            "unit": "ns/op\t     464 B/op\t       6 allocs/op",
+            "extra": "3347988 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 355.8,
+            "unit": "ns/op",
+            "extra": "3347988 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 464,
+            "unit": "B/op",
+            "extra": "3347988 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "3347988 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda)",
+            "value": 495.7,
+            "unit": "ns/op\t     512 B/op\t       6 allocs/op",
+            "extra": "2420719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 495.7,
+            "unit": "ns/op",
+            "extra": "2420719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 512,
+            "unit": "B/op",
+            "extra": "2420719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "2420719 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda)",
+            "value": 495.6,
+            "unit": "ns/op\t     512 B/op\t       6 allocs/op",
+            "extra": "2419221 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 495.6,
+            "unit": "ns/op",
+            "extra": "2419221 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 512,
+            "unit": "B/op",
+            "extra": "2419221 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "2419221 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda)",
+            "value": 496.8,
+            "unit": "ns/op\t     512 B/op\t       6 allocs/op",
+            "extra": "2421450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - ns/op",
+            "value": 496.8,
+            "unit": "ns/op",
+            "extra": "2421450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - B/op",
+            "value": 512,
+            "unit": "B/op",
+            "extra": "2421450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_1 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 6,
+            "unit": "allocs/op",
+            "extra": "2421450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda)",
+            "value": 3851,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "314100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3851,
+            "unit": "ns/op",
+            "extra": "314100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "314100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "314100 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda)",
+            "value": 3842,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "311907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3842,
+            "unit": "ns/op",
+            "extra": "311907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "311907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "311907 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda)",
+            "value": 3898,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "313506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3898,
+            "unit": "ns/op",
+            "extra": "313506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "313506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "313506 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda)",
+            "value": 4945,
+            "unit": "ns/op\t    5120 B/op\t      60 allocs/op",
+            "extra": "241060 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 4945,
+            "unit": "ns/op",
+            "extra": "241060 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 5120,
+            "unit": "B/op",
+            "extra": "241060 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "241060 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda)",
+            "value": 4975,
+            "unit": "ns/op\t    5120 B/op\t      60 allocs/op",
+            "extra": "243367 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 4975,
+            "unit": "ns/op",
+            "extra": "243367 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 5120,
+            "unit": "B/op",
+            "extra": "243367 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "243367 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda)",
+            "value": 4954,
+            "unit": "ns/op\t    5120 B/op\t      60 allocs/op",
+            "extra": "237283 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 4954,
+            "unit": "ns/op",
+            "extra": "237283 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 5120,
+            "unit": "B/op",
+            "extra": "237283 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "237283 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda)",
+            "value": 38591,
+            "unit": "ns/op\t   46407 B/op\t     600 allocs/op",
+            "extra": "31015 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 38591,
+            "unit": "ns/op",
+            "extra": "31015 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 46407,
+            "unit": "B/op",
+            "extra": "31015 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "31015 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda)",
+            "value": 39298,
+            "unit": "ns/op\t   46407 B/op\t     600 allocs/op",
+            "extra": "29510 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 39298,
+            "unit": "ns/op",
+            "extra": "29510 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 46407,
+            "unit": "B/op",
+            "extra": "29510 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "29510 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda)",
+            "value": 38627,
+            "unit": "ns/op\t   46407 B/op\t     600 allocs/op",
+            "extra": "30936 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 38627,
+            "unit": "ns/op",
+            "extra": "30936 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 46407,
+            "unit": "B/op",
+            "extra": "30936 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineGET_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "30936 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda)",
+            "value": 49381,
+            "unit": "ns/op\t   51208 B/op\t     600 allocs/op",
+            "extra": "24450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 49381,
+            "unit": "ns/op",
+            "extra": "24450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 51208,
+            "unit": "B/op",
+            "extra": "24450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "24450 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda)",
+            "value": 49378,
+            "unit": "ns/op\t   51208 B/op\t     600 allocs/op",
+            "extra": "24252 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 49378,
+            "unit": "ns/op",
+            "extra": "24252 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 51208,
+            "unit": "B/op",
+            "extra": "24252 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "24252 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda)",
+            "value": 49454,
+            "unit": "ns/op\t   51208 B/op\t     600 allocs/op",
+            "extra": "24284 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - ns/op",
+            "value": 49454,
+            "unit": "ns/op",
+            "extra": "24284 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - B/op",
+            "value": 51208,
+            "unit": "B/op",
+            "extra": "24284 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelinePOST_100 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 600,
+            "unit": "allocs/op",
+            "extra": "24284 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda)",
+            "value": 6252,
+            "unit": "ns/op\t    6806 B/op\t      90 allocs/op",
+            "extra": "185334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 6252,
+            "unit": "ns/op",
+            "extra": "185334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 6806,
+            "unit": "B/op",
+            "extra": "185334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 90,
+            "unit": "allocs/op",
+            "extra": "185334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda)",
+            "value": 6245,
+            "unit": "ns/op\t    6806 B/op\t      90 allocs/op",
+            "extra": "191334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 6245,
+            "unit": "ns/op",
+            "extra": "191334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 6806,
+            "unit": "B/op",
+            "extra": "191334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 90,
+            "unit": "allocs/op",
+            "extra": "191334 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda)",
+            "value": 6217,
+            "unit": "ns/op\t    6806 B/op\t      90 allocs/op",
+            "extra": "188900 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 6217,
+            "unit": "ns/op",
+            "extra": "188900 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 6806,
+            "unit": "B/op",
+            "extra": "188900 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineFullCycle_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 90,
+            "unit": "allocs/op",
+            "extra": "188900 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda)",
+            "value": 3933,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "309829 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3933,
+            "unit": "ns/op",
+            "extra": "309829 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "309829 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "309829 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda)",
+            "value": 3928,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "304453 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3928,
+            "unit": "ns/op",
+            "extra": "304453 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "304453 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "304453 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda)",
+            "value": 3942,
+            "unit": "ns/op\t    4640 B/op\t      60 allocs/op",
+            "extra": "311155 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - ns/op",
+            "value": 3942,
+            "unit": "ns/op",
+            "extra": "311155 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - B/op",
+            "value": 4640,
+            "unit": "B/op",
+            "extra": "311155 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkPipelineBufferShift_10 (github.com/go-kruda/kruda) - allocs/op",
+            "value": 60,
+            "unit": "allocs/op",
+            "extra": "311155 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.6266,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.6266,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.6237,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.6237,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.6241,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.6241,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeString (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.9359,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.9359,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.9442,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.9442,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv)",
+            "value": 0.9349,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - ns/op",
+            "value": 0.9349,
+            "unit": "ns/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkUnsafeBytes (github.com/go-kruda/kruda/internal/bytesconv) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "1000000000 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport)",
+            "value": 42.43,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "28120761 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - ns/op",
+            "value": 42.43,
+            "unit": "ns/op",
+            "extra": "28120761 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "28120761 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "28120761 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport)",
+            "value": 42.51,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "28234216 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - ns/op",
+            "value": 42.51,
+            "unit": "ns/op",
+            "extra": "28234216 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "28234216 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "28234216 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport)",
+            "value": 42.98,
+            "unit": "ns/op\t       0 B/op\t       0 allocs/op",
+            "extra": "28101156 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - ns/op",
+            "value": 42.98,
+            "unit": "ns/op",
+            "extra": "28101156 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - B/op",
+            "value": 0,
+            "unit": "B/op",
+            "extra": "28101156 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkGetStaticResponseStringCached (github.com/go-kruda/kruda/transport) - allocs/op",
+            "value": 0,
+            "unit": "allocs/op",
+            "extra": "28101156 times\n4 procs"
           }
         ]
       }

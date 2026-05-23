@@ -72,6 +72,19 @@ func BenchmarkCPUResponseJSON(b *testing.B) {
 	}
 }
 
+func BenchmarkCPUResponsePlaintext(b *testing.B) {
+	out := make([]byte, 0, 256)
+	b.ReportAllocs()
+	for b.Loop() {
+		r := acquireResponse()
+		r.responseMode = responsePlaintext
+		r.SetStaticText(200, "text/plain; charset=utf-8", "Hello, World!")
+		out = r.appendPlaintextTo(out[:0])
+		releaseResponse(r)
+	}
+	runtime.KeepAlive(out)
+}
+
 func BenchmarkCPUFullCycle(b *testing.B) {
 	body := []byte("Hello, World!")
 	b.ReportAllocs()
@@ -104,6 +117,27 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 		releaseResponse(resp)
 		releaseRequest(req)
 	}
+}
+
+func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
+	app := New()
+	app.Get("/users/42", func(c *Ctx) error {
+		return c.Text("Hello, World!")
+	}, WingPlaintext())
+	app.Compile()
+
+	b.ReportAllocs()
+	out := make([]byte, 0, 256)
+	for b.Loop() {
+		req, _, _ := parseHTTPRequest(rawGET, noLimits)
+		resp := acquireResponse()
+		resp.responseMode = responsePlaintext
+		app.ServeKruda(resp, req)
+		out = resp.appendPlaintextTo(out[:0])
+		releaseResponse(resp)
+		releaseRequest(req)
+	}
+	runtime.KeepAlive(out)
 }
 
 // ============================================================================

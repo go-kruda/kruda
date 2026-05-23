@@ -86,11 +86,20 @@ func (m DispatchMode) String() string {
 	}
 }
 
+type responseMode uint8
+
+const (
+	responseGeneric responseMode = iota
+	responsePlaintext
+	responseJSON
+)
+
 // Feather is the per-route tuning hint passed to Wing. Construct via the
 // preset vars (Bolt, Arrow, Spear, …) or directly with options.
 type Feather struct {
 	Dispatch       DispatchMode
 	StaticResponse []byte // pre-built full HTTP response; bypasses handler entirely
+	ResponseMode   responseMode
 }
 
 // FeatherOption modifies a Feather in-place.
@@ -131,7 +140,7 @@ var (
 	Spear = Feather{Dispatch: Takeover}
 
 	// Plaintext — Bolt-aliased preset for static text and health-check routes.
-	Plaintext = Bolt
+	Plaintext = Feather{Dispatch: Inline, ResponseMode: responsePlaintext}
 	// JSON — Bolt-aliased preset for JSON-only handlers (no I/O).
 	JSON = Bolt
 	// Query — Spear-aliased preset for short DB/Redis lookups.

@@ -247,9 +247,10 @@ type worker struct {
 }
 
 type handlerJob struct {
-	req       *wingRequest
-	fd        int32
-	keepAlive bool
+	req          *wingRequest
+	fd           int32
+	keepAlive    bool
+	responseMode responseMode
 }
 
 // workerPool is a fixed-size goroutine pool per worker.
@@ -282,6 +283,7 @@ func (p *workerPool) loop(h transport.Handler) {
 	defer p.wg.Done()
 	for job := range p.jobs {
 		resp := acquireResponse()
+		resp.responseMode = job.responseMode
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -566,6 +568,7 @@ func (w *worker) tryParse(c *conn) {
 				releaseRequest(req)
 			} else {
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				w.handler.ServeKruda(resp, req)
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
@@ -574,6 +577,13 @@ func (w *worker) tryParse(c *conn) {
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
 					c.sendFileSize = resp.fileSize
+					releaseResponse(resp)
+					releaseRequest(req)
+					break
+				}
+				if resp.plaintextFast {
+					c.keepAlive = req.keepAlive
+					c.sendBuf = resp.appendPlaintextTo(c.sendBuf)
 					releaseResponse(resp)
 					releaseRequest(req)
 					break
@@ -589,12 +599,13 @@ func (w *worker) tryParse(c *conn) {
 			// Dispatch to goroutine pool.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive}
+			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
 			select {
 			case w.pool.jobs <- job:
 			default:
 				// Pool saturated — run inline to avoid deadlock.
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -624,6 +635,7 @@ func (w *worker) tryParse(c *conn) {
 			go func(req *wingRequest, fd int32, ka bool) {
 				defer w.dispatchWG.Done()
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -679,7 +691,7 @@ func (w *worker) tryParse(c *conn) {
 			// Persist or unknown — treat as Pool for now.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive}
+			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
 			if w.pool != nil {
 				select {
 				case w.pool.jobs <- job:
@@ -689,6 +701,7 @@ func (w *worker) tryParse(c *conn) {
 				}
 			} else {
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {

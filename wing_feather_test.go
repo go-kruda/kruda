@@ -41,7 +41,7 @@ func TestPresetValues(t *testing.T) {
 		{"Bolt", Bolt, Feather{Dispatch: Inline}},
 		{"Arrow", Arrow, Feather{Dispatch: Pool}},
 		{"Spear", Spear, Feather{Dispatch: Takeover}},
-		{"Plaintext", Plaintext, Bolt},
+		{"Plaintext", Plaintext, Feather{Dispatch: Inline, ResponseMode: responsePlaintext}},
 		{"JSON", JSON, Bolt},
 		{"Query", Query, Spear},
 		{"Render", Render, Spear},
@@ -52,6 +52,15 @@ func TestPresetValues(t *testing.T) {
 				t.Errorf("%s = %+v, want %+v", tt.name, tt.f, tt.want)
 			}
 		})
+	}
+}
+
+func TestPlaintextPresetResponseMode(t *testing.T) {
+	if Plaintext.ResponseMode != responsePlaintext {
+		t.Fatalf("Plaintext response mode = %v, want responsePlaintext", Plaintext.ResponseMode)
+	}
+	if Bolt.ResponseMode != responseGeneric {
+		t.Fatalf("Bolt response mode = %v, want responseGeneric", Bolt.ResponseMode)
 	}
 }
 
@@ -124,6 +133,105 @@ func TestWingStaticJSONOption(t *testing.T) {
 	}
 	if JSON.StaticResponse != nil {
 		t.Fatal("WingStaticJSON mutated JSON preset")
+	}
+}
+
+func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	resp.responseMode = responsePlaintext
+	resp.SetStaticText(201, "text/plain; charset=utf-8", "created")
+
+	if resp.staticResp != nil {
+		t.Fatal("plaintext response mode should not use the shared static response cache")
+	}
+	if !resp.plaintextFast {
+		t.Fatal("plaintext response mode did not enable plaintext fast serialization")
+	}
+
+	data := resp.buildZeroCopy()
+	for _, want := range [][]byte{
+		[]byte("HTTP/1.1 201 Created\r\n"),
+		[]byte("Content-Type: text/plain; charset=utf-8\r\n"),
+		[]byte("Content-Length: 7\r\n"),
+		[]byte("\r\n\r\ncreated"),
+	} {
+		if !bytes.Contains(data, want) {
+			t.Fatalf("plaintext response missing %q in:\n%s", want, data)
+		}
+	}
+}
+
+func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	resp.SetStaticText(200, "text/plain; charset=utf-8", "ok")
+
+	if resp.staticResp == nil {
+		t.Fatal("generic Wing text path should keep using the shared static response cache")
+	}
+	if resp.plaintextFast {
+		t.Fatal("generic Wing text path should not enable plaintext response mode")
+	}
+}
+
+func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+	app := New()
+	var middlewareRan, beforeRan, handlerRan, afterRan bool
+	app.Use(func(c *Ctx) error {
+		middlewareRan = true
+		return c.Next()
+	})
+	app.BeforeHandle(func(c *Ctx) error {
+		beforeRan = true
+		return nil
+	})
+	app.AfterHandle(func(c *Ctx) error {
+		afterRan = true
+		return nil
+	})
+	app.Get("/plaintext", func(c *Ctx) error {
+		handlerRan = true
+		return c.Text("ok")
+	}, WingPlaintext())
+	app.Compile()
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	resp.responseMode = responsePlaintext
+
+	app.ServeKruda(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true})
+
+	if !middlewareRan || !beforeRan || !handlerRan || !afterRan {
+		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
+	}
+	if !resp.plaintextFast {
+		t.Fatal("simple WingPlaintext handler did not use plaintext response mode")
+	}
+}
+
+func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+	app := New()
+	app.Get("/plaintext", func(c *Ctx) error {
+		c.SetHeader("X-Test", "yes")
+		return c.Text("ok")
+	}, WingPlaintext())
+	app.Compile()
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	resp.responseMode = responsePlaintext
+
+	app.ServeKruda(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true})
+
+	if resp.plaintextFast {
+		t.Fatal("custom response headers must fall back to generic serialization")
+	}
+	data := resp.buildZeroCopy()
+	if !bytes.Contains(data, []byte("X-Test: yes\r\n")) {
+		t.Fatalf("generic fallback missing custom header:\n%s", data)
 	}
 }
 

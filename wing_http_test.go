@@ -160,6 +160,26 @@ func TestParseHTTPRequest_PathIsSafeCopy(t *testing.T) {
 	}
 }
 
+func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\nConnection: keep-alive\r\n\r\n")
+	req, _, ok := parseHTTPRequest(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+
+	copy(raw, []byte("GET /xxxx HTTP/1.1\r\nHost: mutated.test\r\nAccept: application/json"))
+
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+	if got := req.Header("Connection"); got != "" {
+		t.Fatalf("Header(Connection) = %q, want empty", got)
+	}
+}
+
 // TestBtoi verifies integer parsing including overflow protection.
 func TestBtoi(t *testing.T) {
 	tests := []struct {

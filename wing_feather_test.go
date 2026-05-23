@@ -41,7 +41,7 @@ func TestPresetValues(t *testing.T) {
 		{"Bolt", Bolt, Feather{Dispatch: Inline}},
 		{"Arrow", Arrow, Feather{Dispatch: Pool}},
 		{"Spear", Spear, Feather{Dispatch: Takeover}},
-		{"Plaintext", Plaintext, Bolt},
+		{"Plaintext", Plaintext, Feather{Dispatch: Inline, ResponseMode: responsePlaintext}},
 		{"JSON", JSON, Bolt},
 		{"Query", Query, Spear},
 		{"Render", Render, Spear},
@@ -52,6 +52,15 @@ func TestPresetValues(t *testing.T) {
 				t.Errorf("%s = %+v, want %+v", tt.name, tt.f, tt.want)
 			}
 		})
+	}
+}
+
+func TestPlaintextPresetResponseMode(t *testing.T) {
+	if Plaintext.ResponseMode != responsePlaintext {
+		t.Fatalf("Plaintext response mode = %v, want responsePlaintext", Plaintext.ResponseMode)
+	}
+	if Bolt.ResponseMode != responseGeneric {
+		t.Fatalf("Bolt response mode = %v, want responseGeneric", Bolt.ResponseMode)
 	}
 }
 

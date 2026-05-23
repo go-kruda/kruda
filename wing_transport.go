@@ -238,6 +238,7 @@ type worker struct {
 	writeTimeout int64
 	idleTimeout  int64
 	sweepAt      int64 // next sweep unix nano
+	now          int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
 	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
 	// finish before closing fds. Pool goroutines are tracked separately by
@@ -247,9 +248,14 @@ type worker struct {
 }
 
 type handlerJob struct {
-	req       *wingRequest
-	fd        int32
-	keepAlive bool
+	req          *wingRequest
+	fd           int32
+	keepAlive    bool
+	responseMode responseMode
+}
+
+type wingRouteHandler interface {
+	serveKrudaRoute(transport.ResponseWriter, transport.Request, []HandlerFunc)
 }
 
 // workerPool is a fixed-size goroutine pool per worker.
@@ -282,6 +288,7 @@ func (p *workerPool) loop(h transport.Handler) {
 	defer p.wg.Done()
 	for job := range p.jobs {
 		resp := acquireResponse()
+		resp.responseMode = job.responseMode
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -317,6 +324,16 @@ func (p *workerPool) loop(h transport.Handler) {
 		}
 		p.wake()
 	}
+}
+
+func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
+	if f.ResponseMode == responsePlaintext && len(f.handlers) > 0 && !containsDotPercent(req.path) {
+		if h, ok := w.handler.(wingRouteHandler); ok {
+			h.serveKrudaRoute(resp, req, f.handlers)
+			return
+		}
+	}
+	w.handler.ServeKruda(resp, req)
 }
 
 func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
@@ -401,13 +418,16 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 			}
 			continue
 		}
+		if hasTimeout {
+			w.now = time.Now().UnixNano()
+		}
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
 		if hasTimeout {
-			if now := time.Now().UnixNano(); now >= w.sweepAt {
-				w.sweepTimeouts(now)
-				w.sweepAt = now + int64(time.Second)
+			if w.now >= w.sweepAt {
+				w.sweepTimeouts(w.now)
+				w.sweepAt = w.now + int64(time.Second)
 			}
 		}
 	}
@@ -477,7 +497,10 @@ func (w *worker) handleAccept(ev event) {
 		cancel:     cancel,
 	}
 	if w.hasTimeout {
-		now := time.Now().UnixNano()
+		now := w.now
+		if now == 0 {
+			now = time.Now().UnixNano()
+		}
 		c.lastActive = now
 		if w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
@@ -495,7 +518,7 @@ func (w *worker) handleAccept(ev event) {
 	// Speculative read got EAGAIN — arm read for next data arrival.
 	// On Linux this is redundant (ET EPOLLIN already registered by RegisterConn)
 	// but on kqueue/darwin SubmitRecv is the only way to register EVFILT_READ.
-	w.eng.SubmitRecv(c.fd, nil, 0)
+	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
 func (w *worker) handleRecv(ev event) {
@@ -515,7 +538,10 @@ func (w *worker) handleRecv(ev event) {
 	}
 	c.readN += int(nr)
 	if w.hasTimeout {
-		now := time.Now().UnixNano()
+		now := w.now
+		if now == 0 {
+			now = time.Now().UnixNano()
+		}
 		c.lastActive = now
 		if c.readN == int(nr) && w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
@@ -526,7 +552,7 @@ func (w *worker) handleRecv(ev event) {
 
 func (w *worker) tryParse(c *conn) {
 	for c.readN > 0 {
-		req, consumed, ok := parseHTTPRequest(c.readBuf[:c.readN], w.limits)
+		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
 			if c.readN >= len(c.readBuf) {
 				w.closeConn(c.fd)
@@ -544,6 +570,7 @@ func (w *worker) tryParse(c *conn) {
 		}
 
 		f := w.feathers.Lookup(req.method, req.path)
+		finalizeRequestPath(req, f)
 
 		// For async dispatch modes, only one in-flight handler per conn.
 		if f.Dispatch != Inline && c.pending > 0 {
@@ -554,6 +581,7 @@ func (w *worker) tryParse(c *conn) {
 		// Consume parsed bytes.
 		remaining := c.readN - consumed
 		if remaining > 0 {
+			finalizeRequestCommonHeaders(req)
 			copy(c.readBuf, c.readBuf[consumed:c.readN])
 		}
 		c.readN = remaining
@@ -566,7 +594,8 @@ func (w *worker) tryParse(c *conn) {
 				releaseRequest(req)
 			} else {
 				resp := acquireResponse()
-				w.handler.ServeKruda(resp, req)
+				resp.responseMode = f.ResponseMode
+				w.serveRoute(resp, req, f)
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()
@@ -574,6 +603,13 @@ func (w *worker) tryParse(c *conn) {
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
 					c.sendFileSize = resp.fileSize
+					releaseResponse(resp)
+					releaseRequest(req)
+					break
+				}
+				if resp.plaintextFast {
+					c.keepAlive = req.keepAlive
+					c.sendBuf = resp.appendPlaintextTo(c.sendBuf)
 					releaseResponse(resp)
 					releaseRequest(req)
 					break
@@ -589,12 +625,13 @@ func (w *worker) tryParse(c *conn) {
 			// Dispatch to goroutine pool.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive}
+			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
 			select {
 			case w.pool.jobs <- job:
 			default:
 				// Pool saturated — run inline to avoid deadlock.
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -602,7 +639,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
@@ -621,9 +658,10 @@ func (w *worker) tryParse(c *conn) {
 			c.keepAlive = req.keepAlive
 			c.pending++
 			w.dispatchWG.Add(1)
-			go func(req *wingRequest, fd int32, ka bool) {
+			go func(req *wingRequest, fd int32, ka bool, f Feather) {
 				defer w.dispatchWG.Done()
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -631,7 +669,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
@@ -653,7 +691,7 @@ func (w *worker) tryParse(c *conn) {
 					w.doneCh <- doneMsg{fd: fd, data: data[written:], keepAlive: ka}
 				}
 				w.wake()
-			}(req, c.fd, req.keepAlive)
+			}(req, c.fd, req.keepAlive, f)
 			return
 
 		case Takeover:
@@ -679,7 +717,7 @@ func (w *worker) tryParse(c *conn) {
 			// Persist or unknown — treat as Pool for now.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive}
+			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
 			if w.pool != nil {
 				select {
 				case w.pool.jobs <- job:
@@ -689,6 +727,7 @@ func (w *worker) tryParse(c *conn) {
 				}
 			} else {
 				resp := acquireResponse()
+				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -696,7 +735,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
@@ -715,7 +754,7 @@ func (w *worker) tryParse(c *conn) {
 		// Direct write — skip epoll EPOLLOUT round-trip for inline responses.
 		w.directSend(c)
 	} else {
-		w.eng.SubmitRecv(c.fd, nil, 0)
+		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
 }
 
@@ -732,7 +771,7 @@ func (w *worker) handleDone(msg doneMsg) {
 			if c.readN > 0 {
 				w.tryParse(c)
 			} else {
-				w.eng.SubmitRecv(c.fd, nil, 0)
+				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
 		} else {
 			w.closeConn(c.fd)
@@ -799,7 +838,7 @@ func (w *worker) directSend(c *conn) {
 	// Speculative read got EAGAIN — arm read for next data arrival.
 	// On Linux this is redundant (ET EPOLLIN already active) but on
 	// kqueue/darwin SubmitRecv is required to register EVFILT_READ.
-	w.eng.SubmitRecv(c.fd, nil, 0)
+	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
 // takeoverBufPool provides read buffers for Takeover goroutines.

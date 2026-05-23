@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/go-kruda/kruda/transport"
 )
@@ -33,6 +34,14 @@ var (
 // On success, consumed is the number of bytes used by the parsed request,
 // allowing callers to preserve any pipelined data that follows.
 func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
+	return parseHTTPRequestInternal(data, limits, false)
+}
+
+func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, bool) {
+	return parseHTTPRequestInternal(data, limits, true)
+}
+
+func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
 	for skip+1 < len(data) && data[skip] == '\r' && data[skip+1] == '\n' {
@@ -89,18 +98,22 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 
 	var path, query string
 	if qi := bytes.IndexByte(rawPath, '?'); qi >= 0 {
-		path = string(rawPath[:qi])
+		path = copyOrUnsafeString(rawPath[:qi], unsafePath)
 		query = string(rawPath[qi+1:])
 	} else if len(rawPath) == 1 && rawPath[0] == '/' {
 		path = "/"
 	} else {
-		path = string(rawPath)
+		path = copyOrUnsafeString(rawPath, unsafePath)
 	}
 
 	// Parse headers (only fields we need).
 	contentLength := 0
 	contentType := ""
 	cookie := ""
+	host := ""
+	accept := ""
+	hostUnsafe := false
+	acceptUnsafe := false
 	keepAlive := true // HTTP/1.1 default
 	headerCount := 0
 	contentLengthSeen := false
@@ -182,6 +195,12 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 			hasTE = true
 		case len(key) == 6 && asciiEqualFold(key, bCookie):
 			cookie = string(val)
+		case len(key) == 4 && asciiEqualFold(key, bHost):
+			host = copyOrUnsafeString(val, unsafePath)
+			hostUnsafe = unsafePath && len(val) > 0
+		case len(key) == 6 && asciiEqualFold(key, bAccept):
+			accept = copyOrUnsafeString(val, unsafePath)
+			acceptUnsafe = unsafePath && len(val) > 0
 		default:
 			if extraN < len(extraHdrs) {
 				lk := make([]byte, len(key))
@@ -221,9 +240,14 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 		r.body = body
 		r.contentType = contentType
 		r.cookie = cookie
+		r.host = host
+		r.accept = accept
+		r.hostUnsafe = hostUnsafe
+		r.acceptUnsafe = acceptUnsafe
 		r.extraHdrs = extraHdrs
 		r.extraN = extraN
 		r.keepAlive = keepAlive
+		r.pathUnsafe = unsafePath && path != "/"
 		return r, skip + consumed, true
 	}
 
@@ -233,10 +257,48 @@ func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool
 	r.query = query
 	r.contentType = contentType
 	r.cookie = cookie
+	r.host = host
+	r.accept = accept
+	r.hostUnsafe = hostUnsafe
+	r.acceptUnsafe = acceptUnsafe
 	r.extraHdrs = extraHdrs
 	r.extraN = extraN
 	r.keepAlive = keepAlive
+	r.pathUnsafe = unsafePath && path != "/"
 	return r, skip + bodyStart, true
+}
+
+func copyOrUnsafeString(b []byte, unsafeOK bool) string {
+	if !unsafeOK {
+		return string(b)
+	}
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(&b[0], len(b))
+}
+
+func finalizeRequestPath(r *wingRequest, f Feather) {
+	if !r.pathUnsafe {
+		return
+	}
+	if f.path != "" && r.path == f.path {
+		r.path = f.path
+	} else {
+		r.path = strings.Clone(r.path)
+	}
+	r.pathUnsafe = false
+}
+
+func finalizeRequestCommonHeaders(r *wingRequest) {
+	if r.hostUnsafe {
+		r.host = strings.Clone(r.host)
+		r.hostUnsafe = false
+	}
+	if r.acceptUnsafe {
+		r.accept = strings.Clone(r.accept)
+		r.acceptUnsafe = false
+	}
 }
 
 var (
@@ -247,6 +309,8 @@ var (
 	bClose             = []byte("close")
 	bTransferEncoding  = []byte("transfer-encoding")
 	bCookie            = []byte("cookie")
+	bHost              = []byte("host")
+	bAccept            = []byte("accept")
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
 )
@@ -386,8 +450,13 @@ func releaseRequest(r *wingRequest) {
 	r.body = r.body[:0]
 	r.contentType = ""
 	r.cookie = ""
+	r.host = ""
+	r.accept = ""
+	r.hostUnsafe = false
+	r.acceptUnsafe = false
 	r.remoteAddr = ""
 	r.keepAlive = false
+	r.pathUnsafe = false
 	r.fd = 0
 	r.extraN = 0
 	r.ctx = nil
@@ -415,18 +484,23 @@ func parseCookieValue(cookie, name string) string {
 
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
-	method      string
-	path        string
-	query       string
-	body        []byte
-	contentType string
-	cookie      string
-	remoteAddr  string
-	keepAlive   bool
-	fd          int32 // connection fd — for RawRequest().Fd()
-	extraHdrs   [8]struct{ k, v string }
-	extraN      int
-	ctx         context.Context
+	method       string
+	path         string
+	query        string
+	body         []byte
+	contentType  string
+	cookie       string
+	host         string
+	accept       string
+	remoteAddr   string
+	keepAlive    bool
+	pathUnsafe   bool
+	hostUnsafe   bool
+	acceptUnsafe bool
+	fd           int32 // connection fd — for RawRequest().Fd()
+	extraHdrs    [8]struct{ k, v string }
+	extraN       int
+	ctx          context.Context
 }
 
 func (r *wingRequest) Method() string        { return r.method }
@@ -468,6 +542,20 @@ func (r *wingRequest) Header(key string) string {
 	}
 	if key == "Cookie" || key == "cookie" {
 		return r.cookie
+	}
+	if key == "Host" || key == "host" {
+		if r.hostUnsafe {
+			r.host = strings.Clone(r.host)
+			r.hostUnsafe = false
+		}
+		return r.host
+	}
+	if key == "Accept" || key == "accept" {
+		if r.acceptUnsafe {
+			r.accept = strings.Clone(r.accept)
+			r.acceptUnsafe = false
+		}
+		return r.accept
 	}
 	lk := strings.ToLower(key)
 	for i := range r.extraN {
@@ -516,6 +604,10 @@ func acquireResponse() *wingResponse {
 	r.staticResp = nil
 	r.fileFd = 0
 	r.fileSize = 0
+	r.responseMode = responseGeneric
+	r.plaintextFast = false
+	r.plaintextText = ""
+	r.plaintextContentType = ""
 	return r
 }
 
@@ -523,6 +615,10 @@ func releaseResponse(r *wingResponse) {
 	r.status = 0
 	r.staticResp = nil
 	r.jsonFast = false
+	r.responseMode = responseGeneric
+	r.plaintextFast = false
+	r.plaintextText = ""
+	r.plaintextContentType = ""
 	r.fileFd = 0
 	r.fileSize = 0
 	r.headers.reset()
@@ -541,14 +637,18 @@ func releaseResponse(r *wingResponse) {
 
 // wingResponse implements transport.ResponseWriter.
 type wingResponse struct {
-	status     int
-	headers    wingHeaders
-	body       []byte
-	buf        []byte // scratch buffer for serialization
-	staticResp []byte // pre-built full response (if set, buildZeroCopy returns this)
-	jsonFast   bool   // SetJSON fast path — skip header interface, write status+json directly
-	fileFd     int32  // sendfile fd (0 = not a file response)
-	fileSize   int64  // sendfile byte count
+	status               int
+	headers              wingHeaders
+	body                 []byte
+	buf                  []byte // scratch buffer for serialization
+	staticResp           []byte // pre-built full response (if set, buildZeroCopy returns this)
+	jsonFast             bool   // SetJSON fast path — skip header interface, write status+json directly
+	responseMode         responseMode
+	plaintextFast        bool
+	plaintextText        string
+	plaintextContentType string
+	fileFd               int32 // sendfile fd (0 = not a file response)
+	fileSize             int64 // sendfile byte count
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -559,6 +659,17 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 }
 func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
 func (r *wingResponse) SetStaticText(status int, contentType, text string) {
+	if r.responseMode == responsePlaintext {
+		r.status = status
+		r.headers.reset()
+		r.body = r.body[:0]
+		r.staticResp = nil
+		r.jsonFast = false
+		r.plaintextFast = true
+		r.plaintextText = text
+		r.plaintextContentType = contentType
+		return
+	}
 	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
 }
 
@@ -653,6 +764,12 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 	b := r.buf[:0]
 
+	if r.plaintextFast {
+		b = r.appendPlaintextTo(b)
+		r.buf = nil
+		return b
+	}
+
 	// JSON fast path — status + Date + Content-Type:json + Content-Length + body
 	if r.jsonFast {
 		if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
@@ -662,7 +779,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		}
 		b = append(b, dateHdr()...)
 		b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
-		b = strconv.AppendInt(b, int64(len(r.body)), 10)
+		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n\r\n"...)
 		b = append(b, r.body...)
 		r.buf = nil
@@ -703,7 +820,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 	if !hasCL {
 		b = append(b, "Content-Length: "...)
-		b = strconv.AppendInt(b, int64(len(r.body)), 10)
+		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "\r\n"...)
@@ -712,6 +829,34 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	// Detach buf from response — caller owns this memory now.
 	r.buf = nil
 	return b
+}
+
+func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
+	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
+		b = append(b, statusLines[r.status]...)
+	} else {
+		b = append(b, "HTTP/1.1 "...)
+		b = strconv.AppendInt(b, int64(r.status), 10)
+		b = append(b, " Unknown\r\n"...)
+	}
+	b = append(b, dateHdr()...)
+	if r.plaintextContentType != "" {
+		b = append(b, "Content-Type: "...)
+		b = append(b, r.plaintextContentType...)
+		b = append(b, "\r\n"...)
+	}
+	b = append(b, "Content-Length: "...)
+	b = appendContentLengthValue(b, len(r.plaintextText))
+	b = append(b, "\r\n\r\n"...)
+	b = append(b, r.plaintextText...)
+	return b
+}
+
+func appendContentLengthValue(b []byte, n int) []byte {
+	if n >= 0 && n < len(contentLengthStrings) {
+		return append(b, contentLengthStrings[n]...)
+	}
+	return strconv.AppendInt(b, int64(n), 10)
 }
 
 // build serialises the HTTP response with a safe copy (for async dispatch).
@@ -745,7 +890,11 @@ func (r *wingResponse) buildHeadersOnly() []byte {
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
-	b = strconv.AppendInt(b, r.fileSize, 10)
+	if r.fileSize >= 0 && r.fileSize < int64(len(contentLengthStrings)) {
+		b = append(b, contentLengthStrings[int(r.fileSize)]...)
+	} else {
+		b = strconv.AppendInt(b, r.fileSize, 10)
+	}
 	b = append(b, "\r\n\r\n"...)
 	r.buf = nil
 	return b

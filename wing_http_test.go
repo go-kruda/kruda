@@ -160,6 +160,100 @@ func TestParseHTTPRequest_PathIsSafeCopy(t *testing.T) {
 	}
 }
 
+func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\nConnection: keep-alive\r\n\r\n")
+	req, _, ok := parseHTTPRequest(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+
+	copy(raw, []byte("GET /xxxx HTTP/1.1\r\nHost: mutated.test\r\nAccept: application/json"))
+
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+	if got := req.Header("Connection"); got != "" {
+		t.Fatalf("Header(Connection) = %q, want empty", got)
+	}
+}
+
+func TestParseHTTPRequestFast_FinalizedStaticPathIsSafe(t *testing.T) {
+	raw := []byte("GET /plaintext-handler HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestPath(req, Feather{path: "/plaintext-handler"})
+
+	copy(raw[4:22], "/mutated-handler!")
+	if got := req.Path(); got != "/plaintext-handler" {
+		t.Fatalf("Path() = %q, want /plaintext-handler", got)
+	}
+}
+
+func TestParseHTTPRequestFast_FinalizedFallbackPathIsSafe(t *testing.T) {
+	raw := []byte("GET /dynamic HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestPath(req, Feather{})
+
+	copy(raw[4:12], "/mutated")
+	if got := req.Path(); got != "/dynamic" {
+		t.Fatalf("Path() = %q, want /dynamic", got)
+	}
+}
+
+func TestParseHTTPRequestFast_CommonHeadersCloneOnAccess(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+
+	host := req.Header("Host")
+	accept := req.Header("Accept")
+	for i := range raw {
+		raw[i] = 'x'
+	}
+
+	if host != "example.test" {
+		t.Fatalf("retained Host = %q, want example.test", host)
+	}
+	if accept != "text/plain" {
+		t.Fatalf("retained Accept = %q, want text/plain", accept)
+	}
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+}
+
+func TestParseHTTPRequestFast_FinalizeCommonHeadersBeforeBufferReuse(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\n\r\nGET /next HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestCommonHeaders(req)
+
+	for i := range raw {
+		raw[i] = 'x'
+	}
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+}
+
 // TestBtoi verifies integer parsing including overflow protection.
 func TestBtoi(t *testing.T) {
 	tests := []struct {

@@ -73,6 +73,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 		if idx >= 0 {
 			// Param route: store as prefix match
 			if colonIdx := wingIndexByte(path, ':'); colonIdx > 0 {
+				f.handlers = nil
 				ft.prefixes[idx] = append(ft.prefixes[idx], prefixFeather{
 					prefix: path[:colonIdx], feather: f,
 				})
@@ -80,6 +81,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 				if ft.routes[idx] == nil {
 					ft.routes[idx] = make(map[string]Feather, 4)
 				}
+				f.path = path
 				ft.routes[idx][path] = f
 			}
 		} else {

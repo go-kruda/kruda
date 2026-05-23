@@ -198,6 +198,14 @@ response:
 // ServeKruda implements transport.Handler. Includes panic recovery to prevent
 // server crashes from unhandled panics not caught by Recovery middleware.
 func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
+	app.serveKruda(w, r, nil, false)
+}
+
+func (app *App) serveKrudaRoute(w transport.ResponseWriter, r transport.Request, handlers []HandlerFunc) {
+	app.serveKruda(w, r, handlers, true)
+}
+
+func (app *App) serveKruda(w transport.ResponseWriter, r transport.Request, routeHandlers []HandlerFunc, pathAlreadyClean bool) {
 	c := app.ctxPool.Get().(*Ctx)
 	c.reset(w, r)
 	defer func() {
@@ -218,7 +226,7 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 	// has no '.' or '%' to clean; on error route through handleError so
 	// OnError hooks + slog + custom ErrorHandler all fire; goto response so
 	// OnResponse hooks still run (matches the "always runs" guarantee).
-	if app.config.PathTraversal && len(c.path) > 1 && containsDotPercent(c.path) {
+	if !pathAlreadyClean && app.config.PathTraversal && len(c.path) > 1 && containsDotPercent(c.path) {
 		cleaned, err := cleanPath(c.path)
 		if err != nil {
 			app.handleError(c, NewError(400, "bad request: "+err.Error()))
@@ -238,7 +246,10 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 	}
 
 	{
-		handlers := app.router.find(c.method, c.path, &c.params)
+		handlers := routeHandlers
+		if handlers == nil {
+			handlers = app.router.find(c.method, c.path, &c.params)
+		}
 		if handlers == nil {
 			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
 				c.SetHeader("Allow", allowed)

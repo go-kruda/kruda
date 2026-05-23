@@ -571,6 +571,7 @@ func (w *worker) tryParse(c *conn) {
 		// Consume parsed bytes.
 		remaining := c.readN - consumed
 		if remaining > 0 {
+			finalizeRequestCommonHeaders(req)
 			copy(c.readBuf, c.readBuf[consumed:c.readN])
 		}
 		c.readN = remaining

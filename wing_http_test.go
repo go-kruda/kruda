@@ -208,6 +208,52 @@ func TestParseHTTPRequestFast_FinalizedFallbackPathIsSafe(t *testing.T) {
 	}
 }
 
+func TestParseHTTPRequestFast_CommonHeadersCloneOnAccess(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+
+	host := req.Header("Host")
+	accept := req.Header("Accept")
+	for i := range raw {
+		raw[i] = 'x'
+	}
+
+	if host != "example.test" {
+		t.Fatalf("retained Host = %q, want example.test", host)
+	}
+	if accept != "text/plain" {
+		t.Fatalf("retained Accept = %q, want text/plain", accept)
+	}
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+}
+
+func TestParseHTTPRequestFast_FinalizeCommonHeadersBeforeBufferReuse(t *testing.T) {
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: example.test\r\nAccept: text/plain\r\n\r\nGET /next HTTP/1.1\r\nHost: example.test\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	finalizeRequestCommonHeaders(req)
+
+	for i := range raw {
+		raw[i] = 'x'
+	}
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Accept"); got != "text/plain" {
+		t.Fatalf("Header(Accept) = %q, want text/plain", got)
+	}
+}
+
 // TestBtoi verifies integer parsing including overflow protection.
 func TestBtoi(t *testing.T) {
 	tests := []struct {

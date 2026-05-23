@@ -112,6 +112,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	cookie := ""
 	host := ""
 	accept := ""
+	hostUnsafe := false
+	acceptUnsafe := false
 	keepAlive := true // HTTP/1.1 default
 	headerCount := 0
 	contentLengthSeen := false
@@ -194,9 +196,11 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		case len(key) == 6 && asciiEqualFold(key, bCookie):
 			cookie = string(val)
 		case len(key) == 4 && asciiEqualFold(key, bHost):
-			host = string(val)
+			host = copyOrUnsafeString(val, unsafePath)
+			hostUnsafe = unsafePath && len(val) > 0
 		case len(key) == 6 && asciiEqualFold(key, bAccept):
-			accept = string(val)
+			accept = copyOrUnsafeString(val, unsafePath)
+			acceptUnsafe = unsafePath && len(val) > 0
 		default:
 			if extraN < len(extraHdrs) {
 				lk := make([]byte, len(key))
@@ -238,6 +242,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.cookie = cookie
 		r.host = host
 		r.accept = accept
+		r.hostUnsafe = hostUnsafe
+		r.acceptUnsafe = acceptUnsafe
 		r.extraHdrs = extraHdrs
 		r.extraN = extraN
 		r.keepAlive = keepAlive
@@ -253,6 +259,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.cookie = cookie
 	r.host = host
 	r.accept = accept
+	r.hostUnsafe = hostUnsafe
+	r.acceptUnsafe = acceptUnsafe
 	r.extraHdrs = extraHdrs
 	r.extraN = extraN
 	r.keepAlive = keepAlive
@@ -280,6 +288,17 @@ func finalizeRequestPath(r *wingRequest, f Feather) {
 		r.path = strings.Clone(r.path)
 	}
 	r.pathUnsafe = false
+}
+
+func finalizeRequestCommonHeaders(r *wingRequest) {
+	if r.hostUnsafe {
+		r.host = strings.Clone(r.host)
+		r.hostUnsafe = false
+	}
+	if r.acceptUnsafe {
+		r.accept = strings.Clone(r.accept)
+		r.acceptUnsafe = false
+	}
 }
 
 var (
@@ -433,6 +452,8 @@ func releaseRequest(r *wingRequest) {
 	r.cookie = ""
 	r.host = ""
 	r.accept = ""
+	r.hostUnsafe = false
+	r.acceptUnsafe = false
 	r.remoteAddr = ""
 	r.keepAlive = false
 	r.pathUnsafe = false
@@ -463,21 +484,23 @@ func parseCookieValue(cookie, name string) string {
 
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
-	method      string
-	path        string
-	query       string
-	body        []byte
-	contentType string
-	cookie      string
-	host        string
-	accept      string
-	remoteAddr  string
-	keepAlive   bool
-	pathUnsafe  bool
-	fd          int32 // connection fd — for RawRequest().Fd()
-	extraHdrs   [8]struct{ k, v string }
-	extraN      int
-	ctx         context.Context
+	method       string
+	path         string
+	query        string
+	body         []byte
+	contentType  string
+	cookie       string
+	host         string
+	accept       string
+	remoteAddr   string
+	keepAlive    bool
+	pathUnsafe   bool
+	hostUnsafe   bool
+	acceptUnsafe bool
+	fd           int32 // connection fd — for RawRequest().Fd()
+	extraHdrs    [8]struct{ k, v string }
+	extraN       int
+	ctx          context.Context
 }
 
 func (r *wingRequest) Method() string        { return r.method }
@@ -521,9 +544,17 @@ func (r *wingRequest) Header(key string) string {
 		return r.cookie
 	}
 	if key == "Host" || key == "host" {
+		if r.hostUnsafe {
+			r.host = strings.Clone(r.host)
+			r.hostUnsafe = false
+		}
 		return r.host
 	}
 	if key == "Accept" || key == "accept" {
+		if r.acceptUnsafe {
+			r.accept = strings.Clone(r.accept)
+			r.acceptUnsafe = false
+		}
 		return r.accept
 	}
 	lk := strings.ToLower(key)

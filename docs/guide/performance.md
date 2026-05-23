@@ -1,6 +1,6 @@
 # Performance
 
-Kruda is designed for high performance with zero-allocation hot paths, pooled contexts, and pluggable transports.
+Kruda is designed for high-performance, low-latency, high-throughput CPU-bound routes with zero-allocation hot paths, pooled contexts, and pluggable transports.
 
 ## Transport Selection
 
@@ -8,7 +8,7 @@ Kruda defaults to **Wing** transport on Linux for maximum performance — raw `e
 
 | Transport | Option | Best For |
 |-----------|--------|----------|
-| Wing | `kruda.New()` (default on Linux) | Maximum throughput (846K req/s) |
+| Wing | `kruda.New()` (default on Linux) | Maximum throughput for CPU-bound plaintext and JSON routes |
 | fasthttp | `kruda.New(kruda.FastHTTP())` (default on macOS) | Broad compatibility |
 | net/http | `kruda.New(kruda.NetHTTP())` (default on Windows) | HTTP/2, TLS |
 
@@ -211,6 +211,19 @@ CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs dire
 
 I/O-bound routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
 
+### Opt-in Static Wing Responses
+
+For public static hot paths, Wing can bypass the handler pipeline entirely with prebuilt responses:
+
+```go
+app.Get("/healthz", func(c *kruda.Ctx) error { return c.Text("ok") },
+    kruda.WingStaticText(200, "text/plain; charset=utf-8", "ok"))
+app.Get("/version", func(c *kruda.Ctx) error { return c.JSON(kruda.Map{"version": "1.2.3"}) },
+    kruda.WingStaticJSON(200, `{"version":"1.2.3"}`))
+```
+
+These options bypass the handler, middleware, lifecycle hooks, cookies, CORS, and secure-header injection on Wing transports. Use normal handlers when a response needs application behavior. Do not use static bypass routes for fair normal-handler benchmark comparisons.
+
 ### Handler Pool Size
 
 Pool dispatch routes share a goroutine pool per worker. Default size = number of workers.
@@ -312,17 +325,16 @@ env:
 
 ## Benchmark Results
 
-Measured with `wrk -t4 -c256 -d5s` on Linux i5-13500 (8P cores), `GOGC=400`. Wing transport (epoll + eventfd).
+Use [`bench/reproducible/`](https://github.com/go-kruda/kruda/tree/main/bench/reproducible) for current Kruda vs Fiber vs Actix evidence. The default benchmark is CPU-bound and records RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses for:
 
-### Kruda vs Fiber vs Actix Web
+| Route | Workload |
+|------|----------|
+| `/plaintext-handler` | Normal handler path returning plaintext |
+| `/json-static` | Normal handler path returning constant JSON bytes, no serialization |
+| `/json-serialize` | Normal handler path performing real JSON serialization |
 
-| Test | Kruda (Wing) | Fiber (Go) | Actix (Rust) | vs Fiber | vs Actix |
-|------|--:|--:|--:|--:|--:|
-| plaintext | **846,622** | 670,240 | 814,652 | **+26%** | **+4%** |
-| JSON | **805,124** | 625,839 | 790,362 | **+29%** | **+2%** |
-| db | **108,468** | 107,450 | 37,373 | **+1%** | **+190%** |
-| fortunes | 104,144 | **106,623** | 45,078 | -2% | **+131%** |
+The harness runs both `wrk --latency -t4 -c128 -d15s` and `wrk --latency -t4 -c256 -d15s` with one warmup and five measured rounds per framework/route/profile.
 
-**Why Kruda is fast:** Wing transport uses raw `epoll` + `eventfd` on Linux — bypassing both fasthttp and net/http entirely. Combined with zero-allocation hot paths and inline JSON serialization, this eliminates framework overhead on CPU-bound routes.
+**Claim rule:** say "faster than Actix" only when Kruda median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero socket errors and zero non-2xx responses. Otherwise, say "same ballpark as Actix."
 
-> **Note:** DB and fortunes tests are I/O-bound and depend heavily on database driver and connection pool configuration. See [`bench/`](https://github.com/go-kruda/kruda/tree/main/bench) for full methodology and reproduction steps.
+DB and fortunes workloads are opt-in with `BENCH_ENABLE_DB=1` because database driver, pool, and schema configuration can dominate framework overhead.

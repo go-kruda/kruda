@@ -34,11 +34,17 @@ type JSONResponse struct {
 	Data    JSONBody `json:"data"`
 }
 
+type JSONMessage struct {
+	Message string `json:"message"`
+}
+
 type UserResponse struct {
 	ID    int    `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
 }
+
+var staticJSONBody = []byte(`{"message":"Hello, World!"}`)
 
 var pool *pgxpool.Pool
 
@@ -52,22 +58,34 @@ func main() {
 		dsn = "postgres://benchmarkdbuser:benchmarkdbpass@localhost:5433/hello_world?pool_max_conns=64&pool_min_conns=8"
 	}
 
-	var err error
-	pool, err = pgxpool.New(context.Background(), dsn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "pgxpool: %v\n", err)
-		os.Exit(1)
+	enableDB := os.Getenv("BENCH_ENABLE_DB") == "1"
+	if enableDB {
+		var err error
+		pool, err = pgxpool.New(context.Background(), dsn)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pgxpool: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	plaintext := func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World!")
+	}
+	app.Get("/", plaintext)
+	app.Get("/plaintext-handler", plaintext)
+
+	app.Get("/json-static", func(c *fiber.Ctx) error {
+		c.Set("Content-Type", "application/json; charset=utf-8")
+		return c.Send(staticJSONBody)
 	})
 
-	app.Get("/json", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Hello, World!"})
-	})
+	jsonSerialize := func(c *fiber.Ctx) error {
+		return c.JSON(JSONMessage{Message: "Hello, World!"})
+	}
+	app.Get("/json", jsonSerialize)
+	app.Get("/json-serialize", jsonSerialize)
 
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		id, _ := strconv.Atoi(c.Params("id"))
@@ -82,6 +100,18 @@ func main() {
 		return c.JSON(JSONResponse{Message: "received", Data: body})
 	})
 
+	if enableDB {
+		registerDBRoutes(app)
+	}
+
+	fmt.Printf("[fiber] listening on :%s\n", port)
+	if err := app.Listen(":" + port); err != nil {
+		fmt.Fprintf(os.Stderr, "fiber listen: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func registerDBRoutes(app *fiber.App) {
 	app.Get("/db", func(c *fiber.Ctx) error {
 		w := World{ID: int32(rand.IntN(10000) + 1)}
 		pool.QueryRow(context.Background(),
@@ -154,9 +184,6 @@ func main() {
 		)
 		return c.JSON(worlds)
 	})
-
-	fmt.Printf("[fiber] listening on :%s\n", port)
-	app.Listen(":" + port)
 }
 
 func queryCount(s string) int {

@@ -1,0 +1,95 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkPlaintext-8            	23175702	        51.62 ns/op	      16 B/op	       1 allocs/op
+BenchmarkPlaintext-8            	23584171	        51.36 ns/op	      16 B/op	       1 allocs/op
+BenchmarkPlaintext-8            	23672840	        50.89 ns/op	      16 B/op	       1 allocs/op
+BenchmarkPlaintext-8            	23549844	        50.98 ns/op	      16 B/op	       1 allocs/op
+BenchmarkPlaintext-8            	23407231	        51.86 ns/op	      16 B/op	       1 allocs/op
+BenchmarkJSON-8                 	 3968584	       306.2 ns/op	     416 B/op	       5 allocs/op
+BenchmarkJSON-8                 	 4125168	       292.4 ns/op	     416 B/op	       5 allocs/op
+BenchmarkJSON-8                 	 4085778	       290.9 ns/op	     416 B/op	       5 allocs/op
+BenchmarkJSON-8                 	 4080882	       297.5 ns/op	     416 B/op	       5 allocs/op
+BenchmarkJSON-8                 	 4095880	       292.1 ns/op	     416 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8          	 6410338	       186.7 ns/op	      48 B/op	       6 allocs/op
+BenchmarkCPUParseGET-8          	 6425953	       186.5 ns/op	      48 B/op	       6 allocs/op
+BenchmarkCPUParseGET-8          	 6424080	       189.7 ns/op	      48 B/op	       6 allocs/op
+BenchmarkCPUParseGET-8          	 6392534	       187.5 ns/op	      48 B/op	       6 allocs/op
+BenchmarkCPUParseGET-8          	 6437632	       186.8 ns/op	      48 B/op	       6 allocs/op
+BenchmarkCPUParsePOST-8         	 4987898	       241.0 ns/op	      88 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8         	 4992058	       239.8 ns/op	      88 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8         	 5023063	       239.6 ns/op	      88 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8         	 5005638	       242.5 ns/op	      88 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8         	 4834752	       243.2 ns/op	      88 B/op	       5 allocs/op
+BenchmarkCPUResponseBuild-8     	11485753	       105.2 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseBuild-8     	11465082	       105.7 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseBuild-8     	11516070	       104.6 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseBuild-8     	11574804	       103.3 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseBuild-8     	11603064	       104.1 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8      	12915370	        92.98 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8      	12955120	        92.54 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8      	13003066	        93.49 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8      	12835945	        93.52 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUResponseJSON-8      	12873487	        93.24 ns/op	     472 B/op	       4 allocs/op
+BenchmarkCPUFullCycle-8         	 4451383	       268.0 ns/op	     264 B/op	       9 allocs/op
+BenchmarkCPUFullCycle-8         	 4501797	       266.9 ns/op	     264 B/op	       9 allocs/op
+BenchmarkCPUFullCycle-8         	 4499280	       275.8 ns/op	     264 B/op	       9 allocs/op
+BenchmarkCPUFullCycle-8         	 4370866	       273.4 ns/op	     264 B/op	       9 allocs/op
+BenchmarkCPUFullCycle-8         	 4457890	       268.8 ns/op	     264 B/op	       9 allocs/op
+BenchmarkFeatherTableLookup-8   	30141444	        40.17 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8   	30062787	        40.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8   	30583767	        39.31 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8   	29170849	        40.59 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFeatherTableLookup-8   	29518297	        40.26 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	51.604s
+?   	github.com/go-kruda/kruda/examples/auth	[no test files]
+?   	github.com/go-kruda/kruda/examples/auto-crud	[no test files]
+?   	github.com/go-kruda/kruda/examples/clean-arch	[no test files]
+?   	github.com/go-kruda/kruda/examples/clean-arch/domain	[no test files]
+?   	github.com/go-kruda/kruda/examples/clean-arch/handler	[no test files]
+?   	github.com/go-kruda/kruda/examples/clean-arch/repository	[no test files]
+?   	github.com/go-kruda/kruda/examples/crud	[no test files]
+?   	github.com/go-kruda/kruda/examples/database	[no test files]
+?   	github.com/go-kruda/kruda/examples/di-services	[no test files]
+?   	github.com/go-kruda/kruda/examples/error-handling	[no test files]
+?   	github.com/go-kruda/kruda/examples/flat	[no test files]
+?   	github.com/go-kruda/kruda/examples/health-checks	[no test files]
+?   	github.com/go-kruda/kruda/examples/hello	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal/adapter/http	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal/adapter/storage	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal/domain	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal/port	[no test files]
+?   	github.com/go-kruda/kruda/examples/hexagonal/service	[no test files]
+?   	github.com/go-kruda/kruda/examples/json-api	[no test files]
+?   	github.com/go-kruda/kruda/examples/layered	[no test files]
+?   	github.com/go-kruda/kruda/examples/layered/handler	[no test files]
+?   	github.com/go-kruda/kruda/examples/layered/model	[no test files]
+?   	github.com/go-kruda/kruda/examples/layered/repository	[no test files]
+?   	github.com/go-kruda/kruda/examples/layered/service	[no test files]
+?   	github.com/go-kruda/kruda/examples/middleware	[no test files]
+?   	github.com/go-kruda/kruda/examples/openapi	[no test files]
+?   	github.com/go-kruda/kruda/examples/sse	[no test files]
+?   	github.com/go-kruda/kruda/examples/static-files	[no test files]
+PASS
+ok  	github.com/go-kruda/kruda/examples/testing	0.279s
+?   	github.com/go-kruda/kruda/examples/typed-handlers	[no test files]
+PASS
+ok  	github.com/go-kruda/kruda/internal/bytesconv	0.146s
+PASS
+ok  	github.com/go-kruda/kruda/json	0.541s
+PASS
+ok  	github.com/go-kruda/kruda/middleware	0.640s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/transport
+cpu: Apple M3
+BenchmarkGetStaticResponseStringCached-8   	37643210	        31.35 ns/op	      16 B/op	       1 allocs/op
+BenchmarkGetStaticResponseStringCached-8   	37885015	        31.36 ns/op	      16 B/op	       1 allocs/op
+BenchmarkGetStaticResponseStringCached-8   	38100025	        31.34 ns/op	      16 B/op	       1 allocs/op
+BenchmarkGetStaticResponseStringCached-8   	38275425	        32.14 ns/op	      16 B/op	       1 allocs/op
+BenchmarkGetStaticResponseStringCached-8   	38262915	        31.56 ns/op	      16 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/transport	7.514s

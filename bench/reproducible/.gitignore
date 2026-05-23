@@ -2,4 +2,3 @@
 kruda/kruda-bench
 fiber/fiber-bench
 actix/target/
-actix/Cargo.lock

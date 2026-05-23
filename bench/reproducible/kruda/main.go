@@ -95,8 +95,8 @@ func main() {
 	plaintext := func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
 	}
-	app.Get("/", plaintext, kruda.WingPlaintextTakeover())
-	app.Get("/plaintext-handler", plaintext, kruda.WingPlaintextTakeover())
+	app.Get("/", plaintext, kruda.WingPlaintext())
+	app.Get("/plaintext-handler", plaintext, kruda.WingPlaintext())
 
 	app.Get("/json-static", func(c *kruda.Ctx) error {
 		return c.SendStaticWithTypeBytes(staticJSONContentType, staticJSONBody)

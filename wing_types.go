@@ -16,13 +16,6 @@ func wingFeatherOpt(f Feather) RouteOption {
 // WingPlaintext — static text, health checks. Inline in ioLoop.
 func WingPlaintext() RouteOption { return wingFeatherOpt(Plaintext) }
 
-// WingPlaintextTakeover configures a plaintext route to keep each accepted
-// connection in a blocking Wing goroutine after the first request. The handler,
-// middleware, lifecycle hooks, and normal response behavior still run.
-func WingPlaintextTakeover() RouteOption {
-	return wingFeatherOpt(Plaintext.With(Dispatch(Takeover)))
-}
-
 // WingJSON — JSON response, no external I/O. Inline in ioLoop.
 func WingJSON() RouteOption { return wingFeatherOpt(JSON) }
 

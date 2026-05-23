@@ -1,0 +1,62 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+                     │ /private/tmp/kruda-main-bench.txt │ /private/tmp/kruda-perf-bench.txt  │
+                     │              sec/op               │    sec/op     vs base              │
+Plaintext-8                                 51.36n ± ∞ ¹   51.03n ± ∞ ¹       ~ (p=1.000 n=5)
+JSON-8                                      292.4n ± ∞ ¹   297.0n ± ∞ ¹       ~ (p=0.841 n=5)
+CPUParseGET-8                               186.8n ± ∞ ¹   180.0n ± ∞ ¹  -3.64% (p=0.008 n=5)
+CPUParsePOST-8                              241.0n ± ∞ ¹   231.6n ± ∞ ¹  -3.90% (p=0.008 n=5)
+CPUResponseBuild-8                          104.6n ± ∞ ¹   102.5n ± ∞ ¹  -2.01% (p=0.032 n=5)
+CPUResponseJSON-8                           93.24n ± ∞ ¹   91.35n ± ∞ ¹  -2.03% (p=0.008 n=5)
+CPUFullCycle-8                              268.8n ± ∞ ¹   267.8n ± ∞ ¹       ~ (p=0.548 n=5)
+FeatherTableLookup-8                        40.26n ± ∞ ¹   39.44n ± ∞ ¹       ~ (p=0.421 n=5)
+geomean                                     127.8n         125.7n        -1.65%
+¹ need >= 6 samples for confidence interval at level 0.95
+
+                     │ /private/tmp/kruda-main-bench.txt │  /private/tmp/kruda-perf-bench.txt  │
+                     │               B/op                │    B/op      vs base                │
+Plaintext-8                                  16.00 ± ∞ ¹   16.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+JSON-8                                       416.0 ± ∞ ¹   416.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParseGET-8                                48.00 ± ∞ ¹   48.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParsePOST-8                               88.00 ± ∞ ¹   88.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseBuild-8                           472.0 ± ∞ ¹   472.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseJSON-8                            472.0 ± ∞ ¹   472.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUFullCycle-8                               264.0 ± ∞ ¹   264.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+FeatherTableLookup-8                         0.000 ± ∞ ¹   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+geomean                                                ³                +0.00%               ³
+¹ need >= 6 samples for confidence interval at level 0.95
+² all samples are equal
+³ summaries must be >0 to compute geomean
+
+                     │ /private/tmp/kruda-main-bench.txt │  /private/tmp/kruda-perf-bench.txt  │
+                     │             allocs/op             │  allocs/op   vs base                │
+Plaintext-8                                  1.000 ± ∞ ¹   1.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+JSON-8                                       5.000 ± ∞ ¹   5.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParseGET-8                                6.000 ± ∞ ¹   6.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParsePOST-8                               5.000 ± ∞ ¹   5.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseBuild-8                           4.000 ± ∞ ¹   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseJSON-8                            4.000 ± ∞ ¹   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUFullCycle-8                               9.000 ± ∞ ¹   9.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+FeatherTableLookup-8                         0.000 ± ∞ ¹   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+geomean                                                ³                +0.00%               ³
+¹ need >= 6 samples for confidence interval at level 0.95
+² all samples are equal
+³ summaries must be >0 to compute geomean
+
+pkg: github.com/go-kruda/kruda/transport
+                                │ /private/tmp/kruda-main-bench.txt │  /private/tmp/kruda-perf-bench.txt  │
+                                │              sec/op               │    sec/op     vs base               │
+GetStaticResponseStringCached-8                        31.36n ± ∞ ¹   24.76n ± ∞ ¹  -21.05% (p=0.008 n=5)
+¹ need >= 6 samples for confidence interval at level 0.95
+
+                                │ /private/tmp/kruda-main-bench.txt │ /private/tmp/kruda-perf-bench.txt  │
+                                │               B/op                │    B/op     vs base                │
+GetStaticResponseStringCached-8                         16.00 ± ∞ ¹   0.00 ± ∞ ¹  -100.00% (p=0.008 n=5)
+¹ need >= 6 samples for confidence interval at level 0.95
+
+                                │ /private/tmp/kruda-main-bench.txt │  /private/tmp/kruda-perf-bench.txt  │
+                                │             allocs/op             │  allocs/op   vs base                │
+GetStaticResponseStringCached-8                         1.000 ± ∞ ¹   0.000 ± ∞ ¹  -100.00% (p=0.008 n=5)
+¹ need >= 6 samples for confidence interval at level 0.95

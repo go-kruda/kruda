@@ -120,7 +120,13 @@ type AllQueryProvider interface {
 
 // --- Static response cache ---
 
-var staticCache sync.Map // key → *staticEntry
+var staticCache sync.Map // staticKey → *staticEntry
+
+type staticKey struct {
+	status      int
+	contentType string
+	body        string
+}
 
 type staticEntry struct {
 	resp []byte
@@ -145,20 +151,27 @@ func init() {
 // The Date header is captured when the response is first built. Cached response
 // bytes are immutable so they can be shared safely across workers.
 func GetStaticResponse(status int, contentType string, body []byte) []byte {
-	key := strconv.Itoa(status) + "\x00" + contentType + "\x00" + string(body)
-	return getStaticByKey(status, contentType, key, body)
+	key := staticKey{status: status, contentType: contentType, body: string(body)}
+	if v, ok := staticCache.Load(key); ok {
+		return v.(*staticEntry).resp
+	}
+	b := buildStaticPrefix(status, contentType, len(body))
+	b = append(b, body...)
+	return storeStaticResponse(key, b)
 }
 
 // GetStaticResponseString is like GetStaticResponse but avoids []byte(s) allocation.
 func GetStaticResponseString(status int, contentType, body string) []byte {
-	key := strconv.Itoa(status) + "\x00" + contentType + "\x00" + body
-	return getStaticByKey(status, contentType, key, []byte(body))
-}
-
-func getStaticByKey(status int, contentType, key string, body []byte) []byte {
+	key := staticKey{status: status, contentType: contentType, body: body}
 	if v, ok := staticCache.Load(key); ok {
 		return v.(*staticEntry).resp
 	}
+	b := buildStaticPrefix(status, contentType, len(body))
+	b = append(b, body...)
+	return storeStaticResponse(key, b)
+}
+
+func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
 	var b []byte
 	if status > 0 && status < len(staticStatusLines) && staticStatusLines[status] != nil {
 		b = append(b, staticStatusLines[status]...)
@@ -176,9 +189,12 @@ func getStaticByKey(status int, contentType, key string, body []byte) []byte {
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
-	b = strconv.AppendInt(b, int64(len(body)), 10)
+	b = strconv.AppendInt(b, int64(bodyLen), 10)
 	b = append(b, "\r\n\r\n"...)
-	b = append(b, body...)
+	return b
+}
+
+func storeStaticResponse(key staticKey, b []byte) []byte {
 	entry := &staticEntry{resp: b}
 	actual, _ := staticCache.LoadOrStore(key, entry)
 	return actual.(*staticEntry).resp

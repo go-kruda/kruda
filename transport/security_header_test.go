@@ -31,3 +31,17 @@ func TestStaticResponseCacheKeyIncludesStatus(t *testing.T) {
 		t.Fatalf("404 static response has wrong status line: %q", notFound)
 	}
 }
+
+func BenchmarkGetStaticResponseStringCached(b *testing.B) {
+	staticCache.Clear()
+	want := GetStaticResponseString(200, "text/plain", "ok")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		got := GetStaticResponseString(200, "text/plain", "ok")
+		if len(got) != len(want) {
+			b.Fatalf("len = %d, want %d", len(got), len(want))
+		}
+	}
+}

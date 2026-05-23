@@ -709,7 +709,7 @@ func (w *worker) tryParse(c *conn) {
 			w.dispatchWG.Add(1)
 			go func() {
 				defer w.dispatchWG.Done()
-				w.takeoverLoop(req, c.fd, leftover)
+				w.takeoverLoop(req, c.fd, leftover, f)
 			}()
 			return
 
@@ -848,7 +848,7 @@ var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); retur
 // blocking syscalls (not RawSyscall) so the Go runtime detects the
 // blocking I/O and creates extra OS threads, avoiding starvation
 // from ioLoop's LockOSThread.
-func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, firstFeather Feather) {
 	// Set fd to blocking mode so syscall.Read/Write will block the OS thread,
 	// triggering Go runtime to spin up new threads for other goroutines.
 	syscall.SetNonblock(int(fd), false)
@@ -860,22 +860,29 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	remoteAddr := first.remoteAddr
 	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
+	feather := firstFeather
 	keepAlive := req.keepAlive
 
 	for {
 		// Handle request.
-		resp := acquireResponse()
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					resp.WriteHeader(500)
-					resp.Write([]byte("Internal Server Error\n"))
-				}
+		var data []byte
+		if feather.StaticResponse != nil {
+			data = feather.StaticResponse
+		} else {
+			resp := acquireResponse()
+			resp.responseMode = feather.ResponseMode
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						resp.WriteHeader(500)
+						resp.Write([]byte("Internal Server Error\n"))
+					}
+				}()
+				w.serveRoute(resp, req, feather)
 			}()
-			w.handler.ServeKruda(resp, req)
-		}()
-		data := resp.buildZeroCopy()
-		releaseResponse(resp)
+			data = resp.buildZeroCopy()
+			releaseResponse(resp)
+		}
 		releaseRequest(req)
 
 		// Write full response — blocking syscall.Write (not RawSyscall).
@@ -897,10 +904,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 		// Read next request — blocking syscall.Read.
 		for {
 			if readN > 0 {
-				r, consumed, ok := parseHTTPRequest(buf[:readN], w.limits)
+				r, consumed, ok := parseHTTPRequestFast(buf[:readN], w.limits)
 				if ok {
+					feather = w.feathers.Lookup(r.method, r.path)
+					finalizeRequestPath(r, feather)
 					remaining := readN - consumed
 					if remaining > 0 {
+						finalizeRequestCommonHeaders(r)
 						copy(buf, buf[consumed:readN])
 					}
 					readN = remaining

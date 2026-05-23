@@ -100,6 +100,7 @@ type Feather struct {
 	Dispatch       DispatchMode
 	StaticResponse []byte // pre-built full HTTP response; bypasses handler entirely
 	ResponseMode   responseMode
+	handlers       []HandlerFunc
 }
 
 // FeatherOption modifies a Feather in-place.

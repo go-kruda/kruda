@@ -198,6 +198,14 @@ response:
 // ServeKruda implements transport.Handler. Includes panic recovery to prevent
 // server crashes from unhandled panics not caught by Recovery middleware.
 func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
+	app.serveKruda(w, r, nil)
+}
+
+func (app *App) serveKrudaRoute(w transport.ResponseWriter, r transport.Request, handlers []HandlerFunc) {
+	app.serveKruda(w, r, handlers)
+}
+
+func (app *App) serveKruda(w transport.ResponseWriter, r transport.Request, routeHandlers []HandlerFunc) {
 	c := app.ctxPool.Get().(*Ctx)
 	c.reset(w, r)
 	defer func() {
@@ -238,7 +246,10 @@ func (app *App) ServeKruda(w transport.ResponseWriter, r transport.Request) {
 	}
 
 	{
-		handlers := app.router.find(c.method, c.path, &c.params)
+		handlers := routeHandlers
+		if handlers == nil {
+			handlers = app.router.find(c.method, c.path, &c.params)
+		}
 		if handlers == nil {
 			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
 				c.SetHeader("Allow", allowed)

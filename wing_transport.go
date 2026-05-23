@@ -253,6 +253,10 @@ type handlerJob struct {
 	responseMode responseMode
 }
 
+type wingRouteHandler interface {
+	serveKrudaRoute(transport.ResponseWriter, transport.Request, []HandlerFunc)
+}
+
 // workerPool is a fixed-size goroutine pool per worker.
 type workerPool struct {
 	jobs chan handlerJob
@@ -319,6 +323,16 @@ func (p *workerPool) loop(h transport.Handler) {
 		}
 		p.wake()
 	}
+}
+
+func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
+	if f.ResponseMode == responsePlaintext && len(f.handlers) > 0 && !containsDotPercent(req.path) {
+		if h, ok := w.handler.(wingRouteHandler); ok {
+			h.serveKrudaRoute(resp, req, f.handlers)
+			return
+		}
+	}
+	w.handler.ServeKruda(resp, req)
 }
 
 func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
@@ -569,7 +583,7 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
-				w.handler.ServeKruda(resp, req)
+				w.serveRoute(resp, req, f)
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()
@@ -613,7 +627,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
@@ -632,7 +646,7 @@ func (w *worker) tryParse(c *conn) {
 			c.keepAlive = req.keepAlive
 			c.pending++
 			w.dispatchWG.Add(1)
-			go func(req *wingRequest, fd int32, ka bool) {
+			go func(req *wingRequest, fd int32, ka bool, f Feather) {
 				defer w.dispatchWG.Done()
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
@@ -643,7 +657,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
@@ -665,7 +679,7 @@ func (w *worker) tryParse(c *conn) {
 					w.doneCh <- doneMsg{fd: fd, data: data[written:], keepAlive: ka}
 				}
 				w.wake()
-			}(req, c.fd, req.keepAlive)
+			}(req, c.fd, req.keepAlive, f)
 			return
 
 		case Takeover:
@@ -709,7 +723,7 @@ func (w *worker) tryParse(c *conn) {
 							resp.Write([]byte("Internal Server Error\n"))
 						}
 					}()
-					w.handler.ServeKruda(resp, req)
+					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)

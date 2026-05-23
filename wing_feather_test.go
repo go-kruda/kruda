@@ -178,7 +178,7 @@ func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
 }
 
 func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
-	app := New()
+	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool
 	app.Use(func(c *Ctx) error {
 		middlewareRan = true
@@ -198,11 +198,20 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	}, WingPlaintext())
 	app.Compile()
 
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /plaintext"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingPlaintext route did not retain its handler chain")
+	}
+
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 	resp.responseMode = responsePlaintext
 
-	app.ServeKruda(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true})
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
 	if !middlewareRan || !beforeRan || !handlerRan || !afterRan {
 		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
@@ -213,18 +222,27 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 }
 
 func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
-	app := New()
+	app := New(Wing())
 	app.Get("/plaintext", func(c *Ctx) error {
 		c.SetHeader("X-Test", "yes")
 		return c.Text("ok")
 	}, WingPlaintext())
 	app.Compile()
 
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /plaintext"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingPlaintext route did not retain its handler chain")
+	}
+
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 	resp.responseMode = responsePlaintext
 
-	app.ServeKruda(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true})
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
 	if resp.plaintextFast {
 		t.Fatal("custom response headers must fall back to generic serialization")

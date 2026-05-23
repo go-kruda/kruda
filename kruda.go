@@ -240,7 +240,9 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 		}
 		if rc.wingFeather != nil {
 			if fc, ok := app.transport.(transport.FeatherConfigurator); ok {
-				fc.SetRouteFeather(method, path, rc.wingFeather)
+				f := *rc.wingFeather
+				f.handlers = chain
+				fc.SetRouteFeather(method, path, &f)
 			}
 		}
 	}

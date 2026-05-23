@@ -779,7 +779,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		}
 		b = append(b, dateHdr()...)
 		b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
-		b = strconv.AppendInt(b, int64(len(r.body)), 10)
+		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n\r\n"...)
 		b = append(b, r.body...)
 		r.buf = nil
@@ -820,7 +820,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 	if !hasCL {
 		b = append(b, "Content-Length: "...)
-		b = strconv.AppendInt(b, int64(len(r.body)), 10)
+		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "\r\n"...)
@@ -846,10 +846,17 @@ func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
-	b = strconv.AppendInt(b, int64(len(r.plaintextText)), 10)
+	b = appendContentLengthValue(b, len(r.plaintextText))
 	b = append(b, "\r\n\r\n"...)
 	b = append(b, r.plaintextText...)
 	return b
+}
+
+func appendContentLengthValue(b []byte, n int) []byte {
+	if n >= 0 && n < len(contentLengthStrings) {
+		return append(b, contentLengthStrings[n]...)
+	}
+	return strconv.AppendInt(b, int64(n), 10)
 }
 
 // build serialises the HTTP response with a safe copy (for async dispatch).
@@ -883,7 +890,11 @@ func (r *wingResponse) buildHeadersOnly() []byte {
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
-	b = strconv.AppendInt(b, r.fileSize, 10)
+	if r.fileSize >= 0 && r.fileSize < int64(len(contentLengthStrings)) {
+		b = append(b, contentLengthStrings[int(r.fileSize)]...)
+	} else {
+		b = strconv.AppendInt(b, r.fileSize, 10)
+	}
 	b = append(b, "\r\n\r\n"...)
 	r.buf = nil
 	return b

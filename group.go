@@ -131,7 +131,9 @@ func (g *Group) addRoute(method, path string, handler HandlerFunc, opts ...Route
 		}
 		if rc.wingFeather != nil {
 			if fc, ok := g.app.transport.(transport.FeatherConfigurator); ok {
-				fc.SetRouteFeather(method, fullPath, rc.wingFeather)
+				f := *rc.wingFeather
+				f.handlers = chain
+				fc.SetRouteFeather(method, fullPath, &f)
 			}
 		}
 	}

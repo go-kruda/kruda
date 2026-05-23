@@ -221,6 +221,42 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	}
 }
 
+func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
+	app := New(Wing())
+	var groupMiddlewareRan, handlerRan bool
+	api := app.Group("/api").Use(func(c *Ctx) error {
+		groupMiddlewareRan = true
+		return c.Next()
+	})
+	api.Get("/plaintext", func(c *Ctx) error {
+		handlerRan = true
+		return c.Text("ok")
+	}, WingPlaintext())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /api/plaintext"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingPlaintext group route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	resp.responseMode = responsePlaintext
+
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/api/plaintext", keepAlive: true}, f.handlers)
+
+	if !groupMiddlewareRan || !handlerRan {
+		t.Fatalf("groupMiddleware=%v handler=%v", groupMiddlewareRan, handlerRan)
+	}
+	if !resp.plaintextFast {
+		t.Fatal("simple grouped WingPlaintext handler did not use plaintext response mode")
+	}
+}
+
 func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	app := New(Wing())
 	app.Get("/plaintext", func(c *Ctx) error {

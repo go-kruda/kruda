@@ -497,7 +497,7 @@ func (w *worker) handleAccept(ev event) {
 	// Speculative read got EAGAIN — arm read for next data arrival.
 	// On Linux this is redundant (ET EPOLLIN already registered by RegisterConn)
 	// but on kqueue/darwin SubmitRecv is the only way to register EVFILT_READ.
-	w.eng.SubmitRecv(c.fd, nil, 0)
+	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
 func (w *worker) handleRecv(ev event) {
@@ -728,7 +728,7 @@ func (w *worker) tryParse(c *conn) {
 		// Direct write — skip epoll EPOLLOUT round-trip for inline responses.
 		w.directSend(c)
 	} else {
-		w.eng.SubmitRecv(c.fd, nil, 0)
+		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
 }
 
@@ -745,7 +745,7 @@ func (w *worker) handleDone(msg doneMsg) {
 			if c.readN > 0 {
 				w.tryParse(c)
 			} else {
-				w.eng.SubmitRecv(c.fd, nil, 0)
+				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
 		} else {
 			w.closeConn(c.fd)
@@ -812,7 +812,7 @@ func (w *worker) directSend(c *conn) {
 	// Speculative read got EAGAIN — arm read for next data arrival.
 	// On Linux this is redundant (ET EPOLLIN already active) but on
 	// kqueue/darwin SubmitRecv is required to register EVFILT_READ.
-	w.eng.SubmitRecv(c.fd, nil, 0)
+	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
 // takeoverBufPool provides read buffers for Takeover goroutines.

@@ -89,6 +89,51 @@ func TestNewWingTransport_PoolSizeEnv_Invalid(t *testing.T) {
 	}
 }
 
+func TestNewWingTransport_ReadBufSizeEnv(t *testing.T) {
+	os.Setenv("KRUDA_READ_BUF_SIZE", "4096")
+	defer os.Unsetenv("KRUDA_READ_BUF_SIZE")
+
+	cfg := defaultConfig()
+	cfg.Logger = discardLogger()
+	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
+	if !ok {
+		t.Fatal("newWingTransport did not return Wing transport")
+	}
+	if tr.config.ReadBufSize != 4096 {
+		t.Fatalf("ReadBufSize = %d, want 4096", tr.config.ReadBufSize)
+	}
+}
+
+func TestNewWingTransport_ReadBufSizeEnv_Invalid(t *testing.T) {
+	os.Setenv("KRUDA_READ_BUF_SIZE", "abc")
+	defer os.Unsetenv("KRUDA_READ_BUF_SIZE")
+
+	cfg := defaultConfig()
+	cfg.Logger = discardLogger()
+	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
+	if !ok {
+		t.Fatal("newWingTransport did not return Wing transport")
+	}
+	if tr.config.ReadBufSize != 8192 {
+		t.Fatalf("ReadBufSize = %d, want default 8192", tr.config.ReadBufSize)
+	}
+}
+
+func TestNewWingTransport_ReadBufSizeEnv_Zero(t *testing.T) {
+	os.Setenv("KRUDA_READ_BUF_SIZE", "0")
+	defer os.Unsetenv("KRUDA_READ_BUF_SIZE")
+
+	cfg := defaultConfig()
+	cfg.Logger = discardLogger()
+	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
+	if !ok {
+		t.Fatal("newWingTransport did not return Wing transport")
+	}
+	if tr.config.ReadBufSize != 8192 {
+		t.Fatalf("ReadBufSize = %d, want default 8192", tr.config.ReadBufSize)
+	}
+}
+
 func TestNewWingTransport_AsyncEnv(t *testing.T) {
 	os.Setenv("KRUDA_ASYNC", "1")
 	defer os.Unsetenv("KRUDA_ASYNC")

@@ -211,6 +211,24 @@ CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs dire
 
 I/O-bound routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
 
+### Handler-Level Static JSON
+
+Use `SendStaticJSON` for immutable package-level JSON bytes that should still
+run through the normal handler, middleware, lifecycle hooks, cookies, CORS, and
+security headers:
+
+```go
+var versionJSON = []byte(`{"version":"1.2.3"}`)
+
+app.Get("/version", func(c *kruda.Ctx) error {
+    return c.SendStaticJSON(versionJSON)
+}, kruda.WingJSON())
+```
+
+This is appropriate for fair handler-path benchmarks and public static JSON
+responses that still need application behavior. The byte slice must be
+immutable for the lifetime of the program.
+
 ### Opt-in Static Wing Responses
 
 For public static hot paths, Wing can bypass the handler pipeline entirely with prebuilt responses:
@@ -345,7 +363,7 @@ Current committed evidence satisfies that rule for these CPU-bound Wing handler 
 | Route | Profile | Kruda median RPS | Actix median RPS | Kruda vs Actix RPS | Kruda vs Actix p99 | Evidence |
 |------|---------|-----------------:|-----------------:|-------------------:|-------------------:|----------|
 | `/plaintext-handler` | throughput | 812782.42 | 734378.34 | +10.68% | -76.99% | `20260523T123854Z-plaintext-final-k4` |
-| `/json-static` | throughput | 811740.53 | 712263.97 | +13.97% | -69.33% | `20260524Tphase3-json-final` |
+| `/json-static` | throughput | 820646.04 | 737305.93 | +11.30% | -65.13% | `20260524Tphase9-send-static-json-readbuf4k-p3620` |
 | `/json-serialize` | throughput | 791812.23 | 706101.18 | +12.14% | -68.01% | `20260524Tphase3-json-final` |
 
 These are fair handler-path benchmark claims. Wing static bypass route options are documented separately and should not be mixed into handler-path comparison claims.

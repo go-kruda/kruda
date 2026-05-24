@@ -31,8 +31,7 @@ type JSONMessage struct {
 }
 
 var (
-	staticJSONContentType = []byte("application/json; charset=utf-8")
-	staticJSONBody        = []byte(`{"message":"Hello, World!"}`)
+	staticJSONBody = []byte(`{"message":"Hello, World!"}`)
 )
 
 // bench types
@@ -94,7 +93,7 @@ func main() {
 	app.Get("/plaintext-handler", plaintext, kruda.WingPlaintext())
 
 	app.Get("/json-static", func(c *kruda.Ctx) error {
-		return c.SendStaticWithTypeBytes(staticJSONContentType, staticJSONBody)
+		return c.SendStaticJSON(staticJSONBody)
 	}, kruda.WingJSON())
 
 	jsonSerialize := func(c *kruda.Ctx) error {

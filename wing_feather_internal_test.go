@@ -198,6 +198,44 @@ func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
 	}
 }
 
+func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
+	app := New(Wing())
+	var handlerRan bool
+	app.Get("/json-static", func(c *Ctx) error {
+		handlerRan = true
+		return c.SendStaticJSON([]byte(`{"message":"ok"}`))
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-static"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/json-static", keepAlive: true}, f.handlers)
+
+	if !handlerRan {
+		t.Fatal("handler did not run")
+	}
+	if !resp.jsonFast {
+		t.Fatal("SendStaticJSON did not use Wing JSON responder")
+	}
+	data := resp.buildZeroCopy()
+	if !bytes.Contains(data, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
+		t.Fatalf("JSON fast response missing content type:\n%s", data)
+	}
+	if !bytes.Contains(data, []byte("\r\n\r\n{\"message\":\"ok\"}")) {
+		t.Fatalf("JSON fast response missing body:\n%s", data)
+	}
+}
+
 func TestWingResponseJSONAppendMatchesBuildZeroCopy(t *testing.T) {
 	body := []byte(`{"message":"ok"}`)
 

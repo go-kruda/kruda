@@ -130,10 +130,10 @@ Current committed evidence satisfies that gate for the CPU-bound Wing handler ro
 | Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|---------|---------------------------:|-------------------:|
 | `/plaintext-handler` | throughput | +10.68% | -76.99% |
-| `/json-static` | throughput | +13.97% | -69.33% |
+| `/json-static` | throughput | +11.30% | -65.13% |
 | `/json-serialize` | throughput | +12.14% | -68.01% |
 
-Evidence: `bench/reproducible/results/20260523T123854Z-plaintext-final-k4/` and `bench/reproducible/results/20260524Tphase3-json-final/`. These are normal handler-path routes, not Wing static bypass routes.
+Evidence: `bench/reproducible/results/20260523T123854Z-plaintext-final-k4/`, `bench/reproducible/results/20260524Tphase3-json-final/`, and `bench/reproducible/results/20260524Tphase9-send-static-json-readbuf4k-p3620/`. These are normal handler-path routes, not Wing static bypass routes.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 

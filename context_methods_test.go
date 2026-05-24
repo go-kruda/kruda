@@ -211,6 +211,27 @@ func TestCtx_SendStaticWithTypeBytes(t *testing.T) {
 	}
 }
 
+func TestCtx_SendStaticJSON(t *testing.T) {
+	app := New()
+	staticData := []byte(`{"ok":true}`)
+	app.Get("/static-json", func(c *Ctx) error {
+		return c.SendStaticJSON(staticData)
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	resp, _ := tc.Get("/static-json")
+	if resp.StatusCode() != 200 {
+		t.Errorf("status = %d", resp.StatusCode())
+	}
+	if got := resp.Header("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Errorf("content-type = %q", got)
+	}
+	if resp.BodyString() != `{"ok":true}` {
+		t.Errorf("body = %q", resp.BodyString())
+	}
+}
+
 func TestCtx_SendBytes(t *testing.T) {
 	app := New()
 	app.Get("/send-bytes", func(c *Ctx) error {

@@ -455,6 +455,7 @@ func releaseRequest(r *wingRequest) {
 	r.hostUnsafe = false
 	r.acceptUnsafe = false
 	r.remoteAddr = ""
+	r.remoteAddrRef = nil
 	r.keepAlive = false
 	r.pathUnsafe = false
 	r.fd = 0
@@ -484,30 +485,46 @@ func parseCookieValue(cookie, name string) string {
 
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
-	method       string
-	path         string
-	query        string
-	body         []byte
-	contentType  string
-	cookie       string
-	host         string
-	accept       string
-	remoteAddr   string
-	keepAlive    bool
-	pathUnsafe   bool
-	hostUnsafe   bool
-	acceptUnsafe bool
-	fd           int32 // connection fd — for RawRequest().Fd()
-	extraHdrs    [8]struct{ k, v string }
-	extraN       int
-	ctx          context.Context
+	method        string
+	path          string
+	query         string
+	body          []byte
+	contentType   string
+	cookie        string
+	host          string
+	accept        string
+	remoteAddr    string
+	remoteAddrRef *string
+	keepAlive     bool
+	pathUnsafe    bool
+	hostUnsafe    bool
+	acceptUnsafe  bool
+	fd            int32 // connection fd — for RawRequest().Fd()
+	extraHdrs     [8]struct{ k, v string }
+	extraN        int
+	ctx           context.Context
 }
 
 func (r *wingRequest) Method() string        { return r.method }
 func (r *wingRequest) Path() string          { return r.path }
 func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
-func (r *wingRequest) RemoteAddr() string    { return r.remoteAddr }
-func (r *wingRequest) RawRequest() any       { return r }
+func (r *wingRequest) RemoteAddr() string {
+	if r.remoteAddr != "" {
+		return r.remoteAddr
+	}
+	if r.remoteAddrRef != nil {
+		if *r.remoteAddrRef == "" && r.fd > 0 {
+			*r.remoteAddrRef = getPeerAddr(r.fd)
+		}
+		r.remoteAddr = *r.remoteAddrRef
+		return r.remoteAddr
+	}
+	if r.fd > 0 {
+		r.remoteAddr = getPeerAddr(r.fd)
+	}
+	return r.remoteAddr
+}
+func (r *wingRequest) RawRequest() any { return r }
 func (r *wingRequest) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx

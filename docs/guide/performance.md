@@ -337,4 +337,14 @@ The harness runs both `wrk --latency -t4 -c128 -d15s` and `wrk --latency -t4 -c2
 
 **Claim rule:** say "faster than Actix" only when Kruda median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero socket errors and zero non-2xx responses. Otherwise, say "same ballpark as Actix."
 
+Current committed evidence satisfies that rule for these CPU-bound Wing handler routes:
+
+| Route | Profile | Kruda median RPS | Actix median RPS | Kruda vs Actix RPS | Kruda vs Actix p99 | Evidence |
+|------|---------|-----------------:|-----------------:|-------------------:|-------------------:|----------|
+| `/plaintext-handler` | throughput | 812782.42 | 734378.34 | +10.68% | -76.99% | `20260523T123854Z-plaintext-final-k4` |
+| `/json-static` | throughput | 811740.53 | 712263.97 | +13.97% | -69.33% | `20260524Tphase3-json-final` |
+| `/json-serialize` | throughput | 791812.23 | 706101.18 | +12.14% | -68.01% | `20260524Tphase3-json-final` |
+
+These are fair handler-path benchmark claims. Wing static bypass route options are documented separately and should not be mixed into handler-path comparison claims.
+
 DB and fortunes workloads are opt-in with `BENCH_ENABLE_DB=1` because database driver, pool, and schema configuration can dominate framework overhead.

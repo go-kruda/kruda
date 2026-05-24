@@ -112,6 +112,13 @@ app := kruda.New().
 - All Wing types live in `wing_types_shared.go` (no build tag) so cross-platform stubs can never drift
 - `transport/wing/` is now a thin deprecation alias (re-exports core symbols) — slated for removal in v2.0.0
 
+### Wing flight model vocabulary
+- Transport = low-level flight method: socket I/O, protocol parsing, connection lifecycle, timeouts, and response writes
+- Wing = Kruda's performance-oriented flight surface for high-throughput HTTP/1.1 routes while preserving normal handler behavior by default
+- Feather = explicit route/workload tuning component for Wing, such as dispatch mode, response mode, static response, or route lookup hints
+- Default Kruda behavior is the framework contract: handler, middleware, lifecycle hooks, cookies, CORS, secure headers, safety checks, panic recovery, and error handling must remain intact unless an opt-in Feather documents a bypass
+- Design reference: `docs/superpowers/specs/2026-05-24-wing-flight-model.md`
+
 ### Tooling (`cmd/kruda/`)
 - `kruda new` — project scaffolding
 - `kruda dev` — hot reload dev server

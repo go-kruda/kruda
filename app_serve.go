@@ -205,6 +205,37 @@ func (app *App) serveKrudaRoute(w transport.ResponseWriter, r transport.Request,
 	app.serveKruda(w, r, handlers, true)
 }
 
+func (app *App) serveKrudaSingleHandler(w transport.ResponseWriter, r transport.Request, handler HandlerFunc) (handled bool) {
+	if app.hasLifecycle {
+		return false
+	}
+	handled = true
+	c := app.ctxPool.Get().(*Ctx)
+	c.reset(w, r)
+	defer func() {
+		if rec := recover(); rec != nil {
+			app.config.Logger.Error("unrecovered panic in ServeKruda", "panic", fmt.Sprintf("%v", rec))
+			if !c.responded {
+				c.Status(500)
+				_ = c.JSON(Map{
+					"code":    500,
+					"message": "internal server error",
+				})
+			}
+		}
+		c.cleanup()
+		app.ctxPool.Put(c)
+	}()
+
+	if err := handler(c); err != nil {
+		app.handleError(c, err)
+	}
+	if c.body != nil && !c.responded {
+		_ = c.send()
+	}
+	return handled
+}
+
 func (app *App) serveKruda(w transport.ResponseWriter, r transport.Request, routeHandlers []HandlerFunc, pathAlreadyClean bool) {
 	c := app.ctxPool.Get().(*Ctx)
 	c.reset(w, r)

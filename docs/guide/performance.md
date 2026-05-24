@@ -362,9 +362,9 @@ Current committed evidence satisfies that rule for these CPU-bound Wing handler 
 
 | Route | Profile | Kruda median RPS | Actix median RPS | Kruda vs Actix RPS | Kruda vs Actix p99 | Evidence |
 |------|---------|-----------------:|-----------------:|-------------------:|-------------------:|----------|
-| `/plaintext-handler` | throughput | 829459.01 | 744041.04 | +11.48% | -70.95% | `20260524Tphase10-dirty-cleanup-plaintext-readbuf4k-p3630` |
-| `/json-static` | throughput | 831897.15 | 742215.44 | +12.08% | -71.52% | `20260524Tphase10-dirty-cleanup-json-static-readbuf4k-p3640` |
-| `/json-serialize` | throughput | 791812.23 | 706101.18 | +12.14% | -68.01% | `20260524Tphase3-json-final` |
+| `/plaintext-handler` | throughput | 823554.65 | 734767.90 | +12.08% | -69.66% | `20260524Tphase11-single-handler-plaintext-readbuf4k-p3650` |
+| `/json-static` | throughput | 814008.78 | 738144.14 | +10.28% | -71.47% | `20260524Tphase11-single-handler-json-static-readbuf4k-p3660` |
+| `/json-serialize` | throughput | 806376.39 | 721754.24 | +11.72% | -64.01% | `20260524Tphase11-single-handler-json-serialize-readbuf4k-p3670` |
 
 These are fair handler-path benchmark claims. Wing static bypass route options are documented separately and should not be mixed into handler-path comparison claims.
 

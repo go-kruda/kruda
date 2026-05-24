@@ -5,7 +5,59 @@ package kruda
 import (
 	"bytes"
 	"testing"
+
+	"github.com/go-kruda/kruda/transport"
 )
+
+type workerSingleHandlerSpy struct {
+	singleCalls   int
+	routeCalls    int
+	serveCalls    int
+	singleHandled bool
+}
+
+func (s *workerSingleHandlerSpy) ServeKruda(transport.ResponseWriter, transport.Request) {
+	s.serveCalls++
+}
+
+func (s *workerSingleHandlerSpy) serveKrudaRoute(transport.ResponseWriter, transport.Request, []HandlerFunc) {
+	s.routeCalls++
+}
+
+func (s *workerSingleHandlerSpy) serveKrudaSingleHandler(transport.ResponseWriter, transport.Request, HandlerFunc) bool {
+	s.singleCalls++
+	return s.singleHandled
+}
+
+func TestWorkerServeRouteUsesSingleHandlerFastPath(t *testing.T) {
+	spy := &workerSingleHandlerSpy{singleHandled: true}
+	w := &worker{handler: spy}
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
+	})
+
+	if spy.singleCalls != 1 || spy.routeCalls != 0 || spy.serveCalls != 0 {
+		t.Fatalf("single=%d route=%d serve=%d", spy.singleCalls, spy.routeCalls, spy.serveCalls)
+	}
+}
+
+func TestWorkerServeRouteFallsBackWhenSingleHandlerDeclines(t *testing.T) {
+	spy := &workerSingleHandlerSpy{singleHandled: false}
+	w := &worker{handler: spy}
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
+	})
+
+	if spy.singleCalls != 1 || spy.routeCalls != 1 || spy.serveCalls != 0 {
+		t.Fatalf("single=%d route=%d serve=%d", spy.singleCalls, spy.routeCalls, spy.serveCalls)
+	}
+}
 
 func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
 	resp := acquireResponse()

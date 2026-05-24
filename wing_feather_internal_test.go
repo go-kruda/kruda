@@ -59,6 +59,40 @@ func TestWorkerServeRouteFallsBackWhenSingleHandlerDeclines(t *testing.T) {
 	}
 }
 
+func TestWorkerServeRouteUsesCleanExactRouteFlag(t *testing.T) {
+	spy := &workerSingleHandlerSpy{singleHandled: true}
+	w := &worker{handler: spy}
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, Feather{
+		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
+		path:      "/plaintext",
+		pathClean: true,
+	})
+
+	if spy.singleCalls != 1 || spy.routeCalls != 0 || spy.serveCalls != 0 {
+		t.Fatalf("single=%d route=%d serve=%d", spy.singleCalls, spy.routeCalls, spy.serveCalls)
+	}
+}
+
+func TestWorkerServeRouteSkipsFastPathForDirtyExactRoute(t *testing.T) {
+	spy := &workerSingleHandlerSpy{singleHandled: true}
+	w := &worker{handler: spy}
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/assets/app.js", keepAlive: true}, Feather{
+		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
+		path:      "/assets/app.js",
+		pathClean: false,
+	})
+
+	if spy.singleCalls != 0 || spy.routeCalls != 0 || spy.serveCalls != 1 {
+		t.Fatalf("single=%d route=%d serve=%d", spy.singleCalls, spy.routeCalls, spy.serveCalls)
+	}
+}
+
 func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
 	w := &worker{feathers: NewFeatherTable(map[string]Feather{
 		"GET /plaintext": Plaintext,

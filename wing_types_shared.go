@@ -102,6 +102,7 @@ type Feather struct {
 	ResponseMode   responseMode
 	handlers       []HandlerFunc
 	path           string
+	pathClean      bool
 }
 
 // FeatherOption modifies a Feather in-place.

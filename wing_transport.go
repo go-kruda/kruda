@@ -145,6 +145,8 @@ func (t *Transport) SetRouteFeather(method, path string, feather any) {
 	if t.config.Feathers == nil {
 		t.config.Feathers = make(map[string]Feather)
 	}
+	f.path = path
+	f.pathClean = !containsDotPercent(path)
 	t.config.Feathers[method+" "+path] = f
 }
 
@@ -339,7 +341,7 @@ func (p *workerPool) loop(h transport.Handler) {
 }
 
 func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
-	if len(f.handlers) > 0 && !containsDotPercent(req.path) {
+	if len(f.handlers) > 0 && (f.pathClean || (f.path == "" && !containsDotPercent(req.path))) {
 		if len(f.handlers) == 1 {
 			if h, ok := w.handler.(wingSingleHandler); ok && h.serveKrudaSingleHandler(resp, req, f.handlers[0]) {
 				return

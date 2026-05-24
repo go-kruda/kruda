@@ -20,8 +20,12 @@ SUMMARY_MD="$RESULT_DIR/summary.md"
 META_FILE="$RESULT_DIR/environment.txt"
 
 GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
-KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-$GOMAXPROCS_VALUE}"
+# The benchmark profiles use wrk -t4. Keep Kruda's harness worker count aligned
+# with the active load-generator threads unless the run is explicitly studying
+# worker scaling. This does not change Kruda's framework default.
+KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
+BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
 BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
 DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
@@ -111,6 +115,7 @@ write_environment() {
     echo "script_dir=$SCRIPT_DIR"
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
+    echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "bench_rounds=$BENCH_ROUNDS_VALUE"
@@ -148,7 +153,8 @@ start_server() {
       (
         cd "$SCRIPT_DIR/kruda"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
-          PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$DATABASE_URL_VALUE" \
+          PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
+          DATABASE_URL="$DATABASE_URL_VALUE" \
           ./kruda-bench
       ) > "$log" 2>&1 &
       ;;

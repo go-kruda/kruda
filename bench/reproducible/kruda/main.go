@@ -85,10 +85,12 @@ func main() {
 		}
 	}
 
-	go func() {
-		fmt.Println("[pprof] listening on :6060")
-		_ = http.ListenAndServe(":6060", nil)
-	}()
+	if os.Getenv("BENCH_ENABLE_PPROF") == "1" {
+		go func() {
+			fmt.Println("[pprof] listening on :6060")
+			_ = http.ListenAndServe(":6060", nil)
+		}()
+	}
 
 	app := kruda.New(kruda.Wing())
 

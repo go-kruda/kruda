@@ -614,6 +614,13 @@ func (w *worker) tryParse(c *conn) {
 					releaseRequest(req)
 					break
 				}
+				if resp.jsonFast {
+					c.keepAlive = req.keepAlive
+					c.sendBuf = resp.appendJSONTo(c.sendBuf)
+					releaseResponse(resp)
+					releaseRequest(req)
+					break
+				}
 				data := resp.buildZeroCopy()
 				c.keepAlive = req.keepAlive
 				c.sendBuf = append(c.sendBuf, data...)

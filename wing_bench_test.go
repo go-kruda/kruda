@@ -155,7 +155,7 @@ func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
 func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
-		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
+		return c.SendStaticJSON(benchStaticJSONBody)
 	}, WingJSON())
 	app.Compile()
 	f := app.transport.(*Transport).config.Feathers["GET /json-static"]

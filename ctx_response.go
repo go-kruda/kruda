@@ -382,6 +382,35 @@ func (c *Ctx) SendStaticWithTypeBytes(contentType []byte, data []byte) error {
 	return err
 }
 
+// SendStaticJSON sends an immutable JSON response body on the normal handler
+// path. It is intended for package-level, const-like JSON byte slices and keeps
+// middleware, lifecycle hooks, cookies, CORS, and security headers in force.
+//
+// SAFETY: The data slice MUST be immutable for the lifetime of the program
+// (e.g. a package-level var or const-like []byte). Do NOT use with pooled
+// buffers or any data that may be modified after this call returns.
+func (c *Ctx) SendStaticJSON(data []byte) error {
+	if c.responded {
+		return ErrAlreadyResponded
+	}
+	c.responded = true
+
+	// Ultra-fast path: fasthttp — zero-copy body (no memcopy).
+	if c.trySendStaticWithTypeBytesFastHTTP(jsonContentType, data) {
+		return nil
+	}
+	if c.tryJSONResponder(data) {
+		return nil
+	}
+
+	c.contentLength = len(data)
+	c.contentType = "application/json; charset=utf-8"
+	c.writeHeaders()
+	c.writer.WriteHeader(c.status)
+	_, err := c.writer.Write(data)
+	return err
+}
+
 // SendBytes writes the response body and triggers an immediate flush to the
 // transport (eager-send). Unlike SetBody, the data is written before SendBytes
 // returns, so the caller may safely return the buffer to a sync.Pool

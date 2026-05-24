@@ -1,0 +1,136 @@
+Linux 6.8.0-111-generic (dev-server) 	05/24/26 	_x86_64_	(8 CPU)
+
+08:39:12      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:13     1000    815308   61.00  241.00    0.00    0.00  302.00     4  kruda-bench
+
+08:39:12      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:13     1000    815308    641.00      0.00 2647512   19048   0.12  kruda-bench
+
+08:39:12      UID       PID   cswch/s nvcswch/s  Command
+08:39:13     1000    815308      0.00      0.00  kruda-bench
+
+08:39:13      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:14     1000    815308   76.00  320.00    0.00    0.00  396.00     4  kruda-bench
+
+08:39:13      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:14     1000    815308    476.00      0.00 2647512   19892   0.12  kruda-bench
+
+08:39:13      UID       PID   cswch/s nvcswch/s  Command
+08:39:14     1000    815308      0.00      0.00  kruda-bench
+
+08:39:14      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:15     1000    815308   81.00  312.00    0.00    0.00  393.00     4  kruda-bench
+
+08:39:14      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:15     1000    815308    517.00      0.00 2647512   19624   0.12  kruda-bench
+
+08:39:14      UID       PID   cswch/s nvcswch/s  Command
+08:39:15     1000    815308      0.00      0.00  kruda-bench
+
+08:39:15      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:16     1000    815308   77.00  313.00    0.00    0.00  390.00     4  kruda-bench
+
+08:39:15      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:16     1000    815308    272.00      0.00 2647512   19944   0.12  kruda-bench
+
+08:39:15      UID       PID   cswch/s nvcswch/s  Command
+08:39:16     1000    815308      0.00      0.00  kruda-bench
+
+08:39:16      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:17     1000    815308   84.00  311.00    0.00    0.00  395.00     4  kruda-bench
+
+08:39:16      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:17     1000    815308    420.00      0.00 2647512   20356   0.12  kruda-bench
+
+08:39:16      UID       PID   cswch/s nvcswch/s  Command
+08:39:17     1000    815308      0.00      0.00  kruda-bench
+
+08:39:17      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:18     1000    815308   79.00  310.00    0.00    0.00  389.00     4  kruda-bench
+
+08:39:17      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:18     1000    815308    471.00      0.00 2647512   18872   0.12  kruda-bench
+
+08:39:17      UID       PID   cswch/s nvcswch/s  Command
+08:39:18     1000    815308      0.00      0.00  kruda-bench
+
+08:39:18      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:19     1000    815308   79.00  309.00    0.00    0.00  388.00     4  kruda-bench
+
+08:39:18      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:19     1000    815308    845.00      0.00 2647512   19760   0.12  kruda-bench
+
+08:39:18      UID       PID   cswch/s nvcswch/s  Command
+08:39:19     1000    815308      0.00      0.00  kruda-bench
+
+08:39:19      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:20     1000    815308   81.00  318.00    0.00    0.00  399.00     4  kruda-bench
+
+08:39:19      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:20     1000    815308    599.00      0.00 2647512   19608   0.12  kruda-bench
+
+08:39:19      UID       PID   cswch/s nvcswch/s  Command
+08:39:20     1000    815308      0.00      0.00  kruda-bench
+
+08:39:20      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:21     1000    815308   84.00  309.00    0.00    0.00  393.00     4  kruda-bench
+
+08:39:20      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:21     1000    815308    519.00      0.00 2647512   19696   0.12  kruda-bench
+
+08:39:20      UID       PID   cswch/s nvcswch/s  Command
+08:39:21     1000    815308      0.00      0.00  kruda-bench
+
+08:39:21      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:22     1000    815308   85.00  311.00    0.00    0.00  396.00     4  kruda-bench
+
+08:39:21      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:22     1000    815308    509.00      0.00 2647512   19888   0.12  kruda-bench
+
+08:39:21      UID       PID   cswch/s nvcswch/s  Command
+08:39:22     1000    815308      0.00      0.00  kruda-bench
+
+08:39:22      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:23     1000    815308   83.00  312.00    0.00    0.00  395.00     4  kruda-bench
+
+08:39:22      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:23     1000    815308    319.00      0.00 2647512   19084   0.12  kruda-bench
+
+08:39:22      UID       PID   cswch/s nvcswch/s  Command
+08:39:23     1000    815308      0.00      0.00  kruda-bench
+
+08:39:23      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:24     1000    815308   79.00  310.00    0.00    0.00  389.00     4  kruda-bench
+
+08:39:23      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:24     1000    815308    447.00      0.00 2647512   19280   0.12  kruda-bench
+
+08:39:23      UID       PID   cswch/s nvcswch/s  Command
+08:39:24     1000    815308      0.00      0.00  kruda-bench
+
+08:39:24      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:25     1000    815308   83.00  305.00    0.00    0.00  388.00     4  kruda-bench
+
+08:39:24      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:25     1000    815308    918.00      0.00 2647512   19208   0.12  kruda-bench
+
+08:39:24      UID       PID   cswch/s nvcswch/s  Command
+08:39:25     1000    815308      0.00      0.00  kruda-bench
+
+08:39:25      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:26     1000    815308   83.00  308.00    0.00    0.00  391.00     4  kruda-bench
+
+08:39:25      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:26     1000    815308    837.00      0.00 2647512   18908   0.12  kruda-bench
+
+08:39:25      UID       PID   cswch/s nvcswch/s  Command
+08:39:26     1000    815308      0.00      0.00  kruda-bench
+
+08:39:26      UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+08:39:27     1000    815308   80.00  313.00    0.00    0.00  393.00     4  kruda-bench
+
+08:39:26      UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+08:39:27     1000    815308    527.00      0.00 2647512   19644   0.12  kruda-bench
+
+08:39:26      UID       PID   cswch/s nvcswch/s  Command
+08:39:27     1000    815308      0.00      0.00  kruda-bench

@@ -34,7 +34,7 @@ Every run records:
 
 - CPU and OS/kernel information
 - Go, Rust, Cargo, and wrk versions
-- `GOMAXPROCS`, `KRUDA_WORKERS`, `BENCH_ENABLE_DB`, routes, and profiles
+- `GOMAXPROCS`, `KRUDA_WORKERS`, optional `KRUDA_READ_BUF_SIZE`, `BENCH_ENABLE_DB`, routes, and profiles
 - Per-round RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses
 - Raw output path for each measured round
 

@@ -24,9 +24,16 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			poolSize = n
 		}
 	}
+	readBufSize := 0
+	if v := os.Getenv("KRUDA_READ_BUF_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			readBufSize = n
+		}
+	}
 	wcfg := WingConfig{
 		Workers:         workers,
 		HandlerPoolSize: poolSize,
+		ReadBufSize:     readBufSize,
 		ReadTimeout:     cfg.ReadTimeout,
 		WriteTimeout:    cfg.WriteTimeout,
 		IdleTimeout:     cfg.IdleTimeout,

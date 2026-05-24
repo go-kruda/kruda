@@ -25,6 +25,7 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 # with the active load-generator threads unless the run is explicitly studying
 # worker scaling. This does not change Kruda's framework default.
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
+KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
@@ -128,6 +129,7 @@ write_environment() {
     echo "kruda_go_tags=$KRUDA_GO_TAGS_VALUE"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
+    echo "kruda_read_buf_size=${KRUDA_READ_BUF_SIZE_VALUE:-default}"
     echo "bench_duration=$BENCH_DURATION_VALUE"
     echo "resource_interval=$RESOURCE_INTERVAL_VALUE"
     echo "resource_min_cpu_sample=$RESOURCE_MIN_CPU_SAMPLE_VALUE"
@@ -175,6 +177,7 @@ start_server() {
       (
         cd "$SCRIPT_DIR/kruda"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
+          KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
           DATABASE_URL="$DATABASE_URL_VALUE" \
           ./kruda-bench

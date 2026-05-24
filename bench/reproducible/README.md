@@ -82,6 +82,8 @@ The script runs both profiles for every framework and route:
 
 The harness sets `GOMAXPROCS=8` and `KRUDA_WORKERS=4` by default. The Kruda worker count matches the `wrk -t4` CPU-bound profiles and is recorded in every `environment.txt`. Override `KRUDA_WORKERS` explicitly when studying worker scaling.
 
+Memory footprint experiments may set `KRUDA_READ_BUF_SIZE`, for example `KRUDA_READ_BUF_SIZE=4096`, to reduce Wing's per-connection read buffer for short-header CPU-only workloads. This is not the framework default and must be labeled as a workload-specific memory profile; smaller buffers can reject requests whose request line and headers do not fit the configured size.
+
 Each framework/route/profile combination gets one warmup run and five measured rounds.
 
 ## Resource Run
@@ -142,4 +144,6 @@ The committed evidence below satisfies the "faster than Actix" gate for CPU-boun
 
 These are normal handler-path routes. Static bypass route options are intentionally separate from fair handler-path benchmark claims.
 
-Current resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase6-no-pprof-build-rerun/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.
+Baseline resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase6-no-pprof-build-rerun/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.
+
+The optional short-header read-buffer resource profile is in `results/resource-20260524Tphase7-readbuf4k/`, with a summary note in `results/2026-05-24-read-buffer-size-evidence.md`. It uses `KRUDA_READ_BUF_SIZE=4096`; compared with the phase 6 baseline, Kruda max RSS dropped by 10.77%, 17.61%, and 10.85% on the throughput routes. Actix still has lower RSS, so this is RSS reduction evidence, not a memory-footprint win claim.

@@ -240,10 +240,13 @@ Rule of thumb: keep total pool goroutines (workers × pool_size) close to your D
 
 ### Env Vars
 
+`KRUDA_READ_BUF_SIZE` is advanced tuning for Wing's per-connection read buffer. Lower values can reduce RSS in short-header CPU-only profiles, but requests whose request line and headers do not fit the buffer are rejected. Keep the default for general APIs unless a workload-specific benchmark proves the smaller buffer is safe.
+
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `KRUDA_WORKERS` | GOMAXPROCS | Number of epoll workers |
 | `KRUDA_POOL_SIZE` | workers | Goroutine pool size per worker |
+| `KRUDA_READ_BUF_SIZE` | 8192 | Wing read buffer bytes per connection |
 | `KRUDA_BATCH_WRITE` | off | Coalesce pipelined responses (`1` to enable) |
 | `KRUDA_POOL_ROUTES` | — | Comma-separated routes for Pool dispatch |
 | `KRUDA_SPAWN_ROUTES` | — | Comma-separated routes for Spawn dispatch |

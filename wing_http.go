@@ -158,21 +158,16 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			return nil, 0, false
 		}
 
-		key := trimHTTPSpaces(hline[:colon])
+		key := hline[:colon]
 		val := trimHTTPSpaces(hline[colon+1:])
-
-		// Validate header name characters (RFC 7230 token set).
-		if !isValidTokenName(key) {
-			return nil, 0, false
-		}
 
 		// Reject bare CR or LF in header values (CRLF injection).
 		if containsCRLF(val) {
 			return nil, 0, false
 		}
 
-		switch {
-		case len(key) == 14 && asciiEqualFold(key, bContentLength):
+		switch knownHeader(key) {
+		case headerContentLength:
 			// Reject duplicate Content-Length headers.
 			if contentLengthSeen {
 				return nil, 0, false
@@ -185,20 +180,66 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 				return nil, 0, false
 			}
 			contentLength = btoi(val)
-		case len(key) == 12 && asciiEqualFold(key, bContentType):
+			continue
+		case headerContentType:
 			contentType = string(val)
-		case len(key) == 10 && asciiEqualFold(key, bConnection):
+			continue
+		case headerConnection:
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
 			}
-		case len(key) == 17 && asciiEqualFold(key, bTransferEncoding):
+			continue
+		case headerTransferEncoding:
 			hasTE = true
-		case len(key) == 6 && asciiEqualFold(key, bCookie):
+			continue
+		case headerCookie:
 			cookie = string(val)
-		case len(key) == 4 && asciiEqualFold(key, bHost):
+			continue
+		case headerHost:
 			host = copyOrUnsafeString(val, unsafePath)
 			hostUnsafe = unsafePath && len(val) > 0
-		case len(key) == 6 && asciiEqualFold(key, bAccept):
+			continue
+		case headerAccept:
+			accept = copyOrUnsafeString(val, unsafePath)
+			acceptUnsafe = unsafePath && len(val) > 0
+			continue
+		}
+
+		key = trimHTTPSpaces(key)
+
+		// Validate header name characters (RFC 7230 token set).
+		if !isValidTokenName(key) {
+			return nil, 0, false
+		}
+
+		switch knownHeader(key) {
+		case headerContentLength:
+			// Reject duplicate Content-Length headers.
+			if contentLengthSeen {
+				return nil, 0, false
+			}
+			contentLengthSeen = true
+			hasCL = true
+
+			// Reject non-numeric Content-Length values.
+			if !isAllDigits(val) {
+				return nil, 0, false
+			}
+			contentLength = btoi(val)
+		case headerContentType:
+			contentType = string(val)
+		case headerConnection:
+			if asciiEqualFold(val, bClose) {
+				keepAlive = false
+			}
+		case headerTransferEncoding:
+			hasTE = true
+		case headerCookie:
+			cookie = string(val)
+		case headerHost:
+			host = copyOrUnsafeString(val, unsafePath)
+			hostUnsafe = unsafePath && len(val) > 0
+		case headerAccept:
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
 		default:
@@ -314,6 +355,50 @@ var (
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
 )
+
+const (
+	headerUnknown uint8 = iota
+	headerContentLength
+	headerContentType
+	headerConnection
+	headerTransferEncoding
+	headerCookie
+	headerHost
+	headerAccept
+)
+
+func knownHeader(key []byte) uint8 {
+	switch len(key) {
+	case 4:
+		if asciiEqualFold(key, bHost) {
+			return headerHost
+		}
+	case 6:
+		if asciiEqualFold(key, bCookie) {
+			return headerCookie
+		}
+		if asciiEqualFold(key, bAccept) {
+			return headerAccept
+		}
+	case 10:
+		if asciiEqualFold(key, bConnection) {
+			return headerConnection
+		}
+	case 12:
+		if asciiEqualFold(key, bContentType) {
+			return headerContentType
+		}
+	case 14:
+		if asciiEqualFold(key, bContentLength) {
+			return headerContentLength
+		}
+	case 17:
+		if asciiEqualFold(key, bTransferEncoding) {
+			return headerTransferEncoding
+		}
+	}
+	return headerUnknown
+}
 
 // noLimits is a zero-value parserLimits (all unlimited).
 var noLimits = parserLimits{}

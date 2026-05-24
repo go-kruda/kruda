@@ -181,6 +181,24 @@ func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
 	}
 }
 
+func TestParseHTTPRequest_CommonHeaderNamesWithWhitespace(t *testing.T) {
+	raw := []byte("POST /safe HTTP/1.1\r\nHost : example.test\r\nContent-Type : application/json\r\nContent-Length : 2\r\n\r\n{}")
+	req, _, ok := parseHTTPRequest(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	if got := req.Header("Host"); got != "example.test" {
+		t.Fatalf("Header(Host) = %q, want example.test", got)
+	}
+	if got := req.Header("Content-Type"); got != "application/json" {
+		t.Fatalf("Header(Content-Type) = %q, want application/json", got)
+	}
+	body, _ := req.Body()
+	if string(body) != "{}" {
+		t.Fatalf("Body = %q, want {}", body)
+	}
+}
+
 func TestParseHTTPRequestFast_FinalizedStaticPathIsSafe(t *testing.T) {
 	raw := []byte("GET /plaintext-handler HTTP/1.1\r\nHost: example.test\r\n\r\n")
 	req, _, ok := parseHTTPRequestFast(raw, noLimits)

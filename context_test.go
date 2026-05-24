@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"testing"
@@ -166,6 +167,62 @@ func TestShrinkMaps_MixedSizes(t *testing.T) {
 	// locals: replaced — empty
 	if len(c.locals) != 0 {
 		t.Errorf("locals: want 0 entries after shrink, got %d", len(c.locals))
+	}
+}
+
+func TestCtxGenericCleanupClearsDirtyColdFields(t *testing.T) {
+	app := New()
+	c := newCtx(app)
+	c.reset(newMockResponse(), &mockRequest{
+		method:  "GET",
+		path:    "/",
+		headers: map[string]string{"X-Test": "request"},
+	})
+
+	c.Header("X-Test")
+	c.SetHeader("X-Response", "ok")
+	c.SetCookie(&Cookie{Name: "session", Value: "abc"})
+	c.Set("local", "value")
+	c.SetBody([]byte("response"))
+	c.bodyBytes = []byte("request")
+	c.bodyErr = context.Canceled
+	c.dirty |= dirtyBodyBytes
+
+	c.cleanup()
+
+	if len(c.headers) != 0 {
+		t.Fatalf("headers len = %d, want 0", len(c.headers))
+	}
+	if len(c.respHeaders) != 0 {
+		t.Fatalf("respHeaders len = %d, want 0", len(c.respHeaders))
+	}
+	if len(c.locals) != 0 {
+		t.Fatalf("locals len = %d, want 0", len(c.locals))
+	}
+	if len(c.cookies) != 0 {
+		t.Fatalf("cookies len = %d, want 0", len(c.cookies))
+	}
+	if c.body != nil {
+		t.Fatalf("body = %q, want nil", c.body)
+	}
+	if c.bodyBytes != nil {
+		t.Fatalf("bodyBytes = %q, want nil", c.bodyBytes)
+	}
+	if c.bodyErr != nil {
+		t.Fatalf("bodyErr = %v, want nil", c.bodyErr)
+	}
+}
+
+func TestCtxGenericResetClearsDirtyFlagForNewRequest(t *testing.T) {
+	app := New()
+	c := newCtx(app)
+
+	c.SetHeader("X-Response", "ok")
+	c.cleanup()
+	c.reset(newMockResponse(), &mockRequest{method: "GET", path: "/"})
+
+	if c.dirty != 0 {
+		t.Fatalf("dirty = %08b, want 0", c.dirty)
 	}
 }
 

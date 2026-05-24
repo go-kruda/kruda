@@ -122,6 +122,7 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.path = r.Path()
 	c.status = 200
 	c.responded = false
+	c.dirty = 0
 	c.bodyParsed = false
 	c.routeIndex = 0
 	c.handlers = nil
@@ -143,24 +144,7 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 		c.params.reset()
 	}
 
-	if len(c.headers) > 0 {
-		clear(c.headers)
-	}
-	if len(c.respHeaders) > 0 {
-		clear(c.respHeaders)
-	}
-	if len(c.locals) > 0 {
-		clear(c.locals)
-	}
-	if len(c.cookies) > 0 {
-		c.cookies = c.cookies[:0]
-	}
-
-	c.body = nil
-	c.bodyBytes = nil
-	c.bodyErr = nil
 	c.logger = nil
-	c.multipartForm = nil
 }
 
 // Pool shrink thresholds — maps exceeding these entry counts are reallocated
@@ -188,20 +172,39 @@ func (c *Ctx) shrinkMaps() {
 
 // cleanup prepares the context for returning to the pool.
 func (c *Ctx) cleanup() {
-	// Remove multipart temp files now that the handler is done.
-	if c.multipartForm != nil {
-		_ = c.multipartForm.RemoveAll()
-		c.multipartForm = nil
+	if d := c.dirty; d != 0 {
+		if d&(dirtyHeaders|dirtyRespHdrs|dirtyLocals) != 0 {
+			c.shrinkMaps()
+		}
+		if d&dirtyHeaders != 0 {
+			clear(c.headers)
+		}
+		if d&dirtyRespHdrs != 0 {
+			clear(c.respHeaders)
+		}
+		if d&dirtyLocals != 0 {
+			clear(c.locals)
+		}
+		if d&dirtyCookies != 0 {
+			c.cookies = c.cookies[:0]
+		}
+		if d&dirtyBody != 0 {
+			c.body = nil
+		}
+		if d&dirtyBodyBytes != 0 {
+			c.bodyBytes = nil
+			c.bodyErr = nil
+		}
+		if d&dirtyMultipart != 0 && c.multipartForm != nil {
+			_ = c.multipartForm.RemoveAll()
+			c.multipartForm = nil
+		}
 	}
 
-	// Shrink oversized maps via shared method.
-	c.shrinkMaps()
-
-	c.body = nil
 	c.writer = nil
 	c.request = nil
-	c.bodyBytes = nil
 	c.handlers = nil
 	c.ctx = nil
 	c.logger = nil
+	c.dirty = 0
 }

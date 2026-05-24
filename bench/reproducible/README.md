@@ -138,9 +138,9 @@ The committed evidence below satisfies the "faster than Actix" gate for CPU-boun
 
 | Route | Evidence directory | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|--------------------|---------------------------:|-------------------:|
-| `/plaintext-handler` | `results/20260524Tphase10-dirty-cleanup-plaintext-readbuf4k-p3630/` | +11.48% | -70.95% |
-| `/json-static` | `results/20260524Tphase10-dirty-cleanup-json-static-readbuf4k-p3640/` | +12.08% | -71.52% |
-| `/json-serialize` | `results/20260524Tphase3-json-final/` | +12.14% | -68.01% |
+| `/plaintext-handler` | `results/20260524Tphase11-single-handler-plaintext-readbuf4k-p3650/` | +12.08% | -69.66% |
+| `/json-static` | `results/20260524Tphase11-single-handler-json-static-readbuf4k-p3660/` | +10.28% | -71.47% |
+| `/json-serialize` | `results/20260524Tphase11-single-handler-json-serialize-readbuf4k-p3670/` | +11.72% | -64.01% |
 
 These are normal handler-path routes. Static bypass route options are intentionally separate from fair handler-path benchmark claims.
 

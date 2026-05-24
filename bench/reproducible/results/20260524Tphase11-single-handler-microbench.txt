@@ -1,0 +1,61 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+                                 │ /private/tmp/kruda-phase11-main-bench.txt │ /private/tmp/kruda-phase11-single-handler-bench.txt │
+                                 │                  sec/op                   │            sec/op             vs base               │
+Plaintext-8                                                     48.43n ± ∞ ¹                   47.47n ± ∞ ¹        ~ (p=0.095 n=5)
+JSON-8                                                          288.7n ± ∞ ¹                   305.7n ± ∞ ¹   +5.89% (p=0.032 n=5)
+CPUParseGET-8                                                   186.2n ± ∞ ¹                   170.0n ± ∞ ¹        ~ (p=0.127 n=5)
+CPUParsePOST-8                                                  223.0n ± ∞ ¹                   218.4n ± ∞ ¹   -2.06% (p=0.032 n=5)
+CPUResponseBuild-8                                              108.1n ± ∞ ¹                   105.0n ± ∞ ¹        ~ (p=0.151 n=5)
+CPUResponseJSON-8                                               97.71n ± ∞ ¹                  100.10n ± ∞ ¹        ~ (p=0.841 n=5)
+CPUResponsePlaintext-8                                          23.82n ± ∞ ¹                   22.63n ± ∞ ¹        ~ (p=0.087 n=5)
+CPUFullCycle-8                                                  293.4n ± ∞ ¹                   256.0n ± ∞ ¹  -12.75% (p=0.008 n=5)
+CPUHandlerInline-8                                              275.6n ± ∞ ¹                   256.5n ± ∞ ¹   -6.93% (p=0.008 n=5)
+CPUHandlerPlaintextFeather-8                                    226.5n ± ∞ ¹                   198.6n ± ∞ ¹  -12.32% (p=0.008 n=5)
+CPUHandlerJSONStaticFeather-8                                   330.7n ± ∞ ¹                   305.2n ± ∞ ¹        ~ (p=0.421 n=5)
+CPUHandlerJSONSerializeFeather-8                                366.6n ± ∞ ¹                   376.1n ± ∞ ¹        ~ (p=1.000 n=5)
+FeatherTableLookup-8                                            41.46n ± ∞ ¹                   42.93n ± ∞ ¹        ~ (p=0.222 n=5)
+geomean                                                         145.8n                         140.4n         -3.70%
+¹ need >= 6 samples for confidence interval at level 0.95
+
+                                 │ /private/tmp/kruda-phase11-main-bench.txt │ /private/tmp/kruda-phase11-single-handler-bench.txt │
+                                 │                   B/op                    │            B/op              vs base                │
+Plaintext-8                                                      16.00 ± ∞ ¹                   16.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+JSON-8                                                           416.0 ± ∞ ¹                   416.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParseGET-8                                                    48.00 ± ∞ ¹                   48.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParsePOST-8                                                   80.00 ± ∞ ¹                   80.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseBuild-8                                               472.0 ± ∞ ¹                   472.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseJSON-8                                                472.0 ± ∞ ¹                   472.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponsePlaintext-8                                           0.000 ± ∞ ¹                   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUFullCycle-8                                                   264.0 ± ∞ ¹                   264.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerInline-8                                               264.0 ± ∞ ¹                   264.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerPlaintextFeather-8                                     16.00 ± ∞ ¹                   16.00 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerJSONStaticFeather-8                                    488.0 ± ∞ ¹                   488.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerJSONSerializeFeather-8                                 521.0 ± ∞ ¹                   521.0 ± ∞ ¹       ~ (p=1.000 n=5) ²
+FeatherTableLookup-8                                             0.000 ± ∞ ¹                   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+geomean                                                                    ³                                +0.00%               ³
+¹ need >= 6 samples for confidence interval at level 0.95
+² all samples are equal
+³ summaries must be >0 to compute geomean
+
+                                 │ /private/tmp/kruda-phase11-main-bench.txt │ /private/tmp/kruda-phase11-single-handler-bench.txt │
+                                 │                 allocs/op                 │          allocs/op           vs base                │
+Plaintext-8                                                      1.000 ± ∞ ¹                   1.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+JSON-8                                                           5.000 ± ∞ ¹                   5.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParseGET-8                                                    4.000 ± ∞ ¹                   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUParsePOST-8                                                   4.000 ± ∞ ¹                   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseBuild-8                                               4.000 ± ∞ ¹                   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponseJSON-8                                                4.000 ± ∞ ¹                   4.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUResponsePlaintext-8                                           0.000 ± ∞ ¹                   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUFullCycle-8                                                   7.000 ± ∞ ¹                   7.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerInline-8                                               7.000 ± ∞ ¹                   7.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerPlaintextFeather-8                                     2.000 ± ∞ ¹                   2.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerJSONStaticFeather-8                                    5.000 ± ∞ ¹                   5.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+CPUHandlerJSONSerializeFeather-8                                 6.000 ± ∞ ¹                   6.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+FeatherTableLookup-8                                             0.000 ± ∞ ¹                   0.000 ± ∞ ¹       ~ (p=1.000 n=5) ²
+geomean                                                                    ³                                +0.00%               ³
+¹ need >= 6 samples for confidence interval at level 0.95
+² all samples are equal
+³ summaries must be >0 to compute geomean

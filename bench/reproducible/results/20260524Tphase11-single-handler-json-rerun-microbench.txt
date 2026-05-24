@@ -1,0 +1,29 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+                                 │ /private/tmp/kruda-phase11-main-json-bench.txt │ /private/tmp/kruda-phase11-single-handler-json-bench.txt │
+                                 │                     sec/op                     │              sec/op                vs base               │
+JSON-8                                                                296.5n ± 2%                         298.1n ± 7%       ~ (p=1.000 n=10)
+CPUResponseJSON-8                                                     96.16n ± 7%                         95.30n ± 3%       ~ (p=0.280 n=10)
+CPUHandlerJSONStaticFeather-8                                         287.8n ± 3%                         286.6n ± 7%       ~ (p=0.670 n=10)
+CPUHandlerJSONSerializeFeather-8                                      372.1n ± 7%                         358.7n ± 3%  -3.63% (p=0.020 n=10)
+geomean                                                               235.1n                              232.5n       -1.11%
+
+                                 │ /private/tmp/kruda-phase11-main-json-bench.txt │ /private/tmp/kruda-phase11-single-handler-json-bench.txt │
+                                 │                      B/op                      │              B/op                vs base                 │
+JSON-8                                                                 416.0 ± 0%                        416.0 ± 0%       ~ (p=1.000 n=10) ¹
+CPUResponseJSON-8                                                      472.0 ± 0%                        472.0 ± 0%       ~ (p=1.000 n=10) ¹
+CPUHandlerJSONStaticFeather-8                                          488.0 ± 0%                        488.0 ± 0%       ~ (p=1.000 n=10) ¹
+CPUHandlerJSONSerializeFeather-8                                       521.0 ± 0%                        521.0 ± 0%       ~ (p=1.000 n=10) ¹
+geomean                                                                472.7                             472.7       +0.00%
+¹ all samples are equal
+
+                                 │ /private/tmp/kruda-phase11-main-json-bench.txt │ /private/tmp/kruda-phase11-single-handler-json-bench.txt │
+                                 │                   allocs/op                    │            allocs/op             vs base                 │
+JSON-8                                                                 5.000 ± 0%                        5.000 ± 0%       ~ (p=1.000 n=10) ¹
+CPUResponseJSON-8                                                      4.000 ± 0%                        4.000 ± 0%       ~ (p=1.000 n=10) ¹
+CPUHandlerJSONStaticFeather-8                                          5.000 ± 0%                        5.000 ± 0%       ~ (p=1.000 n=10) ¹
+CPUHandlerJSONSerializeFeather-8                                       6.000 ± 0%                        6.000 ± 0%       ~ (p=1.000 n=10) ¹
+geomean                                                                4.949                             4.949       +0.00%
+¹ all samples are equal

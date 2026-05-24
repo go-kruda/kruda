@@ -90,6 +90,81 @@ func TestServeKruda_PanicRecovery_AlreadyResponded(t *testing.T) {
 	app.ServeKruda(resp, req)
 }
 
+func TestServeKrudaSingleHandlerFlushesLazyBody(t *testing.T) {
+	app := New()
+	resp := newMockResponse()
+	req := &mockRequest{method: "GET", path: "/fast", headers: map[string]string{}}
+
+	handled := app.serveKrudaSingleHandler(resp, req, func(c *Ctx) error {
+		if got := c.Method(); got != "GET" {
+			t.Fatalf("Method = %q, want GET", got)
+		}
+		if got := c.Path(); got != "/fast" {
+			t.Fatalf("Path = %q, want /fast", got)
+		}
+		c.SetHeader("X-Test", "yes")
+		c.SetContentType("text/plain; charset=utf-8").SetBody([]byte("ok"))
+		return nil
+	})
+
+	if !handled {
+		t.Fatal("single handler fast path was not used")
+	}
+	if resp.statusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.statusCode)
+	}
+	if got := string(resp.body); got != "ok" {
+		t.Fatalf("body = %q, want ok", got)
+	}
+	if got := resp.headers.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/plain; charset=utf-8", got)
+	}
+	if got := resp.headers.Get("X-Test"); got != "yes" {
+		t.Fatalf("X-Test = %q, want yes", got)
+	}
+}
+
+func TestServeKrudaSingleHandlerPanicStillReportsHandled(t *testing.T) {
+	app := New()
+	resp := newMockResponse()
+	req := &mockRequest{method: "GET", path: "/panic", headers: map[string]string{}}
+
+	handled := app.serveKrudaSingleHandler(resp, req, func(c *Ctx) error {
+		panic("boom")
+	})
+
+	if !handled {
+		t.Fatal("panic recovery must still report the request as handled")
+	}
+	if resp.statusCode != 500 {
+		t.Fatalf("status = %d, want 500", resp.statusCode)
+	}
+	if len(resp.body) == 0 {
+		t.Fatal("panic response body is empty")
+	}
+}
+
+func TestServeKrudaSingleHandlerSkipsLifecycleApps(t *testing.T) {
+	app := New()
+	app.OnRequest(func(c *Ctx) error { return nil })
+	app.Compile()
+	resp := newMockResponse()
+	req := &mockRequest{method: "GET", path: "/lifecycle", headers: map[string]string{}}
+	handlerRan := false
+
+	handled := app.serveKrudaSingleHandler(resp, req, func(c *Ctx) error {
+		handlerRan = true
+		return c.Text("wrong")
+	})
+
+	if handled {
+		t.Fatal("single handler fast path should not handle lifecycle apps")
+	}
+	if handlerRan {
+		t.Fatal("single handler fast path called handler despite lifecycle hooks")
+	}
+}
+
 // --- ServeHTTP (net/http adapter) ---
 
 func TestServeHTTP_PathTraversalBlocked_Boost3(t *testing.T) {

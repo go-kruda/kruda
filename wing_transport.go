@@ -258,6 +258,10 @@ type wingRouteHandler interface {
 	serveKrudaRoute(transport.ResponseWriter, transport.Request, []HandlerFunc)
 }
 
+type wingSingleHandler interface {
+	serveKrudaSingleHandler(transport.ResponseWriter, transport.Request, HandlerFunc) bool
+}
+
 // workerPool is a fixed-size goroutine pool per worker.
 type workerPool struct {
 	jobs chan handlerJob
@@ -328,6 +332,11 @@ func (p *workerPool) loop(h transport.Handler) {
 
 func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
 	if len(f.handlers) > 0 && !containsDotPercent(req.path) {
+		if len(f.handlers) == 1 {
+			if h, ok := w.handler.(wingSingleHandler); ok && h.serveKrudaSingleHandler(resp, req, f.handlers[0]) {
+				return
+			}
+		}
 		if h, ok := w.handler.(wingRouteHandler); ok {
 			h.serveKrudaRoute(resp, req, f.handlers)
 			return

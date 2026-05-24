@@ -45,6 +45,29 @@ func TestFeatherTableDefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestFeatherTableMarksCleanExactRoutes(t *testing.T) {
+	ft := NewFeatherTable(map[string]Feather{
+		"GET /plaintext":     Bolt,
+		"GET /assets/app.js": Bolt,
+		"GET /encoded%2F":    Bolt,
+		"GET /users/:id":     Arrow,
+	}, Arrow)
+
+	if got := ft.Lookup("GET", "/plaintext"); !got.pathClean {
+		t.Fatalf("clean exact route pathClean = false")
+	}
+	if got := ft.Lookup("GET", "/assets/app.js"); got.pathClean {
+		t.Fatalf("dotted exact route pathClean = true")
+	}
+	if got := ft.Lookup("GET", "/encoded%2F"); got.pathClean {
+		t.Fatalf("encoded exact route pathClean = true")
+	}
+	got := ft.Lookup("GET", "/users/42")
+	if got.path != "" || got.pathClean {
+		t.Fatalf("param route cached path = %q pathClean=%v, want empty/false", got.path, got.pathClean)
+	}
+}
+
 func TestSplitKey(t *testing.T) {
 	tests := []struct {
 		key          string

@@ -74,6 +74,8 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 			// Param route: store as prefix match
 			if colonIdx := wingIndexByte(path, ':'); colonIdx > 0 {
 				f.handlers = nil
+				f.path = ""
+				f.pathClean = false
 				ft.prefixes[idx] = append(ft.prefixes[idx], prefixFeather{
 					prefix: path[:colonIdx], feather: f,
 				})
@@ -82,6 +84,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 					ft.routes[idx] = make(map[string]Feather, 4)
 				}
 				f.path = path
+				f.pathClean = !containsDotPercent(path)
 				ft.routes[idx][path] = f
 			}
 		} else {

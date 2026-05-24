@@ -65,6 +65,12 @@ BENCH_ENABLE_DB=1 ./bench.sh db fortunes
 
 The DB mode expects a TechEmpower-style PostgreSQL database and uses `DATABASE_URL` when set.
 
+Kruda's benchmark pprof server is disabled by default so the CPU-only runtime comparison does not include a diagnostic HTTP server that the Fiber and Actix apps do not run. Enable it only for profiling:
+
+```bash
+BENCH_ENABLE_PPROF=1 ./bench.sh json-serialize
+```
+
 ## Profiles
 
 The script runs both profiles for every framework and route:
@@ -73,6 +79,8 @@ The script runs both profiles for every framework and route:
 |---------|-------------------|
 | `latency` | `wrk --latency -t4 -c128 -d15s` |
 | `throughput` | `wrk --latency -t4 -c256 -d15s` |
+
+The harness sets `GOMAXPROCS=8` and `KRUDA_WORKERS=4` by default. The Kruda worker count matches the `wrk -t4` CPU-bound profiles and is recorded in every `environment.txt`. Override `KRUDA_WORKERS` explicitly when studying worker scaling.
 
 Each framework/route/profile combination gets one warmup run and five measured rounds.
 
@@ -92,6 +100,8 @@ Run one route:
 ```
 
 The resource harness uses the same route and profile defaults as `bench.sh`. Each framework/route/profile combination gets one warmup run and one measured run while `pidstat` records process CPU, RSS, and context switch rates. CPU percentage is process CPU across cores, so `400%` means roughly four busy cores. The default `RESOURCE_MIN_CPU_SAMPLE=50` excludes low-CPU startup/shutdown tail samples from average CPU; set it to `0` to include every sample.
+
+Use `BENCH_ENABLE_PPROF=1` with `resource.sh` only when the experiment intentionally measures profiling overhead.
 
 ## Output
 
@@ -131,3 +141,5 @@ The committed evidence below satisfies the "faster than Actix" gate for CPU-boun
 | `/json-serialize` | `results/20260524Tphase3-json-final/` | +12.14% | -68.01% |
 
 These are normal handler-path routes. Static bypass route options are intentionally separate from fair handler-path benchmark claims.
+
+Current resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase5-k4-pprof-off/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and `BENCH_ENABLE_PPROF=0` to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.

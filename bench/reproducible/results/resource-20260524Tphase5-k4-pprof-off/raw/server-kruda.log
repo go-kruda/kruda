@@ -1,0 +1,4 @@
+[kruda] JSON encoder: encoding/json
+2026/05/24 06:35:09 INFO listening addr=:3300
+2026/05/24 06:38:12 INFO shutting down... timeout=10s
+2026/05/24 06:38:12 INFO shutdown complete

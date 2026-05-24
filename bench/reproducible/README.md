@@ -65,7 +65,7 @@ BENCH_ENABLE_DB=1 ./bench.sh db fortunes
 
 The DB mode expects a TechEmpower-style PostgreSQL database and uses `DATABASE_URL` when set.
 
-Kruda's benchmark pprof server is disabled by default so the CPU-only runtime comparison does not include a diagnostic HTTP server that the Fiber and Actix apps do not run. Enable it only for profiling:
+Kruda's benchmark pprof server is excluded from the default CPU-only benchmark binary so the runtime comparison does not include a diagnostic HTTP server that the Fiber and Actix apps do not run. The harness adds the `bench_pprof` Go build tag only when `BENCH_ENABLE_PPROF=1`:
 
 ```bash
 BENCH_ENABLE_PPROF=1 ./bench.sh json-serialize
@@ -142,4 +142,4 @@ The committed evidence below satisfies the "faster than Actix" gate for CPU-boun
 
 These are normal handler-path routes. Static bypass route options are intentionally separate from fair handler-path benchmark claims.
 
-Current resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase5-k4-pprof-off/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and `BENCH_ENABLE_PPROF=0` to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.
+Current resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase6-no-pprof-build-rerun/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.

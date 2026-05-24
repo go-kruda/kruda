@@ -26,6 +26,10 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
+KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
+if [ "$BENCH_ENABLE_PPROF_VALUE" = "1" ]; then
+  KRUDA_GO_TAGS_VALUE="$KRUDA_GO_TAGS_VALUE bench_pprof"
+fi
 BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
 DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
@@ -104,7 +108,7 @@ build_all() {
   require_cmd wrk
   require_cmd curl
 
-  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags kruda_stdjson -o kruda-bench .)
+  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags "$KRUDA_GO_TAGS_VALUE" -o kruda-bench .)
   (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
   (cd "$SCRIPT_DIR/actix" && cargo build --release)
 }
@@ -116,6 +120,7 @@ write_environment() {
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
+    echo "kruda_go_tags=$KRUDA_GO_TAGS_VALUE"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "bench_rounds=$BENCH_ROUNDS_VALUE"

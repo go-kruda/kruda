@@ -27,6 +27,10 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
+KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
+if [ "$BENCH_ENABLE_PPROF_VALUE" = "1" ]; then
+  KRUDA_GO_TAGS_VALUE="$KRUDA_GO_TAGS_VALUE bench_pprof"
+fi
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
 RESOURCE_INTERVAL_VALUE="${RESOURCE_INTERVAL:-1}"
 RESOURCE_MIN_CPU_SAMPLE_VALUE="${RESOURCE_MIN_CPU_SAMPLE:-50}"
@@ -109,7 +113,7 @@ build_all() {
   require_cmd curl
   require_cmd pidstat
 
-  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags kruda_stdjson -o kruda-bench .)
+  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags "$KRUDA_GO_TAGS_VALUE" -o kruda-bench .)
   (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
   (cd "$SCRIPT_DIR/actix" && cargo build --release)
 }
@@ -121,6 +125,7 @@ write_environment() {
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
+    echo "kruda_go_tags=$KRUDA_GO_TAGS_VALUE"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "bench_duration=$BENCH_DURATION_VALUE"
@@ -286,9 +291,19 @@ extract_pidstat_summary() {
       mode = "ctx"
       next
     }
-    /^[0-9]/ && $4 == server_pid {
+    /^[0-9]/ {
+      pid_idx = 0
+      for (i = 1; i <= NF; i++) {
+        if ($i == server_pid) {
+          pid_idx = i
+          break
+        }
+      }
+      if (pid_idx == 0) {
+        next
+      }
       if (mode == "cpu") {
-        cpu = $9 + 0
+        cpu = $(pid_idx + 5) + 0
         all_cpu_sum += cpu
         all_cpu_count++
         if (cpu > all_cpu_max) all_cpu_max = cpu
@@ -298,15 +313,15 @@ extract_pidstat_summary() {
           if (cpu > active_cpu_max) active_cpu_max = cpu
         }
       } else if (mode == "mem") {
-        rss = $8 + 0
+        rss = $(pid_idx + 4) + 0
         if (rss > 0) {
           rss_sum += rss
           rss_count++
           if (rss > rss_max) rss_max = rss
         }
       } else if (mode == "ctx") {
-        cswch_sum += $5 + 0
-        nvcswch_sum += $6 + 0
+        cswch_sum += $(pid_idx + 1) + 0
+        nvcswch_sum += $(pid_idx + 2) + 0
         ctx_count++
       }
     }

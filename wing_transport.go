@@ -200,10 +200,10 @@ type conn struct {
 	sendBuf      []byte
 	sendN        int
 	keepAlive    bool
-	pending      int // in-flight handler goroutines
-	remoteAddr   string
-	lastActive   int64 // unix nano — updated on accept + each recv
-	readDeadline int64 // unix nano — set when first byte arrives, cleared on full request
+	pending      int    // in-flight handler goroutines
+	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive   int64  // unix nano — updated on accept + each recv
+	readDeadline int64  // unix nano — set when first byte arrives, cleared on full request
 	ctx          context.Context
 	cancel       context.CancelFunc
 	sendFileFd   int32 // sendfile: source fd (0 = none)
@@ -490,11 +490,10 @@ func (w *worker) handleAccept(ev event) {
 	setTCPQuickACK(fd)
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
-		fd:         fd,
-		readBuf:    make([]byte, w.config.ReadBufSize),
-		remoteAddr: getPeerAddr(fd),
-		ctx:        ctx,
-		cancel:     cancel,
+		fd:      fd,
+		readBuf: make([]byte, w.config.ReadBufSize),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 	if w.hasTimeout {
 		now := w.now
@@ -560,9 +559,9 @@ func (w *worker) tryParse(c *conn) {
 			}
 			break
 		}
-		req.remoteAddr = c.remoteAddr
 		req.fd = c.fd
 		req.ctx = c.ctx
+		req.remoteAddrRef = &c.remoteAddr
 		// Full request received — clear read deadline, update idle clock.
 		if w.hasTimeout {
 			c.readDeadline = 0
@@ -864,7 +863,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	buf := *bp
 	readN := copy(buf, leftover)
 
-	remoteAddr := first.remoteAddr
+	remoteAddrRef := first.remoteAddrRef
 	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
 	keepAlive := req.keepAlive
@@ -911,9 +910,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 						copy(buf, buf[consumed:readN])
 					}
 					readN = remaining
-					r.remoteAddr = remoteAddr
 					r.fd = fd
 					r.ctx = connCtx
+					r.remoteAddrRef = remoteAddrRef
 					req = r
 					keepAlive = req.keepAlive
 					goto next

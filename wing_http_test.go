@@ -4,6 +4,7 @@ package kruda
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"testing"
@@ -2074,13 +2075,84 @@ func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
 
 // ----------------------------- RemoteAddr Tests -----------------------------
 
-func TestWingRequest_RemoteAddrSetFromConn(t *testing.T) {
-	// Verify that remoteAddr flows from conn → request via tryParse.
-	// We test this at the wingRequest level directly (unit test).
+func TestWingRequest_RemoteAddrCachedValue(t *testing.T) {
+	// Verify that a cached remoteAddr value is returned directly.
 	req := acquireRequest()
 	req.remoteAddr = "192.168.1.1:54321"
 	if req.RemoteAddr() != "192.168.1.1:54321" {
 		t.Errorf("RemoteAddr() = %q, want 192.168.1.1:54321", req.RemoteAddr())
+	}
+	releaseRequest(req)
+}
+
+func TestWingRequest_RemoteAddrLazyFromFD(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	acceptCh := make(chan net.Conn, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		acceptCh <- c
+	}()
+
+	client, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer client.Close()
+
+	var server net.Conn
+	select {
+	case err := <-errCh:
+		t.Fatalf("accept: %v", err)
+	case server = <-acceptCh:
+	}
+	defer server.Close()
+
+	tcp, ok := server.(*net.TCPConn)
+	if !ok {
+		t.Fatalf("accepted conn type = %T, want *net.TCPConn", server)
+	}
+	raw, err := tcp.SyscallConn()
+	if err != nil {
+		t.Fatalf("syscall conn: %v", err)
+	}
+	var fd uintptr
+	if err := raw.Control(func(p uintptr) { fd = p }); err != nil {
+		t.Fatalf("control: %v", err)
+	}
+
+	req := acquireRequest()
+	var cache string
+	req.fd = int32(fd)
+	req.remoteAddrRef = &cache
+	got := req.RemoteAddr()
+	if got == "" {
+		t.Fatal("RemoteAddr() = empty, want peer address")
+	}
+	if got != client.LocalAddr().String() {
+		t.Fatalf("RemoteAddr() = %q, want %q", got, client.LocalAddr().String())
+	}
+	if req.remoteAddr != got {
+		t.Fatalf("cached remoteAddr = %q, want %q", req.remoteAddr, got)
+	}
+	if cache != got {
+		t.Fatalf("connection remoteAddr cache = %q, want %q", cache, got)
+	}
+	releaseRequest(req)
+
+	req = acquireRequest()
+	req.remoteAddrRef = &cache
+	if cached := req.RemoteAddr(); cached != got {
+		t.Fatalf("shared cached RemoteAddr() = %q, want %q", cached, got)
 	}
 	releaseRequest(req)
 }
@@ -2091,8 +2163,8 @@ func TestWingRequest_RemoteAddrEmptyByDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("should parse")
 	}
-	// Parser doesn't set remoteAddr — transport sets it after parse.
+	// Parser doesn't set remoteAddr, and no transport fd is attached in parser-only tests.
 	if req.RemoteAddr() != "" {
-		t.Errorf("RemoteAddr() = %q, want empty (set by transport, not parser)", req.RemoteAddr())
+		t.Errorf("RemoteAddr() = %q, want empty without transport fd", req.RemoteAddr())
 	}
 }

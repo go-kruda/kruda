@@ -82,3 +82,20 @@ func BenchmarkFeatherTableLookup(b *testing.B) {
 		_ = ft.Lookup("GET", "/unknown")
 	}
 }
+
+func BenchmarkFeatherTableLookupExactOne(b *testing.B) {
+	ft := NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Bolt,
+		"GET /json":      Bolt,
+		"POST /db":       Arrow,
+		"GET /fortunes":  Arrow,
+		"GET /queries":   Arrow,
+		"GET /updates":   Arrow,
+	}, Arrow)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = ft.Lookup("GET", "/plaintext")
+	}
+}

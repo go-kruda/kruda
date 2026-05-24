@@ -219,19 +219,27 @@ type doneMsg struct {
 }
 
 type worker struct {
-	id           int
-	listenFd     int
-	eng          engine
-	handler      transport.Handler
-	config       WingConfig
-	limits       parserLimits
-	maxConns     int
-	conns        map[int32]*conn
-	events       [maxEventsPerWait]event
-	evfd         int // eventfd for wake signaling
-	doneCh       chan doneMsg
-	pool         *workerPool
-	feathers     FeatherTable
+	id       int
+	listenFd int
+	eng      engine
+	handler  transport.Handler
+	config   WingConfig
+	limits   parserLimits
+	maxConns int
+	conns    map[int32]*conn
+	events   [maxEventsPerWait]event
+	evfd     int // eventfd for wake signaling
+	doneCh   chan doneMsg
+	pool     *workerPool
+	feathers FeatherTable
+	// Exact-route MRU cache. Paths stored here must come from Feather.path,
+	// never directly from the read buffer's unsafe request path.
+	lastFeather0 Feather
+	lastFeather1 Feather
+	lastMethod0  string
+	lastMethod1  string
+	lastPath0    string
+	lastPath1    string
 	shutdown     *atomic.Bool
 	hasTimeout   bool
 	readTimeout  int64 // nanoseconds (0 = disabled)
@@ -343,6 +351,34 @@ func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
 		}
 	}
 	w.handler.ServeKruda(resp, req)
+}
+
+func (w *worker) lookupFeather(method, path string) Feather {
+	if w.lastPath0 != "" && method == w.lastMethod0 && path == w.lastPath0 {
+		return w.lastFeather0
+	}
+	if w.lastPath1 != "" && method == w.lastMethod1 && path == w.lastPath1 {
+		f := w.lastFeather1
+		m := w.lastMethod1
+		p := w.lastPath1
+		w.lastFeather1 = w.lastFeather0
+		w.lastMethod1 = w.lastMethod0
+		w.lastPath1 = w.lastPath0
+		w.lastFeather0 = f
+		w.lastMethod0 = m
+		w.lastPath0 = p
+		return f
+	}
+	f := w.feathers.Lookup(method, path)
+	if f.path != "" {
+		w.lastFeather1 = w.lastFeather0
+		w.lastMethod1 = w.lastMethod0
+		w.lastPath1 = w.lastPath0
+		w.lastFeather0 = f
+		w.lastMethod0 = method
+		w.lastPath0 = f.path
+	}
+	return f
 }
 
 func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
@@ -577,7 +613,7 @@ func (w *worker) tryParse(c *conn) {
 			c.lastActive = time.Now().UnixNano()
 		}
 
-		f := w.feathers.Lookup(req.method, req.path)
+		f := w.lookupFeather(req.method, req.path)
 		finalizeRequestPath(req, f)
 
 		// For async dispatch modes, only one in-flight handler per conn.

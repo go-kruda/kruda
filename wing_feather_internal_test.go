@@ -59,6 +59,74 @@ func TestWorkerServeRouteFallsBackWhenSingleHandlerDeclines(t *testing.T) {
 	}
 }
 
+func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
+	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Plaintext,
+	}, Arrow)}
+
+	got := w.lookupFeather("GET", "/plaintext")
+	if got.path != "/plaintext" {
+		t.Fatalf("first lookup path = %q, want /plaintext", got.path)
+	}
+	if w.lastMethod0 != "GET" || w.lastPath0 != "/plaintext" {
+		t.Fatalf("cache = %q %q, want GET /plaintext", w.lastMethod0, w.lastPath0)
+	}
+
+	got = w.lookupFeather("GET", "/plaintext")
+	if got.Dispatch != Plaintext.Dispatch || got.ResponseMode != Plaintext.ResponseMode {
+		t.Fatalf("cached lookup = %+v, want Plaintext", got)
+	}
+}
+
+func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
+	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Plaintext,
+		"GET /users/:id": Arrow,
+	}, Bolt)}
+
+	_ = w.lookupFeather("GET", "/plaintext")
+	if w.lastPath0 != "/plaintext" {
+		t.Fatalf("exact route was not cached: %q", w.lastPath0)
+	}
+
+	got := w.lookupFeather("GET", "/users/42")
+	if got.Dispatch != Arrow.Dispatch {
+		t.Fatalf("param lookup dispatch = %v, want Arrow", got.Dispatch)
+	}
+	if w.lastPath0 != "/plaintext" {
+		t.Fatalf("param lookup replaced exact cache with %q", w.lastPath0)
+	}
+
+	got = w.lookupFeather("GET", "/missing")
+	if got.Dispatch != Bolt.Dispatch {
+		t.Fatalf("default lookup dispatch = %v, want Bolt", got.Dispatch)
+	}
+	if w.lastPath0 != "/plaintext" {
+		t.Fatalf("default lookup replaced exact cache with %q", w.lastPath0)
+	}
+}
+
+func TestWorkerLookupFeatherPromotesSecondExactCacheSlot(t *testing.T) {
+	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Plaintext,
+		"GET /json":      JSON,
+	}, Arrow)}
+
+	_ = w.lookupFeather("GET", "/plaintext")
+	_ = w.lookupFeather("GET", "/json")
+	if w.lastPath0 != "/json" || w.lastPath1 != "/plaintext" {
+		t.Fatalf("cache = [%q, %q], want [/json, /plaintext]", w.lastPath0, w.lastPath1)
+	}
+
+	got := w.lookupFeather("GET", "/plaintext")
+	if got.ResponseMode != Plaintext.ResponseMode {
+		t.Fatalf("promoted lookup = %+v, want Plaintext", got)
+	}
+	if w.lastPath0 != "/plaintext" || w.lastPath1 != "/json" {
+		t.Fatalf("promoted cache = [%q, %q], want [/plaintext, /json]", w.lastPath0, w.lastPath1)
+	}
+}
+
 func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
@@ -303,6 +371,34 @@ func TestWingResponseJSONAppendMatchesBuildZeroCopy(t *testing.T) {
 
 	if !bytes.Equal(direct, built) {
 		t.Fatalf("direct JSON response differs from buildZeroCopy:\ndirect:\n%s\nbuilt:\n%s", direct, built)
+	}
+}
+
+func BenchmarkWorkerLookupFeatherCachedExact(b *testing.B) {
+	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Plaintext,
+		"GET /json":      JSON,
+	}, Arrow)}
+	_ = w.lookupFeather("GET", "/plaintext")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = w.lookupFeather("GET", "/plaintext")
+	}
+}
+
+func BenchmarkWorkerLookupFeatherAlternatingExact(b *testing.B) {
+	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+		"GET /plaintext": Plaintext,
+		"GET /json":      JSON,
+	}, Arrow)}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = w.lookupFeather("GET", "/plaintext")
+		_ = w.lookupFeather("GET", "/json")
 	}
 }
 

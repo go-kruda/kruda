@@ -1,0 +1,13 @@
+Running 15s test @ http://127.0.0.1:13000/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   139.27us  204.10us  12.02ms   97.71%
+    Req/Sec   201.67k    42.13k  242.83k    76.16%
+  Latency Distribution
+     50%  110.00us
+     75%  156.00us
+     90%  226.00us
+     99%  577.00us
+  12117233 requests in 15.10s, 1.69GB read
+Requests/sec: 802450.83
+Transfer/sec:    114.79MB

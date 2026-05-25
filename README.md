@@ -125,15 +125,15 @@ Default CPU-bound routes:
 
 The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as "faster than Actix" only when median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero errors. Otherwise, use "same ballpark as Actix."
 
-Current committed evidence satisfies that gate for the CPU-bound Wing handler routes below:
+Current committed tiger evidence from `main` commit `984f0d6` satisfies that gate for the CPU-bound Wing handler routes below:
 
 | Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|---------|---------------------------:|-------------------:|
-| `/plaintext-handler` | throughput | +12.08% | -69.66% |
-| `/json-static` | throughput | +10.28% | -71.47% |
-| `/json-serialize` | throughput | +11.72% | -64.01% |
+| `/plaintext-handler` | throughput | +12.11% | -77.06% |
+| `/json-static` | throughput | +13.50% | -74.24% |
+| `/json-serialize` | throughput | +12.89% | -72.87% |
 
-Evidence: `bench/reproducible/results/20260524Tphase11-single-handler-plaintext-readbuf4k-p3650/`, `bench/reproducible/results/20260524Tphase11-single-handler-json-static-readbuf4k-p3660/`, and `bench/reproducible/results/20260524Tphase11-single-handler-json-serialize-readbuf4k-p3670/`. These are normal handler-path routes, not Wing static bypass routes.
+Evidence: `bench/reproducible/results/main-984f0d6-20260524T171346Z/`, `bench/reproducible/results/resource-main-984f0d6-20260524T174429Z/`, and the summary note in `bench/reproducible/results/2026-05-25-main-984f0d6-tiger-evidence.md`. These are normal handler-path routes, not Wing static bypass routes. The resource evidence shows higher RPS/core than Actix while Actix still uses less RSS.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 

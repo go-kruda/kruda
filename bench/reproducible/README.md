@@ -134,17 +134,17 @@ When those conditions are not met, use "same ballpark as Actix." Do not make RPS
 
 ## Current Evidence
 
-The committed evidence below satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under the throughput profile:
+The committed tiger evidence from `main` commit `984f0d6` satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under both the latency and throughput profiles. Throughput-profile medians:
 
 | Route | Evidence directory | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|--------------------|---------------------------:|-------------------:|
-| `/plaintext-handler` | `results/20260524Tphase11-single-handler-plaintext-readbuf4k-p3650/` | +12.08% | -69.66% |
-| `/json-static` | `results/20260524Tphase11-single-handler-json-static-readbuf4k-p3660/` | +10.28% | -71.47% |
-| `/json-serialize` | `results/20260524Tphase11-single-handler-json-serialize-readbuf4k-p3670/` | +11.72% | -64.01% |
+| `/plaintext-handler` | `results/main-984f0d6-20260524T171346Z/` | +12.11% | -77.06% |
+| `/json-static` | `results/main-984f0d6-20260524T171346Z/` | +13.50% | -74.24% |
+| `/json-serialize` | `results/main-984f0d6-20260524T171346Z/` | +12.89% | -72.87% |
 
 These are normal handler-path routes. Static bypass route options are intentionally separate from fair handler-path benchmark claims.
 
-Baseline resource evidence for the same CPU-bound handler routes is in `results/resource-20260524Tphase6-no-pprof-build-rerun/`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput and p99 ahead of Actix while RSS remains higher than Actix.
+The corresponding resource evidence is in `results/resource-main-984f0d6-20260524T174429Z/`, with a summary note in `results/2026-05-25-main-984f0d6-tiger-evidence.md`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput, p99, and RPS/core ahead of Actix while RSS remains higher than Actix.
 
 The optional short-header read-buffer resource profile is in `results/resource-20260524Tphase7-readbuf4k/`, with a summary note in `results/2026-05-24-read-buffer-size-evidence.md`. It uses `KRUDA_READ_BUF_SIZE=4096`; compared with the phase 6 baseline, Kruda max RSS dropped by 10.77%, 17.61%, and 10.85% on the throughput routes. Actix still has lower RSS, so this is RSS reduction evidence, not a memory-footprint win claim.
 

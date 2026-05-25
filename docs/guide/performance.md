@@ -75,6 +75,10 @@ Kruda minimizes allocations on the request hot path:
 
 ## Benchmark Results
 
+For cross-runtime claims, use the reproducible CPU-bound harness in `bench/reproducible/`. Current committed tiger evidence from `main` commit `984f0d6` satisfies the "faster than Actix" gate for `/plaintext-handler`, `/json-static`, and `/json-serialize` under both the latency and throughput profiles: Kruda median RPS is at least 3% higher than Actix, p99 is not worse than 10% above Actix, and socket errors plus non-2xx responses are zero.
+
+That evidence is limited to same-host loopback CPU-bound handler routes. It is not a database, TLS, HTTP/2, or production network claim. The resource run also shows that Actix still uses less RSS, while Kruda has higher RPS/core on the measured routes.
+
 Run benchmarks locally:
 
 ```bash

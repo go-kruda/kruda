@@ -1,0 +1,136 @@
+Linux 6.8.0-111-generic (dev-server) 	05/24/2026 	_x86_64_	(8 CPU)
+
+05:50:55 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:50:56 PM  1000   1366450   94.06  210.89    0.00    0.00  304.95     5  actix-bench
+
+05:50:55 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:50:56 PM  1000   1366450     24.75      0.00  616656    8012   0.05  actix-bench
+
+05:50:55 PM   UID       PID   cswch/s nvcswch/s  Command
+05:50:56 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:50:56 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:50:57 PM  1000   1366450  105.00  254.00    0.00    0.00  359.00     5  actix-bench
+
+05:50:56 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:50:57 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:50:56 PM   UID       PID   cswch/s nvcswch/s  Command
+05:50:57 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:50:57 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:50:58 PM  1000   1366450  113.00  265.00    0.00    0.00  378.00     5  actix-bench
+
+05:50:57 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:50:58 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:50:57 PM   UID       PID   cswch/s nvcswch/s  Command
+05:50:58 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:50:58 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:50:59 PM  1000   1366450  106.00  260.00    0.00    0.00  366.00     5  actix-bench
+
+05:50:58 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:50:59 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:50:58 PM   UID       PID   cswch/s nvcswch/s  Command
+05:50:59 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:50:59 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:00 PM  1000   1366450  104.00  262.00    0.00    0.00  366.00     5  actix-bench
+
+05:50:59 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:00 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:50:59 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:00 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:00 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:01 PM  1000   1366450  127.00  279.00    0.00    0.00  406.00     5  actix-bench
+
+05:51:00 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:01 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:00 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:01 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:01 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:02 PM  1000   1366450  129.00  281.00    0.00    0.00  410.00     5  actix-bench
+
+05:51:01 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:02 PM  1000   1366450      2.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:01 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:02 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:02 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:03 PM  1000   1366450  112.00  263.00    0.00    0.00  375.00     5  actix-bench
+
+05:51:02 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:03 PM  1000   1366450      2.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:02 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:03 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:03 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:04 PM  1000   1366450  118.00  262.00    0.00    0.00  380.00     5  actix-bench
+
+05:51:03 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:04 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:03 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:04 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:04 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:05 PM  1000   1366450  131.00  297.00    0.00    0.00  428.00     5  actix-bench
+
+05:51:04 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:05 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:04 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:05 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:05 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:06 PM  1000   1366450  129.00  301.00    0.00    0.00  430.00     5  actix-bench
+
+05:51:05 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:06 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:05 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:06 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:06 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:07 PM  1000   1366450  113.00  260.00    0.00    0.00  373.00     5  actix-bench
+
+05:51:06 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:07 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:06 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:07 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:07 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:08 PM  1000   1366450  115.00  273.00    0.00    0.00  388.00     5  actix-bench
+
+05:51:07 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:08 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:07 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:08 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:08 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:09 PM  1000   1366450  124.00  288.00    0.00    0.00  412.00     5  actix-bench
+
+05:51:08 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:09 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:08 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:09 PM  1000   1366450      0.00      0.00  actix-bench
+
+05:51:09 PM   UID       PID    %usr %system  %guest   %wait    %CPU   CPU  Command
+05:51:10 PM  1000   1366450  106.00  247.00    0.00    0.00  353.00     5  actix-bench
+
+05:51:09 PM   UID       PID  minflt/s  majflt/s     VSZ     RSS   %MEM  Command
+05:51:10 PM  1000   1366450      0.00      0.00  616656    8012   0.05  actix-bench
+
+05:51:09 PM   UID       PID   cswch/s nvcswch/s  Command
+05:51:10 PM  1000   1366450      0.00      0.00  actix-bench

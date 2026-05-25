@@ -52,6 +52,11 @@ func (c *Ctx) Context() context.Context {
 	if c.ctx != nil {
 		return c.ctx
 	}
+	if c.request != nil {
+		if ctx := c.request.Context(); ctx != nil {
+			return ctx
+		}
+	}
 	if ctx := c.fastHTTPContext(); ctx != nil {
 		return ctx
 	}

@@ -137,7 +137,9 @@ func (c *Ctx) reset(w transport.ResponseWriter, r transport.Request) {
 	c.cacheControl = ""
 	c.location = ""
 
-	c.ctx = r.Context()
+	// Keep request context lazy. Most hot-path handlers never call Context(),
+	// and Ctx.Context() can read the transport request context on demand.
+	c.ctx = nil
 
 	// Reset params (inline array, zero-alloc)
 	if c.params.count > 0 {

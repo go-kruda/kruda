@@ -35,6 +35,7 @@ KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-4096}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
 PERF_EVENTS="${PERF_EVENTS:-task-clock,cycles,instructions,context-switches,cpu-migrations,page-faults}"
+PROFILE_SUDO="${PROFILE_SUDO:-0}"
 
 SERVER_PID=""
 TRACE_PID=""
@@ -52,7 +53,7 @@ PROFILE_SECONDS="$(duration_seconds "$PROFILE_DURATION")"
 
 cleanup() {
   if [ -n "$TRACE_PID" ] && kill -0 "$TRACE_PID" >/dev/null 2>&1; then
-    kill -INT "$TRACE_PID" >/dev/null 2>&1 || true
+    stop_trace
     wait "$TRACE_PID" >/dev/null 2>&1 || true
   fi
   TRACE_PID=""
@@ -71,10 +72,27 @@ require_cmd() {
   fi
 }
 
+profile_prefix() {
+  if [ "$PROFILE_SUDO" = "1" ]; then
+    printf '%s\n' sudo -n
+  fi
+}
+
+stop_trace() {
+  if [ -z "$TRACE_PID" ]; then
+    return 0
+  fi
+  if [ "$PROFILE_SUDO" = "1" ]; then
+    sudo -n kill -INT "$TRACE_PID" >/dev/null 2>&1 || true
+  else
+    kill -INT "$TRACE_PID" >/dev/null 2>&1 || true
+  fi
+}
+
 port_for() {
   case "$1" in
-    kruda) echo "${KRUDA_PORT:-3000}" ;;
-    actix) echo "${ACTIX_PORT:-3003}" ;;
+    kruda) echo "${KRUDA_PORT:-13000}" ;;
+    actix) echo "${ACTIX_PORT:-13003}" ;;
     *) echo "unknown framework: $1" >&2; exit 1 ;;
   esac
 }
@@ -109,6 +127,7 @@ write_environment() {
     echo "wrk_threads=$WRK_THREADS"
     echo "wrk_connections=$WRK_CONNECTIONS"
     echo "perf_events=$PERF_EVENTS"
+    echo "profile_sudo=$PROFILE_SUDO"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=$KRUDA_READ_BUF_SIZE_VALUE"
@@ -123,6 +142,14 @@ write_environment() {
     echo
     echo "== OS =="
     uname -a
+    echo
+    echo "== Kernel profiling policy =="
+    if [ -r /proc/sys/kernel/perf_event_paranoid ]; then
+      echo "perf_event_paranoid=$(cat /proc/sys/kernel/perf_event_paranoid)"
+    fi
+    if [ -r /proc/sys/kernel/yama/ptrace_scope ]; then
+      echo "ptrace_scope=$(cat /proc/sys/kernel/yama/ptrace_scope)"
+    fi
     echo
     echo "== Toolchain =="
     go version
@@ -193,7 +220,7 @@ run_perf_stat() {
   run_wrk "$url" "$WARMUP_DURATION" "$RAW_DIR/$prefix-warmup.txt"
 
   set +e
-  perf stat -x, -e "$PERF_EVENTS" -p "$SERVER_PID" -o "$RAW_DIR/$prefix-perf.csv" -- sleep "$PROFILE_SECONDS" &
+  $(profile_prefix) perf stat -x, -e "$PERF_EVENTS" -p "$SERVER_PID" -o "$RAW_DIR/$prefix-perf.csv" -- sleep "$PROFILE_SECONDS" &
   local perf_pid="$!"
   sleep 0.3
   run_wrk "$url" "$PROFILE_DURATION" "$RAW_DIR/$prefix-wrk.txt"
@@ -222,12 +249,12 @@ run_strace_count() {
   run_wrk "$url" "$WARMUP_DURATION" "$RAW_DIR/$prefix-warmup.txt"
 
   set +e
-  strace -f -c -p "$SERVER_PID" -o "$RAW_DIR/$prefix-strace.txt" > "$RAW_DIR/$prefix-strace-attach.log" 2>&1 &
+  $(profile_prefix) strace -f -c -p "$SERVER_PID" -o "$RAW_DIR/$prefix-strace.txt" > "$RAW_DIR/$prefix-strace-attach.log" 2>&1 &
   TRACE_PID="$!"
   sleep 0.5
   run_wrk "$url" "$PROFILE_DURATION" "$RAW_DIR/$prefix-wrk.txt"
   local wrk_status="$?"
-  kill -INT "$TRACE_PID" >/dev/null 2>&1 || true
+  stop_trace
   wait "$TRACE_PID"
   local strace_status="$?"
   set -e
@@ -288,9 +315,18 @@ def parse_strace(path):
         return calls
     for line in path.read_text(errors="replace").splitlines():
         cols = line.split()
-        if len(cols) >= 6 and cols[-1].isidentifier():
+        if len(cols) >= 5 and cols[-1].isidentifier() and cols[3].isdigit():
             calls[cols[-1]] = cols[3]
     return calls
+
+def sum_calls(calls, names):
+    total = 0
+    seen = False
+    for name in names:
+        if name in calls:
+            seen = True
+            total += int(calls[name])
+    return str(total) if seen else ""
 
 rows = []
 for wrk in sorted((root / "raw").glob("*-wrk.txt")):
@@ -309,9 +345,9 @@ for wrk in sorted((root / "raw").glob("*-wrk.txt")):
         "instructions": perf.get("instructions", ""),
         "task_clock": perf.get("task-clock", ""),
         "context_switches": perf.get("context-switches", ""),
-        "read_calls": strace.get("read", ""),
-        "write_calls": strace.get("write", ""),
-        "epoll_wait_calls": strace.get("epoll_wait", ""),
+        "read_recv_calls": sum_calls(strace, ("read", "readv", "recvfrom", "recvmsg")),
+        "write_send_calls": sum_calls(strace, ("write", "writev", "sendto", "sendmsg")),
+        "epoll_wait_calls": sum_calls(strace, ("epoll_wait", "epoll_pwait", "epoll_pwait2")),
         "epoll_ctl_calls": strace.get("epoll_ctl", ""),
         "futex_calls": strace.get("futex", ""),
     })
@@ -319,7 +355,7 @@ for wrk in sorted((root / "raw").glob("*-wrk.txt")):
 headers = [
     "framework", "route", "kind", "rps", "p50", "p90", "p99", "max",
     "socket_errors", "non2xx", "cycles", "instructions", "task_clock",
-    "context_switches", "read_calls", "write_calls", "epoll_wait_calls",
+    "context_switches", "read_recv_calls", "write_send_calls", "epoll_wait_calls",
     "epoll_ctl_calls", "futex_calls",
 ]
 csv_path.write_text(",".join(headers) + "\n" + "\n".join(
@@ -329,13 +365,15 @@ csv_path.write_text(",".join(headers) + "\n" + "\n".join(
 lines = [
     "# Syscall Profile Summary",
     "",
-    "| Framework | Route | Kind | RPS | p99 | Socket errors | Non-2xx | read | write | epoll_wait | epoll_ctl | futex | cycles | instructions | context switches |",
+    "Perf rows are the comparable wrk pass. Strace rows are intrusive syscall-count diagnostics; use their syscall counts, not their RPS or latency, for performance conclusions. A strace status of 130 is expected because the harness stops strace with SIGINT after the measured wrk run.",
+    "",
+    "| Framework | Route | Kind | RPS | p99 | Socket errors | Non-2xx | read/recv | write/send | epoll wait | epoll_ctl | futex | cycles | instructions | context switches |",
     "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
 ]
 for r in rows:
     lines.append(
         f"| {r['framework']} | {r['route']} | {r['kind']} | {r['rps']:.2f} | {r['p99']} | "
-        f"{r['socket_errors']} | {r['non2xx']} | {r['read_calls']} | {r['write_calls']} | "
+        f"{r['socket_errors']} | {r['non2xx']} | {r['read_recv_calls']} | {r['write_send_calls']} | "
         f"{r['epoll_wait_calls']} | {r['epoll_ctl_calls']} | {r['futex_calls']} | "
         f"{r['cycles']} | {r['instructions']} | {r['context_switches']} |"
     )

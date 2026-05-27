@@ -134,65 +134,6 @@ func TestNewWingTransport_ReadBufSizeEnv_Zero(t *testing.T) {
 	}
 }
 
-func TestNewWingTransport_EpollIdleSpinsEnv_Default(t *testing.T) {
-	os.Unsetenv("KRUDA_WING_EPOLL_IDLE_SPINS")
-
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
-	if !ok {
-		t.Fatal("newWingTransport did not return Wing transport")
-	}
-	if tr.config.EpollIdleSpins == nil || *tr.config.EpollIdleSpins != defaultWingEpollIdleSpins {
-		t.Fatalf("EpollIdleSpins = %v, want %d", tr.config.EpollIdleSpins, defaultWingEpollIdleSpins)
-	}
-}
-
-func TestNewWingTransport_EpollIdleSpinsEnv(t *testing.T) {
-	os.Setenv("KRUDA_WING_EPOLL_IDLE_SPINS", "0")
-	defer os.Unsetenv("KRUDA_WING_EPOLL_IDLE_SPINS")
-
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
-	if !ok {
-		t.Fatal("newWingTransport did not return Wing transport")
-	}
-	if tr.config.EpollIdleSpins == nil || *tr.config.EpollIdleSpins != 0 {
-		t.Fatalf("EpollIdleSpins = %v, want 0", tr.config.EpollIdleSpins)
-	}
-}
-
-func TestNewWingTransport_EpollIdleSpinsEnv_Negative(t *testing.T) {
-	os.Setenv("KRUDA_WING_EPOLL_IDLE_SPINS", "-1")
-	defer os.Unsetenv("KRUDA_WING_EPOLL_IDLE_SPINS")
-
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
-	if !ok {
-		t.Fatal("newWingTransport did not return Wing transport")
-	}
-	if tr.config.EpollIdleSpins == nil || *tr.config.EpollIdleSpins != -1 {
-		t.Fatalf("EpollIdleSpins = %v, want -1", tr.config.EpollIdleSpins)
-	}
-}
-
-func TestNewWingTransport_EpollIdleSpinsEnv_Invalid(t *testing.T) {
-	os.Setenv("KRUDA_WING_EPOLL_IDLE_SPINS", "abc")
-	defer os.Unsetenv("KRUDA_WING_EPOLL_IDLE_SPINS")
-
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
-	if !ok {
-		t.Fatal("newWingTransport did not return Wing transport")
-	}
-	if tr.config.EpollIdleSpins == nil || *tr.config.EpollIdleSpins != defaultWingEpollIdleSpins {
-		t.Fatalf("EpollIdleSpins = %v, want %d", tr.config.EpollIdleSpins, defaultWingEpollIdleSpins)
-	}
-}
-
 func TestNewWingTransport_AsyncEnv(t *testing.T) {
 	os.Setenv("KRUDA_ASYNC", "1")
 	defer os.Unsetenv("KRUDA_ASYNC")

@@ -26,15 +26,14 @@ type epollEvent struct {
 }
 
 type epollEngine struct {
-	epfd          int
-	evfd          int // eventfd for wake (replaces pipe pair)
-	rawMode       bool
-	wakeup        int32
-	idle          int32
-	idleSpinLimit int32
-	connPtrs      map[int32]unsafe.Pointer
-	listenFd      int
-	epevs         []epollEvent // elastic event list
+	epfd     int
+	evfd     int // eventfd for wake (replaces pipe pair)
+	rawMode  bool
+	wakeup   int32
+	idle     int32
+	connPtrs map[int32]unsafe.Pointer
+	listenFd int
+	epevs    []epollEvent // elastic event list
 }
 
 func newEngine() engine {
@@ -52,7 +51,6 @@ func (e *epollEngine) Init(cfg engineConfig) error {
 	e.epfd = epfd
 	e.evfd = cfg.EventFd
 	e.rawMode = cfg.RawMode
-	e.idleSpinLimit = int32(cfg.EpollIdleSpins)
 	return nil
 }
 
@@ -104,8 +102,7 @@ func (e *epollEngine) Detach(fd int32) {
 func (e *epollEngine) Wait(events []event) (int, error) {
 	// Adaptive: non-blocking first when busy, block when idle.
 	msec := 0
-	limit := e.idleSpinLimit
-	if limit < 0 || e.idle > limit {
+	if e.idle > 64 {
 		msec = -1
 	}
 	n, err := e.waitWithTimeout(events, msec)
@@ -113,7 +110,7 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 		e.idle = 0
 	} else {
 		e.idle++
-		if msec == 0 && e.idle <= limit {
+		if msec == 0 && e.idle <= 64 {
 			runtime.Gosched()
 		}
 	}

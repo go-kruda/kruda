@@ -3,6 +3,22 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.4] — 2026-05-28
+
+### Added
+- Added opt-in Wing static response route options for public static hot paths: `WingStaticText` and `WingStaticJSON`.
+- Added reproducible CPU-bound benchmark evidence for Kruda, Fiber, and Actix, including latency percentiles, error counts, non-2xx counts, CPU/RAM resource data, syscall traces, and CPU profiles.
+- Added Wing flight model documentation defining Transport, Wing, Feather, and Bone terminology.
+
+### Changed
+- Improved Wing CPU-bound handler paths with single-handler dispatch, inline JSON response writing, common-header parsing, route Feather caching, clean path caching, lazy peer address lookup, read buffer tuning, and lower fair-handler overhead.
+- Updated public performance documentation to use balanced CPU-bound claim gates for throughput, p99 latency, socket errors, and non-2xx responses.
+- Hardened the reproducible benchmark harness to run CPU-only routes for Kruda, Fiber, and Actix with warmups, multiple rounds, latency profiles, throughput profiles, raw logs, and summaries.
+
+### Fixed
+- Fixed static response cache keys to include status codes and avoid cross-status cache reuse.
+- Preserved normal handler, middleware, lifecycle, cookie, CORS, and secure-header behavior outside explicitly documented static bypass routes.
+
 ## [1.2.3] — 2026-05-23
 
 ### Fixed

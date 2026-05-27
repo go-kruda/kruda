@@ -95,6 +95,9 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 			t.cleanupWorkers(i)
 			return fmt.Errorf("wing: listen: %w", err)
 		}
+		if t.config.WorkerCPUAffinity {
+			_ = setSocketIncomingCPU(fd, i)
+		}
 		w, err := newWorker(i, fd, t.config, handler)
 		if err != nil {
 			closeFd(fd)

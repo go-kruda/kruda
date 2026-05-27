@@ -1,0 +1,13 @@
+Running 10s test @ http://127.0.0.1:14600/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   211.23us  251.30us  11.39ms   95.42%
+    Req/Sec   208.87k    48.06k  247.99k    73.20%
+  Latency Distribution
+     50%  135.00us
+     75%  242.00us
+     90%  358.00us
+     99%    0.86ms
+  8375668 requests in 10.10s, 1.01GB read
+Requests/sec: 829190.07
+Transfer/sec:    102.80MB

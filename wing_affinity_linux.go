@@ -10,16 +10,7 @@ import (
 
 const (
 	linuxCPUSetBytes = 128
-	soIncomingCPU    = 49
 )
-
-func setSocketIncomingCPU(fd int, workerID int) error {
-	cpu, ok := wingAffinityCPU(workerID)
-	if !ok {
-		return nil
-	}
-	return syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, soIncomingCPU, cpu)
-}
 
 func pinCurrentThreadToCPU(workerID int) error {
 	cpu, ok := wingAffinityCPU(workerID)

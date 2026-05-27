@@ -31,12 +31,13 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		}
 	}
 	wcfg := WingConfig{
-		Workers:         workers,
-		HandlerPoolSize: poolSize,
-		ReadBufSize:     readBufSize,
-		ReadTimeout:     cfg.ReadTimeout,
-		WriteTimeout:    cfg.WriteTimeout,
-		IdleTimeout:     cfg.IdleTimeout,
+		Workers:           workers,
+		HandlerPoolSize:   poolSize,
+		ReadBufSize:       readBufSize,
+		WorkerCPUAffinity: os.Getenv("KRUDA_WING_CPU_AFFINITY") == "1",
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 	if os.Getenv("KRUDA_ASYNC") == "1" {
 		wcfg.DefaultFeather = Feather{Dispatch: Pool}

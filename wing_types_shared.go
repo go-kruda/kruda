@@ -22,6 +22,7 @@ type WingConfig struct {
 	MaxHeaderSize     int
 	MaxConnsPerWorker int
 	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
+	WorkerCPUAffinity bool               // best-effort Linux worker CPU pinning (opt-in)
 	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
 	DefaultFeather    Feather            // fallback feather for routes not in Feathers
 	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)

@@ -13,8 +13,12 @@ func startPprof() {
 	if os.Getenv("BENCH_ENABLE_PPROF") != "1" {
 		return
 	}
+	port := os.Getenv("PPROF_PORT")
+	if port == "" {
+		port = "6060"
+	}
 	go func() {
-		fmt.Println("[pprof] listening on :6060")
-		_ = http.ListenAndServe(":6060", nil)
+		fmt.Println("[pprof] listening on :" + port)
+		_ = http.ListenAndServe(":"+port, nil)
 	}()
 }

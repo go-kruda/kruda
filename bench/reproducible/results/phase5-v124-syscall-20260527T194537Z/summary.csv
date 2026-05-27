@@ -1,0 +1,13 @@
+framework,route,kind,rps,p50,p90,p99,max,socket_errors,non2xx,cycles,instructions,task_clock,context_switches,read_recv_calls,write_send_calls,epoll_wait_calls,epoll_ctl_calls,futex_calls
+actix,json-serialize,perf,721038.24,170.00us,1.08ms,3.21ms,16.48ms,0,0,<not supported>,<not supported>,38113.18,719473,,,,,
+actix,json-serialize,strace,89394.75,2.77ms,3.62ms,4.00ms,20.09ms,0,0,,,,,903305,903432,28507,405,
+actix,json-static,perf,733955.91,171.00us,1.03ms,3.27ms,12.72ms,0,0,<not supported>,<not supported>,39029.44,693335,,,,,
+actix,json-static,strace,89256.99,2.77ms,3.63ms,4.04ms,16.78ms,0,0,,,,,894795,894829,28278,514,
+actix,plaintext-handler,perf,744213.92,171.00us,1.15ms,3.36ms,12.52ms,0,0,<not supported>,<not supported>,39938.60,572216,,,,,
+actix,plaintext-handler,strace,89507.26,2.76ms,3.63ms,3.96ms,26.40ms,0,0,,,,,904479,904549,28693,479,
+kruda,json-serialize,perf,794603.28,217.00us,486.00us,1.36ms,12.33ms,0,0,<not supported>,<not supported>,37661.53,207811,,,,,
+kruda,json-serialize,strace,68313.69,90.00us,791.64ms,1.34s,1.81s,0,0,,,,,687405,684133,491,1283,15316
+kruda,json-static,perf,817824.53,218.00us,430.00us,1.53ms,16.69ms,0,0,<not supported>,<not supported>,37393.24,358534,,,,,
+kruda,json-static,strace,69095.24,92.00us,738.84ms,1.32s,1.85s,0,0,,,,,695462,691965,520,1285,14409
+kruda,plaintext-handler,perf,830630.04,206.00us,428.00us,1.41ms,15.64ms,0,0,<not supported>,<not supported>,37644.35,374509,,,,,
+kruda,plaintext-handler,strace,69094.46,90.00us,838.20ms,1.51s,1.99s,0,0,,,,,695406,692132,471,1281,14215

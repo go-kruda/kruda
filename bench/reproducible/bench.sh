@@ -25,7 +25,6 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 # worker scaling. This does not change Kruda's framework default.
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-}"
-KRUDA_WING_CPU_AFFINITY_VALUE="${KRUDA_WING_CPU_AFFINITY:-0}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
@@ -126,7 +125,6 @@ write_environment() {
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=${KRUDA_READ_BUF_SIZE_VALUE:-default}"
-    echo "kruda_wing_cpu_affinity=$KRUDA_WING_CPU_AFFINITY_VALUE"
     echo "bench_rounds=$BENCH_ROUNDS_VALUE"
     echo "bench_duration=$BENCH_DURATION_VALUE"
     echo "routes=${ROUTES[*]}"
@@ -163,7 +161,6 @@ start_server() {
         cd "$SCRIPT_DIR/kruda"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
           KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" \
-          KRUDA_WING_CPU_AFFINITY="$KRUDA_WING_CPU_AFFINITY_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
           DATABASE_URL="$DATABASE_URL_VALUE" \
           ./kruda-bench

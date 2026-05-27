@@ -32,7 +32,6 @@ WRK_CONNECTIONS="${WRK_CONNECTIONS:-256}"
 GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-4096}"
-KRUDA_WING_CPU_AFFINITY_VALUE="${KRUDA_WING_CPU_AFFINITY:-0}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
 PERF_EVENTS="${PERF_EVENTS:-task-clock,cycles,instructions,context-switches,cpu-migrations,page-faults}"
@@ -132,7 +131,6 @@ write_environment() {
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=$KRUDA_READ_BUF_SIZE_VALUE"
-    echo "kruda_wing_cpu_affinity=$KRUDA_WING_CPU_AFFINITY_VALUE"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "routes=${ROUTES[*]}"
     echo "frameworks=${FRAMEWORKS[*]}"
@@ -176,8 +174,7 @@ start_server() {
       (
         cd "$SCRIPT_DIR/kruda"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
-          KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" KRUDA_WING_CPU_AFFINITY="$KRUDA_WING_CPU_AFFINITY_VALUE" \
-          PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
+          KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
           "$bin"
       ) > "$log" 2>&1 &
       ;;

@@ -1,0 +1,8 @@
+# started on Wed May 27 19:47:17 2026
+
+39029.44,msec,task-clock,39029442098,100.00,3.902,CPUs utilized
+<not supported>,,cycles,0,100.00,,
+<not supported>,,instructions,0,100.00,,
+693335,,context-switches,39029505168,100.00,17.764,K/sec
+2275,,cpu-migrations,39029561394,100.00,58.289,/sec
+101,,page-faults,39029620462,100.00,2.588,/sec

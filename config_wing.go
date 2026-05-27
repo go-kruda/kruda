@@ -30,6 +30,12 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			readBufSize = n
 		}
 	}
+	var epollIdleSpins *int
+	if v := os.Getenv("KRUDA_WING_EPOLL_IDLE_SPINS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			epollIdleSpins = &n
+		}
+	}
 	wcfg := WingConfig{
 		Workers:         workers,
 		HandlerPoolSize: poolSize,
@@ -37,6 +43,7 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		ReadTimeout:     cfg.ReadTimeout,
 		WriteTimeout:    cfg.WriteTimeout,
 		IdleTimeout:     cfg.IdleTimeout,
+		EpollIdleSpins:  epollIdleSpins,
 	}
 	if os.Getenv("KRUDA_ASYNC") == "1" {
 		wcfg.DefaultFeather = Feather{Dispatch: Pool}

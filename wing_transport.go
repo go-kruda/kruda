@@ -397,7 +397,13 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		eng.Close()
 		return nil, err
 	}
-	if err := eng.Init(engineConfig{RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
+	if err := eng.Init(engineConfig{
+		RingSize:       cfg.RingSize,
+		PipeW:          wakeW,
+		EventFd:        wakeR,
+		RawMode:        !cfg.needsAsync(),
+		EpollIdleSpins: *cfg.EpollIdleSpins,
+	}); err != nil {
 		closeFd(wakeR)
 		if wakeW != wakeR {
 			closeFd(wakeW)

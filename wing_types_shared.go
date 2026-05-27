@@ -27,7 +27,10 @@ type WingConfig struct {
 	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
 	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
 	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
+	EpollIdleSpins    *int               // Linux-only: empty epoll polls before blocking; nil keeps default
 }
+
+const defaultWingEpollIdleSpins = 64
 
 func (c *WingConfig) defaults() {
 	if c.Workers <= 0 {
@@ -41,6 +44,10 @@ func (c *WingConfig) defaults() {
 	}
 	if c.HandlerPoolSize <= 0 {
 		c.HandlerPoolSize = c.Workers
+	}
+	if c.EpollIdleSpins == nil {
+		spins := defaultWingEpollIdleSpins
+		c.EpollIdleSpins = &spins
 	}
 }
 

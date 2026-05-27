@@ -13,7 +13,7 @@ Kruda should keep correctness, security, and normal framework behavior as the de
 
 ### Transport
 
-The transport is the low-level flight method. It owns socket I/O, protocol parsing, connection lifecycle, timeout enforcement, request handoff, and response writes.
+The transport is the HTTP backend adapter that carries requests into Kruda while preserving the framework contract.
 
 Current transports:
 
@@ -21,17 +21,19 @@ Current transports:
 - fasthttp: optimized HTTP/1.1 transport used by default on macOS.
 - net/http: standard transport for Windows, TLS, HTTP/2, SSE, and maximum compatibility.
 
-Transport choices are application-level decisions. They set the broad runtime behavior and portability tradeoff.
+Transport choices are application-level decisions. They set the broad runtime behavior, protocol support, and portability tradeoff.
 
 ### Wing
 
-Wing is Kruda's performance-oriented flight surface. It is the transport family where Kruda can specialize for high-throughput HTTP/1.1 routes while still preserving the normal handler path by default.
+Wing is Kruda's performance-oriented transport family and profile surface. It is where Kruda can specialize for high-throughput HTTP/1.1 workloads while still preserving the normal handler path by default.
+
+A Wing is composed from multiple Feathers chosen for a workload. One Wing is not one option. For example, a CPU-bound Wing profile may combine inline dispatch, route lookup specialization, response serialization strategy, buffer policy, event-loop policy, and Linux write strategy. A query/render Wing profile may combine blocking-I/O isolation, timeout-aware dispatch, and backpressure-oriented Feathers.
 
 Wing is not a license to weaken framework behavior. Normal Wing handler routes must still run the handler pipeline, middleware, lifecycle hooks, cookies, CORS, secure headers, path traversal checks, HTTP safety limits, panic recovery, and error handling according to their existing contracts.
 
 ### Feather
 
-A Feather is a small, route-level or workload-level tuning component attached to Wing. Feathers should be composable and explicit. A Feather can tune dispatch strategy, response serialization, lookup behavior, buffering, or a narrowly-scoped bypass.
+A Feather is a tunable component that helps a Wing fit a workload. Feathers should be composable and explicit. A Feather can be a function, config, route hint, dispatch strategy, response strategy, syscall policy, buffer policy, event-loop policy, or fast-path technique.
 
 Existing Feather concepts include:
 
@@ -41,6 +43,21 @@ Existing Feather concepts include:
 - Route metadata: route-specific hints used by Wing's Feather table.
 
 Future Feathers should be introduced only when they make a specific workload faster without changing the default framework contract.
+
+### Bone
+
+Bone is internal design vocabulary for the non-negotiable correctness and security structure that lets Wing remain a framework, not just a benchmark server. Bones are not public API at this stage, and public docs should keep using direct terms such as framework contract, HTTP safety, and lifecycle behavior.
+
+Bones include:
+
+- HTTP parser safety, including header count/size limits, CRLF rejection, duplicate `Content-Length` rejection, and `Transfer-Encoding` plus `Content-Length` rejection.
+- Connection state machine correctness, including keep-alive, close, shutdown, and fd ownership.
+- Middleware, lifecycle hook, panic recovery, error handling, cookies, CORS, and secure-header contracts.
+- Timeout and backpressure behavior.
+- Response ordering and pipelining semantics.
+- Safe-copy semantics for request path, query, body, content type, cookies, and retained header values.
+
+Feathers are tunable. Bones are not optional. A candidate Feather that weakens a Bone must be rejected or moved behind a clearly documented bypass boundary that is not used for fair handler-path claims.
 
 ## Default Contract
 

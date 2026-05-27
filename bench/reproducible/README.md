@@ -23,6 +23,7 @@ bench/reproducible/
 ├── actix/          # Actix Web 4
 ├── bench.sh        # Automated benchmark script
 ├── resource.sh     # CPU/RAM resource benchmark script
+├── profile-kruda.sh # Kruda-only pprof capture helper
 └── README.md
 ```
 
@@ -70,6 +71,15 @@ Kruda's benchmark pprof server is excluded from the default CPU-only benchmark b
 ```bash
 BENCH_ENABLE_PPROF=1 ./bench.sh json-serialize
 ```
+
+For Kruda-only candidate discovery, use `profile-kruda.sh` instead of the cross-runtime benchmark harness. It builds Kruda with `bench_pprof`, runs only CPU-bound Kruda routes, drives `wrk --latency`, captures Go CPU profiles, and writes `go tool pprof -top` reports under `results/profile-<timestamp>/`:
+
+```bash
+./profile-kruda.sh
+./profile-kruda.sh json-serialize
+```
+
+These profiles are diagnostic evidence for choosing the next candidate. They are not cross-runtime benchmark claim evidence because the pprof server and profiler overhead are enabled only for Kruda.
 
 ## Profiles
 

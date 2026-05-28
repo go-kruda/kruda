@@ -1,13 +1,35 @@
 # Wing BigBang Phase 5 Design
 
 Date: 2026-05-28
-Status: Draft
+Status: Closed - evidence recorded, no runtime candidate accepted
 
 ## Goal
 
 Phase 5 is a research branch for finding a credible path toward a larger fair-handler CPU-bound win after the `v1.2.4` release. The working stretch target is a 20% median RPS advantage over Actix on fair handler-path CPU-bound routes, but that is not a current claim.
 
 The first objective is not to ship a runtime change. The first objective is to identify whether any architecture-level Wing profile can move beyond the current syscall-dominated ceiling without weakening correctness, security, or default framework behavior.
+
+## Outcome
+
+Phase 5 did not produce a runtime candidate that cleared the balanced fair-handler gate.
+
+The merged evidence shows that the default Wing path remains syscall-dominated on the tiger Linux benchmark server and that the tested candidates did not provide a broad balanced win:
+
+- CPU affinity and epoll idle-spin prototypes were rejected.
+- The worker-count sweep kept `KRUDA_WORKERS=4` as the balanced setting.
+- Removing the speculative post-send read regressed median throughput.
+- Go 1.26.3 was not a broad win over Go 1.25.8 for this source/profile.
+- CPU Spear takeover collapsed throughput and tail latency on CPU-bound routes.
+- `GOMAXPROCS` tuning did not produce a broad balanced improvement.
+
+The Phase 5 fair-handler runtime track is therefore closed. Future work should not repeat these candidates unless the workload, kernel, Go runtime, or benchmark topology materially changes.
+
+Next performance work should move to one of these separate tracks:
+
+- Workload-specific Wing profiles with explicit Feather composition and clear opt-in boundaries.
+- JSON-specific handler-path Feathers, labeled as JSON-specific evidence.
+- Real-world API credibility work outside the fair-handler CPU-bound benchmark claim.
+- A larger Linux I/O architecture investigation only if it starts from a new design and evidence plan, not from another small hot-path cleanup.
 
 ## Baseline
 
@@ -170,4 +192,4 @@ Commit messages, PR title/body, docs, and benchmark evidence must remain English
 
 Stop Phase 5 runtime work if the fresh `v1.2.4` tiger profile still shows syscall/kernel cost above 80% flat CPU and no Track A candidate can improve all three routes without p99 or error regressions.
 
-In that case, the credible next product direction is not more fair-handler micro-optimization. It is either JSON-specific optimization, workload-specific Wing profiles, or broader framework features where Kruda can win real application credibility.
+This stop rule has been reached for the tested Phase 5 candidates. The credible next product direction is not more fair-handler micro-optimization. It is either JSON-specific optimization, workload-specific Wing profiles, or broader framework features where Kruda can win real application credibility.

@@ -58,6 +58,31 @@ Run one route:
 ./bench.sh json-static
 ```
 
+## Kruda JSON Encoder Mode
+
+The harness builds Kruda with `KRUDA_GO_TAGS=kruda_stdjson` by default so
+portable CPU-bound evidence does not depend on CGO availability. For JSON
+handler profile investigation, set `KRUDA_GO_TAGS=default` or an empty
+`KRUDA_GO_TAGS` value to build Kruda without explicit Go build tags. On
+CGO-enabled systems, that selects the default Sonic encoder path.
+
+Compare the JSON serialization route with stdlib JSON:
+
+```bash
+KRUDA_GO_TAGS=kruda_stdjson RESULT_DIR=results/json-stdjson-$(date -u +%Y%m%dT%H%M%SZ) ./bench.sh json-serialize
+```
+
+Compare the same route with Kruda's default build tags:
+
+```bash
+KRUDA_GO_TAGS=default RESULT_DIR=results/json-default-$(date -u +%Y%m%dT%H%M%SZ) ./bench.sh json-serialize
+```
+
+Use the same `KRUDA_GO_TAGS` values with `resource.sh`, `profile-kruda.sh`, or
+`syscall-profile.sh` when a JSON profile candidate needs resource or diagnostic
+evidence. The generated `environment.txt` records the effective
+`kruda_go_tags` value for each run.
+
 Run opt-in DB routes:
 
 ```bash

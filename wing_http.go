@@ -815,6 +815,8 @@ func init() {
 // cachedDateHdr holds "Date: <RFC1123>\r\n" updated every second.
 var cachedDateHdr atomic.Pointer[[]byte]
 
+const jsonHeaderContentLength = "Content-Type: application/json; charset=utf-8\r\nContent-Length: "
+
 func init() {
 	updateDateHdr()
 	go func() {
@@ -874,13 +876,12 @@ func (r *wingResponse) buildZeroCopy() []byte {
 
 	// JSON fast path — status + Date + Content-Type:json + Content-Length + body
 	if r.jsonFast {
-		if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
-			b = append(b, statusLines[r.status]...)
-		} else {
-			b = append(b, "HTTP/1.1 200 OK\r\n"...)
-		}
-		b = append(b, dateHdr()...)
-		b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
+		statusLine := jsonStatusLine(r.status)
+		date := dateHdr()
+		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+		b = append(b, statusLine...)
+		b = append(b, date...)
+		b = append(b, jsonHeaderContentLength...)
 		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n\r\n"...)
 		b = append(b, r.body...)
@@ -955,17 +956,32 @@ func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
 }
 
 func (r *wingResponse) appendJSONTo(b []byte) []byte {
-	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
-		b = append(b, statusLines[r.status]...)
-	} else {
-		b = append(b, "HTTP/1.1 200 OK\r\n"...)
-	}
-	b = append(b, dateHdr()...)
-	b = append(b, "Content-Type: application/json; charset=utf-8\r\nContent-Length: "...)
+	statusLine := jsonStatusLine(r.status)
+	date := dateHdr()
+	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+	b = append(b, statusLine...)
+	b = append(b, date...)
+	b = append(b, jsonHeaderContentLength...)
 	b = appendContentLengthValue(b, len(r.body))
 	b = append(b, "\r\n\r\n"...)
 	b = append(b, r.body...)
 	return b
+}
+
+func jsonStatusLine(status int) []byte {
+	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
+		return statusLines[status]
+	}
+	return statusLines[200]
+}
+
+func growForAppend(b []byte, extra int) []byte {
+	if cap(b)-len(b) >= extra {
+		return b
+	}
+	out := make([]byte, len(b), len(b)+extra)
+	copy(out, b)
+	return out
 }
 
 func appendContentLengthValue(b []byte, n int) []byte {
@@ -973,6 +989,28 @@ func appendContentLengthValue(b []byte, n int) []byte {
 		return append(b, contentLengthStrings[n]...)
 	}
 	return strconv.AppendInt(b, int64(n), 10)
+}
+
+func contentLengthValueLen(n int) int {
+	if n >= 0 && n < len(contentLengthStrings) {
+		return len(contentLengthStrings[n])
+	}
+	if n == 0 {
+		return 1
+	}
+	if n < 0 {
+		return 1 + decimalLen(-n)
+	}
+	return decimalLen(n)
+}
+
+func decimalLen(n int) int {
+	digits := 0
+	for n > 0 {
+		digits++
+		n /= 10
+	}
+	return digits
 }
 
 // build serialises the HTTP response with a safe copy (for async dispatch).

@@ -50,3 +50,5 @@ Future performance work should be opened as a new track instead of extending Pha
 - JSON-specific handler-path Feathers with JSON-only claim boundaries.
 - Real-world API credibility work outside the fair-handler CPU-bound claim.
 - A larger Linux I/O architecture design only if it starts from new evidence and a rollback-safe plan.
+
+The Phase 6 workload-profile design starts in `docs/superpowers/specs/2026-05-29-wing-phase6-workload-profiles-design.md`.

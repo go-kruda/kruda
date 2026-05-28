@@ -25,7 +25,14 @@ BENCH_DURATION_VALUE="${BENCH_DURATION:-15}"
 WARMUP_DURATION_VALUE="${WARMUP_DURATION:-3}"
 THREADS_VALUE="${THREADS:-4}"
 CONNECTIONS_VALUE="${CONNECTIONS:-256}"
-KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson bench_pprof}"
+KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
+if [ "$KRUDA_GO_TAGS_VALUE" = "default" ] || [ "$KRUDA_GO_TAGS_VALUE" = "none" ]; then
+  KRUDA_GO_TAGS_VALUE=""
+fi
+case " $KRUDA_GO_TAGS_VALUE " in
+  *" bench_pprof "*) ;;
+  *) KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS_VALUE:+$KRUDA_GO_TAGS_VALUE }bench_pprof" ;;
+esac
 
 ROUTES=("$@")
 if [ "${#ROUTES[@]}" -eq 0 ]; then
@@ -83,7 +90,7 @@ write_environment() {
     echo "connections=$CONNECTIONS_VALUE"
     echo "profile_seconds=$BENCH_DURATION_VALUE"
     echo "warmup_seconds=$WARMUP_DURATION_VALUE"
-    echo "kruda_go_tags=$KRUDA_GO_TAGS_VALUE"
+    echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo
     echo "== CPU =="
     if command -v lscpu >/dev/null 2>&1; then
@@ -107,7 +114,12 @@ build_kruda() {
   require_cmd wrk
   require_cmd curl
   mkdir -p "$RAW_DIR" "$PROFILE_DIR" "$REPORT_DIR"
-  (cd "$KRUDA_DIR" && GOWORK=off go build -tags "$KRUDA_GO_TAGS_VALUE" -o kruda-bench .)
+  local kruda_tag_args=()
+  if [ -n "$KRUDA_GO_TAGS_VALUE" ]; then
+    kruda_tag_args=(-tags "$KRUDA_GO_TAGS_VALUE")
+  fi
+
+  (cd "$KRUDA_DIR" && GOWORK=off go build "${kruda_tag_args[@]}" -o kruda-bench .)
 }
 
 start_kruda() {

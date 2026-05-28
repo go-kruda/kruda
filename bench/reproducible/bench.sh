@@ -27,9 +27,15 @@ KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
-KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS:-kruda_stdjson}"
+KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
+if [ "$KRUDA_GO_TAGS_VALUE" = "default" ] || [ "$KRUDA_GO_TAGS_VALUE" = "none" ]; then
+  KRUDA_GO_TAGS_VALUE=""
+fi
 if [ "$BENCH_ENABLE_PPROF_VALUE" = "1" ]; then
-  KRUDA_GO_TAGS_VALUE="$KRUDA_GO_TAGS_VALUE bench_pprof"
+  case " $KRUDA_GO_TAGS_VALUE " in
+    *" bench_pprof "*) ;;
+    *) KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS_VALUE:+$KRUDA_GO_TAGS_VALUE }bench_pprof" ;;
+  esac
 fi
 BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
@@ -109,7 +115,12 @@ build_all() {
   require_cmd wrk
   require_cmd curl
 
-  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build -tags "$KRUDA_GO_TAGS_VALUE" -o kruda-bench .)
+  local kruda_tag_args=()
+  if [ -n "$KRUDA_GO_TAGS_VALUE" ]; then
+    kruda_tag_args=(-tags "$KRUDA_GO_TAGS_VALUE")
+  fi
+
+  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build "${kruda_tag_args[@]}" -o kruda-bench .)
   (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
   (cd "$SCRIPT_DIR/actix" && cargo build --release)
 }
@@ -121,7 +132,7 @@ write_environment() {
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
-    echo "kruda_go_tags=$KRUDA_GO_TAGS_VALUE"
+    echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=${KRUDA_READ_BUF_SIZE_VALUE:-default}"

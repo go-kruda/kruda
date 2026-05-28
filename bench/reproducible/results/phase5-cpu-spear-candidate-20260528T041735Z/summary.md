@@ -1,0 +1,24 @@
+# CPU Spear Candidate
+
+Environment: `/home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/environment.txt`
+
+| Variant | Route | Round | RPS | p50 ms | p90 ms | p99 ms | max ms | Socket errors | Non-2xx | Raw file |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| baseline | plaintext-handler | 1 | 867443.12 | 0.134 | 0.325 | 0.841 | 11.550 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-plaintext-handler-round-1.txt |
+| baseline | plaintext-handler | 2 | 820900.54 | 0.202 | 0.406 | 1.530 | 18.580 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-plaintext-handler-round-2.txt |
+| baseline | plaintext-handler | 3 | 828524.05 | 0.191 | 0.417 | 0.712 | 10.350 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-plaintext-handler-round-3.txt |
+| baseline | json-static | 1 | 797317.48 | 0.249 | 0.484 | 1.300 | 10.710 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-static-round-1.txt |
+| baseline | json-static | 2 | 840500.13 | 0.192 | 0.346 | 0.840 | 13.450 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-static-round-2.txt |
+| baseline | json-static | 3 | 805051.08 | 0.221 | 0.412 | 0.940 | 16.560 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-static-round-3.txt |
+| baseline | json-serialize | 1 | 772838.27 | 0.234 | 0.521 | 1.360 | 12.460 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-serialize-round-1.txt |
+| baseline | json-serialize | 2 | 803765.64 | 0.207 | 0.438 | 0.744 | 9.390 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-serialize-round-2.txt |
+| baseline | json-serialize | 3 | 807145.73 | 0.204 | 0.431 | 0.836 | 13.380 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/baseline-json-serialize-round-3.txt |
+| candidate | plaintext-handler | 1 | 312948.34 | 0.046 | 195.930 | 367.840 | 697.530 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-plaintext-handler-round-1.txt |
+| candidate | plaintext-handler | 2 | 314498.77 | 0.046 | 193.250 | 334.800 | 775.030 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-plaintext-handler-round-2.txt |
+| candidate | plaintext-handler | 3 | 313614.95 | 0.046 | 189.920 | 315.870 | 648.430 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-plaintext-handler-round-3.txt |
+| candidate | json-static | 1 | 306820.79 | 0.051 | 117.190 | 215.230 | 504.320 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-static-round-1.txt |
+| candidate | json-static | 2 | 307023.97 | 0.049 | 110.330 | 224.000 | 577.260 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-static-round-2.txt |
+| candidate | json-static | 3 | 308072.06 | 0.049 | 108.470 | 206.800 | 463.040 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-static-round-3.txt |
+| candidate | json-serialize | 1 | 301272.72 | 0.048 | 108.970 | 205.090 | 494.550 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-serialize-round-1.txt |
+| candidate | json-serialize | 2 | 300946.10 | 0.048 | 114.930 | 224.270 | 435.500 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-serialize-round-2.txt |
+| candidate | json-serialize | 3 | 301558.84 | 0.051 | 108.080 | 212.880 | 466.190 | 0 | 0 | /home/tiger/kruda-phase5-default-profile-144e1f6/bench/reproducible/results/phase5-cpu-spear-candidate-20260528T041735Z/raw/candidate-json-serialize-round-3.txt |

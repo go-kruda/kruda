@@ -1,0 +1,49 @@
+File: kruda-bench
+Build ID: 2b15217f6558263b38f8cbcf1cae8c5dcdc8e384
+Type: cpu
+Time: 2026-05-28 02:49:24 UTC
+Duration: 15.13s, Total samples = 58.61s (387.43%)
+Showing nodes accounting for 55.80s, 95.21% of 58.61s total
+Dropped 75 nodes (cum <= 0.29s)
+Showing top 40 nodes out of 42
+      flat  flat%   sum%        cum   cum%
+    49.62s 84.66% 84.66%     49.62s 84.66%  internal/runtime/syscall.Syscall6
+     2.10s  3.58% 88.24%      2.10s  3.58%  runtime.futex
+     0.73s  1.25% 89.49%      0.73s  1.25%  time.runtimeNow
+     0.37s  0.63% 90.12%     41.12s 70.16%  github.com/go-kruda/kruda.(*worker).directSend
+     0.33s  0.56% 90.68%      1.41s  2.41%  github.com/go-kruda/kruda.parseHTTPRequestInternal
+     0.29s  0.49% 91.18%     53.12s 90.63%  github.com/go-kruda/kruda.(*worker).handleRecv
+     0.29s  0.49% 91.67%     49.91s 85.16%  syscall.RawSyscall6
+     0.27s  0.46% 92.13%     45.54s 77.70%  github.com/go-kruda/kruda.(*worker).tryParse
+     0.25s  0.43% 92.56%     55.89s 95.36%  github.com/go-kruda/kruda.(*worker).ioLoop
+     0.22s  0.38% 92.94%     53.34s 91.01%  github.com/go-kruda/kruda.(*worker).handleEvent
+     0.19s  0.32% 93.26%     48.04s 81.97%  syscall.RawSyscall
+     0.18s  0.31% 93.57%      0.46s  0.78%  sync.(*Pool).Get
+     0.17s  0.29% 93.86%      0.94s  1.60%  github.com/go-kruda/kruda.(*worker).serveRoute
+     0.15s  0.26% 94.11%      0.40s  0.68%  sync.(*Pool).pin
+     0.13s  0.22% 94.34%      0.77s  1.31%  github.com/go-kruda/kruda.(*App).serveWingSingleHandler
+     0.13s  0.22% 94.56%      0.40s  0.68%  github.com/go-kruda/kruda.(*wingResponse).appendJSONTo
+     0.11s  0.19% 94.74%      0.37s  0.63%  main.main.func3
+     0.06s   0.1% 94.85%      0.72s  1.23%  runtime.findRunnable
+     0.03s 0.051% 94.90%      0.90s  1.54%  runtime.notesleep
+     0.03s 0.051% 94.95%      0.76s  1.30%  time.Now
+     0.02s 0.034% 94.98%      2.23s  3.80%  github.com/go-kruda/kruda.(*epollEngine).Wait
+     0.02s 0.034% 95.02%      2.21s  3.77%  github.com/go-kruda/kruda.(*epollEngine).waitWithTimeout
+     0.02s 0.034% 95.05%      1.43s  2.44%  github.com/go-kruda/kruda.parseHTTPRequestFast (inline)
+     0.02s 0.034% 95.09%      2.37s  4.04%  runtime.schedule
+     0.01s 0.017% 95.10%      2.07s  3.53%  github.com/go-kruda/kruda.epollWait
+     0.01s 0.017% 95.12%      0.87s  1.48%  runtime.futexsleep
+     0.01s 0.017% 95.14%      1.25s  2.13%  runtime.futexwakeup
+     0.01s 0.017% 95.15%      0.89s  1.52%  runtime.goschedImpl
+     0.01s 0.017% 95.17%      0.91s  1.55%  runtime.mPark (inline)
+     0.01s 0.017% 95.19%      1.26s  2.15%  runtime.notewakeup
+     0.01s 0.017% 95.21%      0.74s  1.26%  runtime.startlockedm
+         0     0% 95.21%     55.89s 95.36%  github.com/go-kruda/kruda.(*Transport).ListenAndServe.func1
+         0     0% 95.21%     55.89s 95.36%  github.com/go-kruda/kruda.(*worker).run (inline)
+         0     0% 95.21%      0.84s  1.43%  runtime.gosched_m
+         0     0% 95.21%      0.42s  0.72%  runtime.handoffp
+         0     0% 95.21%      2.64s  4.50%  runtime.mcall
+         0     0% 95.21%      1.80s  3.07%  runtime.park_m
+         0     0% 95.21%      0.37s  0.63%  runtime.resetspinning
+         0     0% 95.21%      1.03s  1.76%  runtime.startm
+         0     0% 95.21%      0.52s  0.89%  runtime.stoplockedm

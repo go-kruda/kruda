@@ -1,0 +1,66 @@
+# Benchmark Summary
+
+Environment: `results/pr77-main-default-json-ports3100-20260529T155723Z/environment.txt`
+
+| Profile | Framework | Route | Round | RPS | p50 ms | p90 ms | p99 ms | max ms | Socket errors | Non-2xx | Raw file |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| latency | kruda | json-static | 1 | 799983.15 | 0.115 | 0.241 | 0.747 | 15.230 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-static-round-1.txt |
+| latency | kruda | json-static | 2 | 822268.62 | 0.103 | 0.187 | 1.130 | 12.250 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-static-round-2.txt |
+| latency | kruda | json-static | 3 | 811113.94 | 0.103 | 0.199 | 0.847 | 11.280 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-static-round-3.txt |
+| latency | kruda | json-static | 4 | 825262.01 | 0.106 | 0.197 | 1.050 | 11.910 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-static-round-4.txt |
+| latency | kruda | json-static | 5 | 793945.06 | 0.117 | 0.236 | 0.681 | 15.840 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-static-round-5.txt |
+| latency | kruda | json-serialize | 1 | 790158.51 | 0.113 | 0.225 | 0.860 | 15.750 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-serialize-round-1.txt |
+| latency | kruda | json-serialize | 2 | 769974.44 | 0.120 | 0.281 | 1.150 | 21.340 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-serialize-round-2.txt |
+| latency | kruda | json-serialize | 3 | 776106.96 | 0.112 | 0.272 | 0.833 | 27.050 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-serialize-round-3.txt |
+| latency | kruda | json-serialize | 4 | 787339.67 | 0.111 | 0.234 | 0.860 | 9.190 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-serialize-round-4.txt |
+| latency | kruda | json-serialize | 5 | 805852.45 | 0.107 | 0.219 | 0.597 | 6.670 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-latency-json-serialize-round-5.txt |
+| throughput | kruda | json-static | 1 | 828395.42 | 0.194 | 0.398 | 0.814 | 12.320 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-static-round-1.txt |
+| throughput | kruda | json-static | 2 | 807277.76 | 0.216 | 0.436 | 0.980 | 13.580 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-static-round-2.txt |
+| throughput | kruda | json-static | 3 | 823512.30 | 0.181 | 0.408 | 0.748 | 9.370 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-static-round-3.txt |
+| throughput | kruda | json-static | 4 | 805379.59 | 0.221 | 0.447 | 1.180 | 14.120 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-static-round-4.txt |
+| throughput | kruda | json-static | 5 | 815337.49 | 0.216 | 0.415 | 0.808 | 20.420 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-static-round-5.txt |
+| throughput | kruda | json-serialize | 1 | 806449.25 | 0.212 | 0.461 | 0.870 | 7.870 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-serialize-round-1.txt |
+| throughput | kruda | json-serialize | 2 | 793006.06 | 0.212 | 0.496 | 1.090 | 8.050 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-serialize-round-2.txt |
+| throughput | kruda | json-serialize | 3 | 805199.99 | 0.212 | 0.457 | 1.010 | 8.200 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-serialize-round-3.txt |
+| throughput | kruda | json-serialize | 4 | 793803.94 | 0.215 | 0.471 | 1.180 | 10.990 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-serialize-round-4.txt |
+| throughput | kruda | json-serialize | 5 | 800995.52 | 0.213 | 0.447 | 1.020 | 9.210 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/kruda-throughput-json-serialize-round-5.txt |
+| latency | fiber | json-static | 1 | 638641.50 | 0.136 | 0.505 | 2.470 | 12.000 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-static-round-1.txt |
+| latency | fiber | json-static | 2 | 633074.83 | 0.141 | 0.628 | 2.770 | 12.650 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-static-round-2.txt |
+| latency | fiber | json-static | 3 | 642556.80 | 0.139 | 0.533 | 2.560 | 14.110 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-static-round-3.txt |
+| latency | fiber | json-static | 4 | 629835.71 | 0.141 | 0.605 | 2.800 | 15.810 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-static-round-4.txt |
+| latency | fiber | json-static | 5 | 631519.39 | 0.144 | 0.680 | 2.830 | 12.030 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-static-round-5.txt |
+| latency | fiber | json-serialize | 1 | 612747.18 | 0.145 | 0.696 | 2.950 | 16.150 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-serialize-round-1.txt |
+| latency | fiber | json-serialize | 2 | 611766.13 | 0.145 | 0.714 | 3.010 | 12.600 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-serialize-round-2.txt |
+| latency | fiber | json-serialize | 3 | 607449.26 | 0.146 | 0.771 | 3.070 | 13.740 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-serialize-round-3.txt |
+| latency | fiber | json-serialize | 4 | 608943.62 | 0.144 | 0.723 | 2.960 | 21.840 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-serialize-round-4.txt |
+| latency | fiber | json-serialize | 5 | 608320.27 | 0.146 | 0.740 | 3.090 | 12.320 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-latency-json-serialize-round-5.txt |
+| throughput | fiber | json-static | 1 | 653448.00 | 0.262 | 1.030 | 3.360 | 12.490 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-static-round-1.txt |
+| throughput | fiber | json-static | 2 | 646035.74 | 0.265 | 1.070 | 3.350 | 12.870 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-static-round-2.txt |
+| throughput | fiber | json-static | 3 | 656225.92 | 0.264 | 1.040 | 3.290 | 15.010 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-static-round-3.txt |
+| throughput | fiber | json-static | 4 | 651832.49 | 0.263 | 1.010 | 3.230 | 12.650 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-static-round-4.txt |
+| throughput | fiber | json-static | 5 | 658033.08 | 0.261 | 1.000 | 3.230 | 12.720 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-static-round-5.txt |
+| throughput | fiber | json-serialize | 1 | 641702.42 | 0.264 | 1.050 | 3.330 | 15.010 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-serialize-round-1.txt |
+| throughput | fiber | json-serialize | 2 | 635652.78 | 0.267 | 1.090 | 3.460 | 17.310 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-serialize-round-2.txt |
+| throughput | fiber | json-serialize | 3 | 637595.61 | 0.265 | 1.080 | 3.340 | 13.400 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-serialize-round-3.txt |
+| throughput | fiber | json-serialize | 4 | 631751.34 | 0.273 | 1.220 | 3.510 | 14.590 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-serialize-round-4.txt |
+| throughput | fiber | json-serialize | 5 | 631830.84 | 0.271 | 1.160 | 3.490 | 14.520 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/fiber-throughput-json-serialize-round-5.txt |
+| latency | actix | json-static | 1 | 714022.53 | 0.093 | 0.636 | 2.950 | 16.110 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-static-round-1.txt |
+| latency | actix | json-static | 2 | 709871.24 | 0.093 | 0.757 | 3.170 | 12.150 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-static-round-2.txt |
+| latency | actix | json-static | 3 | 706599.36 | 0.091 | 0.592 | 2.760 | 14.620 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-static-round-3.txt |
+| latency | actix | json-static | 4 | 724875.65 | 0.091 | 1.240 | 3.400 | 16.970 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-static-round-4.txt |
+| latency | actix | json-static | 5 | 709419.54 | 0.092 | 0.497 | 2.770 | 15.210 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-static-round-5.txt |
+| latency | actix | json-serialize | 1 | 697528.47 | 0.093 | 0.715 | 3.100 | 21.360 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-serialize-round-1.txt |
+| latency | actix | json-serialize | 2 | 702602.95 | 0.090 | 1.110 | 3.360 | 13.060 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-serialize-round-2.txt |
+| latency | actix | json-serialize | 3 | 701225.45 | 0.091 | 1.190 | 3.450 | 23.260 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-serialize-round-3.txt |
+| latency | actix | json-serialize | 4 | 697319.90 | 0.092 | 0.773 | 3.040 | 11.140 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-serialize-round-4.txt |
+| latency | actix | json-serialize | 5 | 694050.05 | 0.096 | 0.371 | 2.710 | 12.130 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-latency-json-serialize-round-5.txt |
+| throughput | actix | json-static | 1 | 725937.14 | 0.165 | 0.920 | 3.200 | 14.240 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-static-round-1.txt |
+| throughput | actix | json-static | 2 | 734180.75 | 0.164 | 1.270 | 3.430 | 25.840 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-static-round-2.txt |
+| throughput | actix | json-static | 3 | 726304.53 | 0.169 | 0.960 | 3.210 | 15.760 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-static-round-3.txt |
+| throughput | actix | json-static | 4 | 736525.46 | 0.170 | 1.060 | 3.300 | 16.050 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-static-round-4.txt |
+| throughput | actix | json-static | 5 | 745334.59 | 0.169 | 1.420 | 3.770 | 18.530 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-static-round-5.txt |
+| throughput | actix | json-serialize | 1 | 730458.37 | 0.176 | 1.070 | 3.230 | 14.740 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-serialize-round-1.txt |
+| throughput | actix | json-serialize | 2 | 732283.30 | 0.181 | 1.040 | 3.240 | 12.550 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-serialize-round-2.txt |
+| throughput | actix | json-serialize | 3 | 722502.21 | 0.167 | 0.940 | 3.210 | 16.520 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-serialize-round-3.txt |
+| throughput | actix | json-serialize | 4 | 725471.02 | 0.170 | 0.920 | 3.130 | 13.570 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-serialize-round-4.txt |
+| throughput | actix | json-serialize | 5 | 727242.17 | 0.176 | 1.070 | 3.260 | 17.010 | 0 | 0 | results/pr77-main-default-json-ports3100-20260529T155723Z/raw/actix-throughput-json-serialize-round-5.txt |

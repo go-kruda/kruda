@@ -78,6 +78,13 @@ Compare the same route with Kruda's default build tags:
 KRUDA_GO_TAGS=default RESULT_DIR=results/json-default-$(date -u +%Y%m%dT%H%M%SZ) ./bench.sh json-serialize
 ```
 
+For Kruda-only harness checks or dispatch sweeps, keep the default cross-runtime
+behavior unchanged and set `BENCH_FRAMEWORKS` explicitly:
+
+```bash
+BENCH_FRAMEWORKS=kruda ./bench.sh json-serialize
+```
+
 Use the same `KRUDA_GO_TAGS` values with `resource.sh`, `profile-kruda.sh`, or
 `syscall-profile.sh` when a JSON profile candidate needs resource or diagnostic
 evidence. The generated `environment.txt` records the effective
@@ -90,6 +97,25 @@ BENCH_ENABLE_DB=1 ./bench.sh db fortunes
 ```
 
 The DB mode expects a TechEmpower-style PostgreSQL database and uses `DATABASE_URL` when set.
+For Kruda-only DB dispatch experiments, set `BENCH_KRUDA_DB_DISPATCH` to
+`takeover`, `pool`, `spawn`, or `inline`. This affects only the Kruda
+benchmark app and is meant for workload-profile evidence, not CPU-bound public
+benchmark claims. Pool dispatch also requires explicit `KRUDA_POOL_SIZE`
+evidence because the default pool size follows the Wing worker count:
+
+```bash
+BENCH_ENABLE_DB=1 BENCH_KRUDA_DB_DISPATCH=pool KRUDA_POOL_SIZE=64 ./bench.sh db queries fortunes updates
+```
+
+For repeatable Kruda-only DB dispatch sweeps, use:
+
+```bash
+./sweep-kruda-db-dispatch.sh db queries fortunes updates
+```
+
+The sweep runs Kruda only, stores per-run `bench.sh` output under
+`results/kruda-db-dispatch-sweep-<timestamp>/runs/`, and writes aggregate
+median RPS/p99/error summaries to `dispatch-summary.csv` and `summary.md`.
 
 Kruda's benchmark pprof server is excluded from the default CPU-only benchmark binary so the runtime comparison does not include a diagnostic HTTP server that the Fiber and Actix apps do not run. The harness adds the `bench_pprof` Go build tag only when `BENCH_ENABLE_PPROF=1`:
 
@@ -102,6 +128,7 @@ For Kruda-only candidate discovery, use `profile-kruda.sh` instead of the cross-
 ```bash
 ./profile-kruda.sh
 ./profile-kruda.sh json-serialize
+BENCH_ENABLE_DB=1 BENCH_KRUDA_DB_DISPATCH=pool KRUDA_POOL_SIZE=64 ./profile-kruda.sh db
 ```
 
 These profiles are diagnostic evidence for choosing the next candidate. They are not cross-runtime benchmark claim evidence because the pprof server and profiler overhead are enabled only for Kruda.

@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Capture Kruda-only CPU profiles for the reproducible CPU-bound routes.
+# Capture Kruda-only CPU profiles for reproducible benchmark routes.
 #
 # This script is intentionally profiling-focused, not a benchmark claim source.
 # Use it to choose the next Wing candidate only after route-level A/B evidence
 # shows whether that candidate should ship.
+#
+# Default routes avoid PostgreSQL and profile handler CPU paths only:
+#   /plaintext-handler, /json-static, /json-serialize
+#
+# Usage:
+#   ./profile-kruda.sh                         # profile default CPU routes
+#   ./profile-kruda.sh json-static             # profile one CPU route
+#   BENCH_ENABLE_DB=1 ./profile-kruda.sh db    # opt in to DB routes
 
 set -euo pipefail
 
@@ -21,10 +29,14 @@ PPROF_PORT_VALUE="${PPROF_PORT:-6060}"
 GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-4096}"
+KRUDA_POOL_SIZE_VALUE="${KRUDA_POOL_SIZE:-}"
+BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
+BENCH_KRUDA_DB_DISPATCH_VALUE="${BENCH_KRUDA_DB_DISPATCH:-takeover}"
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15}"
 WARMUP_DURATION_VALUE="${WARMUP_DURATION:-3}"
 THREADS_VALUE="${THREADS:-4}"
 CONNECTIONS_VALUE="${CONNECTIONS:-256}"
+DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
 if [ "$KRUDA_GO_TAGS_VALUE" = "default" ] || [ "$KRUDA_GO_TAGS_VALUE" = "none" ]; then
   KRUDA_GO_TAGS_VALUE=""
@@ -54,6 +66,13 @@ require_cmd() {
     echo "missing required command: $1" >&2
     exit 1
   fi
+}
+
+abs_path() {
+  local path="$1"
+  local dir
+  dir="$(cd -- "$(dirname -- "$path")" && pwd)"
+  printf '%s/%s\n' "$dir" "$(basename -- "$path")"
 }
 
 wait_ready() {
@@ -86,6 +105,9 @@ write_environment() {
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=$KRUDA_READ_BUF_SIZE_VALUE"
+    echo "kruda_pool_size=${KRUDA_POOL_SIZE_VALUE:-default}"
+    echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
+    echo "bench_kruda_db_dispatch=$BENCH_KRUDA_DB_DISPATCH_VALUE"
     echo "threads=$THREADS_VALUE"
     echo "connections=$CONNECTIONS_VALUE"
     echo "profile_seconds=$BENCH_DURATION_VALUE"
@@ -129,10 +151,13 @@ start_kruda() {
     env GOMAXPROCS="$GOMAXPROCS_VALUE" \
       KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
       KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" \
+      KRUDA_POOL_SIZE="$KRUDA_POOL_SIZE_VALUE" \
       PORT="$PORT_VALUE" \
       PPROF_PORT="$PPROF_PORT_VALUE" \
-      BENCH_ENABLE_DB=0 \
+      BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
       BENCH_ENABLE_PPROF=1 \
+      BENCH_KRUDA_DB_DISPATCH="$BENCH_KRUDA_DB_DISPATCH_VALUE" \
+      DATABASE_URL="$DATABASE_URL_VALUE" \
       ./kruda-bench
   ) > "$log" 2>&1 &
   KRUDA_PID="$!"
@@ -147,6 +172,8 @@ capture_route() {
   local wrk_raw="$RAW_DIR/kruda-$route-wrk.txt"
   local profile="$PROFILE_DIR/kruda-$route-cpu.pb.gz"
   local top_report="$REPORT_DIR/kruda-$route-top.txt"
+  local profile_abs
+  local top_report_abs
   local load_seconds=$((BENCH_DURATION_VALUE + 2))
 
   echo "warmup $route"
@@ -158,7 +185,9 @@ capture_route() {
   sleep 1
   curl -fsS "$pprof_url" > "$profile"
   wait "$wrk_pid"
-  (cd "$KRUDA_DIR" && go tool pprof -top -nodecount=40 ./kruda-bench "$profile") > "$top_report"
+  profile_abs="$(abs_path "$profile")"
+  top_report_abs="$(abs_path "$top_report")"
+  (cd "$KRUDA_DIR" && go tool pprof -top -nodecount=40 ./kruda-bench "$profile_abs") > "$top_report_abs"
 }
 
 main() {

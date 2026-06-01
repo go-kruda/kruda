@@ -118,6 +118,21 @@ func TestWingStaticTextOption(t *testing.T) {
 	}
 }
 
+func TestWingFeatherOption(t *testing.T) {
+	var rc routeConfig
+	WingFeather(Arrow)(&rc)
+
+	if rc.wingFeather == nil {
+		t.Fatal("WingFeather did not set a Wing feather")
+	}
+	if rc.wingFeather.Dispatch != Pool {
+		t.Fatalf("Dispatch = %v, want Pool", rc.wingFeather.Dispatch)
+	}
+	if Arrow.StaticResponse != nil {
+		t.Fatal("WingFeather mutated Arrow preset")
+	}
+}
+
 func TestWingStaticJSONOption(t *testing.T) {
 	var rc routeConfig
 	WingStaticJSON(200, `{"ok":true}`)(&rc)

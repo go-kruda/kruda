@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/go-kruda/kruda"
@@ -66,8 +67,15 @@ func main() {
 	fmt.Printf("[kruda] JSON encoder: %s\n", krudajson.EncoderName)
 
 	enableDB := os.Getenv("BENCH_ENABLE_DB") == "1"
+	dbDispatchMode := "takeover"
 	if enableDB {
 		var err error
+		dbDispatchMode, err = normalizeBenchDBDispatch(os.Getenv("BENCH_KRUDA_DB_DISPATCH"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "BENCH_KRUDA_DB_DISPATCH: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("[kruda] DB dispatch: %s\n", dbDispatchMode)
 		cfg, _ := pgxpool.ParseConfig(dsn)
 		cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 			conn.Prepare(ctx, "worldSelect", "SELECT randomnumber FROM world WHERE id=$1")
@@ -116,7 +124,7 @@ func main() {
 	}, kruda.WingJSON())
 
 	if enableDB {
-		registerDBRoutes(app)
+		registerDBRoutes(app, dbDispatchMode)
 	}
 
 	if err := app.Listen(":" + port); err != nil {
@@ -125,13 +133,13 @@ func main() {
 	}
 }
 
-func registerDBRoutes(app *kruda.App) {
+func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 	// TFB: single DB query
 	app.Get("/db", func(c *kruda.Ctx) error {
 		w := World{ID: int32(rand.IntN(10000) + 1)}
 		pool.QueryRow(context.Background(), "worldSelect", w.ID).Scan(&w.RandomNumber)
 		return c.JSON(w)
-	}, kruda.WingQuery())
+	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
 
 	// TFB: multiple queries — pipeline via SendBatch
 	app.Get("/queries", func(c *kruda.Ctx) error {
@@ -150,7 +158,7 @@ func registerDBRoutes(app *kruda.App) {
 		}
 		br.Close()
 		return c.JSON(worlds)
-	}, kruda.WingQuery())
+	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
 
 	// TFB: fortunes
 	app.Get("/fortunes", func(c *kruda.Ctx) error {
@@ -170,7 +178,7 @@ func registerDBRoutes(app *kruda.App) {
 		sort.Slice(fortunes, func(i, j int) bool { return fortunes[i].Message < fortunes[j].Message })
 
 		return c.HTML(fortunesHTML(fortunes))
-	}, kruda.WingRender())
+	}, dbRouteOptions(dbDispatchMode, kruda.WingRender())...)
 
 	// TFB: updates — batch SELECT + batch UPDATE
 	app.Get("/updates", func(c *kruda.Ctx) error {
@@ -200,7 +208,37 @@ func registerDBRoutes(app *kruda.App) {
 			ids, nums,
 		)
 		return c.JSON(worlds)
-	}, kruda.WingQuery())
+	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
+}
+
+func normalizeBenchDBDispatch(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "takeover", "spear":
+		return "takeover", nil
+	case "pool", "arrow":
+		return "pool", nil
+	case "spawn":
+		return "spawn", nil
+	case "inline", "bolt":
+		return "inline", nil
+	default:
+		return "", fmt.Errorf("unknown mode %q; use takeover, pool, spawn, or inline", value)
+	}
+}
+
+func dbRouteOptions(mode string, fallback kruda.RouteOption) []kruda.RouteOption {
+	switch mode {
+	case "takeover":
+		return []kruda.RouteOption{fallback}
+	case "pool":
+		return []kruda.RouteOption{kruda.WingFeather(kruda.Arrow)}
+	case "spawn":
+		return []kruda.RouteOption{kruda.WingFeather(kruda.Feather{Dispatch: kruda.Spawn})}
+	case "inline":
+		return []kruda.RouteOption{kruda.WingFeather(kruda.Bolt)}
+	default:
+		return nil
+	}
 }
 
 func queryCount(c *kruda.Ctx) int {

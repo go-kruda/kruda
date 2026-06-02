@@ -395,11 +395,11 @@ func (c *Ctx) SendStaticJSON(data []byte) error {
 	}
 	c.responded = true
 
-	// Ultra-fast path: fasthttp — zero-copy body (no memcopy).
-	if c.trySendStaticWithTypeBytesFastHTTP(jsonContentType, data) {
+	if c.tryJSONResponder(data) {
 		return nil
 	}
-	if c.tryJSONResponder(data) {
+	// Ultra-fast path: fasthttp — zero-copy body (no memcopy).
+	if c.trySendStaticWithTypeBytesFastHTTP(jsonContentType, data) {
 		return nil
 	}
 

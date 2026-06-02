@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"testing"
 
+	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -387,6 +388,83 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte("\r\n\r\n{\"message\":\"ok\"}")) {
 		t.Fatalf("JSON fast response missing body:\n%s", data)
+	}
+}
+
+func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
+	if krudajson.EncoderName != "encoding/json" {
+		t.Skip("stream responder is used only when the active encoder avoids an intermediate marshal allocation")
+	}
+
+	app := New(Wing(), WithJSONStreamEncoder(func(buf *bytes.Buffer, v any) error {
+		buf.WriteString(`{"message":"streamed"}`)
+		return nil
+	}))
+	var handlerRan bool
+	app.Get("/json-serialize", func(c *Ctx) error {
+		handlerRan = true
+		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-serialize"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/json-serialize", keepAlive: true}, f.handlers)
+
+	if !handlerRan {
+		t.Fatal("handler did not run")
+	}
+	if !resp.jsonFast {
+		t.Fatal("JSON serialize did not use Wing JSON responder")
+	}
+	if string(resp.body) != `{"message":"streamed"}` {
+		t.Fatalf("body = %q", string(resp.body))
+	}
+}
+
+func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
+	app := New(Wing(), WithJSONEncoder(func(v any) ([]byte, error) {
+		return []byte(`{"custom":true}`), nil
+	}))
+	var handlerRan bool
+	app.Get("/json-serialize", func(c *Ctx) error {
+		handlerRan = true
+		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
+	}, WingJSON())
+	app.Compile()
+
+	tr, ok := app.transport.(*Transport)
+	if !ok {
+		t.Skip("Wing transport unavailable on this platform")
+	}
+	f := tr.config.Feathers["GET /json-serialize"]
+	if len(f.handlers) == 0 {
+		t.Fatal("WingJSON route did not retain its handler chain")
+	}
+
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+
+	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/json-serialize", keepAlive: true}, f.handlers)
+
+	if !handlerRan {
+		t.Fatal("handler did not run")
+	}
+	if !resp.jsonFast {
+		t.Fatal("JSON serialize did not use Wing JSON responder")
+	}
+	if string(resp.body) != `{"custom":true}` {
+		t.Fatalf("body = %q", string(resp.body))
 	}
 }
 

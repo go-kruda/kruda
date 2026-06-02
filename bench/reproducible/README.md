@@ -24,6 +24,7 @@ bench/reproducible/
 ├── bench.sh        # Automated benchmark script
 ├── resource.sh     # CPU/RAM resource benchmark script
 ├── pipeline.sh     # HTTP/1.1 pipelined I/O diagnostic harness
+├── pipeline-syscall.sh # Intrusive pipelined syscall-count diagnostic harness
 ├── pipeline-client/ # Go pipelined HTTP/1.1 load generator
 ├── profile-kruda.sh # Kruda-only pprof capture helper
 └── README.md
@@ -96,6 +97,21 @@ plus `summary.csv`, `summary.md`, and `environment.txt` under
 Use these results to decide whether to implement a workload-specific Wing I/O
 profile or Feather. Do not use pipelined results as a blanket real-world API
 claim unless the public wording labels the workload explicitly.
+
+Use `pipeline-syscall.sh` when the question is specifically whether a
+pipelined workload reduces write/send syscalls per request. It attaches
+`strace -f -c` to the server, so the RPS and latency values are intrusive
+diagnostic data. Use the syscall counts and `requests_per_write_send` ratio,
+not the straced RPS, for I/O architecture decisions:
+
+```bash
+PROFILE_SUDO=1 BENCH_FRAMEWORKS="kruda actix" ./pipeline-syscall.sh plaintext-handler
+```
+
+For a depth-8 pipelined workload, a `requests_per_write_send` value near 8
+means responses are being coalesced close to one write/send syscall per
+client-side pipeline batch. A value near 1 means the server is still paying
+roughly one write/send syscall per response.
 
 ## Kruda JSON Encoder Mode
 
@@ -236,6 +252,16 @@ Pipelined diagnostic results are written to
 | `summary.csv` | Machine-readable per-round requests, RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
 | `summary.md` | Markdown table for diagnostic evidence |
 | `raw/*.txt` | Raw `pipeline-client` output and server logs |
+
+Pipelined syscall diagnostic results are written to
+`bench/reproducible/results/pipeline-syscall-<timestamp>/`:
+
+| File | Purpose |
+|------|---------|
+| `environment.txt` | CPU, OS, toolchain, route, profile, worker, pipeline, and strace metadata |
+| `summary.csv` | Machine-readable requests, latency, socket errors, syscall counts, and requests-per-syscall ratios |
+| `summary.md` | Markdown table for diagnostic I/O evidence |
+| `raw/*.txt` | Raw `pipeline-client`, `strace -c`, server, attach, and status logs |
 
 Resource results are written to `bench/reproducible/results/resource-<timestamp>/`:
 

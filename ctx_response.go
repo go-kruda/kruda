@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -27,6 +28,10 @@ var jsonBufPool = sync.Pool{
 // jsonContentType is a pre-allocated byte slice for the JSON content type header.
 // Used by both the fasthttp fast path (SetContentTypeBytes) and generic paths.
 var jsonContentType = []byte("application/json; charset=utf-8")
+
+type jsonStreamResponder interface {
+	SetJSONStream(status int, enc func(buf *bytes.Buffer, v any) error, v any) error
+}
 
 // ErrAlreadyResponded is returned when a handler attempts to write a response
 // after one has already been sent. Check with errors.Is(err, ErrAlreadyResponded).
@@ -67,6 +72,13 @@ func (c *Ctx) JSON(v any) error {
 	// Wing fast path: Marshal → SetJSON directly, skip pooled buffer.
 	if jr, ok := c.writer.(transport.JSONResponder); ok {
 		if c.canBypassHeaderWrite(true) {
+			if sr, ok := c.writer.(jsonStreamResponder); ok && c.app.config.JSONStreamEncoder != nil && shouldUseWingJSONStream() {
+				if err := sr.SetJSONStream(c.status, c.app.config.JSONStreamEncoder, v); err != nil {
+					return err
+				}
+				c.responded = true
+				return nil
+			}
 			data, err := c.app.config.JSONEncoder(v)
 			if err != nil {
 				return err
@@ -658,6 +670,10 @@ func init() {
 	for i := range contentLengthStrings {
 		contentLengthStrings[i] = strconv.Itoa(i)
 	}
+}
+
+func shouldUseWingJSONStream() bool {
+	return krudajson.EncoderName == "encoding/json"
 }
 
 func contentLengthString(length int) string {

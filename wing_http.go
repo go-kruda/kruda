@@ -704,6 +704,7 @@ func acquireResponse() *wingResponse {
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
 	r.staticResp = nil
+	r.jsonFast = false
 	r.fileFd = 0
 	r.fileSize = 0
 	r.responseMode = responseGeneric
@@ -734,6 +735,11 @@ func releaseResponse(r *wingResponse) {
 	} else {
 		r.body = r.body[:0]
 	}
+	if r.jsonBuf.Cap() > 65536 {
+		r.jsonBuf = bytes.Buffer{}
+	} else {
+		r.jsonBuf.Reset()
+	}
 	respPool.Put(r)
 }
 
@@ -743,6 +749,7 @@ type wingResponse struct {
 	headers              wingHeaders
 	body                 []byte
 	buf                  []byte // scratch buffer for serialization
+	jsonBuf              bytes.Buffer
 	staticResp           []byte // pre-built full response (if set, buildZeroCopy returns this)
 	jsonFast             bool   // SetJSON fast path — skip header interface, write status+json directly
 	responseMode         responseMode
@@ -784,6 +791,16 @@ func (r *wingResponse) SetJSON(status int, data []byte) {
 	r.status = status
 	r.body = data
 	r.jsonFast = true
+}
+func (r *wingResponse) SetJSONStream(status int, enc func(buf *bytes.Buffer, v any) error, v any) error {
+	r.jsonBuf.Reset()
+	if err := enc(&r.jsonBuf, v); err != nil {
+		return err
+	}
+	r.status = status
+	r.body = r.jsonBuf.Bytes()
+	r.jsonFast = true
+	return nil
 }
 
 // Pre-computed status lines to avoid strconv per response.

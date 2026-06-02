@@ -297,7 +297,7 @@ func allTools() []mcpTool {
 		},
 		{
 			Name:        "kruda_suggest_wing",
-			Description: "Suggest Wing Feather hints (WingJSON, WingPlaintext, WingQuery, WingRender, WingStream) for routes",
+			Description: "Suggest Wing Feather hints (WingJSON, WingPlaintext, WingQuery, WingRender) for routes",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -616,7 +616,7 @@ func toolSuggestWing(args map[string]any) (string, error) {
 	sb.WriteString("  WingJSON()      — JSON serialization endpoints\n")
 	sb.WriteString("  WingQuery()     — database read/write operations\n")
 	sb.WriteString("  WingRender()    — HTML template rendering\n")
-	sb.WriteString("  WingStream()    — SSE / chunked streaming\n")
+	sb.WriteString("\nStreaming and SSE routes do not have a Wing route hint; keep them on a normal handler route and choose transport-level compatibility deliberately.\n")
 
 	return sb.String(), nil
 }
@@ -626,7 +626,7 @@ func suggestFeather(r routeInfo) (string, string) {
 
 	// SSE / streaming
 	if strings.Contains(lpath, "/sse") || strings.Contains(lpath, "/stream") || strings.Contains(lpath, "/events") {
-		return "WingStream()", "streaming endpoint"
+		return "none", "streaming/SSE route; no Wing route hint"
 	}
 
 	// Health / ping / status
@@ -886,7 +886,6 @@ app.Get("/json", handler, kruda.WingJSON())         // JSON serialization
 app.Get("/text", handler, kruda.WingPlaintext())     // minimal plain text
 app.Get("/db",   handler, kruda.WingQuery())         // database operations
 app.Get("/page", handler, kruda.WingRender())        // HTML template rendering
-app.Get("/sse",  handler, kruda.WingStream())        // SSE / streaming
 ` + "```" + `
 
 | Feather | Best For | Optimization |
@@ -895,10 +894,9 @@ app.Get("/sse",  handler, kruda.WingStream())        // SSE / streaming
 | WingJSON | JSON APIs | Sonic encoder, pre-sized buffers |
 | WingQuery | DB read/write | Connection-aware scheduling |
 | WingRender | HTML templates | Buffer pooling for large responses |
-| WingStream | SSE, chunked | Chunked transfer, no buffering |
 
 Feather hints are optional — routes work fine without them.
-They provide 5-15% additional throughput on hot paths.`,
+Streaming and SSE routes do not have a Wing route hint; keep them on normal handlers and choose the transport for compatibility deliberately.`,
 
 	"config": `# Configuration
 
@@ -979,7 +977,7 @@ app.Get("/events", func(c *kruda.Ctx) error {
 ` + "```" + `
 
 SSE automatically sets Content-Type: text/event-stream and flushes after each event.
-Use WingStream() feather hint for optimal performance.`,
+SSE does not have a Wing route hint. Keep it on a normal handler route and choose the transport for compatibility deliberately.`,
 
 	"file-upload": `# File Upload
 

@@ -1,0 +1,7 @@
+timestamp_utc,profile,framework,route,round,wrk_args,rps,p50_ms,p90_ms,p99_ms,max_ms,socket_errors,non_2xx,raw_file
+20260602T033037Z,latency,kruda,updates,1,-t4 -c128 -d10s,163.79,637.390,1270.000,1540.000,1560.000,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-latency-updates-round-1.txt
+20260602T033037Z,latency,kruda,updates,2,-t4 -c128 -d10s,157.52,659.580,1410.000,1720.000,1760.000,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-latency-updates-round-2.txt
+20260602T033037Z,latency,kruda,updates,3,-t4 -c128 -d10s,163.63,667.640,1340.000,1430.000,1540.000,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-latency-updates-round-3.txt
+20260602T033037Z,throughput,kruda,updates,1,-t4 -c256 -d10s,131.16,1210.000,1840.000,2000.000,2000.000,231,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-throughput-updates-round-1.txt
+20260602T033037Z,throughput,kruda,updates,2,-t4 -c256 -d10s,122.87,1210.000,1780.000,1960.000,1990.000,450,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-throughput-updates-round-2.txt
+20260602T033037Z,throughput,kruda,updates,3,-t4 -c256 -d10s,147.92,1280.000,1790.000,1930.000,1990.000,249,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/updates-inline/raw/kruda-throughput-updates-round-3.txt

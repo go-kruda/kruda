@@ -13,6 +13,10 @@ func wingFeatherOpt(f Feather) RouteOption {
 	return func(rc *routeConfig) { rc.wingFeather = &f }
 }
 
+// WingFeather applies a low-level Wing Feather to a route. It preserves the
+// normal handler path unless the Feather includes a StaticResponse.
+func WingFeather(f Feather) RouteOption { return wingFeatherOpt(f) }
+
 // WingPlaintext — static text, health checks. Inline in ioLoop.
 func WingPlaintext() RouteOption { return wingFeatherOpt(Plaintext) }
 

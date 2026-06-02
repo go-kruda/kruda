@@ -1,0 +1,30 @@
+timestamp_utc=20260602T031308Z
+script_dir=<tiger-checkout>/bench/reproducible
+result_dir=results/phase6-profile-inventory-pr79-20260602T031308Z
+routes=db queries fortunes updates
+modes=takeover inline pool spawn
+bench_rounds=3
+bench_duration=10s
+kruda_port=3260
+pool_size=64
+
+== OS ==
+Linux dev-server 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+== Toolchain ==
+go version go1.26.3 linux/amd64
+wrk debian/4.1.0-4build2 [epoll] Copyright (C) 2012 Will Glozer
+Usage: wrk <options> <url>
+  Options:
+    -c, --connections <N>  Connections to keep open
+    -d, --duration    <T>  Duration of test
+    -t, --threads     <N>  Number of threads to use
+
+    -s, --script      <S>  Load Lua script file
+    -H, --header      <H>  Add header to request
+        --latency          Print latency statistics
+        --timeout     <T>  Socket/request timeout
+    -v, --version          Print version details
+
+  Numeric arguments may include a SI unit (1k, 1M, 1G)
+  Time arguments may include a time unit (2s, 2m, 2h)

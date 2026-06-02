@@ -25,8 +25,10 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 # worker scaling. This does not change Kruda's framework default.
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-}"
+KRUDA_POOL_SIZE_VALUE="${KRUDA_POOL_SIZE:-}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
+BENCH_KRUDA_DB_DISPATCH_VALUE="${BENCH_KRUDA_DB_DISPATCH:-takeover}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
 if [ "$KRUDA_GO_TAGS_VALUE" = "default" ] || [ "$KRUDA_GO_TAGS_VALUE" = "none" ]; then
   KRUDA_GO_TAGS_VALUE=""
@@ -41,7 +43,7 @@ BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
 BENCH_DURATION_VALUE="${BENCH_DURATION:-15s}"
 DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
 
-FRAMEWORKS=(kruda fiber actix)
+read -r -a FRAMEWORKS <<< "${BENCH_FRAMEWORKS:-kruda fiber actix}"
 KRUDA_PID=""
 FIBER_PID=""
 ACTIX_PID=""
@@ -111,7 +113,6 @@ require_cmd() {
 
 build_all() {
   require_cmd go
-  require_cmd cargo
   require_cmd wrk
   require_cmd curl
 
@@ -120,9 +121,24 @@ build_all() {
     kruda_tag_args=(-tags "$KRUDA_GO_TAGS_VALUE")
   fi
 
-  (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build "${kruda_tag_args[@]}" -o kruda-bench .)
-  (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
-  (cd "$SCRIPT_DIR/actix" && cargo build --release)
+  for fw in "${FRAMEWORKS[@]}"; do
+    case "$fw" in
+      kruda)
+        (cd "$SCRIPT_DIR/kruda" && GOWORK=off go build "${kruda_tag_args[@]}" -o kruda-bench .)
+        ;;
+      fiber)
+        (cd "$SCRIPT_DIR/fiber" && GOWORK=off go build -o fiber-bench .)
+        ;;
+      actix)
+        require_cmd cargo
+        (cd "$SCRIPT_DIR/actix" && cargo build --release)
+        ;;
+      *)
+        echo "unknown framework: $fw" >&2
+        exit 1
+        ;;
+    esac
+  done
 }
 
 write_environment() {
@@ -132,12 +148,15 @@ write_environment() {
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
+    echo "bench_kruda_db_dispatch=$BENCH_KRUDA_DB_DISPATCH_VALUE"
     echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
     echo "kruda_read_buf_size=${KRUDA_READ_BUF_SIZE_VALUE:-default}"
+    echo "kruda_pool_size=${KRUDA_POOL_SIZE_VALUE:-default}"
     echo "bench_rounds=$BENCH_ROUNDS_VALUE"
     echo "bench_duration=$BENCH_DURATION_VALUE"
+    echo "frameworks=${FRAMEWORKS[*]}"
     echo "routes=${ROUTES[*]}"
     echo "profiles=${PROFILES[*]}"
     echo
@@ -154,8 +173,16 @@ write_environment() {
     echo
     echo "== Toolchain =="
     go version
-    rustc --version
-    cargo --version
+    if command -v rustc >/dev/null 2>&1; then
+      rustc --version 2>/dev/null || echo "rustc=not usable"
+    else
+      echo "rustc=not found"
+    fi
+    if command -v cargo >/dev/null 2>&1; then
+      cargo --version 2>/dev/null || echo "cargo=not usable"
+    else
+      echo "cargo=not found"
+    fi
     wrk --version 2>&1 || true
   } > "$META_FILE"
 }
@@ -172,7 +199,9 @@ start_server() {
         cd "$SCRIPT_DIR/kruda"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" KRUDA_WORKERS="$KRUDA_WORKERS_VALUE" \
           KRUDA_READ_BUF_SIZE="$KRUDA_READ_BUF_SIZE_VALUE" \
+          KRUDA_POOL_SIZE="$KRUDA_POOL_SIZE_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
+          BENCH_KRUDA_DB_DISPATCH="$BENCH_KRUDA_DB_DISPATCH_VALUE" \
           DATABASE_URL="$DATABASE_URL_VALUE" \
           ./kruda-bench
       ) > "$log" 2>&1 &

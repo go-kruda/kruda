@@ -1,0 +1,5 @@
+[kruda] JSON encoder: encoding/json
+[kruda] DB dispatch: takeover
+2026/06/02 03:29:17 INFO listening addr=:3260
+2026/06/02 03:30:37 INFO shutting down... timeout=10s
+2026/06/02 03:30:37 INFO shutdown complete

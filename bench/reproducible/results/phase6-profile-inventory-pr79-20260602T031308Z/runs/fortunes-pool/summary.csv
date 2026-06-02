@@ -1,0 +1,7 @@
+timestamp_utc,profile,framework,route,round,wrk_args,rps,p50_ms,p90_ms,p99_ms,max_ms,socket_errors,non_2xx,raw_file
+20260602T032636Z,latency,kruda,fortunes,1,-t4 -c128 -d10s,1740.60,0.100,0.870,2.320,4.530,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-latency-fortunes-round-1.txt
+20260602T032636Z,latency,kruda,fortunes,2,-t4 -c128 -d10s,1533.69,0.124,1.290,2.570,4.940,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-latency-fortunes-round-2.txt
+20260602T032636Z,latency,kruda,fortunes,3,-t4 -c128 -d10s,704.66,0.537,1.680,2.940,5.280,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-latency-fortunes-round-3.txt
+20260602T032636Z,throughput,kruda,fortunes,1,-t4 -c256 -d10s,2447.14,0.274,2.910,4.700,8.230,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-throughput-fortunes-round-1.txt
+20260602T032636Z,throughput,kruda,fortunes,2,-t4 -c256 -d10s,1890.77,0.588,2.690,4.050,5.420,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-throughput-fortunes-round-2.txt
+20260602T032636Z,throughput,kruda,fortunes,3,-t4 -c256 -d10s,1287.90,1.380,3.010,4.500,6.260,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-pool/raw/kruda-throughput-fortunes-round-3.txt

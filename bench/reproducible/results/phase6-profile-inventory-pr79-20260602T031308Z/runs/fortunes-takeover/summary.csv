@@ -1,0 +1,7 @@
+timestamp_utc,profile,framework,route,round,wrk_args,rps,p50_ms,p90_ms,p99_ms,max_ms,socket_errors,non_2xx,raw_file
+20260602T032354Z,latency,kruda,fortunes,1,-t4 -c128 -d10s,84065.94,1.350,2.450,4.260,9.870,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-latency-fortunes-round-1.txt
+20260602T032354Z,latency,kruda,fortunes,2,-t4 -c128 -d10s,83464.75,1.350,2.460,4.340,10.710,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-latency-fortunes-round-2.txt
+20260602T032354Z,latency,kruda,fortunes,3,-t4 -c128 -d10s,83396.27,1.360,2.460,4.340,11.010,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-latency-fortunes-round-3.txt
+20260602T032354Z,throughput,kruda,fortunes,1,-t4 -c256 -d10s,82838.60,2.870,4.180,5.730,10.420,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-throughput-fortunes-round-1.txt
+20260602T032354Z,throughput,kruda,fortunes,2,-t4 -c256 -d10s,82328.64,2.880,4.190,5.810,19.790,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-throughput-fortunes-round-2.txt
+20260602T032354Z,throughput,kruda,fortunes,3,-t4 -c256 -d10s,82493.44,2.880,4.190,5.760,10.320,0,0,results/phase6-profile-inventory-pr79-20260602T031308Z/runs/fortunes-takeover/raw/kruda-throughput-fortunes-round-3.txt

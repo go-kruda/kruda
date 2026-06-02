@@ -113,6 +113,7 @@ Do not repeat without new evidence:
 - Worker count increase from 4 to 8 for the current tiger throughput profile.
 - Lowering `GOMAXPROCS` from 8 to 4 for the current tiger throughput profile.
 - Concrete Wing responder assertion in `Ctx.Text` or `Ctx.JSON`; local microbenchmarks rejected it on 2026-05-30.
+- Moving the Wing `JSONResponder` check before the fasthttp static-body path in `SendStaticWithTypeBytes`; local microbenchmarks on 2026-06-02 showed no meaningful improvement for `BenchmarkCPUHandlerJSONStaticBytesFeather`.
 
 ### Static Bypass Profile
 

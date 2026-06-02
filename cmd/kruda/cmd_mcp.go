@@ -614,7 +614,7 @@ func toolSuggestWing(args map[string]any) (string, error) {
 	sb.WriteString("\nAvailable hints:\n")
 	sb.WriteString("  WingPlaintext() — minimal responses (health, ping, plain text)\n")
 	sb.WriteString("  WingJSON()      — JSON serialization endpoints\n")
-	sb.WriteString("  WingQuery()     — database read/write operations\n")
+	sb.WriteString("  WingQuery()     — DB/Redis read-style queries; benchmark write-heavy routes separately\n")
 	sb.WriteString("  WingRender()    — HTML template rendering\n")
 	sb.WriteString("\nStreaming and SSE routes do not have a Wing route hint; keep them on a normal handler route and choose transport-level compatibility deliberately.\n")
 
@@ -644,15 +644,20 @@ func suggestFeather(r routeInfo) (string, string) {
 		return "WingRender()", "HTML template rendering"
 	}
 
-	// DB operations: write methods or paths with :id
+	// Write-heavy routes need workload evidence because latency and lock
+	// contention can dominate dispatch overhead.
 	if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" || r.Method == "DELETE" {
-		return "WingQuery()", "database write operation"
+		return "WingQuery()", "write-heavy route; benchmark with your DB pool and p99 target"
 	}
 
-	// DB read: path with :id param or typical DB patterns
+	// DB read: path with :id param or typical DB/query patterns
 	if strings.Contains(r.Path, ":id") || strings.Contains(lpath, "/db") ||
-		strings.Contains(lpath, "/queries") || strings.Contains(lpath, "/updates") {
-		return "WingQuery()", "database read/write"
+		strings.Contains(lpath, "/queries") {
+		return "WingQuery()", "DB/Redis read-style query"
+	}
+
+	if strings.Contains(lpath, "/updates") {
+		return "WingQuery()", "write-heavy benchmark route; validate dispatch with p99 and errors"
 	}
 
 	// JSON endpoint
@@ -884,7 +889,7 @@ Per-route I/O strategy optimization. Add as the last argument to route registrat
 ` + "```" + `go
 app.Get("/json", handler, kruda.WingJSON())         // JSON serialization
 app.Get("/text", handler, kruda.WingPlaintext())     // minimal plain text
-app.Get("/db",   handler, kruda.WingQuery())         // database operations
+app.Get("/db",   handler, kruda.WingQuery())         // DB/Redis read-style query
 app.Get("/page", handler, kruda.WingRender())        // HTML template rendering
 ` + "```" + `
 
@@ -892,10 +897,11 @@ app.Get("/page", handler, kruda.WingRender())        // HTML template rendering
 |---------|----------|-------------|
 | WingPlaintext | /health, /ping, static text | Pre-allocated headers, minimal alloc |
 | WingJSON | JSON APIs | Sonic encoder, pre-sized buffers |
-| WingQuery | DB read/write | Connection-aware scheduling |
+| WingQuery | DB/Redis read-style queries | Connection-aware scheduling |
 | WingRender | HTML templates | Buffer pooling for large responses |
 
 Feather hints are optional — routes work fine without them.
+Benchmark write-heavy routes with your DB pool, p99 target, and error gate before treating them as query-profile routes.
 Streaming and SSE routes do not have a Wing route hint; keep them on normal handlers and choose the transport for compatibility deliberately.`,
 
 	"config": `# Configuration

@@ -117,6 +117,16 @@ The sweep runs Kruda only, stores per-run `bench.sh` output under
 `results/kruda-db-dispatch-sweep-<timestamp>/runs/`, and writes aggregate
 median RPS/p99/error summaries to `dispatch-summary.csv` and `summary.md`.
 
+Current Phase 6 tiger sweep evidence is in
+`results/phase6-profile-inventory-pr79-20260602T031308Z/`. In that run,
+Takeover/Spear was the best throughput fit for `/db`, `/queries`, and
+`/fortunes` with zero socket errors and zero non-2xx responses. The write-heavy
+`/updates` route did not have a clean universal winner: Takeover/Spear kept
+errors at zero but had high p99 latency, while Inline produced socket errors in
+the throughput profile. Use this evidence as query-profile guidance, not as a
+cross-runtime benchmark claim or a blanket recommendation for every DB write
+route.
+
 Kruda's benchmark pprof server is excluded from the default CPU-only benchmark binary so the runtime comparison does not include a diagnostic HTTP server that the Fiber and Actix apps do not run. The harness adds the `bench_pprof` Go build tag only when `BENCH_ENABLE_PPROF=1`:
 
 ```bash

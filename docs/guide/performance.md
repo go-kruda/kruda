@@ -213,7 +213,9 @@ app.Get("/fortunes",  handler, kruda.WingRender())     // Blocking goroutine per
 
 CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs directly on the epoll worker with zero overhead.
 
-I/O-bound routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
+Read-style I/O routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
+
+Phase 6 tiger evidence supports `WingQuery()`/Spear for DB read-style workloads in the reproducible harness: `/db`, `/queries`, and `/fortunes` had much higher median throughput than Inline with zero socket errors and zero non-2xx responses. Write-heavy routes are different. The `/updates` route had zero errors with `WingQuery()` but much higher p99 latency, while Inline produced socket errors in the throughput profile. Treat write-heavy DB routes as workload-specific tuning: benchmark with your real DB pool, p99 target, and error gate before choosing a dispatch hint.
 
 ### Handler-Level Static JSON
 

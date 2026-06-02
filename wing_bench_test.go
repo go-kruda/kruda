@@ -176,6 +176,30 @@ func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
+func BenchmarkCPUHandlerJSONStaticBytesFeather(b *testing.B) {
+	app := New(Wing())
+	app.Get("/json-static", func(c *Ctx) error {
+		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
+	}, WingJSON())
+	app.Compile()
+	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	w := &worker{handler: app}
+
+	b.ReportAllocs()
+	out := make([]byte, 0, 256)
+	for b.Loop() {
+		req, _, _ := parseHTTPRequestFast(rawJSONStaticGET, noLimits)
+		finalizeRequestPath(req, f)
+		resp := acquireResponse()
+		resp.responseMode = f.ResponseMode
+		w.serveRoute(resp, req, f)
+		out = append(out[:0], resp.buildZeroCopy()...)
+		releaseResponse(resp)
+		releaseRequest(req)
+	}
+	runtime.KeepAlive(out)
+}
+
 func BenchmarkCPUHandlerJSONSerializeFeather(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-serialize", func(c *Ctx) error {

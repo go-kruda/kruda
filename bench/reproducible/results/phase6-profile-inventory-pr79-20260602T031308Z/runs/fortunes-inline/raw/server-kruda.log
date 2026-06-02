@@ -1,0 +1,5 @@
+[kruda] JSON encoder: encoding/json
+[kruda] DB dispatch: inline
+2026/06/02 03:25:15 INFO listening addr=:3260
+2026/06/02 03:26:36 INFO shutting down... timeout=10s
+2026/06/02 03:26:36 INFO shutdown complete

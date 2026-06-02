@@ -196,7 +196,7 @@ When those conditions are not met, use "same ballpark as Actix." Do not make RPS
 
 ## Current Evidence
 
-The committed tiger evidence from `main` commit `984f0d6` satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under both the latency and throughput profiles. Throughput-profile medians:
+The committed tiger evidence captured at commit `984f0d6` satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under both the latency and throughput profiles. Throughput-profile medians:
 
 | Route | Evidence directory | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|--------------------|---------------------------:|-------------------:|

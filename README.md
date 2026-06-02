@@ -125,7 +125,7 @@ Default CPU-bound routes:
 
 The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as "faster than Actix" only when median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero errors. Otherwise, use "same ballpark as Actix."
 
-Current committed tiger evidence from `main` commit `984f0d6` satisfies that gate for the CPU-bound Wing handler routes below:
+Committed tiger evidence captured at commit `984f0d6` satisfies that gate for the CPU-bound Wing handler routes below:
 
 | Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|---------|---------------------------:|-------------------:|

@@ -23,6 +23,8 @@ bench/reproducible/
 ├── actix/          # Actix Web 4
 ├── bench.sh        # Automated benchmark script
 ├── resource.sh     # CPU/RAM resource benchmark script
+├── pipeline.sh     # HTTP/1.1 pipelined I/O diagnostic harness
+├── pipeline-client/ # Go pipelined HTTP/1.1 load generator
 ├── profile-kruda.sh # Kruda-only pprof capture helper
 └── README.md
 ```
@@ -57,6 +59,43 @@ Run one route:
 ```bash
 ./bench.sh json-static
 ```
+
+## Pipelined I/O Diagnostic
+
+Use `pipeline.sh` when investigating whether an HTTP backend benefits from
+batched writes and multiple in-flight HTTP/1.1 requests per TCP connection.
+This is a diagnostic workload for I/O architecture decisions. Keep it separate
+from the default `wrk --latency` handler-path benchmark claims because many
+real clients do not use HTTP/1.1 pipelining.
+
+```bash
+cd bench/reproducible
+./pipeline.sh plaintext-handler
+```
+
+The default profiles are:
+
+| Profile | Connections | Pipeline depth |
+|---------|------------:|---------------:|
+| `baseline-c128-d1` | 128 | 1 |
+| `pipeline-c128-d8` | 128 | 8 |
+| `pipeline-c256-d8` | 256 | 8 |
+
+Override profiles with `PIPELINE_PROFILES` entries in
+`name:connections:depth` format:
+
+```bash
+PIPELINE_PROFILES="baseline-c128-d1:128:1 pipeline-c128-d16:128:16" ./pipeline.sh
+```
+
+The harness builds Kruda, Fiber, Actix, and `pipeline-client` from their own
+directories, starts servers by PID, waits for readiness, and writes raw logs
+plus `summary.csv`, `summary.md`, and `environment.txt` under
+`results/pipeline-<timestamp>/`.
+
+Use these results to decide whether to implement a workload-specific Wing I/O
+profile or Feather. Do not use pipelined results as a blanket real-world API
+claim unless the public wording labels the workload explicitly.
 
 ## Kruda JSON Encoder Mode
 
@@ -187,6 +226,16 @@ Results are written to `bench/reproducible/results/<timestamp>/`:
 | `summary.csv` | Machine-readable per-round RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
 | `summary.md` | Markdown table for PR evidence |
 | `raw/*.txt` | Raw `wrk --latency` output and server logs |
+
+Pipelined diagnostic results are written to
+`bench/reproducible/results/pipeline-<timestamp>/`:
+
+| File | Purpose |
+|------|---------|
+| `environment.txt` | CPU, OS, toolchain, route, profile, worker, and pipeline metadata |
+| `summary.csv` | Machine-readable per-round requests, RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
+| `summary.md` | Markdown table for diagnostic evidence |
+| `raw/*.txt` | Raw `pipeline-client` output and server logs |
 
 Resource results are written to `bench/reproducible/results/resource-<timestamp>/`:
 

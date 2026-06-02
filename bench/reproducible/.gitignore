@@ -1,4 +1,5 @@
 # Compiled binaries (don't commit, build locally)
 kruda/kruda-bench
 fiber/fiber-bench
+pipeline-client/pipeline-client
 actix/target/

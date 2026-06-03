@@ -228,6 +228,33 @@ Interpretation:
   measurable syscall batching, SQPOLL evidence, or a profile where current Wing
   is demonstrably blocked by epoll/read/write coordination.
 
+## SQPOLL Control
+
+Probe commit: `f6272d3` (`bench: wake SQPOLL uring HTTP submissions`)
+
+Command shape:
+
+```bash
+cd bench/reproducible/uring-http-probe
+GOWORK=off go build -o uring-http-probe .
+./uring-http-probe -port 4570 -workers 4 -entries 4096 -sqpoll
+wrk --latency -t4 -c128 -d5s http://127.0.0.1:4570/plaintext-handler
+```
+
+Result:
+
+| Profile | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---:|---:|---:|---:|---:|---:|
+| `-t4 -c128 -d5s` | 513,031.44 | 76 us | 156 us | 2.26 ms | 27.78 ms | 0 |
+
+Interpretation:
+
+- SQPOLL is functional only after waking submissions with
+  `IORING_ENTER_SQ_WAKEUP`.
+- On this host and probe shape, SQPOLL regresses throughput and p99 materially
+  versus the default io_uring HTTP probe.
+- Do not pursue SQPOLL as the next Wing optimization without new evidence.
+
 ## Direction
 
 The highest-probability path to a larger fair-handler win is not another

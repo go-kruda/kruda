@@ -22,6 +22,10 @@ const (
 
 	ioringEnterGetEvents       = 1
 	ioringRecvsendPollFirst    = 1
+	ioringSetupSQPoll          = 1 << 1
+	ioringSetupCoopTaskrun     = 1 << 8
+	ioringSetupSingleIssuer    = 1 << 12
+	ioringSetupDeferTaskrun    = 1 << 13
 	ioringOpAccept             = 13
 	ioringOpSend               = 26
 	ioringOpRecv               = 27
@@ -102,6 +106,11 @@ type ring struct {
 	pendingSubmit uint32
 }
 
+type ringOptions struct {
+	flags        uint32
+	sqThreadIdle uint32
+}
+
 type conn struct {
 	fd     int
 	read   []byte
@@ -132,6 +141,11 @@ func main() {
 	entries := flag.Uint("entries", 4096, "io_uring queue entries")
 	readSize := flag.Int("read-size", 4096, "per-connection read buffer size")
 	workers := flag.Int("workers", 4, "SO_REUSEPORT worker count")
+	sqPoll := flag.Bool("sqpoll", false, "enable IORING_SETUP_SQPOLL")
+	sqPollIdle := flag.Uint("sqpoll-idle-ms", 1000, "SQPOLL thread idle time in milliseconds")
+	singleIssuer := flag.Bool("single-issuer", false, "enable IORING_SETUP_SINGLE_ISSUER")
+	coopTaskrun := flag.Bool("coop-taskrun", false, "enable IORING_SETUP_COOP_TASKRUN")
+	deferTaskrun := flag.Bool("defer-taskrun", false, "enable IORING_SETUP_DEFER_TASKRUN")
 	flag.Parse()
 
 	if *entries == 0 || *readSize <= 0 || *workers <= 0 {
@@ -140,10 +154,24 @@ func main() {
 	}
 
 	runtime.GOMAXPROCS(*workers)
+	opts := ringOptions{}
+	if *sqPoll {
+		opts.flags |= ioringSetupSQPoll
+		opts.sqThreadIdle = uint32(*sqPollIdle)
+	}
+	if *singleIssuer {
+		opts.flags |= ioringSetupSingleIssuer
+	}
+	if *coopTaskrun {
+		opts.flags |= ioringSetupCoopTaskrun
+	}
+	if *deferTaskrun {
+		opts.flags |= ioringSetupDeferTaskrun
+	}
 	st := &stats{}
 	servers := make([]*server, 0, *workers)
 	for i := 0; i < *workers; i++ {
-		r, err := setupRing(uint32(*entries))
+		r, err := setupRing(uint32(*entries), opts)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "worker %d io_uring_setup: %v\n", i, err)
 			os.Exit(1)
@@ -173,8 +201,8 @@ func main() {
 		go servers[i].loop(*readSize)
 	}
 
-	fmt.Printf("uring_http_probe=ready addr=%s:%d workers=%d entries=%d read_size=%d\n",
-		*addr, *port, *workers, servers[0].r.params.sqEntries, *readSize)
+	fmt.Printf("uring_http_probe=ready addr=%s:%d workers=%d entries=%d read_size=%d setup_flags=0x%x sqpoll_idle_ms=%d\n",
+		*addr, *port, *workers, servers[0].r.params.sqEntries, *readSize, opts.flags, opts.sqThreadIdle)
 	servers[0].loop(*readSize)
 }
 
@@ -207,8 +235,8 @@ func listenTCP(addr string, port int) (int, error) {
 	return fd, nil
 }
 
-func setupRing(entries uint32) (*ring, error) {
-	var p ioUringParams
+func setupRing(entries uint32, opts ringOptions) (*ring, error) {
+	p := ioUringParams{flags: opts.flags, sqThreadIdle: opts.sqThreadIdle}
 	fd, _, errno := syscall.RawSyscall(
 		uintptr(unix.SYS_IO_URING_SETUP),
 		uintptr(entries),

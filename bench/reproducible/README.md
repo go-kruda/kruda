@@ -135,6 +135,12 @@ go run . -port 4555 -workers 4 -entries 4096
 wrk --latency -t4 -c256 -d15s http://127.0.0.1:4555/plaintext-handler
 ```
 
+Optional io_uring setup flags can be tested explicitly:
+
+```bash
+go run . -port 4555 -workers 4 -entries 4096 -sqpoll -single-issuer
+```
+
 Treat this as a first gate before any Linux-only Wing proactor experiment. A
 future io_uring prototype still has to preserve the normal handler,
 middleware/lifecycle, timeout, safe-copy, parser-security, and response-ordering

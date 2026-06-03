@@ -429,6 +429,9 @@ func (r *ring) waitCQE() (ioUringCqe, error) {
 			0,
 		)
 		if errno != 0 {
+			if errno == syscall.EINTR {
+				continue
+			}
 			return ioUringCqe{}, errno
 		}
 	}

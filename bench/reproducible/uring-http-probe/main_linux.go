@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"runtime"
 	"sync/atomic"
 	"syscall"
@@ -169,23 +168,6 @@ func main() {
 		s.submitAccept()
 		servers = append(servers, s)
 	}
-
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-done
-		active := 0
-		for _, s := range servers {
-			active += len(s.conns)
-		}
-		fmt.Printf("shutdown=signal requests=%d accepts=%d active=%d errors=%d\n",
-			atomic.LoadUint64(&st.requests),
-			atomic.LoadUint64(&st.accepts),
-			active,
-			atomic.LoadUint64(&st.errors),
-		)
-		os.Exit(0)
-	}()
 
 	for i := 1; i < len(servers); i++ {
 		go servers[i].loop(*readSize)

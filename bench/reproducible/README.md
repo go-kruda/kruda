@@ -113,6 +113,22 @@ means responses are being coalesced close to one write/send syscall per
 client-side pipeline batch. A value near 1 means the server is still paying
 roughly one write/send syscall per response.
 
+## io_uring Feasibility Probe
+
+Use `uring-probe` only to verify that the benchmark host can create an
+`io_uring`, submit NOP operations, and receive completions from Go. It is not a
+Kruda transport, not a runtime benchmark, and not public claim evidence.
+
+```bash
+cd bench/reproducible/uring-probe
+go run . -entries 64 -nops 10000
+```
+
+Treat this as a first gate before any Linux-only Wing proactor experiment. A
+future io_uring prototype still has to preserve the normal handler,
+middleware/lifecycle, timeout, safe-copy, parser-security, and response-ordering
+contracts before it can be benchmarked against Actix.
+
 ## Kruda JSON Encoder Mode
 
 The harness builds Kruda with `KRUDA_GO_TAGS=kruda_stdjson` by default so

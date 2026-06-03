@@ -21,6 +21,7 @@ const (
 	ioringOffSQEs   = 0x10000000
 
 	ioringEnterGetEvents       = 1
+	ioringEnterSQWakeup        = 1 << 1
 	ioringRecvsendPollFirst    = 1
 	ioringSetupSQPoll          = 1 << 1
 	ioringSetupCoopTaskrun     = 1 << 8
@@ -429,12 +430,16 @@ func (r *ring) waitCQE() (ioUringCqe, error) {
 		}
 		toSubmit := r.pendingSubmit
 		r.pendingSubmit = 0
+		flags := uintptr(ioringEnterGetEvents)
+		if r.params.flags&ioringSetupSQPoll != 0 {
+			flags |= ioringEnterSQWakeup
+		}
 		_, _, errno := syscall.RawSyscall6(
 			uintptr(unix.SYS_IO_URING_ENTER),
 			uintptr(r.fd),
 			uintptr(toSubmit),
 			1,
-			ioringEnterGetEvents,
+			flags,
 			0,
 			0,
 		)

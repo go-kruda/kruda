@@ -124,6 +124,17 @@ cd bench/reproducible/uring-probe
 go run . -entries 64 -nops 10000
 ```
 
+Use `uring-http-probe` as the next ceiling check. It is a Linux-only,
+network-facing fixed-response HTTP/1.1 keep-alive probe with one `io_uring` per
+SO_REUSEPORT worker. It intentionally does not run Kruda handlers, middleware,
+or lifecycle hooks:
+
+```bash
+cd bench/reproducible/uring-http-probe
+go run . -port 4555 -workers 4 -entries 4096
+wrk --latency -t4 -c256 -d15s http://127.0.0.1:4555/plaintext-handler
+```
+
 Treat this as a first gate before any Linux-only Wing proactor experiment. A
 future io_uring prototype still has to preserve the normal handler,
 middleware/lifecycle, timeout, safe-copy, parser-security, and response-ordering

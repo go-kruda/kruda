@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"

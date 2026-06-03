@@ -157,6 +157,39 @@ Interpretation:
 - Further parser-only, JSON-only, worker-count, CPU-affinity, or idle-spin work
   is unlikely to be the best path unless new evidence changes this profile.
 
+## io_uring Feasibility Probe
+
+Probe commit: `e88e5d8` (`bench: add io_uring feasibility probe`)
+
+Command:
+
+```bash
+cd bench/reproducible/uring-probe
+GOWORK=off go run . -entries 64 -nops 10000
+```
+
+Result:
+
+```text
+io_uring_probe=ok
+entries=64
+cq_entries=128
+nops=10000
+elapsed_ms=1.532
+nop_per_sec=6526942.24
+```
+
+Interpretation:
+
+- The tiger kernel allows `io_uring_setup` (`io_uring_disabled=0`) and Go can
+  submit/complete basic NOP operations through raw io_uring syscalls.
+- This only proves kernel/API feasibility. It does not prove that a Wing
+  network transport should use io_uring or that it will outperform the current
+  epoll path.
+- The next io_uring step must be a network-facing prototype with normal handler
+  semantics and a kill switch, not a direct replacement of the default Wing
+  transport.
+
 ## Direction
 
 The highest-probability path to a larger fair-handler win is not another

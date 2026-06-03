@@ -190,6 +190,44 @@ Interpretation:
   semantics and a kill switch, not a direct replacement of the default Wing
   transport.
 
+## io_uring HTTP Ceiling Probe
+
+Probe commit: `f892fbd` (`bench: simplify uring HTTP probe shutdown`)
+
+Result directory:
+`/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-ceiling-fixed-20260603T171421Z`
+
+Command shape:
+
+```bash
+cd bench/reproducible/uring-http-probe
+GOWORK=off go build -o uring-http-probe .
+./uring-http-probe -port 4567 -workers 4 -entries 4096
+wrk --latency -t4 -c128 -d10s http://127.0.0.1:4567/plaintext-handler
+wrk --latency -t4 -c256 -d10s http://127.0.0.1:4567/plaintext-handler
+```
+
+The probe is a fixed-response HTTP/1.1 keep-alive server with one io_uring per
+SO_REUSEPORT worker. It does not run Kruda handlers, middleware, lifecycle
+hooks, CORS/security headers, panic recovery, or route lookup.
+
+| Profile | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---:|---:|---:|---:|---:|---:|
+| `-t4 -c128 -d10s` | 817,853.51 | 74 us | 158 us | 309 us | 15.94 ms | 0 |
+| `-t4 -c256 -d10s` | 859,183.53 | 137 us | 317 us | 1.03 ms | 15.93 ms | 0 |
+
+Interpretation:
+
+- The network-facing io_uring path is functional on tiger and handles wrk
+  keep-alive traffic without socket errors in this short run.
+- The ceiling is not clearly higher than current Wing fair-handler diagnostics.
+  The c256 run is close to the best recent Wing plaintext diagnostic, while the
+  c128 run is lower, despite bypassing the framework contract entirely.
+- This does not justify a Wing runtime rewrite or default transport change.
+- A future io_uring experiment would need a more specific advantage, such as
+  measurable syscall batching, SQPOLL evidence, or a profile where current Wing
+  is demonstrably blocked by epoll/read/write coordination.
+
 ## Direction
 
 The highest-probability path to a larger fair-handler win is not another

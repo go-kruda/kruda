@@ -142,6 +142,7 @@ type server struct {
 type serverOptions struct {
 	multishotAccept bool
 	submitBatch     uint32
+	lockOSThread    bool
 }
 
 func main() {
@@ -170,7 +171,7 @@ func main() {
 
 	runtime.GOMAXPROCS(*workers)
 	opts := ringOptions{}
-	serverOpts := serverOptions{multishotAccept: *multishotAccept, submitBatch: uint32(*submitBatch)}
+	serverOpts := serverOptions{multishotAccept: *multishotAccept, submitBatch: uint32(*submitBatch), lockOSThread: *singleIssuer}
 	if *sqPoll {
 		opts.flags |= ioringSetupSQPoll
 		opts.sqThreadIdle = uint32(*sqPollIdle)
@@ -291,6 +292,10 @@ func setupRing(entries uint32, opts ringOptions) (*ring, error) {
 }
 
 func (s *server) loop(readSize int) {
+	if s.options.lockOSThread {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 	s.submitAccept()
 	for {
 		cqe, err := s.r.waitCQE()

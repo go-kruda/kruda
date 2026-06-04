@@ -210,7 +210,6 @@ func main() {
 			options:  serverOpts,
 			stats:    st,
 		}
-		s.submitAccept()
 		servers = append(servers, s)
 	}
 
@@ -292,6 +291,7 @@ func setupRing(entries uint32, opts ringOptions) (*ring, error) {
 }
 
 func (s *server) loop(readSize int) {
+	s.submitAccept()
 	for {
 		cqe, err := s.r.waitCQE()
 		if err != nil {

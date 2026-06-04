@@ -145,6 +145,21 @@ type serverOptions struct {
 	lockOSThread    bool
 }
 
+type workerConfig struct {
+	addr       string
+	port       int
+	entries    uint32
+	readSize   int
+	ringOpts   ringOptions
+	serverOpts serverOptions
+	stats      *stats
+}
+
+type workerReady struct {
+	sqEntries uint32
+	err       error
+}
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1", "listen address")
 	port := flag.Int("port", 4555, "listen port")
@@ -186,41 +201,66 @@ func main() {
 		opts.flags |= ioringSetupDeferTaskrun
 	}
 	st := &stats{}
-	servers := make([]*server, 0, *workers)
+	cfg := workerConfig{
+		addr:       *addr,
+		port:       *port,
+		entries:    uint32(*entries),
+		readSize:   *readSize,
+		ringOpts:   opts,
+		serverOpts: serverOpts,
+		stats:      st,
+	}
+	ready := make(chan workerReady, *workers)
 	for i := 0; i < *workers; i++ {
-		r, err := setupRing(uint32(*entries), opts)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "worker %d io_uring_setup: %v\n", i, err)
-			os.Exit(1)
-		}
-		defer r.close()
-
-		lfd, err := listenTCP(*addr, *port)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "worker %d listen: %v\n", i, err)
-			os.Exit(1)
-		}
-		defer unix.Close(lfd)
-
-		s := &server{
-			id:       i,
-			r:        r,
-			listenFD: lfd,
-			conns:    make(map[uint64]*conn, 4096),
-			response: []byte(defaultResponse),
-			options:  serverOpts,
-			stats:    st,
-		}
-		servers = append(servers, s)
+		go runWorker(i, cfg, ready)
 	}
 
-	for i := 1; i < len(servers); i++ {
-		go servers[i].loop(*readSize)
+	var sqEntries uint32
+	for i := 0; i < *workers; i++ {
+		wr := <-ready
+		if wr.err != nil {
+			fmt.Fprintln(os.Stderr, wr.err)
+			os.Exit(1)
+		}
+		if sqEntries == 0 {
+			sqEntries = wr.sqEntries
+		}
 	}
 
 	fmt.Printf("uring_http_probe=ready addr=%s:%d workers=%d entries=%d read_size=%d setup_flags=0x%x sqpoll_idle_ms=%d multishot_accept=%t submit_batch=%d\n",
-		*addr, *port, *workers, servers[0].r.params.sqEntries, *readSize, opts.flags, opts.sqThreadIdle, serverOpts.multishotAccept, serverOpts.submitBatch)
-	servers[0].loop(*readSize)
+		*addr, *port, *workers, sqEntries, *readSize, opts.flags, opts.sqThreadIdle, serverOpts.multishotAccept, serverOpts.submitBatch)
+	select {}
+}
+
+func runWorker(id int, cfg workerConfig, ready chan<- workerReady) {
+	if cfg.serverOpts.lockOSThread {
+		runtime.LockOSThread()
+	}
+
+	r, err := setupRing(cfg.entries, cfg.ringOpts)
+	if err != nil {
+		ready <- workerReady{err: fmt.Errorf("worker %d io_uring_setup: %w", id, err)}
+		return
+	}
+
+	lfd, err := listenTCP(cfg.addr, cfg.port)
+	if err != nil {
+		r.close()
+		ready <- workerReady{err: fmt.Errorf("worker %d listen: %w", id, err)}
+		return
+	}
+
+	s := &server{
+		id:       id,
+		r:        r,
+		listenFD: lfd,
+		conns:    make(map[uint64]*conn, 4096),
+		response: []byte(defaultResponse),
+		options:  cfg.serverOpts,
+		stats:    cfg.stats,
+	}
+	ready <- workerReady{sqEntries: r.params.sqEntries}
+	s.loop(cfg.readSize)
 }
 
 func listenTCP(addr string, port int) (int, error) {
@@ -292,10 +332,6 @@ func setupRing(entries uint32, opts ringOptions) (*ring, error) {
 }
 
 func (s *server) loop(readSize int) {
-	if s.options.lockOSThread {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-	}
 	s.submitAccept()
 	for {
 		cqe, err := s.r.waitCQE()

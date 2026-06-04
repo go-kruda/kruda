@@ -254,7 +254,12 @@ The script runs both profiles for every framework and route:
 
 The harness sets `GOMAXPROCS=8` and `KRUDA_WORKERS=4` by default. The Kruda worker count matches the `wrk -t4` CPU-bound profiles and is recorded in every `environment.txt`. Override `KRUDA_WORKERS` explicitly when studying worker scaling.
 
-Memory footprint experiments may set `KRUDA_READ_BUF_SIZE`, for example `KRUDA_READ_BUF_SIZE=4096`, to reduce Wing's per-connection read buffer for short-header CPU-only workloads. This is not the framework default and must be labeled as a workload-specific memory profile; smaller buffers can reject requests whose request line and headers do not fit the configured size.
+Memory footprint experiments may set `KRUDA_READ_BUF_SIZE`, for example
+`KRUDA_READ_BUF_SIZE=4096` for the current balanced benchmark profile or
+`KRUDA_READ_BUF_SIZE=2048` for a more aggressive short-header memory candidate.
+This is not the framework default and must be labeled as a workload-specific
+memory profile; smaller buffers can reject requests whose request line and
+headers do not fit the configured size.
 
 Each framework/route/profile combination gets one warmup run and five measured rounds.
 
@@ -326,6 +331,15 @@ When those conditions are not met, use "same ballpark as Actix." Do not make RPS
 
 ## Current Evidence
 
+The latest clean tiger evidence on `perf/wing-nonpipelined-io-profile` is in
+`results/2026-06-04-clean-cross-runtime-evidence.md` and
+`results/2026-06-04-clean-resource-evidence.md`. It uses the normal
+CPU-bound handler routes, `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and
+`KRUDA_READ_BUF_SIZE=4096`. The run satisfied the "faster than Actix" gate on
+all measured route/profile rows with zero socket errors and zero non-2xx
+responses. The resource evidence shows Kruda with higher RPS/core than Actix
+while Actix still uses less RSS.
+
 The committed tiger evidence captured at commit `984f0d6` satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under both the latency and throughput profiles. Throughput-profile medians:
 
 | Route | Evidence directory | Kruda vs Actix median RPS | Kruda vs Actix p99 |
@@ -339,5 +353,13 @@ These are normal handler-path routes. Static bypass route options are intentiona
 The corresponding resource evidence is in `results/resource-main-984f0d6-20260524T174429Z/`, with a summary note in `results/2026-05-25-main-984f0d6-tiger-evidence.md`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput, p99, and RPS/core ahead of Actix while RSS remains higher than Actix.
 
 The optional short-header read-buffer resource profile is in `results/resource-20260524Tphase7-readbuf4k/`, with a summary note in `results/2026-05-24-read-buffer-size-evidence.md`. It uses `KRUDA_READ_BUF_SIZE=4096`; compared with the phase 6 baseline, Kruda max RSS dropped by 10.77%, 17.61%, and 10.85% on the throughput routes. Actix still has lower RSS, so this is RSS reduction evidence, not a memory-footprint win claim.
+
+The repeated `KRUDA_READ_BUF_SIZE=2048` resource candidate is documented in
+`results/2026-06-04-read-buffer-2048-evidence.md`. It reduced Kruda max RSS by
+roughly 12-16% versus the clean `4096` resource evidence while preserving zero
+socket errors, zero non-2xx responses, and the Actix throughput/p99 gate. Some
+Kruda p99 rows were higher than the clean `4096` profile, so keep `4096` as the
+published throughput/p99 evidence profile and treat `2048` as an optional
+short-header memory profile candidate.
 
 The lazy Wing peer-address lookup evidence is in `results/resource-20260524Tphase8-lazy-remote-addr-final-readbuf4k/`, with a summary note in `results/2026-05-24-lazy-remote-addr-evidence.md`. It shows the same CPU-bound handler routes with zero socket errors and zero non-2xx responses, and a short `strace` check confirms that routes which do not call `RemoteAddr()` no longer pay eager `getpeername` syscalls on accept.

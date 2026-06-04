@@ -187,7 +187,7 @@ func (e *epollEngine) drainAccept(events []event) int {
 			break
 		}
 		e.epollAdd(int32(nfd), 0)
-		events[count] = event{Op: opAccept, Res: int32(nfd)}
+		events[count] = event{Op: opAccept, Res: int32(nfd), Flags: cqeFMore}
 		count++
 	}
 	return count

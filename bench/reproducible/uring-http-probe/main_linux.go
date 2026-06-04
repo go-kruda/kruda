@@ -22,7 +22,9 @@ const (
 
 	ioringEnterGetEvents       = 1
 	ioringEnterSQWakeup        = 1 << 1
+	ioringCQEFMore             = 1 << 1
 	ioringRecvsendPollFirst    = 1
+	ioringAcceptMultishot      = 1
 	ioringSetupSQPoll          = 1 << 1
 	ioringSetupCoopTaskrun     = 1 << 8
 	ioringSetupSingleIssuer    = 1 << 12
@@ -133,7 +135,13 @@ type server struct {
 	conns    map[uint64]*conn
 	nextID   uint64
 	response []byte
+	options  serverOptions
 	stats    *stats
+}
+
+type serverOptions struct {
+	multishotAccept bool
+	submitBatch     uint32
 }
 
 func main() {
@@ -142,6 +150,8 @@ func main() {
 	entries := flag.Uint("entries", 4096, "io_uring queue entries")
 	readSize := flag.Int("read-size", 4096, "per-connection read buffer size")
 	workers := flag.Int("workers", 4, "SO_REUSEPORT worker count")
+	multishotAccept := flag.Bool("multishot-accept", false, "enable IORING_ACCEPT_MULTISHOT")
+	submitBatch := flag.Uint("submit-batch", 0, "flush pending submissions after this many queued SQEs; 0 submits when waiting for completions")
 	sqPoll := flag.Bool("sqpoll", false, "enable IORING_SETUP_SQPOLL")
 	sqPollIdle := flag.Uint("sqpoll-idle-ms", 1000, "SQPOLL thread idle time in milliseconds")
 	singleIssuer := flag.Bool("single-issuer", false, "enable IORING_SETUP_SINGLE_ISSUER")
@@ -153,9 +163,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "entries, read-size, and workers must be positive")
 		os.Exit(2)
 	}
+	if *submitBatch > *entries {
+		fmt.Fprintln(os.Stderr, "submit-batch must be less than or equal to entries")
+		os.Exit(2)
+	}
 
 	runtime.GOMAXPROCS(*workers)
 	opts := ringOptions{}
+	serverOpts := serverOptions{multishotAccept: *multishotAccept, submitBatch: uint32(*submitBatch)}
 	if *sqPoll {
 		opts.flags |= ioringSetupSQPoll
 		opts.sqThreadIdle = uint32(*sqPollIdle)
@@ -192,6 +207,7 @@ func main() {
 			listenFD: lfd,
 			conns:    make(map[uint64]*conn, 4096),
 			response: []byte(defaultResponse),
+			options:  serverOpts,
 			stats:    st,
 		}
 		s.submitAccept()
@@ -202,8 +218,8 @@ func main() {
 		go servers[i].loop(*readSize)
 	}
 
-	fmt.Printf("uring_http_probe=ready addr=%s:%d workers=%d entries=%d read_size=%d setup_flags=0x%x sqpoll_idle_ms=%d\n",
-		*addr, *port, *workers, servers[0].r.params.sqEntries, *readSize, opts.flags, opts.sqThreadIdle)
+	fmt.Printf("uring_http_probe=ready addr=%s:%d workers=%d entries=%d read_size=%d setup_flags=0x%x sqpoll_idle_ms=%d multishot_accept=%t submit_batch=%d\n",
+		*addr, *port, *workers, servers[0].r.params.sqEntries, *readSize, opts.flags, opts.sqThreadIdle, serverOpts.multishotAccept, serverOpts.submitBatch)
 	servers[0].loop(*readSize)
 }
 
@@ -285,7 +301,7 @@ func (s *server) loop(readSize int) {
 		kind, id := decodeUserData(cqe.userData)
 		switch kind {
 		case opAccept:
-			s.handleAccept(cqe.res, readSize)
+			s.handleAccept(cqe.res, cqe.flags, readSize)
 		case opRecv:
 			s.handleRecv(id, cqe.res)
 		case opSend:
@@ -293,11 +309,19 @@ func (s *server) loop(readSize int) {
 		default:
 			atomic.AddUint64(&s.stats.errors, 1)
 		}
+		if s.options.submitBatch > 0 && s.r.pendingSubmit >= s.options.submitBatch {
+			if err := s.r.submitPending(0); err != nil {
+				fmt.Fprintf(os.Stderr, "submit pending: %v\n", err)
+				os.Exit(1)
+			}
+		}
 	}
 }
 
-func (s *server) handleAccept(res int32, readSize int) {
-	s.submitAccept()
+func (s *server) handleAccept(res int32, flags uint32, readSize int) {
+	if !s.options.multishotAccept || flags&ioringCQEFMore == 0 {
+		s.submitAccept()
+	}
 	if res < 0 {
 		if res != -int32(unix.EAGAIN) && res != -int32(unix.EINTR) {
 			atomic.AddUint64(&s.stats.errors, 1)
@@ -361,6 +385,9 @@ func (s *server) submitAccept() {
 	sqe.opcode = ioringOpAccept
 	sqe.fd = int32(s.listenFD)
 	sqe.rwFlags = unix.SOCK_NONBLOCK | unix.SOCK_CLOEXEC
+	if s.options.multishotAccept {
+		sqe.ioprio = ioringAcceptMultishot
+	}
 	sqe.userData = encodeUserData(opAccept, 0)
 }
 
@@ -428,28 +455,41 @@ func (r *ring) waitCQE() (ioUringCqe, error) {
 		if cqe, ok := r.popCQE(); ok {
 			return cqe, nil
 		}
-		toSubmit := r.pendingSubmit
-		r.pendingSubmit = 0
-		flags := uintptr(ioringEnterGetEvents)
-		if r.params.flags&ioringSetupSQPoll != 0 {
-			flags |= ioringEnterSQWakeup
-		}
-		_, _, errno := syscall.RawSyscall6(
-			uintptr(unix.SYS_IO_URING_ENTER),
-			uintptr(r.fd),
-			uintptr(toSubmit),
-			1,
-			flags,
-			0,
-			0,
-		)
-		if errno != 0 {
-			if errno == syscall.EINTR {
+		if err := r.submitPending(1); err != nil {
+			if err == syscall.EINTR {
 				continue
 			}
-			return ioUringCqe{}, errno
+			return ioUringCqe{}, err
 		}
 	}
+}
+
+func (r *ring) submitPending(minComplete uint32) error {
+	if r.pendingSubmit == 0 && minComplete == 0 {
+		return nil
+	}
+	toSubmit := r.pendingSubmit
+	r.pendingSubmit = 0
+	flags := uintptr(0)
+	if minComplete > 0 {
+		flags |= ioringEnterGetEvents
+	}
+	if r.params.flags&ioringSetupSQPoll != 0 {
+		flags |= ioringEnterSQWakeup
+	}
+	_, _, errno := syscall.RawSyscall6(
+		uintptr(unix.SYS_IO_URING_ENTER),
+		uintptr(r.fd),
+		uintptr(toSubmit),
+		uintptr(minComplete),
+		flags,
+		0,
+		0,
+	)
+	if errno != 0 {
+		return errno
+	}
+	return nil
 }
 
 func (r *ring) popCQE() (ioUringCqe, bool) {

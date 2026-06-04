@@ -141,6 +141,18 @@ Optional io_uring setup flags can be tested explicitly:
 go run . -port 4555 -workers 4 -entries 4096 -sqpoll -single-issuer
 ```
 
+The probe also has opt-in ceiling flags for event-loop experiments:
+
+```bash
+go run . -port 4555 -workers 4 -entries 4096 -multishot-accept
+go run . -port 4555 -workers 4 -entries 4096 -submit-batch 32
+```
+
+`-multishot-accept` checks whether reducing accept resubmissions matters for
+the keep-alive workload. `-submit-batch` flushes queued SQEs while CQEs are
+still being drained, instead of waiting until the completion queue is empty.
+Both are probe-only controls and are not Kruda runtime behavior.
+
 Treat this as a first gate before any Linux-only Wing proactor experiment. A
 future io_uring prototype still has to preserve the normal handler,
 middleware/lifecycle, timeout, safe-copy, parser-security, and response-ordering

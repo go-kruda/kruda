@@ -176,7 +176,13 @@ start_server() {
   local log="$3"
   local bin
   bin="$(bin_for "$fw")"
+  local ready_url="http://127.0.0.1:$port/plaintext-handler"
   cleanup
+
+  if curl -fsS --max-time 1 "$ready_url" >/dev/null 2>&1; then
+    echo "$fw readiness URL already responds before start: $ready_url" >&2
+    exit 1
+  fi
 
   case "$fw" in
     kruda)
@@ -199,8 +205,24 @@ start_server() {
 
 wait_ready() {
   local url="$1"
+  local log="${2:-}"
   for _ in $(seq 1 100); do
+    if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+      echo "server exited before ready: $url" >&2
+      if [ -n "$log" ]; then
+        cat "$log" >&2 || true
+      fi
+      exit 1
+    fi
     if curl -fsS "$url" >/dev/null 2>&1; then
+      sleep 0.05
+      if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+        echo "server exited after readiness check: $url" >&2
+        if [ -n "$log" ]; then
+          cat "$log" >&2 || true
+        fi
+        exit 1
+      fi
       return 0
     fi
     sleep 0.05
@@ -225,7 +247,7 @@ run_perf_stat() {
   local prefix="$fw-$route-perf"
 
   start_server "$fw" "$port" "$RAW_DIR/server-$prefix.log"
-  wait_ready "$url"
+  wait_ready "$url" "$RAW_DIR/server-$prefix.log"
   run_wrk "$url" "$WARMUP_DURATION" "$RAW_DIR/$prefix-warmup.txt"
 
   set +e

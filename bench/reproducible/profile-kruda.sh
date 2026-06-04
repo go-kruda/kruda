@@ -85,6 +85,12 @@ wait_ready() {
       exit 1
     fi
     if curl -fsS "$url" >/dev/null 2>&1; then
+      sleep 0.05
+      if ! kill -0 "$KRUDA_PID" >/dev/null 2>&1; then
+        echo "kruda exited after readiness check at $url" >&2
+        cat "$log" >&2 || true
+        exit 1
+      fi
       return
     fi
     sleep 0.1
@@ -146,6 +152,18 @@ build_kruda() {
 
 start_kruda() {
   local log="$RAW_DIR/server-kruda.log"
+  local ready_url="http://127.0.0.1:$PORT_VALUE/plaintext-handler"
+  local pprof_ready_url="http://127.0.0.1:$PPROF_PORT_VALUE/debug/pprof/"
+  if curl -fsS --max-time 1 "$ready_url" >/dev/null 2>&1; then
+    echo "kruda readiness URL already responds before start: $ready_url" >&2
+    echo "choose a free port with PORT" >&2
+    exit 1
+  fi
+  if curl -fsS --max-time 1 "$pprof_ready_url" >/dev/null 2>&1; then
+    echo "kruda pprof URL already responds before start: $pprof_ready_url" >&2
+    echo "choose a free port with PPROF_PORT" >&2
+    exit 1
+  fi
   (
     cd "$KRUDA_DIR"
     env GOMAXPROCS="$GOMAXPROCS_VALUE" \

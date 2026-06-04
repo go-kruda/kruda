@@ -192,6 +192,13 @@ start_server() {
   local port
   port="$(port_for "$fw")"
   local log="$RAW_DIR/server-$fw.log"
+  local ready_url="http://127.0.0.1:$port/plaintext-handler"
+
+  if curl -fsS --max-time 1 "$ready_url" >/dev/null 2>&1; then
+    echo "$fw readiness URL already responds before start: $ready_url" >&2
+    echo "choose a free port with KRUDA_PORT/FIBER_PORT/ACTIX_PORT" >&2
+    exit 1
+  fi
 
   case "$fw" in
     kruda)
@@ -254,6 +261,12 @@ wait_ready() {
       exit 1
     fi
     if curl -fsS "$url" >/dev/null 2>&1; then
+      sleep 0.05
+      if ! kill -0 "$(pid_for "$fw")" 2>/dev/null; then
+        echo "$fw exited after readiness check on port $port" >&2
+        cat "$log" >&2 || true
+        exit 1
+      fi
       return
     fi
     sleep 0.1

@@ -134,21 +134,6 @@ func TestNewWingTransport_ReadBufSizeEnv_Zero(t *testing.T) {
 	}
 }
 
-func TestNewWingTransport_CPUAffinityEnv(t *testing.T) {
-	os.Setenv("KRUDA_CPU_AFFINITY", "1")
-	defer os.Unsetenv("KRUDA_CPU_AFFINITY")
-
-	cfg := defaultConfig()
-	cfg.Logger = discardLogger()
-	tr, ok := newWingTransport(cfg, cfg.Logger).(*Transport)
-	if !ok {
-		t.Fatal("newWingTransport did not return Wing transport")
-	}
-	if !tr.config.CPUAffinity {
-		t.Fatal("CPUAffinity = false, want true")
-	}
-}
-
 func TestNewWingTransport_AsyncEnv(t *testing.T) {
 	os.Setenv("KRUDA_ASYNC", "1")
 	defer os.Unsetenv("KRUDA_ASYNC")

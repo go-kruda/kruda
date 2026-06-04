@@ -441,9 +441,6 @@ func (w *worker) run(shutdown *atomic.Bool) {
 func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if w.config.CPUAffinity {
-		pinWorkerThread(w.id)
-	}
 
 	w.eng.SubmitAccept(w.listenFd)
 	w.eng.Flush()

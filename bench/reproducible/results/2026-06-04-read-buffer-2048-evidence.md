@@ -1,6 +1,6 @@
 # Read Buffer 2048 Evidence
 
-Date: 2026-06-04
+Date: 2026-06-05
 Host: tiger dev server
 Branch: `perf/wing-nonpipelined-io-profile`
 Commit under test: `7c54694`
@@ -77,11 +77,53 @@ Compared with the clean `4096` resource evidence from
 RSS by roughly 12-17% across the six measured route/profile rows. It still uses
 more RSS than Actix.
 
+## Repeat Cross-Runtime Resource Pass
+
+Result directory:
+`/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/resource-readbuf2048-repeat-20260604T181840Z`
+
+Command shape:
+
+```bash
+BENCH_FRAMEWORKS="kruda fiber actix" \
+BENCH_DURATION=15s \
+KRUDA_GO_TAGS=kruda_stdjson \
+KRUDA_READ_BUF_SIZE=2048 \
+KRUDA_PORT=3251 \
+FIBER_PORT=3252 \
+ACTIX_PORT=3253 \
+./resource.sh plaintext-handler json-static json-serialize
+```
+
+| Profile | Route | Kruda RPS | Actix RPS | Kruda p99 | Actix p99 | Kruda RSS | Actix RSS | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| latency | `plaintext-handler` | 822,189.28 | 712,321.22 | 1.090 | 3.610 | 14.38 | 7.95 | 0 |
+| latency | `json-static` | 800,095.67 | 700,721.19 | 1.060 | 2.940 | 15.50 | 7.95 | 0 |
+| latency | `json-serialize` | 825,286.03 | 693,787.07 | 0.660 | 3.280 | 16.50 | 7.95 | 0 |
+| throughput | `plaintext-handler` | 824,356.91 | 735,412.99 | 1.130 | 4.100 | 17.88 | 10.20 | 0 |
+| throughput | `json-static` | 809,993.79 | 724,586.98 | 1.140 | 3.250 | 18.25 | 10.45 | 0 |
+| throughput | `json-serialize` | 821,033.81 | 713,632.10 | 1.050 | 3.570 | 18.38 | 10.45 | 0 |
+
+The repeat pass did not reproduce the earlier `latency/json-serialize` p99
+spike. It again preserved zero socket errors and zero non-2xx responses.
+
+Compared with the clean `4096` resource evidence, the repeat `2048` pass reduced
+Kruda max RSS by roughly 12-16% across the six measured route/profile rows:
+
+| Profile | Route | 4096 RSS MB | 2048 repeat RSS MB | RSS delta |
+|---|---|---:|---:|---:|
+| latency | `plaintext-handler` | 16.25 | 14.38 | -11.5% |
+| latency | `json-static` | 17.75 | 15.50 | -12.7% |
+| latency | `json-serialize` | 19.00 | 16.50 | -13.2% |
+| throughput | `plaintext-handler` | 20.38 | 17.88 | -12.3% |
+| throughput | `json-static` | 21.75 | 18.25 | -16.1% |
+| throughput | `json-serialize` | 21.38 | 18.38 | -14.0% |
+
 ## Decision
 
-Keep `KRUDA_READ_BUF_SIZE=4096` as the current published benchmark profile until
-there is repeated evidence. `2048` is a credible follow-up candidate for an
-optional short-header memory profile because it lowered RSS materially while
-preserving zero errors and competitive throughput. Repeat the cross-runtime run
-before updating docs or public benchmark recommendations, because the
-`latency/json-serialize` row had a p99 spike in this single resource pass.
+Keep `KRUDA_READ_BUF_SIZE=4096` as the current published throughput/p99 evidence
+profile. Promote `2048` only as an optional short-header memory profile
+candidate: it repeatedly reduced RSS materially while preserving zero errors,
+zero non-2xx responses, and the Actix throughput/p99 gate, but it also produced
+some higher Kruda p99 rows than the clean `4096` profile. Do not change Kruda's
+framework default from this evidence.

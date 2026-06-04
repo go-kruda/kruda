@@ -34,6 +34,7 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		Workers:         workers,
 		HandlerPoolSize: poolSize,
 		ReadBufSize:     readBufSize,
+		CPUAffinity:     os.Getenv("KRUDA_CPU_AFFINITY") == "1",
 		ReadTimeout:     cfg.ReadTimeout,
 		WriteTimeout:    cfg.WriteTimeout,
 		IdleTimeout:     cfg.IdleTimeout,

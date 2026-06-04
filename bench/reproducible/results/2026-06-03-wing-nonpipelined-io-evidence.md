@@ -262,6 +262,7 @@ Probe commits:
 - `b838614` (`bench: add uring HTTP ceiling controls`)
 - `b99f8b3` (`bench: start uring accepts on ring owner`)
 - `05226ff` (`bench: lock uring single issuer workers`)
+- `2f032f7` (`bench: own uring setup in workers`)
 
 Result directories:
 
@@ -269,6 +270,7 @@ Result directories:
 - `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-v2-c256-sweep-20260604T141810Z`
 - `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-setup-sweep-20260604T142207Z`
 - `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-taskrun-sweep-20260604T142259Z`
+- `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-single-issuer-owned-20260604T142755Z`
 
 The v2 controls tested multishot accept, mid-drain submission flushing, and
 io_uring setup flags. These are still fixed-response ceiling probes, not Kruda
@@ -309,12 +311,21 @@ Task-run setup sweep:
 | coop taskrun | 861,745.30 | 136 us | 298 us | 517 us | 14.02 ms | 0 |
 | coop taskrun + submit batch 16 | 873,489.63 | 131 us | 265 us | 498 us | 10.15 ms | 0 |
 
-Rejected or incomplete controls:
+Worker-owned single-issuer sweep:
 
-- `-single-issuer` still returned `wait cqe: file exists` with multiple
-  workers even after starting accepts from the loop and locking the OS thread.
-  That suggests the ring creation task also has to be the issuer. Testing it
-  correctly would require moving ring setup into the event-loop owner.
+| Case | Profile | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|
+| control | `-t4 -c128 -d10s` | 841,568.51 | 75 us | 165 us | 726 us | 12.92 ms | 0 |
+| control | `-t4 -c256 -d10s` | 866,711.00 | 136 us | 302 us | 513 us | 8.03 ms | 0 |
+| single issuer | `-t4 -c128 -d10s` | 801,333.00 | 77 us | 169 us | 420 us | 11.86 ms | 0 |
+| single issuer | `-t4 -c256 -d10s` | 759,781.90 | 153 us | 315 us | 0.90 ms | 11.85 ms | 0 |
+| single issuer + coop taskrun | `-t4 -c128 -d10s` | 868,611.51 | 69 us | 140 us | 274 us | 9.87 ms | 0 |
+| single issuer + coop taskrun | `-t4 -c256 -d10s` | 834,767.00 | 134 us | 270 us | 659 us | 10.07 ms | 0 |
+| single issuer + submit batch 16 | `-t4 -c128 -d10s` | 742,800.15 | 80 us | 176 us | 678 us | 7.66 ms | 0 |
+| single issuer + submit batch 16 | `-t4 -c256 -d10s` | 736,936.28 | 172 us | 340 us | 563 us | 7.51 ms | 0 |
+
+Rejected controls:
+
 - `-defer-taskrun` returned `io_uring_setup: invalid argument` on this host
   without the setup constraints it expects.
 
@@ -326,6 +337,10 @@ Interpretation:
   one c256 run but regressed c128 and landed inside control-run variance in the
   short sweep.
 - `IORING_SETUP_COOP_TASKRUN` did not beat the same-run control.
+- `IORING_SETUP_SINGLE_ISSUER` only became valid after moving ring setup into
+  the worker owner thread. It did not produce a broad win: standalone
+  single-issuer regressed both profiles, and `single-issuer + coop-taskrun`
+  only improved c128 while losing c256 to the same-run control.
 - These v2 controls still do not establish an io_uring ceiling high enough to
   justify a Wing runtime rewrite. A future io_uring attempt needs a stronger
   hypothesis than setup flags or accept resubmission reduction.

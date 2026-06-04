@@ -255,6 +255,81 @@ Interpretation:
   versus the default io_uring HTTP probe.
 - Do not pursue SQPOLL as the next Wing optimization without new evidence.
 
+## io_uring HTTP v2 Controls
+
+Probe commits:
+
+- `b838614` (`bench: add uring HTTP ceiling controls`)
+- `b99f8b3` (`bench: start uring accepts on ring owner`)
+- `05226ff` (`bench: lock uring single issuer workers`)
+
+Result directories:
+
+- `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-v2-20260604T141539Z`
+- `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-v2-c256-sweep-20260604T141810Z`
+- `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-setup-sweep-20260604T142207Z`
+- `/home/tiger/kruda-wing-nonpipelined-io-ef3fb05/bench/reproducible/results/uring-http-taskrun-sweep-20260604T142259Z`
+
+The v2 controls tested multishot accept, mid-drain submission flushing, and
+io_uring setup flags. These are still fixed-response ceiling probes, not Kruda
+runtime behavior.
+
+Primary 10s matrix:
+
+| Case | Profile | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---|---:|---:|---:|---:|---:|---:|
+| control | `-t4 -c128 -d10s` | 847,676.90 | 77 us | 170 us | 663 us | 12.06 ms | 0 |
+| control | `-t4 -c256 -d10s` | 835,659.87 | 141 us | 293 us | 634 us | 16.08 ms | 0 |
+| multishot accept | `-t4 -c128 -d10s` | 837,854.38 | 79 us | 175 us | 357 us | 19.22 ms | 0 |
+| multishot accept | `-t4 -c256 -d10s` | 805,871.99 | 145 us | 306 us | 0.96 ms | 9.96 ms | 0 |
+| submit batch 16 | `-t4 -c128 -d10s` | 762,996.57 | 84 us | 180 us | 361 us | 15.24 ms | 0 |
+| submit batch 16 | `-t4 -c256 -d10s` | 860,146.79 | 150 us | 330 us | 527 us | 12.36 ms | 0 |
+| submit batch 32 | `-t4 -c128 -d10s` | 803,455.05 | 83 us | 202 us | 825 us | 13.96 ms | 0 |
+| submit batch 32 | `-t4 -c256 -d10s` | 838,917.68 | 141 us | 299 us | 602 us | 15.42 ms | 0 |
+| multishot accept + submit batch 32 | `-t4 -c128 -d10s` | 801,924.85 | 81 us | 177 us | 369 us | 10.28 ms | 0 |
+| multishot accept + submit batch 32 | `-t4 -c256 -d10s` | 782,112.13 | 150 us | 318 us | 0.94 ms | 10.15 ms | 0 |
+
+Short c256 sweep:
+
+| Case | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---:|---:|---:|---:|---:|---:|
+| control A | 859,209.75 | 140 us | 305 us | 559 us | 10.47 ms | 0 |
+| control B | 833,457.83 | 140 us | 304 us | 682 us | 13.20 ms | 0 |
+| submit batch 4 | 686,130.20 | 167 us | 343 us | 1.20 ms | 10.68 ms | 0 |
+| submit batch 8 | 777,856.93 | 155 us | 324 us | 772 us | 18.81 ms | 0 |
+| submit batch 16 | 836,152.19 | 140 us | 285 us | 476 us | 9.65 ms | 0 |
+| submit batch 24 | 813,933.77 | 147 us | 318 us | 585 us | 5.66 ms | 0 |
+| submit batch 64 | 847,051.93 | 139 us | 297 us | 526 us | 7.99 ms | 0 |
+
+Task-run setup sweep:
+
+| Case | RPS | p50 | p90 | p99 | Max | Errors |
+|---|---:|---:|---:|---:|---:|---:|
+| control | 888,981.82 | 138 us | 323 us | 608 us | 10.33 ms | 0 |
+| coop taskrun | 861,745.30 | 136 us | 298 us | 517 us | 14.02 ms | 0 |
+| coop taskrun + submit batch 16 | 873,489.63 | 131 us | 265 us | 498 us | 10.15 ms | 0 |
+
+Rejected or incomplete controls:
+
+- `-single-issuer` still returned `wait cqe: file exists` with multiple
+  workers even after starting accepts from the loop and locking the OS thread.
+  That suggests the ring creation task also has to be the issuer. Testing it
+  correctly would require moving ring setup into the event-loop owner.
+- `-defer-taskrun` returned `io_uring_setup: invalid argument` on this host
+  without the setup constraints it expects.
+
+Interpretation:
+
+- Multishot accept does not produce a throughput win for this keep-alive
+  workload because accepting new sockets is not the dominant cost.
+- Mid-drain submission flushing is not a stable win. `submit-batch 16` improved
+  one c256 run but regressed c128 and landed inside control-run variance in the
+  short sweep.
+- `IORING_SETUP_COOP_TASKRUN` did not beat the same-run control.
+- These v2 controls still do not establish an io_uring ceiling high enough to
+  justify a Wing runtime rewrite. A future io_uring attempt needs a stronger
+  hypothesis than setup flags or accept resubmission reduction.
+
 ## Direction
 
 The highest-probability path to a larger fair-handler win is not another

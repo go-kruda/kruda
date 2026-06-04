@@ -3,7 +3,7 @@ module github.com/go-kruda/kruda/bench
 go 1.25.10
 
 replace (
-	github.com/go-kruda/kruda => ..
+	github.com/go-kruda/kruda => ../
 	github.com/go-kruda/kruda/transport/wing => ../transport/wing
 )
 

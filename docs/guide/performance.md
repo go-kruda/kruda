@@ -79,6 +79,8 @@ For cross-runtime claims, use the reproducible CPU-bound harness in `bench/repro
 
 That evidence is limited to same-host loopback CPU-bound handler routes. It is not a database, TLS, HTTP/2, or production network claim. The resource run also shows that Actix still uses less RSS, while Kruda has higher RPS/core on the measured routes.
 
+Opt-in read-only DB workload evidence is tracked separately. The current tiger follow-up run in `bench/reproducible/results/2026-06-06-wing-actix-20-follow-up.md` used `BENCH_ENABLE_DB=1`, `BENCH_KRUDA_DB_DISPATCH=takeover`, framework-specific default DB DSNs, and zero socket errors/non-2xx responses. In that run, throughput-profile median RPS was +160.21% versus Actix for `/db` and +95.05% for `/fortunes`, with materially lower p99 latency. Treat this as a read-style DB workload result, not as a broad CPU-bound handler-path claim.
+
 Run benchmarks locally:
 
 ```bash
@@ -216,6 +218,8 @@ CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs dire
 Read-style I/O routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
 
 Phase 6 tiger evidence supports `WingQuery()`/Spear for DB read-style workloads in the reproducible harness: `/db`, `/queries`, and `/fortunes` had much higher median throughput than Inline with zero socket errors and zero non-2xx responses. Write-heavy routes are different. The `/updates` route had zero errors with `WingQuery()` but much higher p99 latency, while Inline produced socket errors in the throughput profile. Treat write-heavy DB routes as workload-specific tuning: benchmark with your real DB pool, p99 target, and error gate before choosing a dispatch hint.
+
+For cross-runtime DB comparisons, keep the claim scoped to read-style routes. The latest tiger follow-up evidence with framework-specific DB DSN defaults measured `/db` at +160.21% median throughput versus Actix and `/fortunes` at +95.05%, with lower p99 latency in both throughput and latency profiles. This supports a workload-specific DB claim only; the default CPU-bound fair-handler benchmark remains a separate claim with lower but still positive Actix deltas.
 
 ### Handler-Level Static JSON
 

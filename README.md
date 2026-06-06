@@ -135,6 +135,15 @@ Committed tiger evidence captured at commit `984f0d6` satisfies that gate for th
 
 Evidence: `bench/reproducible/results/main-984f0d6-20260524T171346Z/`, `bench/reproducible/results/resource-main-984f0d6-20260524T174429Z/`, and the summary note in `bench/reproducible/results/2026-05-25-main-984f0d6-tiger-evidence.md`. These are normal handler-path routes, not Wing static bypass routes. The resource evidence shows higher RPS/core than Actix while Actix still uses less RSS.
 
+Opt-in read-only DB workload evidence is tracked separately because database driver, pool, and schema behavior can dominate framework overhead. In the current tiger follow-up run with `BENCH_ENABLE_DB=1`, `BENCH_KRUDA_DB_DISPATCH=takeover`, and framework-specific default DB DSNs, Kruda was materially faster than Actix on read-style routes:
+
+| Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
+|------|---------|---------------------------:|-------------------:|
+| `/db` | throughput | +160.21% | -71.25% |
+| `/fortunes` | throughput | +95.05% | -70.00% |
+
+Evidence: `bench/reproducible/results/2026-06-06-wing-actix-20-follow-up.md`. Treat this as a workload-specific DB result, not a broad CPU-bound handler-path claim.
+
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 
 ## Documentation

@@ -14,6 +14,13 @@ The default benchmark does not require PostgreSQL. It measures framework overhea
 
 DB, queries, fortunes, and updates are out of scope for the default comparison. Enable them explicitly with `BENCH_ENABLE_DB=1` when you want to study database-heavy workloads.
 
+## v1.2.6 Candidate Boundary
+
+The post-v1.2.5 evidence does not support a broad CPU-bound +20% Actix claim on
+the default fair handler path. Treat read-only DB workloads, serialized JSON,
+pipelined HTTP/1.1 diagnostics, and short-header read-buffer tuning as separate
+candidate tracks. Do not mix their results into one public performance claim.
+
 ## Directory Structure
 
 ```

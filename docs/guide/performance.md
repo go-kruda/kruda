@@ -264,7 +264,13 @@ Rule of thumb: keep total pool goroutines (workers × pool_size) close to your D
 
 ### Env Vars
 
-`KRUDA_READ_BUF_SIZE` is advanced tuning for Wing's per-connection read buffer. Lower values can reduce RSS in short-header CPU-only profiles, but requests whose request line and headers do not fit the buffer are rejected. Keep the default for general APIs unless a workload-specific benchmark proves the smaller buffer is safe.
+`KRUDA_READ_BUF_SIZE` is advanced tuning for Wing's per-connection read buffer.
+Lower values can reduce RSS in short-header CPU-only profiles, but requests
+whose request line and headers do not fit the buffer are rejected. Keep the
+default for general APIs unless a workload-specific benchmark proves the smaller
+buffer is safe. The reproducible CPU-bound benchmark uses `4096` for the current
+balanced throughput/p99 evidence profile; `2048` is only an optional
+short-header memory profile candidate.
 
 | Env Var | Default | Description |
 |---------|---------|-------------|

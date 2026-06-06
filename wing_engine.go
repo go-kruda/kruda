@@ -49,6 +49,7 @@ const (
 	opWake
 )
 
-// cqeFMore is set in event.Flags when a multishot operation will produce more completions.
-// On non-Linux backends (kqueue) this is always 0, so re-arm happens every time.
+// cqeFMore is set in event.Flags when the backend will keep producing accept
+// events without a worker-level re-arm. On kqueue this is always 0, so re-arm
+// happens every time.
 const cqeFMore uint32 = 1 << 1

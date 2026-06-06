@@ -81,6 +81,8 @@ That evidence is limited to same-host loopback CPU-bound handler routes. It is n
 
 Opt-in read-only DB workload evidence is tracked separately. The current tiger follow-up run in `bench/reproducible/results/2026-06-06-wing-actix-20-follow-up.md` used `BENCH_ENABLE_DB=1`, `BENCH_KRUDA_DB_DISPATCH=takeover`, framework-specific default DB DSNs, and zero socket errors/non-2xx responses. In that run, throughput-profile median RPS was +160.21% versus Actix for `/db` and +95.05% for `/fortunes`, with materially lower p99 latency. Treat this as a read-style DB workload result, not as a broad CPU-bound handler-path claim.
 
+For post-v1.2.5 candidate work, keep CPU-bound, read-only DB, pipelined HTTP/1.1, and read-buffer memory profiles separate; each profile needs its own evidence and wording.
+
 Run benchmarks locally:
 
 ```bash

@@ -324,11 +324,13 @@ The corresponding resource evidence is in `results/resource-main-984f0d6-2026052
 The optional short-header read-buffer resource profile is in `results/resource-20260524Tphase7-readbuf4k/`, with a summary note in `results/2026-05-24-read-buffer-size-evidence.md`. It uses `KRUDA_READ_BUF_SIZE=4096`; compared with the phase 6 baseline, Kruda max RSS dropped by 10.77%, 17.61%, and 10.85% on the throughput routes. Actix still has lower RSS, so this is RSS reduction evidence, not a memory-footprint win claim.
 
 The repeated `KRUDA_READ_BUF_SIZE=2048` resource candidate is documented in
-`results/2026-06-04-read-buffer-2048-evidence.md`. It reduced Kruda max RSS by
-roughly 12-16% versus the clean `4096` resource evidence while preserving zero
-socket errors, zero non-2xx responses, and the Actix throughput/p99 gate. Some
-Kruda p99 rows were higher than the clean `4096` profile, so keep `4096` as the
-published throughput/p99 evidence profile and treat `2048` as an optional
-short-header memory profile candidate.
+`results/2026-06-04-read-buffer-2048-evidence.md` and rechecked in
+`results/2026-06-07-v126-readbuf2048-evidence.md`. The v1.2.6 recheck reduced
+Kruda max RSS by 4.64-9.84% versus a same-runner `4096` baseline while
+preserving zero socket errors and zero non-2xx responses. It did not pass the
+strict default-change gate because p99 regressed on every measured
+route/profile row and RPS fell by 0.68-4.37%, so keep `4096` as the balanced
+throughput/p99 evidence profile and treat `2048` as an optional short-header
+memory profile candidate.
 
 The lazy Wing peer-address lookup evidence is in `results/resource-20260524Tphase8-lazy-remote-addr-final-readbuf4k/`, with a summary note in `results/2026-05-24-lazy-remote-addr-evidence.md`. It shows the same CPU-bound handler routes with zero socket errors and zero non-2xx responses, and a short `strace` check confirms that routes which do not call `RemoteAddr()` no longer pay eager `getpeername` syscalls on accept.

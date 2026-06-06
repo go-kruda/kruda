@@ -321,6 +321,15 @@ These are normal handler-path routes. Static bypass route options are intentiona
 
 The corresponding resource evidence is in `results/resource-main-984f0d6-20260524T174429Z/`, with a summary note in `results/2026-05-25-main-984f0d6-tiger-evidence.md`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput, p99, and RPS/core ahead of Actix while RSS remains higher than Actix.
 
+The v1.2.6 HTTP/1.1 pipelined diagnostic recheck is in
+`results/2026-06-07-v126-pipeline-evidence.md`. It uses `pipeline.sh` with
+Kruda and Actix, three rounds, 5s measured duration, 2s warmup, and profiles
+`baseline-c128-d1`, `pipeline-c128-d8`, and `pipeline-c256-d8`. Kruda had higher
+median RPS and lower p99 than Actix in all nine profile/route rows with zero
+socket errors and zero non-2xx responses. Keep this labeled as pipelined
+HTTP/1.1 diagnostic evidence; do not mix it into default fair handler-path
+claims.
+
 The optional short-header read-buffer resource profile is in `results/resource-20260524Tphase7-readbuf4k/`, with a summary note in `results/2026-05-24-read-buffer-size-evidence.md`. It uses `KRUDA_READ_BUF_SIZE=4096`; compared with the phase 6 baseline, Kruda max RSS dropped by 10.77%, 17.61%, and 10.85% on the throughput routes. Actix still has lower RSS, so this is RSS reduction evidence, not a memory-footprint win claim.
 
 The repeated `KRUDA_READ_BUF_SIZE=2048` resource candidate is documented in

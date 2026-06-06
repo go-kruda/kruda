@@ -152,6 +152,13 @@ BENCH_ENABLE_DB=1 ./bench.sh db fortunes
 ```
 
 The DB mode expects a TechEmpower-style PostgreSQL database and uses `DATABASE_URL` when set.
+When `DATABASE_URL` is not set, the cross-runtime harness uses framework-safe
+defaults: Kruda and Fiber receive a pgx DSN with pool query parameters, while
+Actix receives the same base PostgreSQL DSN without pgx-only query options.
+Set `KRUDA_DATABASE_URL`, `FIBER_DATABASE_URL`, or `ACTIX_DATABASE_URL` for
+framework-specific overrides. Set `BENCH_DATABASE_BASE_URL` to change the shared
+default base DSN without disabling those framework-specific defaults.
+
 For Kruda-only DB dispatch experiments, set `BENCH_KRUDA_DB_DISPATCH` to
 `takeover`, `pool`, `spawn`, or `inline`. This affects only the Kruda
 benchmark app and is meant for workload-profile evidence, not CPU-bound public

@@ -3,6 +3,23 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.5] — 2026-06-06
+
+### Added
+- Added reproducible Wing CPU, JSON, DB, resource, read-buffer, and pipelined syscall benchmark evidence after the v1.2.4 baseline.
+- Added benchmark controls for default Kruda JSON encoder runs, DB dispatch sweeps, framework-specific DB DSNs, and pipelined syscall diagnostics.
+
+### Changed
+- Streamed Wing stdjson responses into pooled buffers and pre-sized JSON response buffers on the JSON response path.
+- Preferred the Wing JSON responder for static JSON route hints.
+- Clarified public benchmark wording, Wing query-profile guidance, and workload-specific read-only DB evidence without broadening CPU-bound handler-path claims.
+- Documented `KRUDA_READ_BUF_SIZE=2048` as an optional short-header memory profile candidate while keeping the framework default unchanged.
+
+### Fixed
+- Skipped duplicate Wing accept re-arms on Linux epoll listeners after successful accept events, reducing accept hot-path churn without changing normal handler behavior.
+- Stopped suggesting the nonexistent `WingStream` hint in public documentation.
+- Normalized benchmark module local replace paths for current Go toolchain validation.
+
 ## [1.2.4] — 2026-05-28
 
 ### Added

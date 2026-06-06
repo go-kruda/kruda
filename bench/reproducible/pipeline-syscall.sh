@@ -34,7 +34,10 @@ PIPELINE_DURATION_VALUE="${PIPELINE_DURATION:-10s}"
 PIPELINE_WARMUP_VALUE="${PIPELINE_WARMUP:-3s}"
 PIPELINE_TIMEOUT_VALUE="${PIPELINE_TIMEOUT:-5s}"
 PROFILE_SUDO="${PROFILE_SUDO:-0}"
-DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
+DATABASE_BASE_URL_VALUE="${BENCH_DATABASE_BASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world}"
+DATABASE_PGX_URL_VALUE="${DATABASE_BASE_URL_VALUE}?pool_max_conns=64&pool_min_conns=8"
+KRUDA_DATABASE_URL_VALUE="${KRUDA_DATABASE_URL:-${DATABASE_URL:-$DATABASE_PGX_URL_VALUE}}"
+ACTIX_DATABASE_URL_VALUE="${ACTIX_DATABASE_URL:-${DATABASE_URL:-$DATABASE_BASE_URL_VALUE}}"
 STRACE_TRACE="${STRACE_TRACE:-read,readv,recvfrom,recvmsg,write,writev,sendto,sendmsg,epoll_wait,epoll_pwait,epoll_pwait2,epoll_ctl,futex}"
 
 read -r -a FRAMEWORKS <<< "${BENCH_FRAMEWORKS:-kruda actix}"
@@ -146,6 +149,9 @@ write_environment() {
     echo "strace_trace=$STRACE_TRACE"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_kruda_db_dispatch=$BENCH_KRUDA_DB_DISPATCH_VALUE"
+    if [ -n "${DATABASE_URL:-}" ]; then echo "database_url_common_override=1"; else echo "database_url_common_override=0"; fi
+    if [ -n "${KRUDA_DATABASE_URL:-}" ]; then echo "kruda_database_url_override=1"; else echo "kruda_database_url_override=0"; fi
+    if [ -n "${ACTIX_DATABASE_URL:-}" ]; then echo "actix_database_url_override=1"; else echo "actix_database_url_override=0"; fi
     echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
@@ -197,14 +203,14 @@ start_server() {
           KRUDA_POOL_SIZE="$KRUDA_POOL_SIZE_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
           BENCH_KRUDA_DB_DISPATCH="$BENCH_KRUDA_DB_DISPATCH_VALUE" \
-          DATABASE_URL="$DATABASE_URL_VALUE" \
+          DATABASE_URL="$KRUDA_DATABASE_URL_VALUE" \
           "$bin"
       ) > "$log" 2>&1 &
       ;;
     actix)
       (
         cd "$SCRIPT_DIR/actix"
-        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$DATABASE_URL_VALUE" "$bin"
+        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$ACTIX_DATABASE_URL_VALUE" "$bin"
       ) > "$log" 2>&1 &
       ;;
   esac

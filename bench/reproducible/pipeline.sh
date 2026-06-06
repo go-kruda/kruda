@@ -40,7 +40,11 @@ BENCH_ROUNDS_VALUE="${BENCH_ROUNDS:-5}"
 PIPELINE_DURATION_VALUE="${PIPELINE_DURATION:-15s}"
 PIPELINE_WARMUP_VALUE="${PIPELINE_WARMUP:-5s}"
 PIPELINE_TIMEOUT_VALUE="${PIPELINE_TIMEOUT:-5s}"
-DATABASE_URL_VALUE="${DATABASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world?pool_max_conns=64&pool_min_conns=8}"
+DATABASE_BASE_URL_VALUE="${BENCH_DATABASE_BASE_URL:-postgres://benchmarkdbuser:benchmarkdbpass@localhost:5432/hello_world}"
+DATABASE_PGX_URL_VALUE="${DATABASE_BASE_URL_VALUE}?pool_max_conns=64&pool_min_conns=8"
+KRUDA_DATABASE_URL_VALUE="${KRUDA_DATABASE_URL:-${DATABASE_URL:-$DATABASE_PGX_URL_VALUE}}"
+FIBER_DATABASE_URL_VALUE="${FIBER_DATABASE_URL:-${DATABASE_URL:-$DATABASE_PGX_URL_VALUE}}"
+ACTIX_DATABASE_URL_VALUE="${ACTIX_DATABASE_URL:-${DATABASE_URL:-$DATABASE_BASE_URL_VALUE}}"
 
 read -r -a FRAMEWORKS <<< "${BENCH_FRAMEWORKS:-kruda fiber actix}"
 read -r -a PIPELINE_PROFILES <<< "${PIPELINE_PROFILES:-baseline-c128-d1:128:1 pipeline-c128-d8:128:8 pipeline-c256-d8:256:8}"
@@ -149,6 +153,10 @@ write_environment() {
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
     echo "bench_kruda_db_dispatch=$BENCH_KRUDA_DB_DISPATCH_VALUE"
+    if [ -n "${DATABASE_URL:-}" ]; then echo "database_url_common_override=1"; else echo "database_url_common_override=0"; fi
+    if [ -n "${KRUDA_DATABASE_URL:-}" ]; then echo "kruda_database_url_override=1"; else echo "kruda_database_url_override=0"; fi
+    if [ -n "${FIBER_DATABASE_URL:-}" ]; then echo "fiber_database_url_override=1"; else echo "fiber_database_url_override=0"; fi
+    if [ -n "${ACTIX_DATABASE_URL:-}" ]; then echo "actix_database_url_override=1"; else echo "actix_database_url_override=0"; fi
     echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
@@ -204,7 +212,7 @@ start_server() {
           KRUDA_POOL_SIZE="$KRUDA_POOL_SIZE_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
           BENCH_KRUDA_DB_DISPATCH="$BENCH_KRUDA_DB_DISPATCH_VALUE" \
-          DATABASE_URL="$DATABASE_URL_VALUE" \
+          DATABASE_URL="$KRUDA_DATABASE_URL_VALUE" \
           ./kruda-bench
       ) > "$log" 2>&1 &
       ;;
@@ -212,13 +220,13 @@ start_server() {
       (
         cd "$SCRIPT_DIR/fiber"
         env GOMAXPROCS="$GOMAXPROCS_VALUE" PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" \
-          DATABASE_URL="$DATABASE_URL_VALUE" ./fiber-bench
+          DATABASE_URL="$FIBER_DATABASE_URL_VALUE" ./fiber-bench
       ) > "$log" 2>&1 &
       ;;
     actix)
       (
         cd "$SCRIPT_DIR/actix"
-        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$DATABASE_URL_VALUE" \
+        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$ACTIX_DATABASE_URL_VALUE" \
           ./target/release/actix-bench
       ) > "$log" 2>&1 &
       ;;

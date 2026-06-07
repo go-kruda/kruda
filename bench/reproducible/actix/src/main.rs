@@ -156,6 +156,19 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or(3003);
 
     let enable_db = std::env::var("BENCH_ENABLE_DB").ok().as_deref() == Some("1");
+    let workers = std::env::var("BENCH_ACTIX_WORKERS").ok().and_then(|raw| {
+        if raw.is_empty() {
+            return None;
+        }
+        let value = raw
+            .parse::<usize>()
+            .unwrap_or_else(|_| panic!("BENCH_ACTIX_WORKERS must be a positive integer: {raw}"));
+        assert!(
+            value > 0,
+            "BENCH_ACTIX_WORKERS must be a positive integer: {raw}"
+        );
+        Some(value)
+    });
     let pool_data = if enable_db {
         let dsn = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
             "postgres://benchmarkdbuser:benchmarkdbpass@localhost:5433/hello_world".to_string()
@@ -171,7 +184,7 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         let app = App::new()
             .route("/", web::get().to(plaintext))
             .route("/plaintext-handler", web::get().to(plaintext))
@@ -189,8 +202,12 @@ async fn main() -> std::io::Result<()> {
         } else {
             app
         }
-    })
-    .bind(("0.0.0.0", port))?
-    .run()
-    .await
+    });
+    let server = if let Some(workers) = workers {
+        server.workers(workers)
+    } else {
+        server
+    };
+
+    server.bind(("0.0.0.0", port))?.run().await
 }

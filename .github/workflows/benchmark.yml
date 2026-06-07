@@ -137,24 +137,7 @@ jobs:
           set -euo pipefail
 
           benchstat main-benchmark.txt benchmark.txt | tee benchstat.txt
-
-          awk '
-            /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ && $0 !~ /~$/ {
-              for (i = 1; i <= NF; i++) {
-                if ($i ~ /^\+[0-9.]+%$/) {
-                  change = $i
-                  gsub(/^\+|%$/, "", change)
-                  if ((change + 0) > 10) bad = 1
-                }
-              }
-            }
-            END {
-              if (bad) {
-                print "::error::Benchmark regression above 10% detected by same-runner benchstat."
-                exit 1
-              }
-            }
-          ' benchstat.txt
+          scripts/check-benchmark-regressions.sh benchstat.txt
 
       - name: Summarize PR benchmark comparison
         if: ${{ always() && github.event_name == 'pull_request' }}
@@ -178,21 +161,7 @@ jobs:
               exit 0
             fi
 
-            regressions="$(
-              awk '
-                /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ && $0 !~ /~$/ {
-                  for (i = 1; i <= NF; i++) {
-                    if ($i ~ /^\+[0-9.]+%$/) {
-                      change = $i
-                      gsub(/^\+|%$/, "", change)
-                      if ((change + 0) > 10) {
-                        printf("- `%s` %s\n", $1, $i)
-                      }
-                    }
-                  }
-                }
-              ' benchstat.txt
-            )"
+            regressions="$(scripts/check-benchmark-regressions.sh --list benchstat.txt)"
 
             if [ -n "$regressions" ]; then
               echo "Regressions above 10%:"

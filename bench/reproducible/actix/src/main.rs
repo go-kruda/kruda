@@ -69,6 +69,33 @@ async fn db(pool: web::Data<Pool>) -> HttpResponse {
     HttpResponse::Ok().json(w)
 }
 
+async fn queries(
+    pool: web::Data<Pool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> HttpResponse {
+    let n: i32 = query
+        .get("q")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+        .max(1)
+        .min(500);
+    let client = pool.get().await.unwrap();
+    let mut worlds = Vec::with_capacity(n as usize);
+    let mut rng = rand::thread_rng();
+    for _ in 0..n {
+        let id: i32 = rng.gen_range(1..=10000);
+        let row = client
+            .query_one("SELECT id, randomnumber FROM world WHERE id=$1", &[&id])
+            .await
+            .unwrap();
+        worlds.push(World {
+            id: row.get(0),
+            random_number: row.get(1),
+        });
+    }
+    HttpResponse::Ok().json(worlds)
+}
+
 async fn fortunes(pool: web::Data<Pool>) -> HttpResponse {
     let client = pool.get().await.unwrap();
     let rows = client
@@ -197,6 +224,7 @@ async fn main() -> std::io::Result<()> {
         if let Some(pool) = &pool_data {
             app.app_data(pool.clone())
                 .route("/db", web::get().to(db))
+                .route("/queries", web::get().to(queries))
                 .route("/fortunes", web::get().to(fortunes))
                 .route("/updates", web::get().to(updates))
         } else {

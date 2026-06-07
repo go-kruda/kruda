@@ -166,6 +166,11 @@ jobs:
             echo
             echo "- Gate: fail on non-noisy same-runner benchmark regressions above 10%."
             echo "- Read ns/op together with B/op and allocs/op; allocation increases are reviewed even when latency is noisy."
+            echo "- Review checklist:"
+            echo "  - Confirm any regression row is on a route or helper touched by this PR."
+            echo "  - Treat default hot-path regressions as blockers even when historical chart data is noisy."
+            echo "  - Reject new allocation increases unless the PR explains why they are off the request hot path."
+            echo "  - Keep historical benchmark chart output informational; same-runner benchstat owns the merge gate."
             echo
 
             if [ ! -f benchstat.txt ]; then

@@ -306,7 +306,9 @@ def parse_wrk(path):
     errors = re.search(r"Socket errors: connect (\d+), read (\d+), write (\d+), timeout (\d+)", text)
     non2xx = re.search(r"Non-2xx or 3xx responses: (\d+)", text)
     rps = re.search(r"Requests/sec:\s+([0-9.]+)", text)
+    requests = re.search(r"(\d+) requests in", text)
     return {
+        "requests": int(requests.group(1)) if requests else 0,
         "rps": float(rps.group(1)) if rps else 0.0,
         "p50": latency_pct("50"),
         "p90": latency_pct("90"),
@@ -338,6 +340,12 @@ def parse_strace(path):
             calls[cols[-1]] = cols[3]
     return calls
 
+def int_value(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
 def sum_calls(calls, names):
     total = 0
     seen = False
@@ -347,6 +355,14 @@ def sum_calls(calls, names):
             total += int(calls[name])
     return str(total) if seen else ""
 
+def requests_per_syscall(requests, calls):
+    calls = int_value(calls)
+    return f"{requests / calls:.2f}" if requests and calls else ""
+
+def calls_per_1k_requests(calls, requests):
+    calls = int_value(calls)
+    return f"{calls / requests * 1000.0:.2f}" if requests and calls else ""
+
 rows = []
 for wrk in sorted((root / "raw").glob("*-wrk.txt")):
     stem = wrk.name[:-len("-wrk.txt")]
@@ -355,6 +371,11 @@ for wrk in sorted((root / "raw").glob("*-wrk.txt")):
     data = parse_wrk(wrk)
     perf = parse_perf(root / "raw" / f"{fw}-{route}-perf-perf.csv") if kind == "perf" else {}
     strace = parse_strace(root / "raw" / f"{fw}-{route}-strace-strace.txt") if kind == "strace" else {}
+    read_recv_calls = sum_calls(strace, ("read", "readv", "recvfrom", "recvmsg"))
+    write_send_calls = sum_calls(strace, ("write", "writev", "sendto", "sendmsg"))
+    epoll_wait_calls = sum_calls(strace, ("epoll_wait", "epoll_pwait", "epoll_pwait2"))
+    epoll_ctl_calls = strace.get("epoll_ctl", "")
+    futex_calls = strace.get("futex", "")
     rows.append({
         "framework": fw,
         "route": route,
@@ -364,18 +385,25 @@ for wrk in sorted((root / "raw").glob("*-wrk.txt")):
         "instructions": perf.get("instructions", ""),
         "task_clock": perf.get("task-clock", ""),
         "context_switches": perf.get("context-switches", ""),
-        "read_recv_calls": sum_calls(strace, ("read", "readv", "recvfrom", "recvmsg")),
-        "write_send_calls": sum_calls(strace, ("write", "writev", "sendto", "sendmsg")),
-        "epoll_wait_calls": sum_calls(strace, ("epoll_wait", "epoll_pwait", "epoll_pwait2")),
-        "epoll_ctl_calls": strace.get("epoll_ctl", ""),
-        "futex_calls": strace.get("futex", ""),
+        "read_recv_calls": read_recv_calls,
+        "write_send_calls": write_send_calls,
+        "requests_per_read_recv": requests_per_syscall(data["requests"], read_recv_calls),
+        "requests_per_write_send": requests_per_syscall(data["requests"], write_send_calls),
+        "epoll_wait_calls": epoll_wait_calls,
+        "epoll_wait_per_1k_requests": calls_per_1k_requests(epoll_wait_calls, data["requests"]),
+        "epoll_ctl_calls": epoll_ctl_calls,
+        "epoll_ctl_per_1k_requests": calls_per_1k_requests(epoll_ctl_calls, data["requests"]),
+        "futex_calls": futex_calls,
+        "futex_per_1k_requests": calls_per_1k_requests(futex_calls, data["requests"]),
     })
 
 headers = [
-    "framework", "route", "kind", "rps", "p50", "p90", "p99", "max",
+    "framework", "route", "kind", "requests", "rps", "p50", "p90", "p99", "max",
     "socket_errors", "non2xx", "cycles", "instructions", "task_clock",
-    "context_switches", "read_recv_calls", "write_send_calls", "epoll_wait_calls",
-    "epoll_ctl_calls", "futex_calls",
+    "context_switches", "read_recv_calls", "write_send_calls",
+    "requests_per_read_recv", "requests_per_write_send", "epoll_wait_calls",
+    "epoll_wait_per_1k_requests", "epoll_ctl_calls", "epoll_ctl_per_1k_requests",
+    "futex_calls", "futex_per_1k_requests",
 ]
 csv_path.write_text(",".join(headers) + "\n" + "\n".join(
     ",".join(str(r.get(h, "")) for h in headers) for r in rows
@@ -386,14 +414,17 @@ lines = [
     "",
     "Perf rows are the comparable wrk pass. Strace rows are intrusive syscall-count diagnostics; use their syscall counts, not their RPS or latency, for performance conclusions. A strace status of 130 is expected because the harness stops strace with SIGINT after the measured wrk run.",
     "",
-    "| Framework | Route | Kind | RPS | p99 | Socket errors | Non-2xx | read/recv | write/send | epoll wait | epoll_ctl | futex | cycles | instructions | context switches |",
-    "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    "| Framework | Route | Kind | Requests | RPS | p99 | Socket errors | Non-2xx | read/recv | write/send | req/read | req/write | epoll wait | epoll wait/1k req | epoll_ctl | epoll_ctl/1k req | futex | futex/1k req | cycles | instructions | context switches |",
+    "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
 ]
 for r in rows:
     lines.append(
-        f"| {r['framework']} | {r['route']} | {r['kind']} | {r['rps']:.2f} | {r['p99']} | "
+        f"| {r['framework']} | {r['route']} | {r['kind']} | {r['requests']} | {r['rps']:.2f} | {r['p99']} | "
         f"{r['socket_errors']} | {r['non2xx']} | {r['read_recv_calls']} | {r['write_send_calls']} | "
-        f"{r['epoll_wait_calls']} | {r['epoll_ctl_calls']} | {r['futex_calls']} | "
+        f"{r['requests_per_read_recv']} | {r['requests_per_write_send']} | "
+        f"{r['epoll_wait_calls']} | {r['epoll_wait_per_1k_requests']} | "
+        f"{r['epoll_ctl_calls']} | {r['epoll_ctl_per_1k_requests']} | "
+        f"{r['futex_calls']} | {r['futex_per_1k_requests']} | "
         f"{r['cycles']} | {r['instructions']} | {r['context_switches']} |"
     )
 md_path.write_text("\n".join(lines) + "\n")

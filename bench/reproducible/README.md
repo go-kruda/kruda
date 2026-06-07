@@ -292,6 +292,16 @@ Pipelined diagnostic results are written to
 | `summary.md` | Markdown table for diagnostic evidence |
 | `raw/*.txt` | Raw `pipeline-client` output and server logs |
 
+Non-pipelined syscall diagnostic results are written to
+`bench/reproducible/results/syscall-<timestamp>/`:
+
+| File | Purpose |
+|------|---------|
+| `environment.txt` | Git commit/dirty state, CPU, OS, toolchain, route, worker, perf, and strace metadata |
+| `summary.csv` | Machine-readable requests, latency, socket errors, perf counters, syscall counts, requests-per-syscall ratios, and per-1k-request syscall ratios |
+| `summary.md` | Markdown table for diagnostic CPU and I/O evidence |
+| `raw/*.txt` | Raw `wrk --latency`, `perf stat`, `strace -c`, server, attach, and status logs |
+
 Pipelined syscall diagnostic results are written to
 `bench/reproducible/results/pipeline-syscall-<timestamp>/`:
 

@@ -66,11 +66,19 @@ func main() {
 
 	fmt.Printf("[kruda] JSON encoder: %s\n", krudajson.EncoderName)
 
+	cpuDispatchMode, err := normalizeBenchDispatch(os.Getenv("BENCH_KRUDA_CPU_DISPATCH"), "inline")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "BENCH_KRUDA_CPU_DISPATCH: %v\n", err)
+		os.Exit(1)
+	}
+	if os.Getenv("BENCH_KRUDA_CPU_DISPATCH") != "" {
+		fmt.Printf("[kruda] CPU dispatch: %s\n", cpuDispatchMode)
+	}
+
 	enableDB := os.Getenv("BENCH_ENABLE_DB") == "1"
 	dbDispatchMode := "takeover"
 	if enableDB {
-		var err error
-		dbDispatchMode, err = normalizeBenchDBDispatch(os.Getenv("BENCH_KRUDA_DB_DISPATCH"))
+		dbDispatchMode, err = normalizeBenchDispatch(os.Getenv("BENCH_KRUDA_DB_DISPATCH"), "takeover")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "BENCH_KRUDA_DB_DISPATCH: %v\n", err)
 			os.Exit(1)
@@ -97,23 +105,23 @@ func main() {
 	plaintext := func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")
 	}
-	app.Get("/", plaintext, kruda.WingPlaintext())
-	app.Get("/plaintext-handler", plaintext, kruda.WingPlaintext())
+	app.Get("/", plaintext, cpuRouteOptions(cpuDispatchMode, kruda.Plaintext)...)
+	app.Get("/plaintext-handler", plaintext, cpuRouteOptions(cpuDispatchMode, kruda.Plaintext)...)
 
 	app.Get("/json-static", func(c *kruda.Ctx) error {
 		return c.SendStaticJSON(staticJSONBody)
-	}, kruda.WingJSON())
+	}, cpuRouteOptions(cpuDispatchMode, kruda.JSON)...)
 
 	jsonSerialize := func(c *kruda.Ctx) error {
 		return c.JSON(JSONMessage{Message: "Hello, World!"})
 	}
-	app.Get("/json", jsonSerialize, kruda.WingJSON())
-	app.Get("/json-serialize", jsonSerialize, kruda.WingJSON())
+	app.Get("/json", jsonSerialize, cpuRouteOptions(cpuDispatchMode, kruda.JSON)...)
+	app.Get("/json-serialize", jsonSerialize, cpuRouteOptions(cpuDispatchMode, kruda.JSON)...)
 
 	app.Get("/users/:id", func(c *kruda.Ctx) error {
 		id, _ := c.ParamInt("id")
 		return c.JSON(UserResponse{ID: id, Name: "Tiger", Email: "tiger@kruda.dev"})
-	}, kruda.WingJSON())
+	}, cpuRouteOptions(cpuDispatchMode, kruda.JSON)...)
 
 	app.Post("/json", func(c *kruda.Ctx) error {
 		var body JSONBody
@@ -121,7 +129,7 @@ func main() {
 			return c.Status(400).JSON(map[string]string{"error": err.Error()})
 		}
 		return c.JSON(JSONResponse{Message: "received", Data: body})
-	}, kruda.WingJSON())
+	}, cpuRouteOptions(cpuDispatchMode, kruda.JSON)...)
 
 	if enableDB {
 		registerDBRoutes(app, dbDispatchMode)
@@ -211,9 +219,13 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
 }
 
-func normalizeBenchDBDispatch(value string) (string, error) {
+func normalizeBenchDispatch(value string, defaultMode string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return defaultMode, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "takeover", "spear":
+	case "takeover", "spear":
 		return "takeover", nil
 	case "pool", "arrow":
 		return "pool", nil
@@ -224,6 +236,20 @@ func normalizeBenchDBDispatch(value string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown mode %q; use takeover, pool, spawn, or inline", value)
 	}
+}
+
+func cpuRouteOptions(mode string, base kruda.Feather) []kruda.RouteOption {
+	switch mode {
+	case "inline":
+		base.Dispatch = kruda.Inline
+	case "pool":
+		base.Dispatch = kruda.Pool
+	case "spawn":
+		base.Dispatch = kruda.Spawn
+	case "takeover":
+		base.Dispatch = kruda.Takeover
+	}
+	return []kruda.RouteOption{kruda.WingFeather(base)}
 }
 
 func dbRouteOptions(mode string, fallback kruda.RouteOption) []kruda.RouteOption {

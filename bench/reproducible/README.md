@@ -32,6 +32,7 @@ bench/reproducible/
 ├── resource.sh     # CPU/RAM resource benchmark script
 ├── pipeline.sh     # HTTP/1.1 pipelined I/O diagnostic harness
 ├── pipeline-syscall.sh # Intrusive pipelined syscall-count diagnostic harness
+├── sweep-kruda-cpu-dispatch.sh # Kruda-only CPU dispatch candidate sweep
 ├── pipeline-client/ # Go pipelined HTTP/1.1 load generator
 ├── profile-kruda.sh # Kruda-only pprof capture helper
 └── README.md
@@ -189,6 +190,21 @@ The sweep runs Kruda only, stores per-run `bench.sh` output under
 `results/kruda-db-dispatch-sweep-<timestamp>/runs/`, and writes aggregate
 median RPS/p99/error summaries to `dispatch-summary.csv`, `summary.md`, and an
 `environment.txt` with Git commit/dirty state plus sweep settings.
+
+For Kruda-only CPU-bound dispatch experiments, set `BENCH_KRUDA_CPU_DISPATCH`
+to `inline`, `takeover`, `pool`, or `spawn`. The default is `inline`, matching
+the normal CPU-bound benchmark routes. This setting affects only the Kruda
+benchmark app and is candidate-discovery tooling, not cross-runtime benchmark
+claim evidence:
+
+```bash
+BENCH_FRAMEWORKS=kruda BENCH_KRUDA_CPU_DISPATCH=takeover ./bench.sh json-serialize
+./sweep-kruda-cpu-dispatch.sh plaintext-handler json-static json-serialize
+```
+
+Current tiger evidence in
+`results/2026-06-07-cpu-dispatch-sweep-evidence.md` rejects CPU-bound dispatch
+mode changes as the next broad fair-handler performance path.
 
 Current Phase 6 tiger sweep evidence is in
 `results/phase6-profile-inventory-pr79-20260602T031308Z/`. In that run,

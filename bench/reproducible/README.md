@@ -257,7 +257,7 @@ Results are written to `bench/reproducible/results/<timestamp>/`:
 
 | File | Purpose |
 |------|---------|
-| `environment.txt` | CPU, OS, toolchain, route, profile, and worker metadata |
+| `environment.txt` | Git commit/dirty state, CPU, OS, toolchain, route, profile, and worker metadata |
 | `summary.csv` | Machine-readable per-round RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
 | `summary.md` | Markdown table for PR evidence |
 | `raw/*.txt` | Raw `wrk --latency` output and server logs |
@@ -267,7 +267,7 @@ Pipelined diagnostic results are written to
 
 | File | Purpose |
 |------|---------|
-| `environment.txt` | CPU, OS, toolchain, route, profile, worker, and pipeline metadata |
+| `environment.txt` | Git commit/dirty state, CPU, OS, toolchain, route, profile, worker, and pipeline metadata |
 | `summary.csv` | Machine-readable per-round requests, RPS, p50, p90, p99, max latency, socket errors, and non-2xx responses |
 | `summary.md` | Markdown table for diagnostic evidence |
 | `raw/*.txt` | Raw `pipeline-client` output and server logs |
@@ -277,7 +277,7 @@ Pipelined syscall diagnostic results are written to
 
 | File | Purpose |
 |------|---------|
-| `environment.txt` | CPU, OS, toolchain, route, profile, worker, pipeline, and strace metadata |
+| `environment.txt` | Git commit/dirty state, CPU, OS, toolchain, route, profile, worker, pipeline, and strace metadata |
 | `summary.csv` | Machine-readable requests, latency, socket errors, syscall counts, and requests-per-syscall ratios |
 | `summary.md` | Markdown table for diagnostic I/O evidence |
 | `raw/*.txt` | Raw `pipeline-client`, `strace -c`, server, attach, and status logs |
@@ -286,7 +286,7 @@ Resource results are written to `bench/reproducible/results/resource-<timestamp>
 
 | File | Purpose |
 |------|---------|
-| `environment.txt` | CPU, memory, OS, toolchain, route, profile, worker, and `pidstat` metadata |
+| `environment.txt` | Git commit/dirty state, CPU, memory, OS, toolchain, route, profile, worker, and `pidstat` metadata |
 | `resource-summary.csv` | Machine-readable wrk and pidstat output, including CPU, RSS, context switches, and RPS/core |
 | `resource-aggregated.csv` | Smaller table for cross-framework comparison |
 | `summary.md` | Markdown table for PR evidence |

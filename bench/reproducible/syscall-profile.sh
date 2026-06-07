@@ -32,6 +32,7 @@ WRK_THREADS="${WRK_THREADS:-4}"
 WRK_CONNECTIONS="${WRK_CONNECTIONS:-256}"
 GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
+ACTIX_WORKERS_VALUE="${BENCH_ACTIX_WORKERS:-}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-4096}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
@@ -146,6 +147,7 @@ write_environment() {
     echo "profile_sudo=$PROFILE_SUDO"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
+    echo "actix_workers=${ACTIX_WORKERS_VALUE:-default}"
     echo "kruda_read_buf_size=$KRUDA_READ_BUF_SIZE_VALUE"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
@@ -198,7 +200,7 @@ start_server() {
     actix)
       (
         cd "$SCRIPT_DIR/actix"
-        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" "$bin"
+        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ACTIX_WORKERS="$ACTIX_WORKERS_VALUE" "$bin"
       ) > "$log" 2>&1 &
       ;;
   esac

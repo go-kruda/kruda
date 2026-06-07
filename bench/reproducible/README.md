@@ -165,6 +165,9 @@ Actix receives the same base PostgreSQL DSN without pgx-only query options.
 Set `KRUDA_DATABASE_URL`, `FIBER_DATABASE_URL`, or `ACTIX_DATABASE_URL` for
 framework-specific overrides. Set `BENCH_DATABASE_BASE_URL` to change the shared
 default base DSN without disabling those framework-specific defaults.
+Set `BENCH_ACTIX_WORKERS` only for methodology controls that intentionally pin
+Actix's worker count. Leave it unset for the default Actix runtime behavior.
+The harness records the effective `actix_workers` value in `environment.txt`.
 
 For Kruda-only DB dispatch experiments, set `BENCH_KRUDA_DB_DISPATCH` to
 `takeover`, `pool`, `spawn`, or `inline`. This affects only the Kruda

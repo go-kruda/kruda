@@ -25,6 +25,7 @@ GOMAXPROCS_VALUE="${GOMAXPROCS:-8}"
 # with the active load-generator threads unless the run is explicitly studying
 # worker scaling. This does not change Kruda's framework default.
 KRUDA_WORKERS_VALUE="${KRUDA_WORKERS:-4}"
+ACTIX_WORKERS_VALUE="${BENCH_ACTIX_WORKERS:-}"
 KRUDA_READ_BUF_SIZE_VALUE="${KRUDA_READ_BUF_SIZE:-}"
 KRUDA_POOL_SIZE_VALUE="${KRUDA_POOL_SIZE:-}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
@@ -168,6 +169,7 @@ write_environment() {
     echo "kruda_go_tags=${KRUDA_GO_TAGS_VALUE:-default}"
     echo "gomaxprocs=$GOMAXPROCS_VALUE"
     echo "kruda_workers=$KRUDA_WORKERS_VALUE"
+    echo "actix_workers=${ACTIX_WORKERS_VALUE:-default}"
     echo "kruda_read_buf_size=${KRUDA_READ_BUF_SIZE_VALUE:-default}"
     echo "kruda_pool_size=${KRUDA_POOL_SIZE_VALUE:-default}"
     echo "bench_rounds=$BENCH_ROUNDS_VALUE"
@@ -232,7 +234,8 @@ start_server() {
     actix)
       (
         cd "$SCRIPT_DIR/actix"
-        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" DATABASE_URL="$ACTIX_DATABASE_URL_VALUE" \
+        env PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ACTIX_WORKERS="$ACTIX_WORKERS_VALUE" \
+          DATABASE_URL="$ACTIX_DATABASE_URL_VALUE" \
           ./target/release/actix-bench
       ) > "$log" 2>&1 &
       ;;

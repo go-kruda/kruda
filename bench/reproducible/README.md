@@ -321,6 +321,15 @@ These are normal handler-path routes. Static bypass route options are intentiona
 
 The corresponding resource evidence is in `results/resource-main-984f0d6-20260524T174429Z/`, with a summary note in `results/2026-05-25-main-984f0d6-tiger-evidence.md`. It uses `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and a default Kruda benchmark binary without the `bench_pprof` build tag to match the harness `wrk -t4` CPU-bound profiles. The run shows zero socket errors and zero non-2xx responses, with Kruda throughput, p99, and RPS/core ahead of Actix while RSS remains higher than Actix.
 
+The accepted v1.2.6 read-only DB revalidation is in
+`results/2026-06-06-v126-db-evidence.md`. It uses `BENCH_ENABLE_DB=1`,
+`BENCH_KRUDA_DB_DISPATCH=takeover`, Kruda and Actix only, framework-specific
+default DB DSNs, three measured rounds, 8s measured duration, and 2s warmup.
+Throughput-profile medians were +166.13% versus Actix for `/db` and +92.47%
+for `/fortunes`, with materially lower p99 latency and zero socket errors and
+zero non-2xx responses. Keep this scoped to read-only DB workloads; do not mix
+it into CPU-bound fair handler-path claims.
+
 The v1.2.6 HTTP/1.1 pipelined diagnostic recheck is in
 `results/2026-06-07-v126-pipeline-evidence.md`. It uses `pipeline.sh` with
 Kruda and Actix, three rounds, 5s measured duration, 2s warmup, and profiles

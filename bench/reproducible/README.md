@@ -184,7 +184,8 @@ For repeatable Kruda-only DB dispatch sweeps, use:
 
 The sweep runs Kruda only, stores per-run `bench.sh` output under
 `results/kruda-db-dispatch-sweep-<timestamp>/runs/`, and writes aggregate
-median RPS/p99/error summaries to `dispatch-summary.csv` and `summary.md`.
+median RPS/p99/error summaries to `dispatch-summary.csv`, `summary.md`, and an
+`environment.txt` with Git commit/dirty state plus sweep settings.
 
 Current Phase 6 tiger sweep evidence is in
 `results/phase6-profile-inventory-pr79-20260602T031308Z/`. In that run,

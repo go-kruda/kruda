@@ -31,6 +31,7 @@ KRUDA_POOL_SIZE_VALUE="${KRUDA_POOL_SIZE:-}"
 BENCH_ENABLE_DB_VALUE="${BENCH_ENABLE_DB:-0}"
 BENCH_ENABLE_PPROF_VALUE="${BENCH_ENABLE_PPROF:-0}"
 BENCH_KRUDA_DB_DISPATCH_VALUE="${BENCH_KRUDA_DB_DISPATCH:-takeover}"
+BENCH_KRUDA_CPU_DISPATCH_VALUE="${BENCH_KRUDA_CPU_DISPATCH:-inline}"
 KRUDA_GO_TAGS_VALUE="${KRUDA_GO_TAGS-kruda_stdjson}"
 if [ "$KRUDA_GO_TAGS_VALUE" = "default" ] || [ "$KRUDA_GO_TAGS_VALUE" = "none" ]; then
   KRUDA_GO_TAGS_VALUE=""
@@ -162,6 +163,7 @@ write_environment() {
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
     echo "bench_enable_pprof=$BENCH_ENABLE_PPROF_VALUE"
     echo "bench_kruda_db_dispatch=$BENCH_KRUDA_DB_DISPATCH_VALUE"
+    echo "bench_kruda_cpu_dispatch=$BENCH_KRUDA_CPU_DISPATCH_VALUE"
     if [ -n "${DATABASE_URL:-}" ]; then echo "database_url_common_override=1"; else echo "database_url_common_override=0"; fi
     if [ -n "${KRUDA_DATABASE_URL:-}" ]; then echo "kruda_database_url_override=1"; else echo "kruda_database_url_override=0"; fi
     if [ -n "${FIBER_DATABASE_URL:-}" ]; then echo "fiber_database_url_override=1"; else echo "fiber_database_url_override=0"; fi
@@ -220,6 +222,7 @@ start_server() {
           KRUDA_POOL_SIZE="$KRUDA_POOL_SIZE_VALUE" \
           PORT="$port" BENCH_ENABLE_DB="$BENCH_ENABLE_DB_VALUE" BENCH_ENABLE_PPROF="$BENCH_ENABLE_PPROF_VALUE" \
           BENCH_KRUDA_DB_DISPATCH="$BENCH_KRUDA_DB_DISPATCH_VALUE" \
+          BENCH_KRUDA_CPU_DISPATCH="$BENCH_KRUDA_CPU_DISPATCH_VALUE" \
           DATABASE_URL="$KRUDA_DATABASE_URL_VALUE" \
           ./kruda-bench
       ) > "$log" 2>&1 &

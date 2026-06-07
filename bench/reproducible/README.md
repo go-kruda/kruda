@@ -300,14 +300,16 @@ When those conditions are not met, use "same ballpark as Actix." Do not make RPS
 
 ## Current Evidence
 
-The latest clean tiger evidence on `perf/wing-nonpipelined-io-profile` is in
-`results/2026-06-04-clean-cross-runtime-evidence.md` and
-`results/2026-06-04-clean-resource-evidence.md`. It uses the normal
-CPU-bound handler routes, `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and
+A post-v1.2.5 CPU-bound tiger follow-up on `perf/wing-nonpipelined-io-profile`
+is in `results/2026-06-04-clean-cross-runtime-evidence.md` and
+`results/2026-06-04-clean-resource-evidence.md`. It uses the normal CPU-bound
+handler routes, `GOMAXPROCS=8`, `KRUDA_WORKERS=4`, and
 `KRUDA_READ_BUF_SIZE=4096`. The run satisfied the "faster than Actix" gate on
 all measured route/profile rows with zero socket errors and zero non-2xx
-responses. The resource evidence shows Kruda with higher RPS/core than Actix
-while Actix still uses less RSS.
+responses. Treat it as CPU-bound follow-up evidence, separate from the v1.2.6
+DB, pipelined HTTP/1.1, and read-buffer candidate tracks below. The resource
+evidence shows Kruda with higher RPS/core than Actix while Actix still uses less
+RSS.
 
 The committed tiger evidence captured at commit `984f0d6` satisfies the "faster than Actix" gate for CPU-bound Wing handler routes under both the latency and throughput profiles. Throughput-profile medians:
 

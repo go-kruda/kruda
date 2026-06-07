@@ -16,6 +16,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 KRUDA_DIR="$SCRIPT_DIR/kruda"
 TIMESTAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
 RESULT_DIR="${RESULT_DIR:-"$SCRIPT_DIR/results/profile-$TIMESTAMP"}"
@@ -98,6 +99,13 @@ write_environment() {
   {
     echo "timestamp_utc=$TIMESTAMP"
     echo "script_dir=$SCRIPT_DIR"
+    echo "repo_root=$REPO_ROOT"
+    echo "git_commit=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+    if git -C "$REPO_ROOT" diff --quiet --ignore-submodules -- && git -C "$REPO_ROOT" diff --cached --quiet --ignore-submodules --; then
+      echo "git_tracked_dirty=0"
+    else
+      echo "git_tracked_dirty=1"
+    fi
     echo "result_dir=$RESULT_DIR"
     echo "routes=${ROUTES[*]}"
     echo "port=$PORT_VALUE"

@@ -148,6 +148,11 @@ write_environment() {
     echo "script_dir=$SCRIPT_DIR"
     echo "repo_root=$REPO_ROOT"
     echo "git_commit=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+    if git -C "$REPO_ROOT" diff --quiet --ignore-submodules -- && git -C "$REPO_ROOT" diff --cached --quiet --ignore-submodules --; then
+      echo "git_tracked_dirty=0"
+    else
+      echo "git_tracked_dirty=1"
+    fi
     echo "result_dir=$RESULT_DIR"
     echo "workload=http1_pipelined_diagnostic"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"

@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         go-version: ['1.25.10', 'stable']
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-2025]
 
     steps:
       - name: Checkout code
@@ -54,7 +54,7 @@ jobs:
           go test -v -race -tags kruda_stdjson $COVER_FLAG ./...
 
       - name: Test Wing alias module (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+        if: runner.os != 'Windows'
         # Wing alias module's go.mod requires kruda at the new tag version, which
         # doesn't exist on the proxy until release. For PR CI we add a local
         # replace so tests can resolve kruda from the working tree. The replace

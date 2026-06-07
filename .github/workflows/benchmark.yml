@@ -210,6 +210,20 @@ jobs:
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output.txt
+            benchmark.txt
+            main-output.txt
+            main-benchmark.txt
+            benchstat.txt
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Get system information
         uses: kenchan0130/actions-system-info@v1.4.0
         id: system-info

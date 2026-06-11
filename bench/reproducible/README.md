@@ -362,6 +362,16 @@ for `/fortunes`, with materially lower p99 latency and zero socket errors and
 zero non-2xx responses. Keep this scoped to read-only DB workloads; do not mix
 it into CPU-bound fair handler-path claims.
 
+The corrected Actix `/queries` route evidence is in
+`results/2026-06-07-actix-queries-db-extended-evidence.md`, and the
+Fiber-inclusive read-only DB run from `main` commit `b84e19b` is in
+`results/2026-06-11-fiber-db-read-evidence.md`. The Fiber-inclusive run
+reproduces the scoped `/db`, `/queries`, and `/fortunes` wins versus Actix and
+shows the scoped DB story does not extend to Fiber: Kruda median RPS was
+0.41-10.84% below Fiber on those routes, with lower median p99 than Fiber on
+`/db` and `/queries` but not `/fortunes`. Use "same ballpark as Fiber" for
+read-only DB RPS wording.
+
 The v1.2.6 HTTP/1.1 pipelined diagnostic recheck is in
 `results/2026-06-07-v126-pipeline-evidence.md`. It uses `pipeline.sh` with
 Kruda and Actix, three rounds, 5s measured duration, 2s warmup, and profiles

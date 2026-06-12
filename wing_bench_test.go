@@ -8,12 +8,30 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
 )
+
+// BenchmarkWingStringLaneFortuneSize measures the string fast lane at a
+// fortunes-sized HTML payload: one SetStringBody + one single-pass serialize
+// into a reused buffer. Expected 0 allocs/op.
+func BenchmarkWingStringLaneFortuneSize(b *testing.B) {
+	payload := strings.Repeat("<tr><td>fortune</td></tr>", 52) // ≈1.3 KB, fortunes-sized
+	buf := make([]byte, 0, 4096)
+	r := acquireResponse()
+	defer releaseResponse(r)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.SetStringBody(200, "text/html; charset=utf-8", payload)
+		buf = r.appendStringTo(buf[:0])
+	}
+	_ = buf
+}
 
 // ============================================================================
 // Level 1 — CPU-only benchmarks

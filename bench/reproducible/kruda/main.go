@@ -147,7 +147,7 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 		w := World{ID: int32(rand.IntN(10000) + 1)}
 		pool.QueryRow(context.Background(), "worldSelect", w.ID).Scan(&w.RandomNumber)
 		return c.JSON(w)
-	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
+	}, dbRouteOptions(dbDispatchMode, kruda.DB)...)
 
 	// TFB: multiple queries — pipeline via SendBatch
 	app.Get("/queries", func(c *kruda.Ctx) error {
@@ -166,7 +166,7 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 		}
 		br.Close()
 		return c.JSON(worlds)
-	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
+	}, dbRouteOptions(dbDispatchMode, kruda.DB)...)
 
 	// TFB: fortunes
 	app.Get("/fortunes", func(c *kruda.Ctx) error {
@@ -186,7 +186,7 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 		sort.Slice(fortunes, func(i, j int) bool { return fortunes[i].Message < fortunes[j].Message })
 
 		return c.HTML(fortunesHTML(fortunes))
-	}, dbRouteOptions(dbDispatchMode, kruda.WingRender())...)
+	}, dbRouteOptions(dbDispatchMode, kruda.Render)...)
 
 	// TFB: updates — batch SELECT + batch UPDATE
 	app.Get("/updates", func(c *kruda.Ctx) error {
@@ -216,7 +216,7 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 			ids, nums,
 		)
 		return c.JSON(worlds)
-	}, dbRouteOptions(dbDispatchMode, kruda.WingQuery())...)
+	}, dbRouteOptions(dbDispatchMode, kruda.DB)...)
 }
 
 func normalizeBenchDispatch(value string, defaultMode string) (string, error) {
@@ -238,7 +238,7 @@ func normalizeBenchDispatch(value string, defaultMode string) (string, error) {
 	}
 }
 
-func cpuRouteOptions(mode string, base kruda.Feather) []kruda.RouteOption {
+func cpuRouteOptions(mode string, base kruda.Preset) []kruda.RouteOption {
 	switch mode {
 	case "inline":
 		base.Dispatch = kruda.Inline
@@ -249,7 +249,7 @@ func cpuRouteOptions(mode string, base kruda.Feather) []kruda.RouteOption {
 	case "takeover":
 		base.Dispatch = kruda.Takeover
 	}
-	return []kruda.RouteOption{kruda.WingFeather(base)}
+	return []kruda.RouteOption{base}
 }
 
 func dbRouteOptions(mode string, fallback kruda.RouteOption) []kruda.RouteOption {
@@ -257,11 +257,11 @@ func dbRouteOptions(mode string, fallback kruda.RouteOption) []kruda.RouteOption
 	case "takeover":
 		return []kruda.RouteOption{fallback}
 	case "pool":
-		return []kruda.RouteOption{kruda.WingFeather(kruda.Arrow)}
+		return []kruda.RouteOption{kruda.Arrow}
 	case "spawn":
-		return []kruda.RouteOption{kruda.WingFeather(kruda.Feather{Dispatch: kruda.Spawn})}
+		return []kruda.RouteOption{kruda.Preset{Dispatch: kruda.Spawn}}
 	case "inline":
-		return []kruda.RouteOption{kruda.WingFeather(kruda.Bolt)}
+		return []kruda.RouteOption{kruda.Bolt}
 	default:
 		return nil
 	}

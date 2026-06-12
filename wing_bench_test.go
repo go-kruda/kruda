@@ -8,12 +8,30 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
 )
+
+// BenchmarkWingStringLaneFortuneSize measures the string fast lane at a
+// fortunes-sized HTML payload: one SetStringBody + one single-pass serialize
+// into a reused buffer. Expected 0 allocs/op.
+func BenchmarkWingStringLaneFortuneSize(b *testing.B) {
+	payload := strings.Repeat("<tr><td>fortune</td></tr>", 52) // ≈1.3 KB, fortunes-sized
+	buf := make([]byte, 0, 4096)
+	r := acquireResponse()
+	defer releaseResponse(r)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.SetStringBody(200, "text/html; charset=utf-8", payload)
+		buf = r.appendStringTo(buf[:0])
+	}
+	_ = buf
+}
 
 // ============================================================================
 // Level 1 — CPU-only benchmarks
@@ -87,9 +105,8 @@ func BenchmarkCPUResponsePlaintext(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		r := acquireResponse()
-		r.responseMode = responsePlaintext
-		r.SetStaticText(200, "text/plain; charset=utf-8", "Hello, World!")
-		out = r.appendPlaintextTo(out[:0])
+		r.SetStringBody(200, "text/plain; charset=utf-8", "Hello, World!")
+		out = r.appendStringTo(out[:0])
 		releaseResponse(r)
 	}
 	runtime.KeepAlive(out)
@@ -129,13 +146,13 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 	}
 }
 
-func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
+func BenchmarkCPUHandlerPlaintextPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/users/42", func(c *Ctx) error {
 		return c.Text("Hello, World!")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /users/42"]
+	f := app.transport.(*Transport).config.Presets["GET /users/42"]
 
 	b.ReportAllocs()
 	out := make([]byte, 0, 256)
@@ -143,22 +160,21 @@ func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
 		req, _, _ := parseHTTPRequestFast(rawGET, noLimits)
 		finalizeRequestPath(req, f)
 		resp := acquireResponse()
-		resp.responseMode = responsePlaintext
 		app.serveKrudaRoute(resp, req, f.handlers)
-		out = resp.appendPlaintextTo(out[:0])
+		out = resp.appendStringTo(out[:0])
 		releaseResponse(resp)
 		releaseRequest(req)
 	}
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONStaticPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticJSON(benchStaticJSONBody)
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()
@@ -176,13 +192,13 @@ func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONStaticBytesFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONStaticBytesPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()
@@ -200,13 +216,13 @@ func BenchmarkCPUHandlerJSONStaticBytesFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONSerializeFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONSerializePreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-serialize", func(c *Ctx) error {
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-serialize"]
+	f := app.transport.(*Transport).config.Presets["GET /json-serialize"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()

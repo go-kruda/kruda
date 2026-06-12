@@ -52,13 +52,13 @@ func TestApp_All_AllMethods(t *testing.T) {
 	}
 }
 
-// --- addRoute with WingFeather option ---
+// --- addRoute with Preset route option ---
 
 func TestApp_AddRoute_WithWingOption(t *testing.T) {
 	app := New()
 	app.Get("/health", func(c *Ctx) error {
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	req := &mockRequest{method: "GET", path: "/health"}
@@ -74,7 +74,7 @@ func TestGroup_AddRoute_WithWingOption(t *testing.T) {
 	g := app.Group("/api")
 	g.Get("/data", func(c *Ctx) error {
 		return c.JSON(Map{"ok": true})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	req := &mockRequest{method: "GET", path: "/api/data"}
@@ -93,7 +93,7 @@ func TestApp_AddRoute_WingStaticOptionNormalHandlerFallback(t *testing.T) {
 	})
 	app.Get("/healthz", func(c *Ctx) error {
 		return c.Text("handler")
-	}, WingStaticText(200, "text/plain; charset=utf-8", "static"))
+	}, StaticText(200, "text/plain; charset=utf-8", "static"))
 	app.Compile()
 
 	tc := NewTestClient(app)

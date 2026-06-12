@@ -59,6 +59,11 @@ func (c *Ctx) Responded() bool {
 // and fasthttp writes it to the TCP socket before GC reclaims it.
 // This eliminates jsonBufPool contention under high concurrency.
 // On net/http or non-default encoder paths, falls back to pooled buffer or direct marshal.
+//
+// Fast lane rule: a response built from a single c.JSON/c.Text/c.HTML call
+// with no custom headers or cookies is written through the transport's
+// zero-copy lane automatically; setting any header, cookie, or secure-header
+// config falls back to the standard path with identical output.
 func (c *Ctx) JSON(v any) error {
 	if c.responded {
 		return ErrAlreadyResponded
@@ -169,6 +174,11 @@ func (c *Ctx) jsonSend(data []byte) error {
 }
 
 // Text sends a plain text response.
+//
+// Fast lane rule: a response built from a single c.JSON/c.Text/c.HTML call
+// with no custom headers or cookies is written through the transport's
+// zero-copy lane automatically; setting any header, cookie, or secure-header
+// config falls back to the standard path with identical output.
 func (c *Ctx) Text(s string) error {
 	if c.responded {
 		return ErrAlreadyResponded
@@ -177,11 +187,11 @@ func (c *Ctx) Text(s string) error {
 	if c.tryFastHTTPText(s) {
 		return nil
 	}
-	// Fast path for transports with pre-built static response support (e.g., Wing)
-	if sr, ok := c.writer.(transport.StaticTextResponder); ok {
+	// Fast path for transports with a zero-copy string lane (e.g., Wing)
+	if sr, ok := c.writer.(transport.StringResponder); ok {
 		if c.canBypassHeaderWrite(true) {
 			c.responded = true
-			sr.SetStaticText(c.status, "text/plain; charset=utf-8", s)
+			sr.SetStringBody(c.status, "text/plain; charset=utf-8", s)
 			return nil
 		}
 	}
@@ -214,7 +224,20 @@ func (c *Ctx) canBypassHeaderWrite(includeSecurityHeaders bool) bool {
 
 // HTML sends an HTML response (raw string, no template).
 // For template rendering, use c.Render() with a ViewEngine.
+//
+// Fast lane rule: a response built from a single c.JSON/c.Text/c.HTML call
+// with no custom headers or cookies is written through the transport's
+// zero-copy lane automatically; setting any header, cookie, or secure-header
+// config falls back to the standard path with identical output.
 func (c *Ctx) HTML(html string) error {
+	if c.responded {
+		return ErrAlreadyResponded
+	}
+	if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
+		c.responded = true
+		sr.SetStringBody(c.status, "text/html; charset=utf-8", html)
+		return nil
+	}
 	c.contentType = "text/html; charset=utf-8"
 	return c.sendBytes([]byte(html))
 }

@@ -36,7 +36,7 @@ func TestWorkerServeRouteUsesSingleHandlerFastPath(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Preset{
 		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
 	})
 
@@ -51,7 +51,7 @@ func TestWorkerServeRouteFallsBackWhenSingleHandlerDeclines(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Preset{
 		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
 	})
 
@@ -66,7 +66,7 @@ func TestWorkerServeRouteUsesCleanExactRouteFlag(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, Preset{
 		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
 		path:      "/plaintext",
 		pathClean: true,
@@ -83,7 +83,7 @@ func TestWorkerServeRouteSkipsFastPathForDirtyExactRoute(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/assets/app.js", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/assets/app.js", keepAlive: true}, Preset{
 		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
 		path:      "/assets/app.js",
 		pathClean: false,
@@ -94,12 +94,12 @@ func TestWorkerServeRouteSkipsFastPathForDirtyExactRoute(t *testing.T) {
 	}
 }
 
-func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetCachesExactRoute(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 	}, Arrow)}
 
-	got := w.lookupFeather("GET", "/plaintext")
+	got := w.lookupPreset("GET", "/plaintext")
 	if got.path != "/plaintext" {
 		t.Fatalf("first lookup path = %q, want /plaintext", got.path)
 	}
@@ -107,24 +107,24 @@ func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
 		t.Fatalf("cache = %q %q, want GET /plaintext", w.lastMethod0, w.lastPath0)
 	}
 
-	got = w.lookupFeather("GET", "/plaintext")
+	got = w.lookupPreset("GET", "/plaintext")
 	if got.Dispatch != Plaintext.Dispatch || got.ResponseMode != Plaintext.ResponseMode {
 		t.Fatalf("cached lookup = %+v, want Plaintext", got)
 	}
 }
 
-func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetDoesNotCacheParamOrDefaultPath(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /users/:id": Arrow,
 	}, Bolt)}
 
-	_ = w.lookupFeather("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/plaintext")
 	if w.lastPath0 != "/plaintext" {
 		t.Fatalf("exact route was not cached: %q", w.lastPath0)
 	}
 
-	got := w.lookupFeather("GET", "/users/42")
+	got := w.lookupPreset("GET", "/users/42")
 	if got.Dispatch != Arrow.Dispatch {
 		t.Fatalf("param lookup dispatch = %v, want Arrow", got.Dispatch)
 	}
@@ -132,7 +132,7 @@ func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
 		t.Fatalf("param lookup replaced exact cache with %q", w.lastPath0)
 	}
 
-	got = w.lookupFeather("GET", "/missing")
+	got = w.lookupPreset("GET", "/missing")
 	if got.Dispatch != Bolt.Dispatch {
 		t.Fatalf("default lookup dispatch = %v, want Bolt", got.Dispatch)
 	}
@@ -141,19 +141,19 @@ func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
 	}
 }
 
-func TestWorkerLookupFeatherPromotesSecondExactCacheSlot(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetPromotesSecondExactCacheSlot(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
 
-	_ = w.lookupFeather("GET", "/plaintext")
-	_ = w.lookupFeather("GET", "/json")
+	_ = w.lookupPreset("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/json")
 	if w.lastPath0 != "/json" || w.lastPath1 != "/plaintext" {
 		t.Fatalf("cache = [%q, %q], want [/json, /plaintext]", w.lastPath0, w.lastPath1)
 	}
 
-	got := w.lookupFeather("GET", "/plaintext")
+	got := w.lookupPreset("GET", "/plaintext")
 	if got.ResponseMode != Plaintext.ResponseMode {
 		t.Fatalf("promoted lookup = %+v, want Plaintext", got)
 	}
@@ -162,18 +162,17 @@ func TestWorkerLookupFeatherPromotesSecondExactCacheSlot(t *testing.T) {
 	}
 }
 
-func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
+func TestWingResponseSetStringBodyBuildZeroCopy(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	resp.responseMode = responsePlaintext
-	resp.SetStaticText(201, "text/plain; charset=utf-8", "created")
+	resp.SetStringBody(201, "text/plain; charset=utf-8", "created")
 
 	if resp.staticResp != nil {
-		t.Fatal("plaintext response mode should not use the shared static response cache")
+		t.Fatal("string fast lane should not use the shared static response cache")
 	}
-	if !resp.plaintextFast {
-		t.Fatal("plaintext response mode did not enable plaintext fast serialization")
+	if !resp.stringFast {
+		t.Fatal("SetStringBody did not enable the string fast lane")
 	}
 
 	data := resp.buildZeroCopy()
@@ -184,26 +183,12 @@ func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
 		[]byte("\r\n\r\ncreated"),
 	} {
 		if !bytes.Contains(data, want) {
-			t.Fatalf("plaintext response missing %q in:\n%s", want, data)
+			t.Fatalf("string lane response missing %q in:\n%s", want, data)
 		}
 	}
 }
 
-func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
-	resp := acquireResponse()
-	defer releaseResponse(resp)
-
-	resp.SetStaticText(200, "text/plain; charset=utf-8", "ok")
-
-	if resp.staticResp == nil {
-		t.Fatal("generic Wing text path should keep using the shared static response cache")
-	}
-	if resp.plaintextFast {
-		t.Fatal("generic Wing text path should not enable plaintext response mode")
-	}
-}
-
-func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+func TestPlaintextPresetModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool
 	app.Use(func(c *Ctx) error {
@@ -221,33 +206,32 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app.Get("/plaintext", func(c *Ctx) error {
 		handlerRan = true
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /plaintext"]
+	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext route did not retain its handler chain")
+		t.Fatal("Plaintext route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
 	if !middlewareRan || !beforeRan || !handlerRan || !afterRan {
 		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
 	}
-	if !resp.plaintextFast {
-		t.Fatal("simple WingPlaintext handler did not use plaintext response mode")
+	if !resp.stringFast {
+		t.Fatal("simple Plaintext handler did not ride the string fast lane")
 	}
 }
 
-func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
+func TestPlaintextPresetModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	app := New(Wing())
 	var groupMiddlewareRan, handlerRan bool
 	api := app.Group("/api").Use(func(c *Ctx) error {
@@ -257,56 +241,54 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	api.Get("/plaintext", func(c *Ctx) error {
 		handlerRan = true
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /api/plaintext"]
+	f := tr.config.Presets["GET /api/plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext group route did not retain its handler chain")
+		t.Fatal("Plaintext group route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/api/plaintext", keepAlive: true}, f.handlers)
 
 	if !groupMiddlewareRan || !handlerRan {
 		t.Fatalf("groupMiddleware=%v handler=%v", groupMiddlewareRan, handlerRan)
 	}
-	if !resp.plaintextFast {
-		t.Fatal("simple grouped WingPlaintext handler did not use plaintext response mode")
+	if !resp.stringFast {
+		t.Fatal("simple grouped Plaintext handler did not ride the string fast lane")
 	}
 }
 
-func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+func TestPlaintextPresetModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	app := New(Wing())
 	app.Get("/plaintext", func(c *Ctx) error {
 		c.SetHeader("X-Test", "yes")
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /plaintext"]
+	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext route did not retain its handler chain")
+		t.Fatal("Plaintext route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
-	if resp.plaintextFast {
+	if resp.stringFast {
 		t.Fatal("custom response headers must fall back to generic serialization")
 	}
 	data := resp.buildZeroCopy()
@@ -315,20 +297,20 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	}
 }
 
-func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
+func TestPresetJSONStaticBytesUseJSONResponder(t *testing.T) {
 	app := New(Wing())
 	var handlerRan bool
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -359,14 +341,14 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticJSON([]byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -391,7 +373,7 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	}
 }
 
-func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
+func TestPresetJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	if krudajson.EncoderName != "encoding/json" {
 		t.Skip("stream responder is used only when the active encoder avoids an intermediate marshal allocation")
 	}
@@ -404,14 +386,14 @@ func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	app.Get("/json-serialize", func(c *Ctx) error {
 		handlerRan = true
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-serialize"]
+	f := tr.config.Presets["GET /json-serialize"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -432,7 +414,7 @@ func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	}
 }
 
-func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
+func TestPresetJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
 	app := New(Wing(), WithJSONEncoder(func(v any) ([]byte, error) {
 		return []byte(`{"custom":true}`), nil
 	}))
@@ -440,14 +422,14 @@ func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
 	app.Get("/json-serialize", func(c *Ctx) error {
 		handlerRan = true
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-serialize"]
+	f := tr.config.Presets["GET /json-serialize"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -486,22 +468,22 @@ func TestWingResponseJSONAppendMatchesBuildZeroCopy(t *testing.T) {
 	}
 }
 
-func BenchmarkWorkerLookupFeatherCachedExact(b *testing.B) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func BenchmarkWorkerLookupPresetCachedExact(b *testing.B) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
-	_ = w.lookupFeather("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/plaintext")
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = w.lookupFeather("GET", "/plaintext")
+		_ = w.lookupPreset("GET", "/plaintext")
 	}
 }
 
-func BenchmarkWorkerLookupFeatherAlternatingExact(b *testing.B) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func BenchmarkWorkerLookupPresetAlternatingExact(b *testing.B) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
@@ -509,12 +491,12 @@ func BenchmarkWorkerLookupFeatherAlternatingExact(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = w.lookupFeather("GET", "/plaintext")
-		_ = w.lookupFeather("GET", "/json")
+		_ = w.lookupPreset("GET", "/plaintext")
+		_ = w.lookupPreset("GET", "/json")
 	}
 }
 
-func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+func TestPresetJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool
 	app.Use(func(c *Ctx) error {
@@ -532,14 +514,14 @@ func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -557,19 +539,19 @@ func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	}
 }
 
-func TestWingJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+func TestPresetJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		c.SetHeader("X-Test", "yes")
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}

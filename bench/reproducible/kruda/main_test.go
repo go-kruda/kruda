@@ -68,16 +68,16 @@ func TestCPURouteOptions(t *testing.T) {
 }
 
 func TestDBRouteOptions(t *testing.T) {
-	if got := dbRouteOptions("takeover", kruda.WingQuery()); len(got) != 1 {
+	if got := dbRouteOptions("takeover", kruda.DB); len(got) != 1 {
 		t.Fatalf("takeover options len = %d, want 1", len(got))
 	}
-	if got := dbRouteOptions("pool", kruda.WingQuery()); len(got) != 1 {
+	if got := dbRouteOptions("pool", kruda.DB); len(got) != 1 {
 		t.Fatalf("pool options len = %d, want 1", len(got))
 	}
-	if got := dbRouteOptions("spawn", kruda.WingQuery()); len(got) != 1 {
+	if got := dbRouteOptions("spawn", kruda.DB); len(got) != 1 {
 		t.Fatalf("spawn options len = %d, want 1", len(got))
 	}
-	if got := dbRouteOptions("inline", kruda.WingQuery()); len(got) != 1 {
+	if got := dbRouteOptions("inline", kruda.DB); len(got) != 1 {
 		t.Fatalf("inline options len = %d, want 1", len(got))
 	}
 }

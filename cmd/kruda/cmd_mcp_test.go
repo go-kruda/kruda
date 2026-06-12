@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-func TestSuggestFeatherStreamingRouteDoesNotInventWingStream(t *testing.T) {
-	feather, reason := suggestFeather(routeInfo{Method: "GET", Path: "/events"})
-	if feather != "none" {
-		t.Fatalf("feather = %q, want none", feather)
+func TestSuggestPresetStreamingRouteDoesNotInventWingStream(t *testing.T) {
+	preset, reason := suggestPreset(routeInfo{Method: "GET", Path: "/events"})
+	if preset != "none" {
+		t.Fatalf("preset = %q, want none", preset)
 	}
-	if strings.Contains(feather, "WingStream") || strings.Contains(reason, "WingStream") {
-		t.Fatalf("streaming suggestion mentions WingStream: feather=%q reason=%q", feather, reason)
+	if strings.Contains(preset, "WingStream") || strings.Contains(reason, "WingStream") {
+		t.Fatalf("streaming suggestion mentions WingStream: preset=%q reason=%q", preset, reason)
 	}
 }
 
@@ -23,20 +23,20 @@ func TestMCPDocsDoNotMentionWingStream(t *testing.T) {
 	}
 }
 
-func TestSuggestFeatherDBReadStyleRoute(t *testing.T) {
-	feather, reason := suggestFeather(routeInfo{Method: "GET", Path: "/queries"})
-	if feather != "WingQuery()" {
-		t.Fatalf("feather = %q, want WingQuery()", feather)
+func TestSuggestPresetDBReadStyleRoute(t *testing.T) {
+	preset, reason := suggestPreset(routeInfo{Method: "GET", Path: "/queries"})
+	if preset != "kruda.DB" {
+		t.Fatalf("preset = %q, want WingQuery()", preset)
 	}
 	if !strings.Contains(reason, "read-style query") {
 		t.Fatalf("reason = %q, want read-style query guidance", reason)
 	}
 }
 
-func TestSuggestFeatherWriteRouteRequiresBenchmarking(t *testing.T) {
-	feather, reason := suggestFeather(routeInfo{Method: "POST", Path: "/products"})
-	if feather != "WingQuery()" {
-		t.Fatalf("feather = %q, want WingQuery()", feather)
+func TestSuggestPresetWriteRouteRequiresBenchmarking(t *testing.T) {
+	preset, reason := suggestPreset(routeInfo{Method: "POST", Path: "/products"})
+	if preset != "kruda.DB" {
+		t.Fatalf("preset = %q, want WingQuery()", preset)
 	}
 	if !strings.Contains(reason, "benchmark") || !strings.Contains(reason, "p99") {
 		t.Fatalf("reason = %q, want benchmark and p99 guidance", reason)

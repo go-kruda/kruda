@@ -11,7 +11,7 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-// WingConfig, Feather, FeatherOption, DispatchMode, RawRequest and their
+// WingConfig, Preset, PresetOption, DispatchMode, RawRequest and their
 // preset/helper definitions are declared in wing_types_shared.go (no build
 // tag) so this stub never drifts out of sync with the linux/darwin impl.
 
@@ -40,9 +40,9 @@ func (t *Transport) Serve(_ net.Listener, _ transport.Handler) error {
 	return fmt.Errorf("wing: unsupported platform; use FastHTTP or NetHTTP transport")
 }
 
-// SetRouteFeather is a no-op on this platform; the stub Wing transport
+// SetRoutePreset is a no-op on this platform; the stub Wing transport
 // has no router to configure.
-func (t *Transport) SetRouteFeather(_, _ string, _ any) {}
+func (t *Transport) SetRoutePreset(_, _ string, _ any) {}
 
 // Shutdown is a no-op on this platform because the stub Wing transport
 // never starts any workers.

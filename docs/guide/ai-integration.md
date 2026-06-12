@@ -35,7 +35,7 @@ kruda mcp --test      # verify it works
 | `kruda_add_handler` | Generate a route handler with optional typed `C[T]` pattern |
 | `kruda_add_resource` | Generate a CRUD `ResourceService[T, string]` implementation |
 | `kruda_list_routes` | Scan Go source files and list all registered routes |
-| `kruda_suggest_wing` | Suggest Wing Feather hints for routes |
+| `kruda_suggest_wing` | Suggest Wing route presets for routes |
 | `kruda_docs` | Look up Kruda docs and code examples by topic |
 
 ## How It Works

@@ -200,26 +200,27 @@ You should see your package listed as using PGO.
 
 Wing is Kruda's high-performance transport using epoll+eventfd on Linux and kqueue on macOS. It is built into core since v1.2.0. Enable explicitly with `kruda.Wing()` or use `kruda.New()` on Linux (auto-selected).
 
-### Wing Types (Feather)
+### Route Presets
 
-Assign a Wing type per route to select the optimal dispatch strategy:
+Pass a Preset per route to select the optimal dispatch strategy. Presets are
+RouteOptions — pass the value directly:
 
 ```go
 app := kruda.New(kruda.Wing())
 
-app.Get("/",          handler, kruda.WingPlaintext())  // Inline in ioLoop
-app.Get("/json",      handler, kruda.WingJSON())       // Inline in ioLoop
-app.Get("/users/:id", handler, kruda.WingJSON())       // Inline in ioLoop
-app.Post("/json",     handler, kruda.WingJSON())       // Inline in ioLoop
-app.Get("/db",        handler, kruda.WingQuery())      // Blocking goroutine per connection
-app.Get("/fortunes",  handler, kruda.WingRender())     // Blocking goroutine per connection
+app.Get("/",          handler, kruda.Plaintext) // Inline in ioLoop
+app.Get("/json",      handler, kruda.JSON)      // Inline in ioLoop
+app.Get("/users/:id", handler, kruda.JSON)      // Inline in ioLoop
+app.Post("/json",     handler, kruda.JSON)      // Inline in ioLoop
+app.Get("/db",        handler, kruda.DB)        // Blocking goroutine per connection
+app.Get("/fortunes",  handler, kruda.Render)    // Blocking goroutine per connection
 ```
 
 CPU-bound routes (plaintext, JSON) use **Inline** dispatch — handler runs directly on the epoll worker with zero overhead.
 
 Read-style I/O routes (DB, Redis) use **Spear** dispatch — handler runs in a blocking goroutine that owns the connection, and the Go runtime auto-creates OS threads as needed.
 
-Phase 6 tiger evidence supports `WingQuery()`/Spear for DB read-style workloads in the reproducible harness: `/db`, `/queries`, and `/fortunes` had much higher median throughput than Inline with zero socket errors and zero non-2xx responses. Write-heavy routes are different. The `/updates` route had zero errors with `WingQuery()` but much higher p99 latency, while Inline produced socket errors in the throughput profile. Treat write-heavy DB routes as workload-specific tuning: benchmark with your real DB pool, p99 target, and error gate before choosing a dispatch hint.
+Phase 6 tiger evidence supports `kruda.DB`/Spear for DB read-style workloads in the reproducible harness: `/db`, `/queries`, and `/fortunes` had much higher median throughput than Inline with zero socket errors and zero non-2xx responses. Write-heavy routes are different. The `/updates` route had zero errors with `kruda.DB` but much higher p99 latency, while Inline produced socket errors in the throughput profile. Treat write-heavy DB routes as workload-specific tuning: benchmark with your real DB pool, p99 target, and error gate before choosing a preset.
 
 For cross-runtime DB comparisons, keep the claim scoped to read-style routes. The accepted v1.2.6 tiger revalidation with framework-specific DB DSN defaults measured throughput-profile `/db` at +166.13% median throughput versus Actix and `/fortunes` at +92.47%, with lower p99 latency in both throughput and latency profiles. This supports a workload-specific DB claim only; the default CPU-bound fair-handler benchmark remains a separate claim with lower but still positive Actix deltas.
 
@@ -234,7 +235,7 @@ var versionJSON = []byte(`{"version":"1.2.3"}`)
 
 app.Get("/version", func(c *kruda.Ctx) error {
     return c.SendStaticJSON(versionJSON)
-}, kruda.WingJSON())
+}, kruda.JSON)
 ```
 
 This is appropriate for fair handler-path benchmarks and public static JSON
@@ -247,9 +248,9 @@ For public static hot paths, Wing can bypass the handler pipeline entirely with 
 
 ```go
 app.Get("/healthz", func(c *kruda.Ctx) error { return c.Text("ok") },
-    kruda.WingStaticText(200, "text/plain; charset=utf-8", "ok"))
+    kruda.StaticText(200, "text/plain; charset=utf-8", "ok"))
 app.Get("/version", func(c *kruda.Ctx) error { return c.JSON(kruda.Map{"version": "1.2.3"}) },
-    kruda.WingStaticJSON(200, `{"version":"1.2.3"}`))
+    kruda.StaticJSON(200, `{"version":"1.2.3"}`))
 ```
 
 These options bypass the handler, middleware, lifecycle hooks, cookies, CORS, and secure-header injection on Wing transports. Use normal handlers when a response needs application behavior. Do not use static bypass routes for fair normal-handler benchmark comparisons.
@@ -263,7 +264,7 @@ Pool dispatch routes share a goroutine pool per worker. Default size = number of
 KRUDA_POOL_SIZE=16
 
 # Or in code
-kruda.New(kruda.Wing(wing.Config{HandlerPoolSize: 16}))
+kruda.New(kruda.WithTransport(kruda.NewWingTransport(kruda.WingConfig{HandlerPoolSize: 16})))
 ```
 
 Rule of thumb: keep total pool goroutines (workers × pool_size) close to your DB `pool_max_conns`. Too many goroutines cause Go runtime scheduler contention — in benchmarks, 2048 goroutines fighting for 64 DB connections lost 37% throughput vs a right-sized pool.
@@ -283,9 +284,10 @@ short-header memory profile candidate.
 | `KRUDA_WORKERS` | GOMAXPROCS | Number of epoll workers |
 | `KRUDA_POOL_SIZE` | workers | Goroutine pool size per worker |
 | `KRUDA_READ_BUF_SIZE` | 8192 | Wing read buffer bytes per connection |
-| `KRUDA_BATCH_WRITE` | off | Coalesce pipelined responses (`1` to enable) |
-| `KRUDA_POOL_ROUTES` | — | Comma-separated routes for Pool dispatch |
-| `KRUDA_SPAWN_ROUTES` | — | Comma-separated routes for Spawn dispatch |
+
+Per-route dispatch env vars (`KRUDA_ASYNC`, `KRUDA_POOL_ROUTES`,
+`KRUDA_SPAWN_ROUTES`, `KRUDA_STATIC`) were removed in v1.3.0 — use route
+presets or `WingConfig.Presets` instead.
 
 ## Production Tips
 

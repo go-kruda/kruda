@@ -21,14 +21,14 @@ var _ transport.Transport = (*Transport)(nil)
 // needsPool returns true if any route uses Pool dispatch (requires pre-allocated goroutine pool).
 // Spawn dispatch uses ad-hoc goroutines and does NOT require a pool.
 func (c *WingConfig) needsPool() bool {
-	d := c.DefaultFeather.Dispatch
+	d := c.DefaultPreset.Dispatch
 	if d == 0 {
 		d = Inline
 	}
 	if d == Pool {
 		return true
 	}
-	for _, f := range c.Feathers {
+	for _, f := range c.Presets {
 		fd := f.Dispatch
 		if fd == 0 {
 			fd = Inline
@@ -43,14 +43,14 @@ func (c *WingConfig) needsPool() bool {
 // needsAsync returns true if any route uses Pool or Spawn dispatch.
 // When true, doneCh and pipe wake are needed but LockOSThread is still safe.
 func (c *WingConfig) needsAsync() bool {
-	d := c.DefaultFeather.Dispatch
+	d := c.DefaultPreset.Dispatch
 	if d == 0 {
 		d = Inline
 	}
 	if d == Pool || d == Spawn || d == Takeover {
 		return true
 	}
-	for _, f := range c.Feathers {
+	for _, f := range c.Presets {
 		fd := f.Dispatch
 		if fd == 0 {
 			fd = Inline
@@ -65,7 +65,7 @@ func (c *WingConfig) needsAsync() bool {
 // Transport is the Wing async I/O transport. It pins one worker per CPU
 // (configurable via WingConfig.Workers), each running its own epoll/kqueue
 // loop on a dedicated OS thread. Implements transport.Transport and
-// transport.FeatherConfigurator.
+// transport.PresetConfigurator.
 type Transport struct {
 	config   WingConfig
 	workers  []*worker
@@ -125,29 +125,29 @@ func (t *Transport) Serve(ln net.Listener, handler transport.Handler) error {
 	return t.ListenAndServe(addr, handler)
 }
 
-// SetRouteFeather implements transport.FeatherConfigurator. The feather
+// SetRoutePreset implements transport.PresetConfigurator. The preset
 // argument is typed as `any` at the interface boundary; route registration
-// passes a `*Feather` (so a missing hint is nil); we accept either form for
-// backward compatibility with anything still passing `Feather` by value.
-func (t *Transport) SetRouteFeather(method, path string, feather any) {
-	var f Feather
-	switch v := feather.(type) {
-	case *Feather:
+// passes a `*Preset` (so a missing hint is nil); we accept either form for
+// backward compatibility with anything still passing `Preset` by value.
+func (t *Transport) SetRoutePreset(method, path string, preset any) {
+	var f Preset
+	switch v := preset.(type) {
+	case *Preset:
 		if v == nil {
 			return
 		}
 		f = *v
-	case Feather:
+	case Preset:
 		f = v
 	default:
 		return
 	}
-	if t.config.Feathers == nil {
-		t.config.Feathers = make(map[string]Feather)
+	if t.config.Presets == nil {
+		t.config.Presets = make(map[string]Preset)
 	}
 	f.path = path
 	f.pathClean = !containsDotPercent(path)
-	t.config.Feathers[method+" "+path] = f
+	t.config.Presets[method+" "+path] = f
 }
 
 // Shutdown signals every worker to stop accepting new connections and waits
@@ -233,11 +233,11 @@ type worker struct {
 	evfd     int // eventfd for wake signaling
 	doneCh   chan doneMsg
 	pool     *workerPool
-	feathers FeatherTable
-	// Exact-route MRU cache. Paths stored here must come from Feather.path,
+	presets PresetTable
+	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
-	lastFeather0 Feather
-	lastFeather1 Feather
+	lastPreset0 Preset
+	lastPreset1 Preset
 	lastMethod0  string
 	lastMethod1  string
 	lastPath0    string
@@ -344,7 +344,7 @@ func (p *workerPool) loop(h transport.Handler) {
 	}
 }
 
-func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
+func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Preset) {
 	if len(f.handlers) > 0 && (f.pathClean || (f.path == "" && !containsDotPercent(req.path))) {
 		if len(f.handlers) == 1 {
 			if h, ok := w.handler.(wingFastSingleHandler); ok && h.serveWingSingleHandler(resp, req, f.handlers[0]) {
@@ -362,28 +362,28 @@ func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Feather) {
 	w.handler.ServeKruda(resp, req)
 }
 
-func (w *worker) lookupFeather(method, path string) Feather {
+func (w *worker) lookupPreset(method, path string) Preset {
 	if w.lastPath0 != "" && method == w.lastMethod0 && path == w.lastPath0 {
-		return w.lastFeather0
+		return w.lastPreset0
 	}
 	if w.lastPath1 != "" && method == w.lastMethod1 && path == w.lastPath1 {
-		f := w.lastFeather1
+		f := w.lastPreset1
 		m := w.lastMethod1
 		p := w.lastPath1
-		w.lastFeather1 = w.lastFeather0
+		w.lastPreset1 = w.lastPreset0
 		w.lastMethod1 = w.lastMethod0
 		w.lastPath1 = w.lastPath0
-		w.lastFeather0 = f
+		w.lastPreset0 = f
 		w.lastMethod0 = m
 		w.lastPath0 = p
 		return f
 	}
-	f := w.feathers.Lookup(method, path)
+	f := w.presets.Lookup(method, path)
 	if f.path != "" {
-		w.lastFeather1 = w.lastFeather0
+		w.lastPreset1 = w.lastPreset0
 		w.lastMethod1 = w.lastMethod0
 		w.lastPath1 = w.lastPath0
-		w.lastFeather0 = f
+		w.lastPreset0 = f
 		w.lastMethod0 = method
 		w.lastPath0 = f.path
 	}
@@ -410,7 +410,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		closeFd(wakeW)
 	}
 	doneCh := make(chan doneMsg, 4096)
-	ft := NewFeatherTable(cfg.Feathers, cfg.DefaultFeather)
+	ft := NewPresetTable(cfg.Presets, cfg.DefaultPreset)
 	w := &worker{
 		id:           id,
 		listenFd:     listenFd,
@@ -422,7 +422,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		conns:        make(map[int32]*conn, 1024),
 		evfd:         wakeR,
 		doneCh:       doneCh,
-		feathers:     ft,
+		presets:     ft,
 		readTimeout:  int64(cfg.ReadTimeout),
 		writeTimeout: int64(cfg.WriteTimeout),
 		idleTimeout:  int64(cfg.IdleTimeout),
@@ -622,7 +622,7 @@ func (w *worker) tryParse(c *conn) {
 			c.lastActive = time.Now().UnixNano()
 		}
 
-		f := w.lookupFeather(req.method, req.path)
+		f := w.lookupPreset(req.method, req.path)
 		finalizeRequestPath(req, f)
 
 		// For async dispatch modes, only one in-flight handler per conn.
@@ -648,7 +648,11 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
+				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
+				if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
+					advisorObserve(req.method, req.path, elapsed, f.explicit)
+				}
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()
@@ -660,9 +664,9 @@ func (w *worker) tryParse(c *conn) {
 					releaseRequest(req)
 					break
 				}
-				if resp.plaintextFast {
+				if resp.stringFast {
 					c.keepAlive = req.keepAlive
-					c.sendBuf = resp.appendPlaintextTo(c.sendBuf)
+					c.sendBuf = resp.appendStringTo(c.sendBuf)
 					releaseResponse(resp)
 					releaseRequest(req)
 					break
@@ -718,7 +722,7 @@ func (w *worker) tryParse(c *conn) {
 			c.keepAlive = req.keepAlive
 			c.pending++
 			w.dispatchWG.Add(1)
-			go func(req *wingRequest, fd int32, ka bool, f Feather) {
+			go func(req *wingRequest, fd int32, ka bool, f Preset) {
 				defer w.dispatchWG.Done()
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode

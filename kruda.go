@@ -3,6 +3,7 @@ package kruda
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/textproto"
 	"os"
 	"os/signal"
@@ -232,17 +233,22 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 	chain := buildChain(app.middleware, nil, handler)
 	app.router.addRoute(method, path, chain)
 
-	// Apply Wing feather if transport supports it.
+	// Apply Wing preset if transport supports it.
 	if len(opts) > 0 {
 		var rc routeConfig
 		for _, o := range opts {
-			o(&rc)
+			o.applyRoute(&rc)
 		}
-		if rc.wingFeather != nil {
-			if fc, ok := app.transport.(transport.FeatherConfigurator); ok {
-				f := *rc.wingFeather
+		if rc.preset != nil {
+			if fc, ok := app.transport.(transport.PresetConfigurator); ok {
+				f := *rc.preset
 				f.handlers = chain
-				fc.SetRouteFeather(method, path, &f)
+				fc.SetRoutePreset(method, path, &f)
+				eff := f
+				eff.defaults()
+				slog.Debug("kruda: route preset",
+					"route", method+" "+path,
+					"dispatch", eff.Dispatch.String())
 			}
 		}
 	}

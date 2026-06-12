@@ -1,27 +1,27 @@
 package kruda
 
-// FeatherTable maps method+path to a Feather for per-route dispatch decisions.
-// Lookup is two map reads (method → path → Feather), zero allocation.
+// PresetTable maps method+path to a Preset for per-route dispatch decisions.
+// Lookup is two map reads (method → path → Preset), zero allocation.
 //
 // Usage:
 //
 //	NewWingTransport(WingConfig{
-//	    Feathers: map[string]Feather{
+//	    Presets: map[string]Preset{
 //	        "GET /plaintext": Bolt,
 //	        "GET /json":      Bolt,
 //	        "GET /db":        Arrow,
 //	    },
 //	})
-type FeatherTable struct {
-	routes   [mCount]map[string]Feather // indexed by method for O(1) first lookup
-	prefixes [mCount][]prefixFeather    // param routes: prefix before ':'
-	fallback map[string]Feather         // custom methods
-	def      Feather
+type PresetTable struct {
+	routes   [mCount]map[string]Preset // indexed by method for O(1) first lookup
+	prefixes [mCount][]prefixPreset    // param routes: prefix before ':'
+	fallback map[string]Preset         // custom methods
+	def      Preset
 }
 
-type prefixFeather struct {
+type prefixPreset struct {
 	prefix  string
-	feather Feather
+	preset Preset
 }
 
 // method index constants matching Wing's HTTP parser wingInternMethod output.
@@ -60,14 +60,15 @@ func methodIdx(m string) int {
 	return -1
 }
 
-// NewFeatherTable builds a FeatherTable from a user-friendly string map.
+// NewPresetTable builds a PresetTable from a user-friendly string map.
 // Keys are "METHOD /path" (e.g. "GET /plaintext").
-// Default feather is used for routes not in the table.
-func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
+// Default preset is used for routes not in the table.
+func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 	def.defaults()
-	ft := FeatherTable{def: def}
+	ft := PresetTable{def: def}
 	for key, f := range routes {
 		f.defaults()
+		f.explicit = true
 		method, path := splitKey(key)
 		idx := methodIdx(method)
 		if idx >= 0 {
@@ -76,12 +77,12 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 				f.handlers = nil
 				f.path = ""
 				f.pathClean = false
-				ft.prefixes[idx] = append(ft.prefixes[idx], prefixFeather{
-					prefix: path[:colonIdx], feather: f,
+				ft.prefixes[idx] = append(ft.prefixes[idx], prefixPreset{
+					prefix: path[:colonIdx], preset: f,
 				})
 			} else {
 				if ft.routes[idx] == nil {
-					ft.routes[idx] = make(map[string]Feather, 4)
+					ft.routes[idx] = make(map[string]Preset, 4)
 				}
 				f.path = path
 				f.pathClean = !containsDotPercent(path)
@@ -89,7 +90,7 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 			}
 		} else {
 			if ft.fallback == nil {
-				ft.fallback = make(map[string]Feather, 2)
+				ft.fallback = make(map[string]Preset, 2)
 			}
 			ft.fallback[key] = f
 		}
@@ -97,9 +98,9 @@ func NewFeatherTable(routes map[string]Feather, def Feather) FeatherTable {
 	return ft
 }
 
-// Lookup returns the Feather for the given method and path.
+// Lookup returns the Preset for the given method and path.
 // Two map reads, zero allocation. Returns default if not found.
-func (ft *FeatherTable) Lookup(method, path string) Feather {
+func (ft *PresetTable) Lookup(method, path string) Preset {
 	idx := methodIdx(method)
 	if idx >= 0 {
 		if m := ft.routes[idx]; m != nil {
@@ -110,7 +111,7 @@ func (ft *FeatherTable) Lookup(method, path string) Feather {
 		// Check param route prefixes
 		for _, pf := range ft.prefixes[idx] {
 			if len(path) >= len(pf.prefix) && path[:len(pf.prefix)] == pf.prefix {
-				return pf.feather
+				return pf.preset
 			}
 		}
 	} else if ft.fallback != nil {

@@ -36,7 +36,7 @@ if [[ ${#modules[@]} -eq 0 ]]; then
   while IFS= read -r dir; do
     modules+=("$dir")
   done < <(find contrib -mindepth 2 -maxdepth 2 -name go.mod -print | sed 's#/go.mod$##' | sort)
-  modules+=("transport/wing" "cmd/kruda")
+  modules+=("cmd/kruda")
 fi
 
 test_flags=(-tags kruda_stdjson)

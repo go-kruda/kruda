@@ -68,12 +68,6 @@ type StaticResponder interface {
 	SetStaticResponse(data []byte)
 }
 
-// StaticTextResponder extends StaticResponder with a string-based fast path
-// that avoids the []byte(s) allocation.
-type StaticTextResponder interface {
-	SetStaticText(status int, contentType, text string)
-}
-
 // FileSender is an optional interface for ResponseWriters that support
 // sendfile(2) zero-copy file transfer (e.g., Wing transport).
 type FileSender interface {
@@ -87,11 +81,20 @@ type JSONResponder interface {
 	SetJSON(status int, data []byte)
 }
 
-// FeatherConfigurator is an optional interface for transports that support
-// per-route tuning (e.g., Wing transport). SetRouteFeather is called during
+// StringResponder is an optional interface for ResponseWriters that support
+// a zero-copy string-body fast path (e.g., Wing transport). SetStringBody
+// writes status + Content-Type + Content-Length + body in one shot; the
+// body string is referenced, never copied, which is safe because Go strings
+// are immutable.
+type StringResponder interface {
+	SetStringBody(status int, contentType, body string)
+}
+
+// PresetConfigurator is an optional interface for transports that support
+// per-route tuning (e.g., Wing transport). SetRoutePreset is called during
 // route registration to configure dispatch/buffer/response modes per route.
-type FeatherConfigurator interface {
-	SetRouteFeather(method, path string, feather any)
+type PresetConfigurator interface {
+	SetRoutePreset(method, path string, preset any)
 }
 
 // HeaderMap abstracts response header manipulation.

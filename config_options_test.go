@@ -169,25 +169,25 @@ func TestParseSize_MBError(t *testing.T) {
 	}
 }
 
-// --- Wing feather route options ---
+// --- Wing preset route options ---
 
-func TestWingFeatherOptions(t *testing.T) {
+func TestPresetRouteOptions(t *testing.T) {
 	// These just create RouteOption funcs — calling them should not panic.
 	opts := []RouteOption{
-		WingPlaintext(),
-		WingJSON(),
-		WingQuery(),
-		WingRender(),
+		Plaintext,
+		JSON,
+		DB,
+		Render,
 	}
 	for i, opt := range opts {
 		if opt == nil {
-			t.Errorf("Wing feather option %d is nil", i)
+			t.Errorf("Wing preset option %d is nil", i)
 		}
 		// Apply to a routeConfig to exercise the code
 		var rc routeConfig
-		opt(&rc)
-		if rc.wingFeather == nil {
-			t.Errorf("Wing feather option %d did not set feather", i)
+		opt.applyRoute(&rc)
+		if rc.preset == nil {
+			t.Errorf("Wing preset option %d did not set preset", i)
 		}
 	}
 }

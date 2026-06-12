@@ -86,7 +86,7 @@ Applies to `SetHeader`, `AddHeader`, and `SetCookie`.
 
 ## DoS Protection
 
-**Source:** `config.go`, `transport/nethttp.go`, `transport/wing/transport.go`
+**Source:** `config.go`, `transport/nethttp.go`, `wing_transport.go`
 
 | Setting | Default | Option |
 |---------|---------|--------|

@@ -125,24 +125,24 @@ Default CPU-bound routes:
 
 The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as "faster than Actix" only when median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero errors. Otherwise, use "same ballpark as Actix."
 
-Committed tiger evidence captured at commit `984f0d6` satisfies that gate for the CPU-bound Wing handler routes below:
+Committed tiger evidence for the v1.3.0 release gate (`142a418`) satisfies that gate for the CPU-bound Wing handler routes below:
 
 | Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|---------|---------------------------:|-------------------:|
-| `/plaintext-handler` | throughput | +12.11% | -77.06% |
-| `/json-static` | throughput | +13.50% | -74.24% |
-| `/json-serialize` | throughput | +12.89% | -72.87% |
+| `/plaintext-handler` | throughput | +13.88% | -70.73% |
+| `/json-static` | throughput | +13.71% | -72.33% |
+| `/json-serialize` | throughput | +14.53% | -70.76% |
 
-Evidence: `bench/reproducible/results/main-984f0d6-20260524T171346Z/`, `bench/reproducible/results/resource-main-984f0d6-20260524T174429Z/`, and the summary note in `bench/reproducible/results/2026-05-25-main-984f0d6-tiger-evidence.md`. These are normal handler-path routes, not Wing static bypass routes. The resource evidence shows higher RPS/core than Actix while Actix still uses less RSS.
+Evidence: `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (earlier baseline: `bench/reproducible/results/2026-05-25-main-984f0d6-tiger-evidence.md`). These are normal handler-path routes, not Wing static bypass routes. The older resource evidence (`resource-main-984f0d6-20260524T174429Z/`) shows higher RPS/core than Actix while Actix still uses less RSS.
 
 Opt-in read-only DB workload evidence is tracked separately because database driver, pool, and schema behavior can dominate framework overhead. In the accepted v1.2.6 tiger revalidation with `BENCH_ENABLE_DB=1`, `BENCH_KRUDA_DB_DISPATCH=takeover`, framework-specific default DB DSNs, and zero socket errors/non-2xx responses, Kruda was materially faster than Actix on read-style routes:
 
 | Route | Profile | Kruda vs Actix median RPS | Kruda vs Actix p99 |
 |------|---------|---------------------------:|-------------------:|
-| `/db` | throughput | +166.13% | -81.94% |
-| `/fortunes` | throughput | +92.47% | -68.67% |
+| `/db` | throughput | +183.42% | -84.42% |
+| `/fortunes` | throughput | +99.48% | -71.57% |
 
-Evidence: `bench/reproducible/results/2026-06-06-v126-db-evidence.md`. Treat this as a workload-specific read-only DB result, not a broad CPU-bound handler-path claim.
+Evidence: `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (v1.2.6 baseline: `2026-06-06-v126-db-evidence.md`). Treat this as a workload-specific read-only DB result, not a broad CPU-bound handler-path claim. Versus Fiber, read-only DB routes remain same ballpark (no claim): `bench/reproducible/results/2026-06-11-fiber-db-read-evidence.md`.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 
@@ -176,7 +176,7 @@ kruda mcp --test      # verify it works
 | `kruda_add_handler` | Generate a typed handler with `C[T]` pattern |
 | `kruda_add_resource` | Generate a CRUD `ResourceService` |
 | `kruda_list_routes` | Scan source code and list all registered routes |
-| `kruda_suggest_wing` | Suggest Wing Feather hints for routes |
+| `kruda_suggest_wing` | Suggest Wing route presets for routes |
 | `kruda_docs` | Look up Kruda docs and code examples |
 
 ## Security
@@ -243,7 +243,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
 ```
 
-The legacy `transport/wing` import path is a compatibility shim. Its surface is type re-exports from core, so scanning the root covers Wing's runtime implementation.
+Wing's runtime implementation lives in the core module (`wing_*.go` at the repo root), so scanning the root module covers it. The legacy `transport/wing` shim was removed in v1.3.0.
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 

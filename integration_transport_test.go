@@ -98,17 +98,13 @@ func TestTransportSmoke_FastHTTP(t *testing.T) {
 // kqueue on macOS) can serve a basic request through the App. Like
 // fasthttp, Wing needs a real listener.
 //
-// The handler responds with c.JSON rather than c.Text. On Wing, c.Text
-// goes through transport.GetStaticResponseString, which caches response
-// bytes globally and patches the Date header from a background goroutine
-// every second. Under -race that background writer races with worker
-// reads in tryParse (see transport/transport.go:144). c.JSON takes the
-// JSONResponder fast path which writes a per-request body and avoids
-// the shared cache. Once the static cache race is fixed this handler
-// can switch back to c.Text.
+// The handler responds with c.Text on purpose: it rides the Wing string
+// fast lane (transport.StringResponder), which serializes a fresh response
+// per request — no shared static cache, no background Date patching, so it
+// must stay race-free under -race.
 func TestTransportSmoke_Wing(t *testing.T) {
 	app := New(Wing())
-	app.Get("/ping", func(c *Ctx) error { return c.JSON(Map{"msg": "pong"}) })
+	app.Get("/ping", func(c *Ctx) error { return c.Text("pong") })
 	app.Compile()
 
 	if app.transportType != "wing" {
@@ -117,7 +113,39 @@ func TestTransportSmoke_Wing(t *testing.T) {
 
 	addr, shutdown := startSmokeApp(t, app, "/ping")
 	defer shutdown()
-	requireSmokeGet(t, "http://"+addr+"/ping", `"msg":"pong"`)
+	requireSmokeGet(t, "http://"+addr+"/ping", "pong")
+}
+
+// TestTransportSecurityHeadersAndCookies_Wing proves the string/JSON fast
+// lanes step aside when the response needs headers the lane cannot carry:
+// with WithSecureHeaders and a cookie set, canBypassHeaderWrite returns
+// false, c.JSON/c.Text/c.HTML take the generic path, and the secure headers
+// and Set-Cookie must appear on the wire.
+func TestTransportSecurityHeadersAndCookies_Wing(t *testing.T) {
+	app := New(Wing(), WithSecureHeaders())
+	app.Get("/headers/json", func(c *Ctx) error {
+		c.SetCookie(&Cookie{Name: "sid", Value: "abc", Path: "/", HTTPOnly: true})
+		return c.JSON(Map{"ok": true})
+	})
+	app.Get("/headers/text", func(c *Ctx) error {
+		c.SetCookie(&Cookie{Name: "sid", Value: "abc", Path: "/", HTTPOnly: true})
+		return c.Text("ok")
+	})
+	app.Get("/headers/html", func(c *Ctx) error {
+		c.SetCookie(&Cookie{Name: "sid", Value: "abc", Path: "/", HTTPOnly: true})
+		return c.HTML("<b>ok</b>")
+	})
+	app.Compile()
+
+	if app.transportType != "wing" {
+		t.Skipf("wing transport not selected on this platform (got %q)", app.transportType)
+	}
+
+	addr, shutdown := startSmokeApp(t, app, "/headers/json")
+	defer shutdown()
+	requireSecurityCookieGet(t, "http://"+addr+"/headers/json")
+	requireSecurityCookieGet(t, "http://"+addr+"/headers/text")
+	requireSecurityCookieGet(t, "http://"+addr+"/headers/html")
 }
 
 // startSmokeApp binds the App's transport to a random TCP port, starts

@@ -660,9 +660,9 @@ func (w *worker) tryParse(c *conn) {
 					releaseRequest(req)
 					break
 				}
-				if resp.plaintextFast {
+				if resp.stringFast {
 					c.keepAlive = req.keepAlive
-					c.sendBuf = resp.appendPlaintextTo(c.sendBuf)
+					c.sendBuf = resp.appendStringTo(c.sendBuf)
 					releaseResponse(resp)
 					releaseRequest(req)
 					break

@@ -87,6 +87,15 @@ type JSONResponder interface {
 	SetJSON(status int, data []byte)
 }
 
+// StringResponder is an optional interface for ResponseWriters that support
+// a zero-copy string-body fast path (e.g., Wing transport). SetStringBody
+// writes status + Content-Type + Content-Length + body in one shot; the
+// body string is referenced, never copied, which is safe because Go strings
+// are immutable.
+type StringResponder interface {
+	SetStringBody(status int, contentType, body string)
+}
+
 // FeatherConfigurator is an optional interface for transports that support
 // per-route tuning (e.g., Wing transport). SetRouteFeather is called during
 // route registration to configure dispatch/buffer/response modes per route.

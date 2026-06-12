@@ -89,7 +89,7 @@ func BenchmarkCPUResponsePlaintext(b *testing.B) {
 		r := acquireResponse()
 		r.responseMode = responsePlaintext
 		r.SetStaticText(200, "text/plain; charset=utf-8", "Hello, World!")
-		out = r.appendPlaintextTo(out[:0])
+		out = r.appendStringTo(out[:0])
 		releaseResponse(r)
 	}
 	runtime.KeepAlive(out)
@@ -145,7 +145,7 @@ func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
 		resp := acquireResponse()
 		resp.responseMode = responsePlaintext
 		app.serveKrudaRoute(resp, req, f.handlers)
-		out = resp.appendPlaintextTo(out[:0])
+		out = resp.appendStringTo(out[:0])
 		releaseResponse(resp)
 		releaseRequest(req)
 	}

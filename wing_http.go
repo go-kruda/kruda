@@ -708,9 +708,9 @@ func acquireResponse() *wingResponse {
 	r.fileFd = 0
 	r.fileSize = 0
 	r.responseMode = responseGeneric
-	r.plaintextFast = false
-	r.plaintextText = ""
-	r.plaintextContentType = ""
+	r.stringFast = false
+	r.stringBody = ""
+	r.stringContentType = ""
 	return r
 }
 
@@ -719,9 +719,9 @@ func releaseResponse(r *wingResponse) {
 	r.staticResp = nil
 	r.jsonFast = false
 	r.responseMode = responseGeneric
-	r.plaintextFast = false
-	r.plaintextText = ""
-	r.plaintextContentType = ""
+	r.stringFast = false
+	r.stringBody = ""
+	r.stringContentType = ""
 	r.fileFd = 0
 	r.fileSize = 0
 	r.headers.reset()
@@ -753,9 +753,9 @@ type wingResponse struct {
 	staticResp           []byte // pre-built full response (if set, buildZeroCopy returns this)
 	jsonFast             bool   // SetJSON fast path — skip header interface, write status+json directly
 	responseMode         responseMode
-	plaintextFast        bool
-	plaintextText        string
-	plaintextContentType string
+	stringFast        bool
+	stringBody        string
+	stringContentType string
 	fileFd               int32 // sendfile fd (0 = not a file response)
 	fileSize             int64 // sendfile byte count
 }
@@ -774,12 +774,27 @@ func (r *wingResponse) SetStaticText(status int, contentType, text string) {
 		r.body = r.body[:0]
 		r.staticResp = nil
 		r.jsonFast = false
-		r.plaintextFast = true
-		r.plaintextText = text
-		r.plaintextContentType = contentType
+		r.stringFast = true
+		r.stringBody = text
+		r.stringContentType = contentType
 		return
 	}
 	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
+}
+
+// SetStringBody implements transport.StringResponder — the zero-copy string
+// fast lane (twin of SetJSON). The response is serialized in one pass as
+// status + Date + Content-Type + Content-Length + body; the body string is
+// referenced until serialization, never copied.
+func (r *wingResponse) SetStringBody(status int, contentType, body string) {
+	r.status = status
+	r.headers.reset()
+	r.body = r.body[:0]
+	r.staticResp = nil
+	r.jsonFast = false
+	r.stringFast = true
+	r.stringBody = body
+	r.stringContentType = contentType
 }
 
 // SetSendFile configures the response to use sendfile(2) for zero-copy file transfer.
@@ -885,8 +900,8 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 	b := r.buf[:0]
 
-	if r.plaintextFast {
-		b = r.appendPlaintextTo(b)
+	if r.stringFast {
+		b = r.appendStringTo(b)
 		r.buf = nil
 		return b
 	}
@@ -951,7 +966,8 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	return b
 }
 
-func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
+func (r *wingResponse) appendStringTo(b []byte) []byte {
+	b = growForAppend(b, 128+len(r.stringContentType)+len(r.stringBody))
 	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
 		b = append(b, statusLines[r.status]...)
 	} else {
@@ -960,15 +976,15 @@ func (r *wingResponse) appendPlaintextTo(b []byte) []byte {
 		b = append(b, " Unknown\r\n"...)
 	}
 	b = append(b, dateHdr()...)
-	if r.plaintextContentType != "" {
+	if r.stringContentType != "" {
 		b = append(b, "Content-Type: "...)
-		b = append(b, r.plaintextContentType...)
+		b = append(b, r.stringContentType...)
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
-	b = appendContentLengthValue(b, len(r.plaintextText))
+	b = appendContentLengthValue(b, len(r.stringBody))
 	b = append(b, "\r\n\r\n"...)
-	b = append(b, r.plaintextText...)
+	b = append(b, r.stringBody...)
 	return b
 }
 

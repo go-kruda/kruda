@@ -172,7 +172,7 @@ func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
 	if resp.staticResp != nil {
 		t.Fatal("plaintext response mode should not use the shared static response cache")
 	}
-	if !resp.plaintextFast {
+	if !resp.stringFast {
 		t.Fatal("plaintext response mode did not enable plaintext fast serialization")
 	}
 
@@ -198,7 +198,7 @@ func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
 	if resp.staticResp == nil {
 		t.Fatal("generic Wing text path should keep using the shared static response cache")
 	}
-	if resp.plaintextFast {
+	if resp.stringFast {
 		t.Fatal("generic Wing text path should not enable plaintext response mode")
 	}
 }
@@ -242,7 +242,7 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	if !middlewareRan || !beforeRan || !handlerRan || !afterRan {
 		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
 	}
-	if !resp.plaintextFast {
+	if !resp.stringFast {
 		t.Fatal("simple WingPlaintext handler did not use plaintext response mode")
 	}
 }
@@ -278,7 +278,7 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	if !groupMiddlewareRan || !handlerRan {
 		t.Fatalf("groupMiddleware=%v handler=%v", groupMiddlewareRan, handlerRan)
 	}
-	if !resp.plaintextFast {
+	if !resp.stringFast {
 		t.Fatal("simple grouped WingPlaintext handler did not use plaintext response mode")
 	}
 }
@@ -306,7 +306,7 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
-	if resp.plaintextFast {
+	if resp.stringFast {
 		t.Fatal("custom response headers must fall back to generic serialization")
 	}
 	data := resp.buildZeroCopy()

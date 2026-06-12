@@ -162,18 +162,17 @@ func TestWorkerLookupPresetPromotesSecondExactCacheSlot(t *testing.T) {
 	}
 }
 
-func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
+func TestWingResponseSetStringBodyBuildZeroCopy(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	resp.responseMode = responsePlaintext
-	resp.SetStaticText(201, "text/plain; charset=utf-8", "created")
+	resp.SetStringBody(201, "text/plain; charset=utf-8", "created")
 
 	if resp.staticResp != nil {
-		t.Fatal("plaintext response mode should not use the shared static response cache")
+		t.Fatal("string fast lane should not use the shared static response cache")
 	}
 	if !resp.stringFast {
-		t.Fatal("plaintext response mode did not enable plaintext fast serialization")
+		t.Fatal("SetStringBody did not enable the string fast lane")
 	}
 
 	data := resp.buildZeroCopy()
@@ -184,22 +183,8 @@ func TestWingResponsePlaintextModeUsesHandlerFastPath(t *testing.T) {
 		[]byte("\r\n\r\ncreated"),
 	} {
 		if !bytes.Contains(data, want) {
-			t.Fatalf("plaintext response missing %q in:\n%s", want, data)
+			t.Fatalf("string lane response missing %q in:\n%s", want, data)
 		}
-	}
-}
-
-func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
-	resp := acquireResponse()
-	defer releaseResponse(resp)
-
-	resp.SetStaticText(200, "text/plain; charset=utf-8", "ok")
-
-	if resp.staticResp == nil {
-		t.Fatal("generic Wing text path should keep using the shared static response cache")
-	}
-	if resp.stringFast {
-		t.Fatal("generic Wing text path should not enable plaintext response mode")
 	}
 }
 
@@ -235,7 +220,6 @@ func TestPlaintextPresetModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 
@@ -243,7 +227,7 @@ func TestPlaintextPresetModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
 	}
 	if !resp.stringFast {
-		t.Fatal("simple Plaintext handler did not use plaintext response mode")
+		t.Fatal("simple Plaintext handler did not ride the string fast lane")
 	}
 }
 
@@ -271,7 +255,6 @@ func TestPlaintextPresetModeGroupRouteRetainsHandlerChain(t *testing.T) {
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/api/plaintext", keepAlive: true}, f.handlers)
 
@@ -279,7 +262,7 @@ func TestPlaintextPresetModeGroupRouteRetainsHandlerChain(t *testing.T) {
 		t.Fatalf("groupMiddleware=%v handler=%v", groupMiddlewareRan, handlerRan)
 	}
 	if !resp.stringFast {
-		t.Fatal("simple grouped Plaintext handler did not use plaintext response mode")
+		t.Fatal("simple grouped Plaintext handler did not ride the string fast lane")
 	}
 }
 
@@ -302,7 +285,6 @@ func TestPlaintextPresetModeCustomHeaderFallsBackToGenericResponse(t *testing.T)
 
 	resp := acquireResponse()
 	defer releaseResponse(resp)
-	resp.responseMode = responsePlaintext
 
 	app.serveKrudaRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, f.handlers)
 

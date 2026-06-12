@@ -176,7 +176,7 @@ func TestPresetRouteOptions(t *testing.T) {
 	opts := []RouteOption{
 		Plaintext,
 		JSON,
-		Query,
+		DB,
 		Render,
 	}
 	for i, opt := range opts {

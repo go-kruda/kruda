@@ -41,10 +41,10 @@ func TestPresetValues(t *testing.T) {
 		{"Bolt", Bolt, Preset{Dispatch: Inline}},
 		{"Arrow", Arrow, Preset{Dispatch: Pool}},
 		{"Spear", Spear, Preset{Dispatch: Takeover}},
-		{"Plaintext", Plaintext, Preset{Dispatch: Inline, ResponseMode: responsePlaintext}},
+		{"Plaintext", Plaintext, Preset{Dispatch: Inline}},
 		{"JSON", JSON, Bolt},
-		{"Query", Query, Spear},
-		{"Render", Render, Spear},
+		{"DB", DB, Spear},
+		{"Render", Render, Preset{Dispatch: Takeover, ResponseMode: responseRender}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,9 +55,9 @@ func TestPresetValues(t *testing.T) {
 	}
 }
 
-func TestPlaintextPresetResponseMode(t *testing.T) {
-	if Plaintext.ResponseMode != responsePlaintext {
-		t.Fatalf("Plaintext response mode = %v, want responsePlaintext", Plaintext.ResponseMode)
+func TestRenderPresetResponseMode(t *testing.T) {
+	if Render.ResponseMode != responseRender {
+		t.Fatalf("Render response mode = %v, want responseRender", Render.ResponseMode)
 	}
 	if Bolt.ResponseMode != responseGeneric {
 		t.Fatalf("Bolt response mode = %v, want responseGeneric", Bolt.ResponseMode)
@@ -123,13 +123,13 @@ func TestWingPresetOption(t *testing.T) {
 	Arrow.applyRoute(&rc)
 
 	if rc.preset == nil {
-		t.Fatal("WingPreset did not set a Wing preset")
+		t.Fatal("Preset option did not set a Wing preset")
 	}
 	if rc.preset.Dispatch != Pool {
 		t.Fatalf("Dispatch = %v, want Pool", rc.preset.Dispatch)
 	}
 	if Arrow.StaticResponse != nil {
-		t.Fatal("WingPreset mutated Arrow preset")
+		t.Fatal("Preset option mutated Arrow preset")
 	}
 }
 

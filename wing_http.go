@@ -767,21 +767,6 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
-func (r *wingResponse) SetStaticText(status int, contentType, text string) {
-	if r.responseMode == responsePlaintext {
-		r.status = status
-		r.headers.reset()
-		r.body = r.body[:0]
-		r.staticResp = nil
-		r.jsonFast = false
-		r.stringFast = true
-		r.stringBody = text
-		r.stringContentType = contentType
-		return
-	}
-	r.staticResp = transport.GetStaticResponseString(status, contentType, text)
-}
-
 // SetStringBody implements transport.StringResponder — the zero-copy string
 // fast lane (twin of SetJSON). The response is serialized in one pass as
 // status + Date + Content-Type + Content-Length + body; the body string is

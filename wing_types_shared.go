@@ -90,8 +90,8 @@ type responseMode uint8
 
 const (
 	responseGeneric responseMode = iota
-	responsePlaintext
 	responseJSON
+	responseRender // intent/diagnostics tag for the Render preset; does not gate the lane
 )
 
 // Preset is the per-route tuning hint passed to Wing. Construct via the
@@ -138,8 +138,8 @@ func Dispatch(m DispatchMode) PresetOption { return func(f *Preset) { f.Dispatch
 // allowing Wing to skip the handler entirely on supported platforms.
 func Static(resp []byte) PresetOption { return func(f *Preset) { f.StaticResponse = resp } }
 
-// Preset presets — pick by what the route does, not how it's dispatched.
-// Wing picks the optimal dispatch mode automatically.
+// Presets — pick by what the route does. Structural presets (Bolt, Arrow,
+// Spear) name the dispatch; semantic presets name the workload.
 var (
 	// Bolt — inline in ioLoop. Maximum throughput, zero dispatch overhead.
 	Bolt = Preset{Dispatch: Inline}
@@ -152,13 +152,13 @@ var (
 	Spear = Preset{Dispatch: Takeover}
 
 	// Plaintext — Bolt-aliased preset for static text and health-check routes.
-	Plaintext = Preset{Dispatch: Inline, ResponseMode: responsePlaintext}
+	Plaintext = Bolt
 	// JSON — Bolt-aliased preset for JSON-only handlers (no I/O).
 	JSON = Bolt
-	// Query — Spear-aliased preset for short DB/Redis lookups.
-	Query = Spear
-	// Render — Spear-aliased preset for DB + template/HTML responses.
-	Render = Spear
+	// DB — Spear-aliased preset for short DB/Redis lookups (named Query in v1.2.x).
+	DB = Spear
+	// Render — Spear dispatch tagged for DB + template/HTML responses.
+	Render = Preset{Dispatch: Takeover, ResponseMode: responseRender}
 )
 
 // RawRequest provides low-level access to Wing's request data.

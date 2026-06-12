@@ -68,12 +68,6 @@ type StaticResponder interface {
 	SetStaticResponse(data []byte)
 }
 
-// StaticTextResponder extends StaticResponder with a string-based fast path
-// that avoids the []byte(s) allocation.
-type StaticTextResponder interface {
-	SetStaticText(status int, contentType, text string)
-}
-
 // FileSender is an optional interface for ResponseWriters that support
 // sendfile(2) zero-copy file transfer (e.g., Wing transport).
 type FileSender interface {

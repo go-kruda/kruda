@@ -103,7 +103,7 @@ plus `summary.csv`, `summary.md`, and `environment.txt` under
 `results/pipeline-<timestamp>/`.
 
 Use these results to decide whether to implement a workload-specific Wing I/O
-profile or Feather. Do not use pipelined results as a blanket real-world API
+profile or Preset. Do not use pipelined results as a blanket real-world API
 claim unless the public wording labels the workload explicitly.
 
 Use `pipeline-syscall.sh` when the question is specifically whether a

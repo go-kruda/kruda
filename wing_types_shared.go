@@ -103,6 +103,7 @@ type Preset struct {
 	handlers       []HandlerFunc
 	path           string
 	pathClean      bool
+	explicit       bool // set for preset-table entries; selects the advisor message variant
 }
 
 // PresetOption modifies a Preset in-place.

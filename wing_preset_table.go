@@ -68,6 +68,7 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 	ft := PresetTable{def: def}
 	for key, f := range routes {
 		f.defaults()
+		f.explicit = true
 		method, path := splitKey(key)
 		idx := methodIdx(method)
 		if idx >= 0 {

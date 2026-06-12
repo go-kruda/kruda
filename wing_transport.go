@@ -648,7 +648,11 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
+				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
+				if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
+					advisorObserve(req.method, req.path, elapsed, f.explicit)
+				}
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()

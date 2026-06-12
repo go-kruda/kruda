@@ -35,7 +35,7 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `cmd/kruda/go.mod` or any `contrib/*/go.mod`
 - [ ] Every released submodule's `go.mod` requires the intended core version
-- [ ] Public API surface diff reviewed — additions OK, removals require a major bump
+- [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0001-break-api-in-v1-minor.md for the v1.3.0 exception)
 
 ## Tagging
 

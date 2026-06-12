@@ -176,7 +176,7 @@ kruda mcp --test      # verify it works
 | `kruda_add_handler` | Generate a typed handler with `C[T]` pattern |
 | `kruda_add_resource` | Generate a CRUD `ResourceService` |
 | `kruda_list_routes` | Scan source code and list all registered routes |
-| `kruda_suggest_wing` | Suggest Wing Feather hints for routes |
+| `kruda_suggest_wing` | Suggest Wing route presets for routes |
 | `kruda_docs` | Look up Kruda docs and code examples |
 
 ## Security
@@ -243,7 +243,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
 ```
 
-The legacy `transport/wing` import path is a compatibility shim. Its surface is type re-exports from core, so scanning the root covers Wing's runtime implementation.
+Wing's runtime implementation lives in the core module (`wing_*.go` at the repo root), so scanning the root module covers it. The legacy `transport/wing` shim was removed in v1.3.0.
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 

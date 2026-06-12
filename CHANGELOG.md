@@ -3,6 +3,52 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] — unreleased
+
+### Breaking
+
+The per-route tuning API was renamed to match the Kruda model: a route rides
+a Preset composed from Wing's internals. With effectively zero external
+adopters, the rename ships as a v1 minor release instead of a v2 — rationale
+in `docs/decisions/0001-break-api-in-v1-minor.md`. Migration table:
+
+| v1.2.x | v1.3.0 |
+|--------|--------|
+| `kruda.WingPlaintext()` | `kruda.Plaintext` |
+| `kruda.WingJSON()` | `kruda.JSON` |
+| `kruda.WingQuery()` | `kruda.DB` |
+| `kruda.WingRender()` | `kruda.Render` |
+| `kruda.WingFeather(f)` | pass the `Preset` value directly as a route option |
+| `kruda.WingStaticText(...)` | `kruda.StaticText(...)` |
+| `kruda.WingStaticJSON(...)` | `kruda.StaticJSON(...)` |
+| `kruda.Feather` / `kruda.FeatherOption` | `kruda.Preset` / `kruda.PresetOption` |
+| `kruda.FeatherTable` / `kruda.NewFeatherTable` | `kruda.PresetTable` / `kruda.NewPresetTable` |
+| `WingConfig.Feathers` / `.DefaultFeather` | `WingConfig.Presets` / `.DefaultPreset` |
+| `transport.FeatherConfigurator.SetRouteFeather` | `transport.PresetConfigurator.SetRoutePreset` |
+| `transport.StaticTextResponder` | removed — `c.Text`/`c.HTML` ride the string fast lane |
+| `RouteOption` (func type) | interface — presets implement it; custom func options wrap internally |
+| `KRUDA_ASYNC`, `KRUDA_POOL_ROUTES`, `KRUDA_SPAWN_ROUTES`, `KRUDA_STATIC` | removed — use route presets or `WingConfig.Presets` |
+| `github.com/go-kruda/kruda/transport/wing` | removed — import `github.com/go-kruda/kruda` (tags up to `transport/wing/v1.2.0` keep working for pinned users) |
+
+### Added
+- Wing string response fast lane: `c.Text` and `c.HTML` now serialize
+  status + Date + Content-Type + Content-Length + body in one zero-copy pass
+  (twin of the JSON fast lane), with automatic fallback to the standard path
+  when headers, cookies, or secure headers are configured.
+- `transport.StringResponder` optional transport interface.
+- Blocking advisor: a route left on inline dispatch that blocks the event
+  loop (>100µs wall time, 10 times) logs one warning per route per process
+  suggesting `kruda.DB` or `kruda.Spear`. Observation only — no dispatch mode
+  is ever switched automatically.
+- Registration-time `slog.Debug` line for preset-annotated routes.
+
+### Fixed
+- `c.Text` responses on Wing no longer share a global static cache: the Date
+  header is always current, the background Date-patcher data race is gone,
+  and dynamic text bodies no longer grow an unbounded cache.
+- `c.HTML` now returns `ErrAlreadyResponded` on double-respond, matching
+  `c.Text`/`c.JSON`.
+
 ## [1.2.5] — 2026-06-06
 
 ### Added

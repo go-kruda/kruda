@@ -108,16 +108,20 @@ app := kruda.New().
 
 ### Wing transport (in core since v1.2.0 — `wing_*.go` at repo root)
 - Wing: custom async I/O transport (epoll+eventfd on Linux, kqueue on macOS)
-- Feather hints: per-route I/O strategy (`Bolt`/`Arrow`/`Spear` and the semantic helpers `WingPlaintext`/`WingJSON`/`WingQuery`/`WingRender`)
+- Presets: per-route composition passed directly as a RouteOption — structural `Bolt`/`Arrow`/`Spear` + semantic `Plaintext`/`JSON`/`DB`/`Render` (e.g. `app.Get("/db", h, kruda.DB)`); customize via `Preset.With(...)`; `StaticText`/`StaticJSON` are the opt-in handler-bypass options
+- String fast lane: `c.Text`/`c.HTML`/`c.JSON` with no custom headers/cookies serialize through zero-copy responders (`transport.StringResponder`/`JSONResponder`) gated by `canBypassHeaderWrite`
+- Blocking advisor: inline routes that block the event loop (>100µs, 10×) log one warning per route per process; no auto-switching ever
 - All Wing types live in `wing_types_shared.go` (no build tag) so cross-platform stubs can never drift
-- `transport/wing/` is now a thin deprecation alias (re-exports core symbols) — slated for removal in v2.0.0
+- `transport/wing/` deprecation shim was removed in v1.3.0 (module tags ≤ transport/wing/v1.2.0 keep serving pinned users)
 
-### Wing flight model vocabulary
-- Transport = low-level flight method: socket I/O, protocol parsing, connection lifecycle, timeouts, and response writes
-- Wing = Kruda's performance-oriented flight surface for high-throughput HTTP/1.1 routes while preserving normal handler behavior by default
-- Feather = explicit route/workload tuning component for Wing, such as dispatch mode, response mode, static response, or route lookup hints
-- Default Kruda behavior is the framework contract: handler, middleware, lifecycle hooks, cookies, CORS, secure headers, safety checks, panic recovery, and error handling must remain intact unless an opt-in Feather documents a bypass
-- Design reference: `docs/superpowers/specs/2026-05-24-wing-flight-model.md`
+### Wing model vocabulary (ครุฑ)
+- Kruda (ครุฑ) = the bird: the framework
+- Wing = the transport: socket I/O, protocol parsing, connection lifecycle, timeouts, response writes — app-level, one per app
+- Preset = the per-route composition (public type `Preset`): dispatch mode, response-mode tag, optional static response — route-level, many per app
+- Feather = component-axis vocabulary in docs/architecture (dispatch feather, response feather); not a public type name
+- Bone = internal invariants; never public API
+- Default Kruda behavior is the framework contract: handler, middleware, lifecycle hooks, cookies, CORS, secure headers, safety checks, panic recovery, and error handling must remain intact unless an opt-in Preset option documents a bypass (StaticText/StaticJSON)
+- Design references: `docs/superpowers/specs/2026-05-24-wing-flight-model.md`, `docs/superpowers/specs/2026-06-12-kruda-preset-api-reshape-design.md`
 
 ### Tooling (`cmd/kruda/`)
 - `kruda new` — project scaffolding

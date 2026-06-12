@@ -42,31 +42,35 @@
 // (via [WithTLS] / [WithHTTP3]) auto-falls back to net/http on every
 // platform.
 //
-// Wing is built into core since v1.2.0. New code should import
-// github.com/go-kruda/kruda directly and use the kruda.Wing option/helpers.
-// The legacy github.com/go-kruda/kruda/transport/wing import path remains a
-// compatibility shim for older v1.x consumers.
+// Wing is built into core since v1.2.0; import github.com/go-kruda/kruda
+// directly and use the kruda.Wing option. The legacy
+// github.com/go-kruda/kruda/transport/wing shim was removed in v1.3.0 —
+// consumers pinned to v1.2.x tags are unaffected until they upgrade.
 //
-// # Wing dispatch tuning (advanced)
+// # Wing route presets (advanced)
 //
-// Wing's per-route dispatch mode controls how each handler is scheduled.
+// Wing schedules each route's handler according to a per-route [Preset].
 // The defaults work for typical workloads; tune only when profiling says so.
 //
 //   - [Bolt] (default) — handler runs inline in the event loop. Zero overhead;
 //     best for plaintext, JSON, and health checks where latency dominates and
-//     there is no I/O wait.
+//     there is no I/O wait. Semantic aliases: [Plaintext], [JSON].
 //   - [Arrow] — handler dispatched to a bounded goroutine pool (~1µs overhead).
 //     Use for short I/O like a DB query or Redis lookup.
 //   - [Spear] — a goroutine takes over the connection with blocking syscalls,
 //     letting the Go runtime spawn extra OS threads for heavy I/O. Use for
-//     DB-heavy endpoints or template rendering.
+//     DB-heavy endpoints or template rendering. Semantic aliases: [DB], [Render].
 //
-// Apply per route with the matching helper:
+// Presets are route options — pass them directly at registration:
 //
-//	app.Get("/ping",       handler, kruda.WingPlaintext()) // Bolt
-//	app.Get("/api/json",   handler, kruda.WingJSON())      // Bolt
-//	app.Get("/users/:id",  handler, kruda.WingQuery())     // Spear
-//	app.Get("/render/:id", handler, kruda.WingRender())    // Spear
+//	app.Get("/ping",       handler, kruda.Plaintext) // inline
+//	app.Get("/api/json",   handler, kruda.JSON)      // inline
+//	app.Get("/users/:id",  handler, kruda.DB)        // takeover
+//	app.Get("/render/:id", handler, kruda.Render)    // takeover
+//
+// If a route left on inline dispatch repeatedly blocks the event loop,
+// Kruda logs a one-time warning per route suggesting kruda.DB or
+// kruda.Spear. No dispatch mode is ever switched automatically.
 //
 // # Dependency injection
 //

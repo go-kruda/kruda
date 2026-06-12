@@ -3,6 +3,7 @@ package kruda
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/textproto"
 	"os"
 	"os/signal"
@@ -243,6 +244,11 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 				f := *rc.preset
 				f.handlers = chain
 				fc.SetRoutePreset(method, path, &f)
+				eff := f
+				eff.defaults()
+				slog.Debug("kruda: route preset",
+					"route", method+" "+path,
+					"dispatch", eff.Dispatch.String())
 			}
 		}
 	}

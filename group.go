@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/go-kruda/kruda/transport"
@@ -134,6 +135,11 @@ func (g *Group) addRoute(method, path string, handler HandlerFunc, opts ...Route
 				f := *rc.preset
 				f.handlers = chain
 				fc.SetRoutePreset(method, fullPath, &f)
+				eff := f
+				eff.defaults()
+				slog.Debug("kruda: route preset",
+					"route", method+" "+fullPath,
+					"dispatch", eff.Dispatch.String())
 			}
 		}
 	}

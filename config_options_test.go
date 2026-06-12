@@ -185,7 +185,7 @@ func TestWingFeatherOptions(t *testing.T) {
 		}
 		// Apply to a routeConfig to exercise the code
 		var rc routeConfig
-		opt(&rc)
+		opt.applyRoute(&rc)
 		if rc.wingFeather == nil {
 			t.Errorf("Wing feather option %d did not set feather", i)
 		}

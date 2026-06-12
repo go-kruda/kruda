@@ -99,7 +99,7 @@ func TestStaticOption(t *testing.T) {
 
 func TestWingStaticTextOption(t *testing.T) {
 	var rc routeConfig
-	WingStaticText(200, "text/plain", "ready")(&rc)
+	WingStaticText(200, "text/plain", "ready").applyRoute(&rc)
 
 	if rc.wingFeather == nil {
 		t.Fatal("WingStaticText did not set a Wing feather")
@@ -120,7 +120,7 @@ func TestWingStaticTextOption(t *testing.T) {
 
 func TestWingFeatherOption(t *testing.T) {
 	var rc routeConfig
-	WingFeather(Arrow)(&rc)
+	WingFeather(Arrow).applyRoute(&rc)
 
 	if rc.wingFeather == nil {
 		t.Fatal("WingFeather did not set a Wing feather")
@@ -135,7 +135,7 @@ func TestWingFeatherOption(t *testing.T) {
 
 func TestWingStaticJSONOption(t *testing.T) {
 	var rc routeConfig
-	WingStaticJSON(200, `{"ok":true}`)(&rc)
+	WingStaticJSON(200, `{"ok":true}`).applyRoute(&rc)
 
 	if rc.wingFeather == nil {
 		t.Fatal("WingStaticJSON did not set a Wing feather")

@@ -9,8 +9,15 @@ type C[T any] struct {
 	In T // parsed input from request
 }
 
-// RouteOption configures per-route metadata (for future OpenAPI integration).
-type RouteOption func(*routeConfig)
+// RouteOption configures per-route behavior at registration time: OpenAPI
+// metadata (WithDescription, WithTags) and Wing per-route presets (Bolt,
+// kruda.DB, …), which implement RouteOption directly.
+type RouteOption interface{ applyRoute(*routeConfig) }
+
+// routeOptionFunc adapts a plain function to RouteOption.
+type routeOptionFunc func(*routeConfig)
+
+func (f routeOptionFunc) applyRoute(rc *routeConfig) { f(rc) }
 
 type routeConfig struct {
 	description string
@@ -22,12 +29,12 @@ type routeConfig struct {
 
 // WithDescription sets a route description (used by OpenAPI in Phase 2B).
 func WithDescription(desc string) RouteOption {
-	return func(rc *routeConfig) { rc.description = desc }
+	return routeOptionFunc(func(rc *routeConfig) { rc.description = desc })
 }
 
 // WithTags sets route tags (used by OpenAPI in Phase 2B).
 func WithTags(tags ...string) RouteOption {
-	return func(rc *routeConfig) { rc.tags = tags }
+	return routeOptionFunc(func(rc *routeConfig) { rc.tags = tags })
 }
 
 // buildTypedHandler creates the handler closure with pre-compiled parser and validators.
@@ -55,7 +62,7 @@ func buildTypedHandler[In any, Out any](
 		outType: reflect.TypeOf((*Out)(nil)).Elem(),
 	}
 	for _, opt := range opts {
-		opt(&rc)
+		opt.applyRoute(&rc)
 	}
 
 	// Store route info for OpenAPI generation

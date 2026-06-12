@@ -236,7 +236,7 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 	if len(opts) > 0 {
 		var rc routeConfig
 		for _, o := range opts {
-			o(&rc)
+			o.applyRoute(&rc)
 		}
 		if rc.wingFeather != nil {
 			if fc, ok := app.transport.(transport.FeatherConfigurator); ok {

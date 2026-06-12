@@ -10,7 +10,7 @@ import "github.com/go-kruda/kruda/transport"
 //	app.Get("/fortunes", handler, kruda.WingRender())
 
 func wingFeatherOpt(f Feather) RouteOption {
-	return func(rc *routeConfig) { rc.wingFeather = &f }
+	return routeOptionFunc(func(rc *routeConfig) { rc.wingFeather = &f })
 }
 
 // WingFeather applies a low-level Wing Feather to a route. It preserves the

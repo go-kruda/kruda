@@ -75,11 +75,11 @@ Kruda minimizes allocations on the request hot path:
 
 ## Benchmark Results
 
-For cross-runtime claims, use the reproducible CPU-bound harness in `bench/reproducible/`. Committed tiger evidence captured at commit `984f0d6` satisfies the "faster than Actix" gate for `/plaintext-handler`, `/json-static`, and `/json-serialize` under both the latency and throughput profiles: Kruda median RPS is at least 3% higher than Actix, p99 is not worse than 10% above Actix, and socket errors plus non-2xx responses are zero.
+For cross-runtime claims, use the reproducible harness in `bench/reproducible/`. The committed v1.3.0 evidence satisfies the claim gate (median RPS at least +3%, p99 no worse than +10%, zero socket errors and non-2xx) against both rivals on every benchmark route: versus Actix in `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (CPU routes +13.7% to +19.1%, `/db` +173% to +183%, `/queries` +157% to +170%, `/fortunes` +99.5%), and versus Fiber after the Wing netpoll takeover dispatch in `bench/reproducible/results/2026-06-12-wing-netpoll-takeover-evidence.md` (CPU routes +26.9% to +34.1%, `/fortunes` +10.4% to +11.9%, `/db` +3.1% to +4.5%, `/queries` +3.3% to +5.2% on the default Sonic build — `kruda_stdjson` builds are same ballpark on that one route).
 
-That evidence is limited to same-host loopback CPU-bound handler routes. It is not a database, TLS, HTTP/2, or production network claim. The resource run also shows that Actix still uses less RSS, while Kruda has higher RPS/core on the measured routes.
+That evidence is same-host loopback with a local PostgreSQL container. It is not a TLS, HTTP/2, or production network claim. The older resource run also shows that Actix still uses less RSS, while Kruda has higher RPS/core on the measured routes. The netpoll takeover trades a few milliseconds of `db`/`queries` p99 for the throughput win; the evidence doc carries the full tables.
 
-Opt-in read-only DB workload evidence is tracked separately. The accepted v1.2.6 tiger revalidation in `bench/reproducible/results/2026-06-06-v126-db-evidence.md` used `BENCH_ENABLE_DB=1`, `BENCH_KRUDA_DB_DISPATCH=takeover`, framework-specific default DB DSNs, and zero socket errors/non-2xx responses. In that run, throughput-profile median RPS was +166.13% versus Actix for `/db` and +92.47% for `/fortunes`, with materially lower p99 latency. Treat this as a read-style DB workload result, not as a broad CPU-bound handler-path claim.
+Earlier accepted baselines remain in their own evidence files: the v1.2.6 read-only DB revalidation (`bench/reproducible/results/2026-06-06-v126-db-evidence.md`, `/db` +166.13% and `/fortunes` +92.47% versus Actix) and the `984f0d6` CPU-route evidence (`bench/reproducible/results/2026-05-25-main-984f0d6-tiger-evidence.md`).
 
 For post-v1.2.5 candidate work, keep CPU-bound, read-only DB, pipelined HTTP/1.1, and read-buffer memory profiles separate; each profile needs its own evidence and wording.
 
@@ -376,9 +376,9 @@ Use [`bench/reproducible/`](https://github.com/go-kruda/kruda/tree/main/bench/re
 
 The harness runs both `wrk --latency -t4 -c128 -d15s` and `wrk --latency -t4 -c256 -d15s` with one warmup and five measured rounds per framework/route/profile.
 
-**Claim rule:** say "faster than Actix" only when Kruda median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero socket errors and zero non-2xx responses. Otherwise, say "same ballpark as Actix."
+**Claim rule:** say Kruda is faster than a rival only when Kruda median RPS is at least 3% higher and p99 is no worse than 10% above that rival with zero socket errors and zero non-2xx responses. Otherwise, say "same ballpark."
 
-Committed tiger evidence captured at commit `984f0d6` satisfies that rule for these CPU-bound Wing handler routes:
+The current claims under that rule live in the v1.3.0 evidence files named above (versus Actix and versus Fiber on every benchmark route). The historical `984f0d6` baseline that first satisfied the rule for the CPU-bound Wing handler routes:
 
 | Route | Profile | Kruda median RPS | Actix median RPS | Kruda vs Actix RPS | Kruda vs Actix p99 | Evidence |
 |------|---------|-----------------:|-----------------:|-------------------:|-------------------:|----------|

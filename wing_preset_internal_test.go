@@ -36,7 +36,7 @@ func TestWorkerServeRouteUsesSingleHandlerFastPath(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Preset{
 		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
 	})
 
@@ -51,7 +51,7 @@ func TestWorkerServeRouteFallsBackWhenSingleHandlerDeclines(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/fast", keepAlive: true}, Preset{
 		handlers: []HandlerFunc{func(c *Ctx) error { return nil }},
 	})
 
@@ -66,7 +66,7 @@ func TestWorkerServeRouteUsesCleanExactRouteFlag(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/plaintext", keepAlive: true}, Preset{
 		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
 		path:      "/plaintext",
 		pathClean: true,
@@ -83,7 +83,7 @@ func TestWorkerServeRouteSkipsFastPathForDirtyExactRoute(t *testing.T) {
 	resp := acquireResponse()
 	defer releaseResponse(resp)
 
-	w.serveRoute(resp, &wingRequest{method: "GET", path: "/assets/app.js", keepAlive: true}, Feather{
+	w.serveRoute(resp, &wingRequest{method: "GET", path: "/assets/app.js", keepAlive: true}, Preset{
 		handlers:  []HandlerFunc{func(c *Ctx) error { return nil }},
 		path:      "/assets/app.js",
 		pathClean: false,
@@ -94,12 +94,12 @@ func TestWorkerServeRouteSkipsFastPathForDirtyExactRoute(t *testing.T) {
 	}
 }
 
-func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetCachesExactRoute(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 	}, Arrow)}
 
-	got := w.lookupFeather("GET", "/plaintext")
+	got := w.lookupPreset("GET", "/plaintext")
 	if got.path != "/plaintext" {
 		t.Fatalf("first lookup path = %q, want /plaintext", got.path)
 	}
@@ -107,24 +107,24 @@ func TestWorkerLookupFeatherCachesExactRoute(t *testing.T) {
 		t.Fatalf("cache = %q %q, want GET /plaintext", w.lastMethod0, w.lastPath0)
 	}
 
-	got = w.lookupFeather("GET", "/plaintext")
+	got = w.lookupPreset("GET", "/plaintext")
 	if got.Dispatch != Plaintext.Dispatch || got.ResponseMode != Plaintext.ResponseMode {
 		t.Fatalf("cached lookup = %+v, want Plaintext", got)
 	}
 }
 
-func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetDoesNotCacheParamOrDefaultPath(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /users/:id": Arrow,
 	}, Bolt)}
 
-	_ = w.lookupFeather("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/plaintext")
 	if w.lastPath0 != "/plaintext" {
 		t.Fatalf("exact route was not cached: %q", w.lastPath0)
 	}
 
-	got := w.lookupFeather("GET", "/users/42")
+	got := w.lookupPreset("GET", "/users/42")
 	if got.Dispatch != Arrow.Dispatch {
 		t.Fatalf("param lookup dispatch = %v, want Arrow", got.Dispatch)
 	}
@@ -132,7 +132,7 @@ func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
 		t.Fatalf("param lookup replaced exact cache with %q", w.lastPath0)
 	}
 
-	got = w.lookupFeather("GET", "/missing")
+	got = w.lookupPreset("GET", "/missing")
 	if got.Dispatch != Bolt.Dispatch {
 		t.Fatalf("default lookup dispatch = %v, want Bolt", got.Dispatch)
 	}
@@ -141,19 +141,19 @@ func TestWorkerLookupFeatherDoesNotCacheParamOrDefaultPath(t *testing.T) {
 	}
 }
 
-func TestWorkerLookupFeatherPromotesSecondExactCacheSlot(t *testing.T) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func TestWorkerLookupPresetPromotesSecondExactCacheSlot(t *testing.T) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
 
-	_ = w.lookupFeather("GET", "/plaintext")
-	_ = w.lookupFeather("GET", "/json")
+	_ = w.lookupPreset("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/json")
 	if w.lastPath0 != "/json" || w.lastPath1 != "/plaintext" {
 		t.Fatalf("cache = [%q, %q], want [/json, /plaintext]", w.lastPath0, w.lastPath1)
 	}
 
-	got := w.lookupFeather("GET", "/plaintext")
+	got := w.lookupPreset("GET", "/plaintext")
 	if got.ResponseMode != Plaintext.ResponseMode {
 		t.Fatalf("promoted lookup = %+v, want Plaintext", got)
 	}
@@ -228,7 +228,7 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /plaintext"]
+	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingPlaintext route did not retain its handler chain")
 	}
@@ -264,7 +264,7 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /api/plaintext"]
+	f := tr.config.Presets["GET /api/plaintext"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingPlaintext group route did not retain its handler chain")
 	}
@@ -295,7 +295,7 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /plaintext"]
+	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingPlaintext route did not retain its handler chain")
 	}
@@ -328,7 +328,7 @@ func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -366,7 +366,7 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -411,7 +411,7 @@ func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-serialize"]
+	f := tr.config.Presets["GET /json-serialize"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -447,7 +447,7 @@ func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-serialize"]
+	f := tr.config.Presets["GET /json-serialize"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -486,22 +486,22 @@ func TestWingResponseJSONAppendMatchesBuildZeroCopy(t *testing.T) {
 	}
 }
 
-func BenchmarkWorkerLookupFeatherCachedExact(b *testing.B) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func BenchmarkWorkerLookupPresetCachedExact(b *testing.B) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
-	_ = w.lookupFeather("GET", "/plaintext")
+	_ = w.lookupPreset("GET", "/plaintext")
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = w.lookupFeather("GET", "/plaintext")
+		_ = w.lookupPreset("GET", "/plaintext")
 	}
 }
 
-func BenchmarkWorkerLookupFeatherAlternatingExact(b *testing.B) {
-	w := &worker{feathers: NewFeatherTable(map[string]Feather{
+func BenchmarkWorkerLookupPresetAlternatingExact(b *testing.B) {
+	w := &worker{presets: NewPresetTable(map[string]Preset{
 		"GET /plaintext": Plaintext,
 		"GET /json":      JSON,
 	}, Arrow)}
@@ -509,8 +509,8 @@ func BenchmarkWorkerLookupFeatherAlternatingExact(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = w.lookupFeather("GET", "/plaintext")
-		_ = w.lookupFeather("GET", "/json")
+		_ = w.lookupPreset("GET", "/plaintext")
+		_ = w.lookupPreset("GET", "/json")
 	}
 }
 
@@ -539,7 +539,7 @@ func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}
@@ -569,7 +569,7 @@ func TestWingJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T)
 	if !ok {
 		t.Skip("Wing transport unavailable on this platform")
 	}
-	f := tr.config.Feathers["GET /json-static"]
+	f := tr.config.Presets["GET /json-static"]
 	if len(f.handlers) == 0 {
 		t.Fatal("WingJSON route did not retain its handler chain")
 	}

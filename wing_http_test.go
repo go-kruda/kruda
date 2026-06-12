@@ -205,7 +205,7 @@ func TestParseHTTPRequestFast_FinalizedStaticPathIsSafe(t *testing.T) {
 	if !ok {
 		t.Fatal("parse failed")
 	}
-	finalizeRequestPath(req, Feather{path: "/plaintext-handler"})
+	finalizeRequestPath(req, Preset{path: "/plaintext-handler"})
 
 	copy(raw[4:22], "/mutated-handler!")
 	if got := req.Path(); got != "/plaintext-handler" {
@@ -219,7 +219,7 @@ func TestParseHTTPRequestFast_FinalizedFallbackPathIsSafe(t *testing.T) {
 	if !ok {
 		t.Fatal("parse failed")
 	}
-	finalizeRequestPath(req, Feather{})
+	finalizeRequestPath(req, Preset{})
 
 	copy(raw[4:12], "/mutated")
 	if got := req.Path(); got != "/dynamic" {

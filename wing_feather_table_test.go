@@ -2,8 +2,8 @@ package kruda
 
 import "testing"
 
-func TestFeatherTableLookupExact(t *testing.T) {
-	ft := NewFeatherTable(map[string]Feather{
+func TestPresetTableLookupExact(t *testing.T) {
+	ft := NewPresetTable(map[string]Preset{
 		"GET /plaintext": Bolt,
 		"GET /json":      Bolt,
 		"POST /db":       Arrow,
@@ -11,7 +11,7 @@ func TestFeatherTableLookupExact(t *testing.T) {
 
 	tests := []struct {
 		method, path, wantPath string
-		want                   Feather
+		want                   Preset
 	}{
 		{"GET", "/plaintext", "/plaintext", Bolt},
 		{"GET", "/json", "/json", Bolt},
@@ -27,16 +27,16 @@ func TestFeatherTableLookupExact(t *testing.T) {
 	}
 }
 
-func TestFeatherTableDefault(t *testing.T) {
-	ft := NewFeatherTable(nil, Arrow)
+func TestPresetTableDefault(t *testing.T) {
+	ft := NewPresetTable(nil, Arrow)
 	got := ft.Lookup("GET", "/anything")
 	if got.Dispatch != Arrow.Dispatch || got.ResponseMode != Arrow.ResponseMode || got.path != "" {
 		t.Errorf("empty table Lookup = %+v, want Arrow", got)
 	}
 }
 
-func TestFeatherTableDefaultsApplied(t *testing.T) {
-	ft := NewFeatherTable(map[string]Feather{
+func TestPresetTableDefaultsApplied(t *testing.T) {
+	ft := NewPresetTable(map[string]Preset{
 		"GET /custom": {Dispatch: Inline},
 	}, Arrow)
 	got := ft.Lookup("GET", "/custom")
@@ -45,8 +45,8 @@ func TestFeatherTableDefaultsApplied(t *testing.T) {
 	}
 }
 
-func TestFeatherTableMarksCleanExactRoutes(t *testing.T) {
-	ft := NewFeatherTable(map[string]Feather{
+func TestPresetTableMarksCleanExactRoutes(t *testing.T) {
+	ft := NewPresetTable(map[string]Preset{
 		"GET /plaintext":     Bolt,
 		"GET /assets/app.js": Bolt,
 		"GET /encoded%2F":    Bolt,
@@ -86,8 +86,8 @@ func TestSplitKey(t *testing.T) {
 	}
 }
 
-func BenchmarkFeatherTableLookup(b *testing.B) {
-	ft := NewFeatherTable(map[string]Feather{
+func BenchmarkPresetTableLookup(b *testing.B) {
+	ft := NewPresetTable(map[string]Preset{
 		"GET /plaintext": Bolt,
 		"GET /json":      Bolt,
 		"POST /db":       Arrow,
@@ -106,8 +106,8 @@ func BenchmarkFeatherTableLookup(b *testing.B) {
 	}
 }
 
-func BenchmarkFeatherTableLookupExactOne(b *testing.B) {
-	ft := NewFeatherTable(map[string]Feather{
+func BenchmarkPresetTableLookupExactOne(b *testing.B) {
+	ft := NewPresetTable(map[string]Preset{
 		"GET /plaintext": Bolt,
 		"GET /json":      Bolt,
 		"POST /db":       Arrow,

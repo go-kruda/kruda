@@ -319,7 +319,7 @@ func copyOrUnsafeString(b []byte, unsafeOK bool) string {
 	return unsafe.String(&b[0], len(b))
 }
 
-func finalizeRequestPath(r *wingRequest, f Feather) {
+func finalizeRequestPath(r *wingRequest, f Preset) {
 	if !r.pathUnsafe {
 		return
 	}

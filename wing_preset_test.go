@@ -6,28 +6,28 @@ import (
 	"testing"
 )
 
-func featherEqual(a, b Feather) bool { return reflect.DeepEqual(a, b) }
+func presetEqual(a, b Preset) bool { return reflect.DeepEqual(a, b) }
 
-func TestFeatherDefaults(t *testing.T) {
-	var f Feather
+func TestPresetDefaults(t *testing.T) {
+	var f Preset
 	f.defaults()
-	want := Feather{Dispatch: Inline}
-	if !featherEqual(f, want) {
+	want := Preset{Dispatch: Inline}
+	if !presetEqual(f, want) {
 		t.Errorf("defaults() = %+v, want %+v", f, want)
 	}
 }
 
-func TestFeatherWith(t *testing.T) {
+func TestPresetWith(t *testing.T) {
 	f := Arrow.With(Dispatch(Spawn))
 	if f.Dispatch != Spawn {
 		t.Errorf("Dispatch = %v, want Spawn", f.Dispatch)
 	}
 }
 
-func TestFeatherWithDoesNotMutateOriginal(t *testing.T) {
+func TestPresetWithDoesNotMutateOriginal(t *testing.T) {
 	original := Arrow
 	_ = Arrow.With(Dispatch(Inline))
-	if !featherEqual(Arrow, original) {
+	if !presetEqual(Arrow, original) {
 		t.Errorf("With() mutated original preset: got %+v, want %+v", Arrow, original)
 	}
 }
@@ -35,20 +35,20 @@ func TestFeatherWithDoesNotMutateOriginal(t *testing.T) {
 func TestPresetValues(t *testing.T) {
 	tests := []struct {
 		name string
-		f    Feather
-		want Feather
+		f    Preset
+		want Preset
 	}{
-		{"Bolt", Bolt, Feather{Dispatch: Inline}},
-		{"Arrow", Arrow, Feather{Dispatch: Pool}},
-		{"Spear", Spear, Feather{Dispatch: Takeover}},
-		{"Plaintext", Plaintext, Feather{Dispatch: Inline, ResponseMode: responsePlaintext}},
+		{"Bolt", Bolt, Preset{Dispatch: Inline}},
+		{"Arrow", Arrow, Preset{Dispatch: Pool}},
+		{"Spear", Spear, Preset{Dispatch: Takeover}},
+		{"Plaintext", Plaintext, Preset{Dispatch: Inline, ResponseMode: responsePlaintext}},
 		{"JSON", JSON, Bolt},
 		{"Query", Query, Spear},
 		{"Render", Render, Spear},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if !featherEqual(tt.f, tt.want) {
+			if !presetEqual(tt.f, tt.want) {
 				t.Errorf("%s = %+v, want %+v", tt.name, tt.f, tt.want)
 			}
 		})
@@ -101,35 +101,35 @@ func TestWingStaticTextOption(t *testing.T) {
 	var rc routeConfig
 	WingStaticText(200, "text/plain", "ready").applyRoute(&rc)
 
-	if rc.wingFeather == nil {
-		t.Fatal("WingStaticText did not set a Wing feather")
+	if rc.preset == nil {
+		t.Fatal("WingStaticText did not set a Wing preset")
 	}
-	if rc.wingFeather.Dispatch != Inline {
-		t.Fatalf("Dispatch = %v, want Inline", rc.wingFeather.Dispatch)
+	if rc.preset.Dispatch != Inline {
+		t.Fatalf("Dispatch = %v, want Inline", rc.preset.Dispatch)
 	}
-	if !bytes.HasPrefix(rc.wingFeather.StaticResponse, []byte("HTTP/1.1 200 OK\r\n")) {
-		t.Fatalf("static response has wrong status line: %q", rc.wingFeather.StaticResponse)
+	if !bytes.HasPrefix(rc.preset.StaticResponse, []byte("HTTP/1.1 200 OK\r\n")) {
+		t.Fatalf("static response has wrong status line: %q", rc.preset.StaticResponse)
 	}
-	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte("ready")) {
-		t.Fatalf("static response missing body: %q", rc.wingFeather.StaticResponse)
+	if !bytes.Contains(rc.preset.StaticResponse, []byte("ready")) {
+		t.Fatalf("static response missing body: %q", rc.preset.StaticResponse)
 	}
 	if Bolt.StaticResponse != nil {
 		t.Fatal("WingStaticText mutated Bolt preset")
 	}
 }
 
-func TestWingFeatherOption(t *testing.T) {
+func TestWingPresetOption(t *testing.T) {
 	var rc routeConfig
-	WingFeather(Arrow).applyRoute(&rc)
+	WingPreset(Arrow).applyRoute(&rc)
 
-	if rc.wingFeather == nil {
-		t.Fatal("WingFeather did not set a Wing feather")
+	if rc.preset == nil {
+		t.Fatal("WingPreset did not set a Wing preset")
 	}
-	if rc.wingFeather.Dispatch != Pool {
-		t.Fatalf("Dispatch = %v, want Pool", rc.wingFeather.Dispatch)
+	if rc.preset.Dispatch != Pool {
+		t.Fatalf("Dispatch = %v, want Pool", rc.preset.Dispatch)
 	}
 	if Arrow.StaticResponse != nil {
-		t.Fatal("WingFeather mutated Arrow preset")
+		t.Fatal("WingPreset mutated Arrow preset")
 	}
 }
 
@@ -137,14 +137,14 @@ func TestWingStaticJSONOption(t *testing.T) {
 	var rc routeConfig
 	WingStaticJSON(200, `{"ok":true}`).applyRoute(&rc)
 
-	if rc.wingFeather == nil {
-		t.Fatal("WingStaticJSON did not set a Wing feather")
+	if rc.preset == nil {
+		t.Fatal("WingStaticJSON did not set a Wing preset")
 	}
-	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
-		t.Fatalf("static JSON response missing content type: %q", rc.wingFeather.StaticResponse)
+	if !bytes.Contains(rc.preset.StaticResponse, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
+		t.Fatalf("static JSON response missing content type: %q", rc.preset.StaticResponse)
 	}
-	if !bytes.Contains(rc.wingFeather.StaticResponse, []byte(`{"ok":true}`)) {
-		t.Fatalf("static JSON response missing body: %q", rc.wingFeather.StaticResponse)
+	if !bytes.Contains(rc.preset.StaticResponse, []byte(`{"ok":true}`)) {
+		t.Fatalf("static JSON response missing body: %q", rc.preset.StaticResponse)
 	}
 	if JSON.StaticResponse != nil {
 		t.Fatal("WingStaticJSON mutated JSON preset")
@@ -152,7 +152,7 @@ func TestWingStaticJSONOption(t *testing.T) {
 }
 
 func TestDispatchOption(t *testing.T) {
-	f := Feather{}
+	f := Preset{}
 	f = f.With(Dispatch(Takeover))
 	if f.Dispatch != Takeover {
 		t.Errorf("Dispatch = %v, want Takeover", f.Dispatch)

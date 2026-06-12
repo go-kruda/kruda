@@ -22,8 +22,8 @@ type WingConfig struct {
 	MaxHeaderSize     int
 	MaxConnsPerWorker int
 	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
-	Feathers          map[string]Feather // per-route feather config ("METHOD /path" → Feather)
-	DefaultFeather    Feather            // fallback feather for routes not in Feathers
+	Presets          map[string]Preset // per-route preset config ("METHOD /path" → Preset)
+	DefaultPreset    Preset            // fallback preset for routes not in Presets
 	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
 	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
 	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
@@ -94,9 +94,9 @@ const (
 	responseJSON
 )
 
-// Feather is the per-route tuning hint passed to Wing. Construct via the
+// Preset is the per-route tuning hint passed to Wing. Construct via the
 // preset vars (Bolt, Arrow, Spear, …) or directly with options.
-type Feather struct {
+type Preset struct {
 	Dispatch       DispatchMode
 	StaticResponse []byte // pre-built full HTTP response; bypasses handler entirely
 	ResponseMode   responseMode
@@ -105,45 +105,45 @@ type Feather struct {
 	pathClean      bool
 }
 
-// FeatherOption modifies a Feather in-place.
-type FeatherOption func(*Feather)
+// PresetOption modifies a Preset in-place.
+type PresetOption func(*Preset)
 
 // With returns a copy of f with the given options applied.
-func (f Feather) With(opts ...FeatherOption) Feather {
+func (f Preset) With(opts ...PresetOption) Preset {
 	for _, opt := range opts {
 		opt(&f)
 	}
 	return f
 }
 
-func (f *Feather) defaults() {
+func (f *Preset) defaults() {
 	if f.Dispatch == 0 {
 		f.Dispatch = Inline
 	}
 }
 
-// Dispatch returns a FeatherOption that sets the dispatch mode.
-func Dispatch(m DispatchMode) FeatherOption { return func(f *Feather) { f.Dispatch = m } }
+// Dispatch returns a PresetOption that sets the dispatch mode.
+func Dispatch(m DispatchMode) PresetOption { return func(f *Preset) { f.Dispatch = m } }
 
-// Static returns a FeatherOption that sets a pre-built static response,
+// Static returns a PresetOption that sets a pre-built static response,
 // allowing Wing to skip the handler entirely on supported platforms.
-func Static(resp []byte) FeatherOption { return func(f *Feather) { f.StaticResponse = resp } }
+func Static(resp []byte) PresetOption { return func(f *Preset) { f.StaticResponse = resp } }
 
-// Feather presets — pick by what the route does, not how it's dispatched.
+// Preset presets — pick by what the route does, not how it's dispatched.
 // Wing picks the optimal dispatch mode automatically.
 var (
 	// Bolt — inline in ioLoop. Maximum throughput, zero dispatch overhead.
-	Bolt = Feather{Dispatch: Inline}
+	Bolt = Preset{Dispatch: Inline}
 
 	// Arrow — goroutine pool dispatch.
-	Arrow = Feather{Dispatch: Pool}
+	Arrow = Preset{Dispatch: Pool}
 
 	// Spear — goroutine owns connection with blocking I/O.
 	// Go runtime auto-creates OS threads, avoiding ioLoop starvation.
-	Spear = Feather{Dispatch: Takeover}
+	Spear = Preset{Dispatch: Takeover}
 
 	// Plaintext — Bolt-aliased preset for static text and health-check routes.
-	Plaintext = Feather{Dispatch: Inline, ResponseMode: responsePlaintext}
+	Plaintext = Preset{Dispatch: Inline, ResponseMode: responsePlaintext}
 	// JSON — Bolt-aliased preset for JSON-only handlers (no I/O).
 	JSON = Bolt
 	// Query — Spear-aliased preset for short DB/Redis lookups.

@@ -52,7 +52,7 @@ func TestApp_All_AllMethods(t *testing.T) {
 	}
 }
 
-// --- addRoute with WingFeather option ---
+// --- addRoute with WingPreset option ---
 
 func TestApp_AddRoute_WithWingOption(t *testing.T) {
 	app := New()

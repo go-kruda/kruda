@@ -39,31 +39,31 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		IdleTimeout:     cfg.IdleTimeout,
 	}
 	if os.Getenv("KRUDA_ASYNC") == "1" {
-		wcfg.DefaultFeather = Feather{Dispatch: Pool}
+		wcfg.DefaultPreset = Preset{Dispatch: Pool}
 	}
 	// Per-route dispatch from env: KRUDA_POOL_ROUTES="GET /db,GET /queries,GET /fortunes,GET /updates"
 	if routes := os.Getenv("KRUDA_POOL_ROUTES"); routes != "" {
-		wcfg.Feathers = make(map[string]Feather)
+		wcfg.Presets = make(map[string]Preset)
 		for _, r := range strings.Split(routes, ",") {
-			wcfg.Feathers[strings.TrimSpace(r)] = Feather{Dispatch: Pool}
+			wcfg.Presets[strings.TrimSpace(r)] = Preset{Dispatch: Pool}
 		}
 	}
 	if routes := os.Getenv("KRUDA_SPAWN_ROUTES"); routes != "" {
-		if wcfg.Feathers == nil {
-			wcfg.Feathers = make(map[string]Feather)
+		if wcfg.Presets == nil {
+			wcfg.Presets = make(map[string]Preset)
 		}
 		for _, r := range strings.Split(routes, ",") {
-			wcfg.Feathers[strings.TrimSpace(r)] = Feather{Dispatch: Spawn}
+			wcfg.Presets[strings.TrimSpace(r)] = Preset{Dispatch: Spawn}
 		}
 	}
 	// Static responses: bypass handler entirely for maximum throughput.
 	if os.Getenv("KRUDA_STATIC") == "1" {
-		if wcfg.Feathers == nil {
-			wcfg.Feathers = make(map[string]Feather)
+		if wcfg.Presets == nil {
+			wcfg.Presets = make(map[string]Preset)
 		}
-		wcfg.Feathers["GET /"] = Bolt.With(Static(
+		wcfg.Presets["GET /"] = Bolt.With(Static(
 			transport.GetStaticResponseString(200, "text/plain; charset=utf-8", "Hello, World!")))
-		wcfg.Feathers["GET /json"] = Bolt.With(Static(
+		wcfg.Presets["GET /json"] = Bolt.With(Static(
 			transport.GetStaticResponseString(200, "application/json; charset=utf-8", `{"message":"Hello, World!"}`)))
 	}
 	return NewWingTransport(wcfg)

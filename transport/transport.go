@@ -96,11 +96,11 @@ type StringResponder interface {
 	SetStringBody(status int, contentType, body string)
 }
 
-// FeatherConfigurator is an optional interface for transports that support
-// per-route tuning (e.g., Wing transport). SetRouteFeather is called during
+// PresetConfigurator is an optional interface for transports that support
+// per-route tuning (e.g., Wing transport). SetRoutePreset is called during
 // route registration to configure dispatch/buffer/response modes per route.
-type FeatherConfigurator interface {
-	SetRouteFeather(method, path string, feather any)
+type PresetConfigurator interface {
+	SetRoutePreset(method, path string, preset any)
 }
 
 // HeaderMap abstracts response header manipulation.

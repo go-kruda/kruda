@@ -171,7 +171,7 @@ func TestNewWingTransport_SpawnRoutes(t *testing.T) {
 }
 
 func TestNewWingTransport_SpawnRoutes_WithoutPoolRoutes(t *testing.T) {
-	// Test spawn routes when no pool routes are set (creates feathers map)
+	// Test spawn routes when no pool routes are set (creates presets map)
 	os.Unsetenv("KRUDA_POOL_ROUTES")
 	os.Setenv("KRUDA_SPAWN_ROUTES", "POST /api")
 	defer os.Unsetenv("KRUDA_SPAWN_ROUTES")

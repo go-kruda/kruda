@@ -147,13 +147,13 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 	}
 }
 
-func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
+func BenchmarkCPUHandlerPlaintextPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/users/42", func(c *Ctx) error {
 		return c.Text("Hello, World!")
 	}, WingPlaintext())
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /users/42"]
+	f := app.transport.(*Transport).config.Presets["GET /users/42"]
 
 	b.ReportAllocs()
 	out := make([]byte, 0, 256)
@@ -170,13 +170,13 @@ func BenchmarkCPUHandlerPlaintextFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONStaticPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticJSON(benchStaticJSONBody)
 	}, WingJSON())
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()
@@ -194,13 +194,13 @@ func BenchmarkCPUHandlerJSONStaticFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONStaticBytesFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONStaticBytesPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
 	}, WingJSON())
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-static"]
+	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()
@@ -218,13 +218,13 @@ func BenchmarkCPUHandlerJSONStaticBytesFeather(b *testing.B) {
 	runtime.KeepAlive(out)
 }
 
-func BenchmarkCPUHandlerJSONSerializeFeather(b *testing.B) {
+func BenchmarkCPUHandlerJSONSerializePreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-serialize", func(c *Ctx) error {
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
 	}, WingJSON())
 	app.Compile()
-	f := app.transport.(*Transport).config.Feathers["GET /json-serialize"]
+	f := app.transport.(*Transport).config.Presets["GET /json-serialize"]
 	w := &worker{handler: app}
 
 	b.ReportAllocs()

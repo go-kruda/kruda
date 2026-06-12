@@ -42,6 +42,14 @@ in `docs/decisions/0001-break-api-in-v1-minor.md`. Migration table:
   is ever switched automatically.
 - Registration-time `slog.Debug` line for preset-annotated routes.
 
+### Changed
+- Takeover dispatch parks connections on the runtime netpoller instead of
+  pinning one OS thread per connection (~24 threads instead of ~250 at 256
+  connections). DB-route benchmarks gain +6% to +20% RPS at identical CPU
+  per request; median latency improves while `db`/`queries` p99 grows by a
+  few milliseconds from the extra netpoller wake hop. Forensics and paired
+  A/B: `bench/reproducible/results/2026-06-12-wing-netpoll-takeover-evidence.md`.
+
 ### Fixed
 - `c.Text` responses on Wing no longer share a global static cache: the Date
   header is always current, the background Date-patcher data race is gone,

@@ -93,7 +93,7 @@ func runMCPInit(cmd *cobra.Command, args []string) error {
 		fmt.Println("    kruda_add_handler    Generate a route handler")
 		fmt.Println("    kruda_add_resource   Generate a CRUD resource service")
 		fmt.Println("    kruda_list_routes    List all registered routes")
-		fmt.Println("    kruda_suggest_wing   Suggest Wing Feather hints")
+		fmt.Println("    kruda_suggest_wing   Suggest Wing route presets")
 		fmt.Println("    kruda_docs           Look up Kruda docs and examples")
 		fmt.Println()
 		fmt.Println("  Verify: kruda mcp --test")

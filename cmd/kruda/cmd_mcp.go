@@ -297,7 +297,7 @@ func allTools() []mcpTool {
 		},
 		{
 			Name:        "kruda_suggest_wing",
-			Description: "Suggest Wing Feather hints (WingJSON, WingPlaintext, WingQuery, WingRender) for routes",
+			Description: "Suggest Wing route presets (kruda.Plaintext, kruda.JSON, kruda.DB, kruda.Render) for routes",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -600,73 +600,73 @@ func toolSuggestWing(args map[string]any) (string, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Wing Feather Hint Suggestions:\n\n")
-	sb.WriteString(fmt.Sprintf("%-8s %-25s %-18s %s\n", "METHOD", "PATH", "FEATHER", "REASON"))
+	sb.WriteString("Wing Route Preset Suggestions:\n\n")
+	sb.WriteString(fmt.Sprintf("%-8s %-25s %-18s %s\n", "METHOD", "PATH", "PRESET", "REASON"))
 	sb.WriteString(strings.Repeat("-", 80) + "\n")
 
 	for _, r := range routes {
-		feather, reason := suggestFeather(r)
-		sb.WriteString(fmt.Sprintf("%-8s %-25s %-18s %s\n", r.Method, r.Path, feather, reason))
+		preset, reason := suggestPreset(r)
+		sb.WriteString(fmt.Sprintf("%-8s %-25s %-18s %s\n", r.Method, r.Path, preset, reason))
 	}
 
-	sb.WriteString("\nTo apply, add the hint as the last argument:\n")
-	sb.WriteString("  app.Get(\"/path\", handler, kruda.WingJSON())\n")
-	sb.WriteString("\nAvailable hints:\n")
-	sb.WriteString("  WingPlaintext() — minimal responses (health, ping, plain text)\n")
-	sb.WriteString("  WingJSON()      — JSON serialization endpoints\n")
-	sb.WriteString("  WingQuery()     — DB/Redis read-style queries; benchmark write-heavy routes separately\n")
-	sb.WriteString("  WingRender()    — HTML template rendering\n")
-	sb.WriteString("\nStreaming and SSE routes do not have a Wing route hint; keep them on a normal handler route and choose transport-level compatibility deliberately.\n")
+	sb.WriteString("\nTo apply, pass the preset as the last argument:\n")
+	sb.WriteString("  app.Get(\"/path\", handler, kruda.JSON)\n")
+	sb.WriteString("\nAvailable presets:\n")
+	sb.WriteString("  kruda.Plaintext — minimal responses (health, ping, plain text)\n")
+	sb.WriteString("  kruda.JSON      — JSON serialization endpoints\n")
+	sb.WriteString("  kruda.DB        — DB/Redis read-style queries; benchmark write-heavy routes separately\n")
+	sb.WriteString("  kruda.Render    — HTML template rendering\n")
+	sb.WriteString("\nStreaming and SSE routes do not have a Wing route preset; keep them on a normal handler route and choose transport-level compatibility deliberately.\n")
 
 	return sb.String(), nil
 }
 
-func suggestFeather(r routeInfo) (string, string) {
+func suggestPreset(r routeInfo) (string, string) {
 	lpath := strings.ToLower(r.Path)
 
 	// SSE / streaming
 	if strings.Contains(lpath, "/sse") || strings.Contains(lpath, "/stream") || strings.Contains(lpath, "/events") {
-		return "none", "streaming/SSE route; no Wing route hint"
+		return "none", "streaming/SSE route; no Wing route preset"
 	}
 
 	// Health / ping / status
 	if lpath == "/health" || lpath == "/ping" || lpath == "/status" || lpath == "/healthz" || lpath == "/readyz" {
-		return "WingPlaintext()", "health check, minimal response"
+		return "kruda.Plaintext", "health check, minimal response"
 	}
 
 	// Plaintext
 	if lpath == "/plaintext" || lpath == "/" {
-		return "WingPlaintext()", "plain text response"
+		return "kruda.Plaintext", "plain text response"
 	}
 
 	// HTML / render / template
 	if strings.Contains(lpath, "/render") || strings.Contains(lpath, "/page") || strings.Contains(lpath, "/template") || strings.Contains(lpath, "/fortune") {
-		return "WingRender()", "HTML template rendering"
+		return "kruda.Render", "HTML template rendering"
 	}
 
 	// Write-heavy routes need workload evidence because latency and lock
 	// contention can dominate dispatch overhead.
 	if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" || r.Method == "DELETE" {
-		return "WingQuery()", "write-heavy route; benchmark with your DB pool and p99 target"
+		return "kruda.DB", "write-heavy route; benchmark with your DB pool and p99 target"
 	}
 
 	// DB read: path with :id param or typical DB/query patterns
 	if strings.Contains(r.Path, ":id") || strings.Contains(lpath, "/db") ||
 		strings.Contains(lpath, "/queries") {
-		return "WingQuery()", "DB/Redis read-style query"
+		return "kruda.DB", "DB/Redis read-style query"
 	}
 
 	if strings.Contains(lpath, "/updates") {
-		return "WingQuery()", "write-heavy benchmark route; validate dispatch with p99 and errors"
+		return "kruda.DB", "write-heavy benchmark route; validate dispatch with p99 and errors"
 	}
 
 	// JSON endpoint
 	if lpath == "/json" || strings.Contains(lpath, "/api") {
-		return "WingJSON()", "JSON serialization"
+		return "kruda.JSON", "JSON serialization"
 	}
 
 	// Default: JSON for GET
-	return "WingJSON()", "default for GET endpoints"
+	return "kruda.JSON", "default for GET endpoints"
 }
 
 // ---------------------------------------------------------------------------
@@ -866,7 +866,7 @@ kruda.Resource[Product, string](app, "/products", &ProductService{db: db})
 // DELETE /products/:id   → Delete
 ` + "```",
 
-	"wing": `# Wing Transport & Feather Hints
+	"wing": `# Wing Transport & Route Presets
 
 Wing is Kruda's custom async I/O transport:
 - Linux: epoll + eventfd (bypasses net/http and fasthttp)
@@ -882,27 +882,32 @@ app := kruda.New(kruda.FastHTTP())   // fasthttp
 app := kruda.New(kruda.NetHTTP())    // stdlib net/http
 ` + "```" + `
 
-## Feather Hints
+## Route Presets
 
-Per-route I/O strategy optimization. Add as the last argument to route registration:
+Per-route composition tuning. Presets are RouteOptions — pass one as the
+last argument to route registration:
 
 ` + "```" + `go
-app.Get("/json", handler, kruda.WingJSON())         // JSON serialization
-app.Get("/text", handler, kruda.WingPlaintext())     // minimal plain text
-app.Get("/db",   handler, kruda.WingQuery())         // DB/Redis read-style query
-app.Get("/page", handler, kruda.WingRender())        // HTML template rendering
+app.Get("/json", handler, kruda.JSON)      // JSON serialization
+app.Get("/text", handler, kruda.Plaintext) // minimal plain text
+app.Get("/db",   handler, kruda.DB)        // DB/Redis read-style query
+app.Get("/page", handler, kruda.Render)    // HTML template rendering
 ` + "```" + `
 
-| Feather | Best For | Optimization |
-|---------|----------|-------------|
-| WingPlaintext | /health, /ping, static text | Pre-allocated headers, minimal alloc |
-| WingJSON | JSON APIs | Sonic encoder, pre-sized buffers |
-| WingQuery | DB/Redis read-style queries | Connection-aware scheduling |
-| WingRender | HTML templates | Buffer pooling for large responses |
+| Preset | Best For | Dispatch |
+|--------|----------|----------|
+| kruda.Plaintext | /health, /ping, static text | inline in the event loop |
+| kruda.JSON | JSON APIs | inline in the event loop |
+| kruda.DB | DB/Redis read-style queries | goroutine owns the connection |
+| kruda.Render | HTML templates | goroutine owns the connection |
 
-Feather hints are optional — routes work fine without them.
+Structural presets kruda.Bolt (inline), kruda.Arrow (pool), and kruda.Spear
+(takeover) name the dispatch directly; customize with With:
+kruda.Spear.With(kruda.Dispatch(kruda.Spawn)).
+
+Presets are optional — routes work fine without them.
 Benchmark write-heavy routes with your DB pool, p99 target, and error gate before treating them as query-profile routes.
-Streaming and SSE routes do not have a Wing route hint; keep them on normal handlers and choose the transport for compatibility deliberately.`,
+Streaming and SSE routes do not have a Wing route preset; keep them on normal handlers and choose the transport for compatibility deliberately.`,
 
 	"config": `# Configuration
 

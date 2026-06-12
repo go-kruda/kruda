@@ -20,7 +20,7 @@ type PresetTable struct {
 }
 
 type prefixPreset struct {
-	prefix  string
+	prefix string
 	preset Preset
 }
 

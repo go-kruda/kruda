@@ -32,9 +32,9 @@
 //   - PrivateKey:  RSA private key for RS256 signing
 //   - Algorithm:   HS256 (default), HS384, HS512, or RS256
 //   - Lookup:      "source:name" — e.g. "header:Authorization" (default),
-//                  "query:token", "cookie:jwt"
+//     "query:token", "cookie:jwt"
 //   - GracePeriod: window after exp during which a token is still
-//                  refreshable but not authoritative
+//     refreshable but not authoritative
 //   - Skip:        per-request bypass function
 //
 // # See also

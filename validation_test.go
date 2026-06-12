@@ -111,10 +111,10 @@ func TestValidateMin(t *testing.T) {
 		{uint(10), "5", true},
 		{3.14, "3.0", true},
 		{2.5, "3.0", false},
-		{[]int{1, 2, 3}, "2", true},     // slice len 3 >= 2
-		{[]int{1}, "2", false},           // slice len 1 < 2
-		{true, "1", false},               // unsupported type
-		{5, "invalid", false},            // invalid param
+		{[]int{1, 2, 3}, "2", true}, // slice len 3 >= 2
+		{[]int{1}, "2", false},      // slice len 1 < 2
+		{true, "1", false},          // unsupported type
+		{5, "invalid", false},       // invalid param
 	}
 	for _, tt := range tests {
 		if got := validateMin(tt.value, tt.param); got != tt.want {
@@ -136,10 +136,10 @@ func TestValidateMax(t *testing.T) {
 		{uint(3), "5", true},
 		{2.5, "3.0", true},
 		{3.5, "3.0", false},
-		{[]int{1, 2}, "3", true},         // slice len 2 <= 3
-		{[]int{1, 2, 3, 4}, "3", false},  // slice len 4 > 3
-		{true, "1", false},               // unsupported type
-		{5, "invalid", false},            // invalid param
+		{[]int{1, 2}, "3", true},        // slice len 2 <= 3
+		{[]int{1, 2, 3, 4}, "3", false}, // slice len 4 > 3
+		{true, "1", false},              // unsupported type
+		{5, "invalid", false},           // invalid param
 	}
 	for _, tt := range tests {
 		if got := validateMax(tt.value, tt.param); got != tt.want {
@@ -212,7 +212,7 @@ func TestValidateLen(t *testing.T) {
 		{[]int{1, 2}, "2", true},
 		{[]int{1}, "2", false},
 		{map[string]int{"a": 1}, "1", true},
-		{42, "2", false},         // unsupported type (int)
+		{42, "2", false},          // unsupported type (int)
 		{"abc", "invalid", false}, // invalid param
 	}
 	for _, tt := range tests {

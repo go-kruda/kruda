@@ -21,12 +21,12 @@ type WingConfig struct {
 	MaxHeaderCount    int
 	MaxHeaderSize     int
 	MaxConnsPerWorker int
-	HandlerPoolSize   int                // goroutine pool size per worker (Pool dispatch routes)
-	Presets          map[string]Preset // per-route preset config ("METHOD /path" → Preset)
-	DefaultPreset    Preset            // fallback preset for routes not in Presets
-	ReadTimeout       time.Duration      // max time to receive a complete request (0 = disabled)
-	WriteTimeout      time.Duration      // max time to send a response (0 = disabled)
-	IdleTimeout       time.Duration      // max time a keep-alive conn can be idle (0 = disabled)
+	HandlerPoolSize   int               // goroutine pool size per worker (Pool dispatch routes)
+	Presets           map[string]Preset // per-route preset config ("METHOD /path" → Preset)
+	DefaultPreset     Preset            // fallback preset for routes not in Presets
+	ReadTimeout       time.Duration     // max time to receive a complete request (0 = disabled)
+	WriteTimeout      time.Duration     // max time to send a response (0 = disabled)
+	IdleTimeout       time.Duration     // max time a keep-alive conn can be idle (0 = disabled)
 }
 
 func (c *WingConfig) defaults() {

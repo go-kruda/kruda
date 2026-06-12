@@ -233,11 +233,11 @@ type worker struct {
 	evfd     int // eventfd for wake signaling
 	doneCh   chan doneMsg
 	pool     *workerPool
-	presets PresetTable
+	presets  PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
-	lastPreset0 Preset
-	lastPreset1 Preset
+	lastPreset0  Preset
+	lastPreset1  Preset
 	lastMethod0  string
 	lastMethod1  string
 	lastPath0    string
@@ -422,7 +422,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		conns:        make(map[int32]*conn, 1024),
 		evfd:         wakeR,
 		doneCh:       doneCh,
-		presets:     ft,
+		presets:      ft,
 		readTimeout:  int64(cfg.ReadTimeout),
 		writeTimeout: int64(cfg.WriteTimeout),
 		idleTimeout:  int64(cfg.IdleTimeout),

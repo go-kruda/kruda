@@ -110,9 +110,9 @@ func FuzzValidateString(f *testing.F) {
 
 		// Some rules have type-specific paths (int/uint/float/slice). Drive
 		// those branches by passing typed values too — same param string.
-		_ = fn(len(value), param)             // int branch
-		_ = fn(uint(len(value)), param)       // uint branch
+		_ = fn(len(value), param)              // int branch
+		_ = fn(uint(len(value)), param)        // uint branch
 		_ = fn(float64(len(value))*1.5, param) // float branch
-		_ = fn([]string{value}, param)        // slice branch
+		_ = fn([]string{value}, param)         // slice branch
 	})
 }

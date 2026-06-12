@@ -121,7 +121,7 @@ app := kruda.New().
 - Feather = component-axis vocabulary in docs/architecture (dispatch feather, response feather); not a public type name
 - Bone = internal invariants; never public API
 - Default Kruda behavior is the framework contract: handler, middleware, lifecycle hooks, cookies, CORS, secure headers, safety checks, panic recovery, and error handling must remain intact unless an opt-in Preset option documents a bypass (StaticText/StaticJSON)
-- Design references: `docs/superpowers/specs/2026-05-24-wing-flight-model.md`, `docs/superpowers/specs/2026-06-12-kruda-preset-api-reshape-design.md`
+- Design rationale in-repo: `docs/decisions/0001-break-api-in-v1-minor.md` + the CHANGELOG 1.3.0 migration table (full design specs are maintainer-local notes, not tracked)
 
 ### Tooling (`cmd/kruda/`)
 - `kruda new` — project scaffolding

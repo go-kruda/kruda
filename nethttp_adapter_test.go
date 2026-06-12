@@ -362,8 +362,8 @@ func (w *nonFlusherWriter) Header() http.Header {
 	}
 	return w.headers
 }
-func (w *nonFlusherWriter) Write(data []byte) (int, error)  { return len(data), nil }
-func (w *nonFlusherWriter) WriteHeader(code int)            { w.code = code }
+func (w *nonFlusherWriter) Write(data []byte) (int, error) { return len(data), nil }
+func (w *nonFlusherWriter) WriteHeader(code int)           { w.code = code }
 
 // --- fastNetHTTPHeaderMap tests ---
 

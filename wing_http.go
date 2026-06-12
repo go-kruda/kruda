@@ -745,19 +745,19 @@ func releaseResponse(r *wingResponse) {
 
 // wingResponse implements transport.ResponseWriter.
 type wingResponse struct {
-	status               int
-	headers              wingHeaders
-	body                 []byte
-	buf                  []byte // scratch buffer for serialization
-	jsonBuf              bytes.Buffer
-	staticResp           []byte // pre-built full response (if set, buildZeroCopy returns this)
-	jsonFast             bool   // SetJSON fast path — skip header interface, write status+json directly
-	responseMode         responseMode
+	status            int
+	headers           wingHeaders
+	body              []byte
+	buf               []byte // scratch buffer for serialization
+	jsonBuf           bytes.Buffer
+	staticResp        []byte // pre-built full response (if set, buildZeroCopy returns this)
+	jsonFast          bool   // SetJSON fast path — skip header interface, write status+json directly
+	responseMode      responseMode
 	stringFast        bool
 	stringBody        string
 	stringContentType string
-	fileFd               int32 // sendfile fd (0 = not a file response)
-	fileSize             int64 // sendfile byte count
+	fileFd            int32 // sendfile fd (0 = not a file response)
+	fileSize          int64 // sendfile byte count
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -767,6 +767,7 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
+
 // SetStringBody implements transport.StringResponder — the zero-copy string
 // fast lane (twin of SetJSON). The response is serialized in one pass as
 // status + Date + Content-Type + Content-Length + body; the body string is

@@ -149,9 +149,17 @@ func registerDBRoutes(app *kruda.App, dbDispatchMode string) {
 		return c.JSON(w)
 	}, dbRouteOptions(dbDispatchMode, kruda.DB)...)
 
-	// TFB: multiple queries — pipeline via SendBatch
+	// TFB: multiple queries — pipeline via SendBatch. n==1 short-circuits to
+	// a direct QueryRow (same as /db): batch pipeline setup/teardown costs
+	// more than the one query it carries. The Fiber app applies the same
+	// short-circuit so the cell stays a framework comparison.
 	app.Get("/queries", func(c *kruda.Ctx) error {
 		n := clamp(queryCount(c), 1, 500)
+		if n == 1 {
+			w := World{ID: int32(rand.IntN(10000) + 1)}
+			pool.QueryRow(context.Background(), "worldSelect", w.ID).Scan(&w.RandomNumber)
+			return c.JSON([]World{w})
+		}
 		worlds := make([]World, n)
 		for i := range worlds {
 			worlds[i].ID = int32(rand.IntN(10000) + 1)

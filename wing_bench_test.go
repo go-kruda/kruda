@@ -151,7 +151,7 @@ func BenchmarkCPUHandlerPlaintextPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/users/42", func(c *Ctx) error {
 		return c.Text("Hello, World!")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 	f := app.transport.(*Transport).config.Presets["GET /users/42"]
 
@@ -174,7 +174,7 @@ func BenchmarkCPUHandlerJSONStaticPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticJSON(benchStaticJSONBody)
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
@@ -198,7 +198,7 @@ func BenchmarkCPUHandlerJSONStaticBytesPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		return c.SendStaticWithTypeBytes(jsonContentType, benchStaticJSONBody)
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 	f := app.transport.(*Transport).config.Presets["GET /json-static"]
 	w := &worker{handler: app}
@@ -222,7 +222,7 @@ func BenchmarkCPUHandlerJSONSerializePreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/json-serialize", func(c *Ctx) error {
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 	f := app.transport.(*Transport).config.Presets["GET /json-serialize"]
 	w := &worker{handler: app}

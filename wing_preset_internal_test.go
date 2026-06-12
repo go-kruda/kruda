@@ -203,7 +203,7 @@ func TestWingResponseGenericStaticTextKeepsStaticCache(t *testing.T) {
 	}
 }
 
-func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+func TestPlaintextPresetModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool
 	app.Use(func(c *Ctx) error {
@@ -221,7 +221,7 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app.Get("/plaintext", func(c *Ctx) error {
 		handlerRan = true
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -230,7 +230,7 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	}
 	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext route did not retain its handler chain")
+		t.Fatal("Plaintext route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
@@ -243,11 +243,11 @@ func TestWingPlaintextModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 		t.Fatalf("middleware=%v before=%v handler=%v after=%v", middlewareRan, beforeRan, handlerRan, afterRan)
 	}
 	if !resp.stringFast {
-		t.Fatal("simple WingPlaintext handler did not use plaintext response mode")
+		t.Fatal("simple Plaintext handler did not use plaintext response mode")
 	}
 }
 
-func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
+func TestPlaintextPresetModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	app := New(Wing())
 	var groupMiddlewareRan, handlerRan bool
 	api := app.Group("/api").Use(func(c *Ctx) error {
@@ -257,7 +257,7 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	api.Get("/plaintext", func(c *Ctx) error {
 		handlerRan = true
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -266,7 +266,7 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 	}
 	f := tr.config.Presets["GET /api/plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext group route did not retain its handler chain")
+		t.Fatal("Plaintext group route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
@@ -279,16 +279,16 @@ func TestWingPlaintextModeGroupRouteRetainsHandlerChain(t *testing.T) {
 		t.Fatalf("groupMiddleware=%v handler=%v", groupMiddlewareRan, handlerRan)
 	}
 	if !resp.stringFast {
-		t.Fatal("simple grouped WingPlaintext handler did not use plaintext response mode")
+		t.Fatal("simple grouped Plaintext handler did not use plaintext response mode")
 	}
 }
 
-func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+func TestPlaintextPresetModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	app := New(Wing())
 	app.Get("/plaintext", func(c *Ctx) error {
 		c.SetHeader("X-Test", "yes")
 		return c.Text("ok")
-	}, WingPlaintext())
+	}, Plaintext)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -297,7 +297,7 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	}
 	f := tr.config.Presets["GET /plaintext"]
 	if len(f.handlers) == 0 {
-		t.Fatal("WingPlaintext route did not retain its handler chain")
+		t.Fatal("Plaintext route did not retain its handler chain")
 	}
 
 	resp := acquireResponse()
@@ -315,13 +315,13 @@ func TestWingPlaintextModeCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	}
 }
 
-func TestWingJSONStaticBytesUseJSONResponder(t *testing.T) {
+func TestPresetJSONStaticBytesUseJSONResponder(t *testing.T) {
 	app := New(Wing())
 	var handlerRan bool
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -359,7 +359,7 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticJSON([]byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -391,7 +391,7 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 	}
 }
 
-func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
+func TestPresetJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	if krudajson.EncoderName != "encoding/json" {
 		t.Skip("stream responder is used only when the active encoder avoids an intermediate marshal allocation")
 	}
@@ -404,7 +404,7 @@ func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	app.Get("/json-serialize", func(c *Ctx) error {
 		handlerRan = true
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -432,7 +432,7 @@ func TestWingJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
 	}
 }
 
-func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
+func TestPresetJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
 	app := New(Wing(), WithJSONEncoder(func(v any) ([]byte, error) {
 		return []byte(`{"custom":true}`), nil
 	}))
@@ -440,7 +440,7 @@ func TestWingJSONSerializeCustomEncoderStillUsesEncoder(t *testing.T) {
 	app.Get("/json-serialize", func(c *Ctx) error {
 		handlerRan = true
 		return c.JSON(benchJSONMessage{Message: "Hello, World!"})
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -514,7 +514,7 @@ func BenchmarkWorkerLookupPresetAlternatingExact(b *testing.B) {
 	}
 }
 
-func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
+func TestPresetJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app := New(Wing())
 	var middlewareRan, beforeRan, handlerRan, afterRan bool
 	app.Use(func(c *Ctx) error {
@@ -532,7 +532,7 @@ func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	app.Get("/json-static", func(c *Ctx) error {
 		handlerRan = true
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)
@@ -557,12 +557,12 @@ func TestWingJSONModeStillRunsHandlerMiddlewareLifecycle(t *testing.T) {
 	}
 }
 
-func TestWingJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T) {
+func TestPresetJSONStaticBytesCustomHeaderFallsBackToGenericResponse(t *testing.T) {
 	app := New(Wing())
 	app.Get("/json-static", func(c *Ctx) error {
 		c.SetHeader("X-Test", "yes")
 		return c.SendStaticWithTypeBytes(jsonContentType, []byte(`{"message":"ok"}`))
-	}, WingJSON())
+	}, JSON)
 	app.Compile()
 
 	tr, ok := app.transport.(*Transport)

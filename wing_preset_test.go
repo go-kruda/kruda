@@ -97,12 +97,12 @@ func TestStaticOption(t *testing.T) {
 	}
 }
 
-func TestWingStaticTextOption(t *testing.T) {
+func TestStaticTextOption(t *testing.T) {
 	var rc routeConfig
-	WingStaticText(200, "text/plain", "ready").applyRoute(&rc)
+	StaticText(200, "text/plain", "ready").applyRoute(&rc)
 
 	if rc.preset == nil {
-		t.Fatal("WingStaticText did not set a Wing preset")
+		t.Fatal("StaticText did not set a Wing preset")
 	}
 	if rc.preset.Dispatch != Inline {
 		t.Fatalf("Dispatch = %v, want Inline", rc.preset.Dispatch)
@@ -114,13 +114,13 @@ func TestWingStaticTextOption(t *testing.T) {
 		t.Fatalf("static response missing body: %q", rc.preset.StaticResponse)
 	}
 	if Bolt.StaticResponse != nil {
-		t.Fatal("WingStaticText mutated Bolt preset")
+		t.Fatal("StaticText mutated Bolt preset")
 	}
 }
 
 func TestWingPresetOption(t *testing.T) {
 	var rc routeConfig
-	WingPreset(Arrow).applyRoute(&rc)
+	Arrow.applyRoute(&rc)
 
 	if rc.preset == nil {
 		t.Fatal("WingPreset did not set a Wing preset")
@@ -133,12 +133,12 @@ func TestWingPresetOption(t *testing.T) {
 	}
 }
 
-func TestWingStaticJSONOption(t *testing.T) {
+func TestStaticJSONOption(t *testing.T) {
 	var rc routeConfig
-	WingStaticJSON(200, `{"ok":true}`).applyRoute(&rc)
+	StaticJSON(200, `{"ok":true}`).applyRoute(&rc)
 
 	if rc.preset == nil {
-		t.Fatal("WingStaticJSON did not set a Wing preset")
+		t.Fatal("StaticJSON did not set a Wing preset")
 	}
 	if !bytes.Contains(rc.preset.StaticResponse, []byte("Content-Type: application/json; charset=utf-8\r\n")) {
 		t.Fatalf("static JSON response missing content type: %q", rc.preset.StaticResponse)
@@ -147,7 +147,7 @@ func TestWingStaticJSONOption(t *testing.T) {
 		t.Fatalf("static JSON response missing body: %q", rc.preset.StaticResponse)
 	}
 	if JSON.StaticResponse != nil {
-		t.Fatal("WingStaticJSON mutated JSON preset")
+		t.Fatal("StaticJSON mutated JSON preset")
 	}
 }
 

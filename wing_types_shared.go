@@ -116,6 +116,15 @@ func (f Preset) With(opts ...PresetOption) Preset {
 	return f
 }
 
+// applyRoute implements RouteOption: passing a Preset at route registration
+// attaches the per-route composition to the route.
+//
+//	app.Get("/db", handler, kruda.DB)
+func (p Preset) applyRoute(rc *routeConfig) {
+	cp := p
+	rc.preset = &cp
+}
+
 func (f *Preset) defaults() {
 	if f.Dispatch == 0 {
 		f.Dispatch = Inline

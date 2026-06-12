@@ -171,13 +171,13 @@ func TestParseSize_MBError(t *testing.T) {
 
 // --- Wing preset route options ---
 
-func TestWingPresetOptions(t *testing.T) {
+func TestPresetRouteOptions(t *testing.T) {
 	// These just create RouteOption funcs — calling them should not panic.
 	opts := []RouteOption{
-		WingPlaintext(),
-		WingJSON(),
-		WingQuery(),
-		WingRender(),
+		Plaintext,
+		JSON,
+		Query,
+		Render,
 	}
 	for i, opt := range opts {
 		if opt == nil {

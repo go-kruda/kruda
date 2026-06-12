@@ -3,7 +3,7 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.3.0] — unreleased
+## [1.3.0] — 2026-06-13
 
 ### Breaking
 

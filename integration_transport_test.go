@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -146,6 +147,84 @@ func TestTransportSecurityHeadersAndCookies_Wing(t *testing.T) {
 	requireSecurityCookieGet(t, "http://"+addr+"/headers/json")
 	requireSecurityCookieGet(t, "http://"+addr+"/headers/text")
 	requireSecurityCookieGet(t, "http://"+addr+"/headers/html")
+}
+
+// TestTransportTakeoverKeepAlive_Wing drives the Takeover dispatch loop end
+// to end on one raw TCP connection: the first request enters takeoverLoop
+// from the event loop, the second is read inside the loop itself, two
+// pipelined requests arrive in a single segment (exercising the parse-
+// without-read path), and a final Connection: close request must end with
+// the server closing the fd — which the worker does through the *os.File
+// handed back from the takeover goroutine.
+func TestTransportTakeoverKeepAlive_Wing(t *testing.T) {
+	app := New(Wing())
+	app.Get("/take", func(c *Ctx) error { return c.Text("spear") }, DB)
+	app.Compile()
+
+	if app.transportType != "wing" {
+		t.Skipf("wing transport not selected on this platform (got %q)", app.transportType)
+	}
+
+	addr, shutdown := startSmokeApp(t, app, "/take")
+	defer shutdown()
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	br := bufio.NewReader(conn)
+
+	keepAliveReq := "GET /take HTTP/1.1\r\nHost: test\r\n\r\n"
+	readResp := func(step string) {
+		t.Helper()
+		resp, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatalf("%s: read response: %v", step, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatalf("%s: read body: %v", step, err)
+		}
+		if resp.StatusCode != http.StatusOK || string(body) != "spear" {
+			t.Fatalf("%s: got status %d body %q, want 200 %q", step, resp.StatusCode, body, "spear")
+		}
+	}
+
+	if _, err := conn.Write([]byte(keepAliveReq)); err != nil {
+		t.Fatalf("write first request: %v", err)
+	}
+	readResp("first request (event loop -> takeover)")
+
+	if _, err := conn.Write([]byte(keepAliveReq)); err != nil {
+		t.Fatalf("write second request: %v", err)
+	}
+	readResp("second request (read inside takeoverLoop)")
+
+	if _, err := conn.Write([]byte(keepAliveReq + keepAliveReq)); err != nil {
+		t.Fatalf("write pipelined requests: %v", err)
+	}
+	readResp("pipelined request 1")
+	readResp("pipelined request 2")
+
+	closeReq := "GET /take HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n"
+	if _, err := conn.Write([]byte(closeReq)); err != nil {
+		t.Fatalf("write close request: %v", err)
+	}
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("close request: read response: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || string(body) != "spear" {
+		t.Fatalf("close request: got status %d body %q", resp.StatusCode, body)
+	}
+	if _, err := br.ReadByte(); err != io.EOF {
+		t.Fatalf("after Connection: close, want EOF from server, got %v", err)
+	}
 }
 
 // startSmokeApp binds the App's transport to a random TCP port, starts

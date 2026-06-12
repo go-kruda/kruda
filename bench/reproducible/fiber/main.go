@@ -120,8 +120,17 @@ func registerDBRoutes(app *fiber.App) {
 		return c.JSON(w)
 	})
 
+	// n==1 short-circuits to a direct QueryRow, mirroring the Kruda app, so
+	// the q=1 cell compares frameworks rather than batch-of-one overhead.
 	app.Get("/queries", func(c *fiber.Ctx) error {
 		n := clamp(queryCount(c.Query("q")), 1, 500)
+		if n == 1 {
+			w := World{ID: int32(rand.IntN(10000) + 1)}
+			pool.QueryRow(context.Background(),
+				"SELECT randomnumber FROM world WHERE id=$1", w.ID,
+			).Scan(&w.RandomNumber)
+			return c.JSON([]World{w})
+		}
 		worlds := make([]World, n)
 		for i := range worlds {
 			worlds[i].ID = int32(rand.IntN(10000) + 1)

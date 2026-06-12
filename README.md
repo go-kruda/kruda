@@ -123,7 +123,7 @@ Default CPU-bound routes:
 | `/json-static` | Normal handler path returning constant JSON bytes, no serialization |
 | `/json-serialize` | Normal handler path performing real JSON serialization |
 
-The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as "faster than Actix" only when median RPS is at least 3% higher and p99 is no worse than 10% above Actix with zero errors. Otherwise, use "same ballpark as Actix."
+The benchmark runs Kruda, Fiber, and Actix with `wrk --latency` across latency and throughput profiles. Kruda should be described as faster than a rival only when median RPS is at least 3% higher and p99 is no worse than 10% above that rival with zero errors. Otherwise, use "same ballpark."
 
 Committed tiger evidence for the v1.3.0 release gate (`142a418`) satisfies that gate for the CPU-bound Wing handler routes below:
 
@@ -142,7 +142,20 @@ Opt-in read-only DB workload evidence is tracked separately because database dri
 | `/db` | throughput | +183.42% | -84.42% |
 | `/fortunes` | throughput | +99.48% | -71.57% |
 
-Evidence: `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (v1.2.6 baseline: `2026-06-06-v126-db-evidence.md`). Treat this as a workload-specific read-only DB result, not a broad CPU-bound handler-path claim. Versus Fiber, read-only DB routes remain same ballpark (no claim): `bench/reproducible/results/2026-06-11-fiber-db-read-evidence.md`.
+Evidence: `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (v1.2.6 baseline: `2026-06-06-v126-db-evidence.md`). Treat this as a workload-specific read-only DB result, not a broad CPU-bound handler-path claim.
+
+With the Wing netpoll takeover dispatch, Kruda also satisfies the gate against Fiber on every benchmark route:
+
+| Route | Profile | Kruda vs Fiber median RPS | Kruda vs Fiber p99 |
+|------|---------|---------------------------:|-------------------:|
+| `/plaintext-handler` | throughput | +26.88% | -76.68% |
+| `/json-static` | throughput | +27.40% | -77.90% |
+| `/json-serialize` | throughput | +30.05% | -78.28% |
+| `/fortunes` | throughput | +11.89% | -6.32% |
+| `/db` | throughput | +3.14% | +1.96% |
+| `/queries` (default build) | throughput | +3.30% | -2.01% |
+
+Evidence: `bench/reproducible/results/2026-06-12-wing-netpoll-takeover-evidence.md` (5 rounds per cell, zero errors; supersedes the "same ballpark as Fiber" wording from `2026-06-11-fiber-db-read-evidence.md`). The `/queries` claim holds on the default Sonic build (+3.30%/+5.16%); on the `kruda_stdjson` build that route is same ballpark. The netpoll takeover trades a few milliseconds of `db`/`queries` p99 for the throughput win — details and the thread-model forensics are in the evidence doc.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -218,6 +219,12 @@ type doneMsg struct {
 	fd        int32
 	data      []byte
 	keepAlive bool
+	// file is non-nil when a Takeover goroutine owned the fd through an
+	// *os.File on the runtime netpoller. The worker must finish conn
+	// bookkeeping first and then close through file (not SubmitClose), so
+	// the kernel cannot recycle the fd number while the conns map still
+	// references it.
+	file *os.File
 }
 
 type worker struct {
@@ -823,6 +830,24 @@ func (w *worker) tryParse(c *conn) {
 }
 
 func (w *worker) handleDone(msg doneMsg) {
+	if msg.file != nil {
+		// Takeover conn finished: clean bookkeeping before closing through
+		// the File so the fd number cannot be recycled mid-cleanup. The fd
+		// was Detached from the engine at takeover, so SubmitClose must not
+		// run here.
+		if c, ok := w.conns[msg.fd]; ok {
+			if c.cancel != nil {
+				c.cancel()
+			}
+			if c.sendFileFd > 0 {
+				syscall.Close(int(c.sendFileFd))
+				c.sendFileFd = 0
+			}
+			delete(w.conns, msg.fd)
+		}
+		msg.file.Close()
+		return
+	}
 	c := w.conns[msg.fd] // async path — no ConnPtr available
 	if c == nil {
 		return
@@ -908,14 +933,23 @@ func (w *worker) directSend(c *conn) {
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
 
-// takeoverLoop owns a connection fd: loops read→handle→write using
-// blocking syscalls (not RawSyscall) so the Go runtime detects the
-// blocking I/O and creates extra OS threads, avoiding starvation
-// from ioLoop's LockOSThread.
+// takeoverLoop owns a connection fd: loops read→handle→write through an
+// *os.File so a blocked read parks the goroutine on the runtime netpoller
+// instead of pinning an OS thread. The previous blocking-syscall variant
+// ran one OS thread per connection (237-250 threads, 1.40 context switches
+// per request at c256 on /db) — identical CPU per request to this model,
+// but scheduler pressure inflated the time a pgx pool conn stayed checked
+// out, costing ~6% throughput (results/forensics-20260612T150500Z).
 func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
-	// Set fd to blocking mode so syscall.Read/Write will block the OS thread,
-	// triggering Go runtime to spin up new threads for other goroutines.
-	syscall.SetNonblock(int(fd), false)
+	// fds arrive non-blocking from accept4/SetNonblock. os.NewFile registers
+	// a non-blocking fd with the runtime poller, so Read/Write below park
+	// the goroutine, never the thread.
+	f := os.NewFile(uintptr(fd), "wing-takeover")
+	if f == nil {
+		w.doneCh <- doneMsg{fd: fd, keepAlive: false}
+		w.wake()
+		return
+	}
 
 	bp := takeoverBufPool.Get().(*[]byte)
 	buf := *bp
@@ -942,23 +976,18 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 		releaseResponse(resp)
 		releaseRequest(req)
 
-		// Write full response — blocking syscall.Write (not RawSyscall).
-		for off := 0; off < len(data); {
-			n, err := syscall.Write(int(fd), data[off:])
-			if err != nil {
-				keepAlive = false
-				goto done
-			}
-			if n > 0 {
-				off += n
-			}
+		// Write full response — os.File loops over partial writes and parks
+		// on EAGAIN via the runtime poller.
+		if _, werr := f.Write(data); werr != nil {
+			keepAlive = false
+			goto done
 		}
 
 		if !keepAlive {
 			goto done
 		}
 
-		// Read next request — blocking syscall.Read.
+		// Read next request — parks the goroutine until data arrives.
 		for {
 			if readN > 0 {
 				r, consumed, ok := parseHTTPRequest(buf[:readN], w.limits)
@@ -980,7 +1009,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 				keepAlive = false
 				goto done
 			}
-			n, err := syscall.Read(int(fd), buf[readN:])
+			n, err := f.Read(buf[readN:])
 			if n > 0 {
 				readN += n
 				continue
@@ -995,9 +1024,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 
 done:
 	takeoverBufPool.Put(bp)
-	// Signal worker loop to close conn and fd via closeConn → SubmitClose.
-	// Do NOT call syscall.Close here — double-close risks recycled fd corruption.
-	w.doneCh <- doneMsg{fd: fd, keepAlive: false}
+	// Hand the File to the worker loop: it deletes conn bookkeeping first
+	// and then closes through the File. Do NOT close here — the kernel
+	// could recycle the fd number while the conns map still references it.
+	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
 	w.wake()
 }
 

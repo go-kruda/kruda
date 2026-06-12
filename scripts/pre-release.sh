@@ -31,7 +31,7 @@ ok "no tracked uncommitted changes"
 
 section "no replace directives in committed go.mod files (released modules only)"
 # examples/ and bench/ are internal-use modules; their go.mod can keep replace
-# directives that point at the local repo. Released modules (root, transport/wing,
+# directives that point at the local repo. Released modules (root, cmd/kruda,
 # contrib/*) must NOT have replace directives.
 violations=$(git ls-files '*go.mod' | grep -vE '^(examples|bench)/' | xargs grep -l '^replace ' 2>/dev/null || true)
 if [[ -n "$violations" ]]; then

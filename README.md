@@ -144,18 +144,18 @@ Opt-in read-only DB workload evidence is tracked separately because database dri
 
 Evidence: `bench/reproducible/results/2026-06-12-v1-3-0-string-lane-preset-evidence.md` (v1.2.6 baseline: `2026-06-06-v126-db-evidence.md`). Treat this as a workload-specific read-only DB result, not a broad CPU-bound handler-path claim.
 
-With the Wing netpoll takeover dispatch, Kruda also satisfies the gate against Fiber on every benchmark route:
+With the Wing netpoll takeover plus the v1.3.1 adaptive-spin dispatch, Kruda's standing versus Fiber on every benchmark route (default Sonic build, 5 rounds, zero errors):
 
 | Route | Profile | Kruda vs Fiber median RPS | Kruda vs Fiber p99 |
 |------|---------|---------------------------:|-------------------:|
-| `/plaintext-handler` | throughput | +26.88% | -76.68% |
-| `/json-static` | throughput | +27.40% | -77.90% |
-| `/json-serialize` | throughput | +30.05% | -78.28% |
-| `/fortunes` | throughput | +11.89% | -6.32% |
-| `/db` | throughput | +3.14% | +1.96% |
-| `/queries` (default build) | throughput | +3.30% | -2.01% |
+| `/plaintext-handler` | throughput | +28.8% | -78.2% |
+| `/json-static` | throughput | +27.8% | -80.1% |
+| `/json-serialize` | throughput | +27.2% | -69.1% |
+| `/fortunes` | throughput | +6.7% | -1.7% |
+| `/db` | throughput | +2.7% | -15.5% |
+| `/queries` | throughput | +1.9% | -6.6% |
 
-Evidence: `bench/reproducible/results/2026-06-12-wing-netpoll-takeover-evidence.md` (5 rounds per cell, zero errors; supersedes the "same ballpark as Fiber" wording from `2026-06-11-fiber-db-read-evidence.md`). The `/queries` claim holds on the default Sonic build (+3.30%/+5.16%); on the `kruda_stdjson` build that route is same ballpark. The netpoll takeover trades a few milliseconds of `db`/`queries` p99 for the throughput win — details and the thread-model forensics are in the evidence doc.
+Evidence: `bench/reproducible/results/2026-06-13-v1-3-1-consolidated-evidence.md` (5 rounds per cell, zero errors). Read it by workload: the CPU routes and `/fortunes` are decisive RPS *and* p99 wins; `/db` and `/queries` are pool-bound and sit at the pgx ceiling (`2026-06-13-db-route-ceiling-evidence.md`), so Kruda **matches** Fiber on their RPS and **beats** it on p99. The v1.3.1 takeover-spin (`2026-06-13-takeover-spin-p99-evidence.md`) removed the v1.3.0 `db`/`queries` p99 trade rather than chasing RPS the floor will not yield.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 

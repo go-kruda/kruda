@@ -173,7 +173,7 @@ app.Group("/api/v1").
 
 ## What You Gain
 
-- **Wing transport** — raw epoll+eventfd on Linux, faster than Fiber on every benchmark route in the committed v1.3.0 evidence: +27-34% on CPU-bound routes (821K vs 647K req/s plaintext throughput), +10-12% on `/fortunes`, +3-6% on `/db` and `/queries` (see `bench/reproducible/results/2026-06-12-wing-netpoll-takeover-evidence.md`)
+- **Wing transport** — raw epoll+eventfd on Linux: +27-35% RPS on CPU-bound routes (825K vs 641K req/s plaintext throughput) and +7% on `/fortunes`, both with far better p99; on the pool-bound `/db` and `/queries` it matches Fiber's RPS at the pgx ceiling while beating its p99 (see `bench/reproducible/results/2026-06-13-v1-3-1-consolidated-evidence.md`)
 - **Type-safe handlers** — no more `BodyParser` + manual validation
 - **No context reuse bugs** — safe string copies by default
 - **HTTP/2 support** — switch to net/http when needed

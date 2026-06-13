@@ -3,6 +3,36 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.1] — 2026-06-13
+
+### Changed
+
+- **Wing: adaptive spin before the netpoller park on Takeover keep-alive reads.**
+  Recovers the `/db` and `/queries` throughput-p99 wake-hop introduced by the
+  v1.3.0 netpoll takeover. On the default build versus Fiber, every DB-route cell
+  now beats Fiber on p99 (−6.6% to −28.9%) while matching it on RPS at the pgx
+  ceiling — the v1.3.0 "trades a few milliseconds of db/queries p99" caveat is
+  removed. The spin is bounded (`takeoverSpinReads`) and reached only by Takeover
+  dispatch (DB/Render routes); DB-bound routes have idle CPU, so it trades that
+  idle for a shorter tail at no throughput cost. Evidence:
+  `bench/reproducible/results/2026-06-13-takeover-spin-p99-evidence.md` and
+  `2026-06-13-v1-3-1-consolidated-evidence.md`.
+
+### Added
+
+- `bench/reproducible/footprint.sh` — runtime footprint measurement (binary size,
+  startup time, RSS).
+- `bench.sh` opt-in low-concurrency profiles (`BENCH_LOWC=1` → c8/c16/c32).
+- `TestStringLaneZeroAlloc` — guards the Wing string lane's zero-allocation
+  property against regression.
+
+### Notes — performance audits (no code change)
+
+- Allocation: the Wing hot path is already allocation-optimal (Ctx pool and the
+  string lane are 0 allocs/op). Footprint: Linux startup 5 ms, idle RSS 13.8 MB.
+  Low-concurrency: Kruda leads RPS at every concurrency and leads p99 from c16 up.
+  Evidence files under `bench/reproducible/results/2026-06-13-*`.
+
 ## [1.3.0] — 2026-06-13
 
 ### Breaking

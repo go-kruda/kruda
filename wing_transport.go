@@ -930,6 +930,12 @@ func (w *worker) directSend(c *conn) {
 	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
+// takeoverSpinReads bounds the non-blocking read attempts a Takeover keep-alive
+// loop makes before parking on the runtime netpoller. A small spin can catch an
+// already-buffered next request without a netpoller wake hop; the fallback park
+// keeps the takeover thread count low when the connection is genuinely idle.
+const takeoverSpinReads = 8
+
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
 
@@ -1008,6 +1014,29 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 			if readN >= len(buf) {
 				keepAlive = false
 				goto done
+			}
+			// Adaptive spin: a few non-blocking raw reads before parking on the
+			// netpoller. Catches an already-buffered next keep-alive request
+			// without a netpoller wake hop; falls back to f.Read (park) under
+			// idle so the takeover thread-count win is preserved. The fd is owned
+			// solely by this goroutine, so a raw read cannot race the *os.File.
+			got := false
+			for s := 0; s < takeoverSpinReads; s++ {
+				sn, serr := syscall.Read(int(fd), buf[readN:])
+				if sn > 0 {
+					readN += sn
+					got = true
+					break
+				}
+				if serr == syscall.EAGAIN {
+					continue
+				}
+				// EOF (sn==0, serr==nil) or hard error: stop keep-alive.
+				keepAlive = false
+				goto done
+			}
+			if got {
+				continue
 			}
 			n, err := f.Read(buf[readN:])
 			if n > 0 {

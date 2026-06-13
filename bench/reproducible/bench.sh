@@ -60,6 +60,17 @@ PROFILES=(
   "throughput:-t4 -c256 -d$BENCH_DURATION_VALUE"
 )
 
+# Opt-in low-concurrency profiles (BENCH_LOWC=1) for characterizing latency when
+# the server is not saturated — closer to many real-world services than c128/c256.
+# Default runs are unchanged.
+if [ "${BENCH_LOWC:-0}" = "1" ]; then
+  PROFILES+=(
+    "lowc8:-t4 -c8 -d$BENCH_DURATION_VALUE"
+    "lowc16:-t4 -c16 -d$BENCH_DURATION_VALUE"
+    "lowc32:-t4 -c32 -d$BENCH_DURATION_VALUE"
+  )
+fi
+
 if [ "$#" -gt 0 ]; then
   ROUTES=("$@")
 else

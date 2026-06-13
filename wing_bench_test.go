@@ -33,6 +33,26 @@ func BenchmarkWingStringLaneFortuneSize(b *testing.B) {
 	_ = buf
 }
 
+// TestStringLaneZeroAlloc guards the Wing string fast lane's zero-allocation
+// property (the v1.3.0 lane + pool win). The serialize path must stay alloc-free
+// so the DB/CPU hot routes never regress on GC pressure. See the perf-track
+// alloc audit (bench/reproducible/results/2026-06-13-alloc-audit-evidence.md):
+// the hot path is already allocation-optimal; this locks it in.
+func TestStringLaneZeroAlloc(t *testing.T) {
+	payload := strings.Repeat("<tr><td>fortune</td></tr>", 52)
+	r := acquireResponse()
+	defer releaseResponse(r)
+	buf := make([]byte, 0, 4096)
+	allocs := testing.AllocsPerRun(200, func() {
+		r.SetStringBody(200, "text/html; charset=utf-8", payload)
+		buf = r.appendStringTo(buf[:0])
+	})
+	if allocs != 0 {
+		t.Fatalf("string lane must be zero-alloc, got %.2f allocs/op", allocs)
+	}
+	_ = buf
+}
+
 // ============================================================================
 // Level 1 — CPU-only benchmarks
 //

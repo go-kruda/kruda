@@ -1,6 +1,6 @@
 # Coming from Fiber
 
-Fiber users will feel right at home — Kruda has the same Express-like API, but with Wing transport (epoll+eventfd) that's 26% faster.
+Fiber users will feel right at home — Kruda has the same Express-like API, but with Wing transport (epoll+eventfd) that's faster than Fiber on every benchmark route in the committed v1.3.0 evidence — up to +27-34% on CPU-bound work.
 
 ## Quick Comparison
 

@@ -55,6 +55,31 @@ func ExampleApp_Group() {
 	// Output:
 }
 
+// ExamplePreset shows the per-route Preset options. A Preset is itself a
+// RouteOption, so it is passed straight to route registration. Semantic
+// presets (Plaintext, JSON, DB, Render) name the workload; structural presets
+// (Bolt, Arrow, Spear) name the dispatch and can be tuned with With.
+func ExamplePreset() {
+	app := kruda.New()
+	h := func(c *kruda.Ctx) error { return c.Text("ok") }
+
+	// Semantic presets — pick by what the route does:
+	app.Get("/health", h, kruda.Plaintext) // static text / health check
+	app.Get("/user", h, kruda.JSON)        // JSON, no I/O
+	app.Get("/db", h, kruda.DB)            // short DB / Redis lookup
+	app.Get("/page", h, kruda.Render)      // DB + HTML/template render
+
+	// Structural presets name the dispatch; tune with With:
+	app.Get("/heavy", h, kruda.Spear)
+	app.Get("/tuned", h, kruda.Bolt.With(kruda.Dispatch(kruda.Pool)))
+
+	// StaticText/StaticJSON opt into Wing's handler bypass for hot paths:
+	app.Get("/version", h, kruda.StaticJSON(200, `{"version":"1.3.0"}`))
+
+	_ = app
+	// Output:
+}
+
 // Stub handlers used only so the Example* functions compile.
 func listUsersHandler(c *kruda.Ctx) error  { _ = c; return nil }
 func createUserHandler(c *kruda.Ctx) error { _ = c; return nil }

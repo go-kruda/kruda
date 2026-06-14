@@ -362,6 +362,14 @@ func (app *App) handleError(c *Ctx, err error) {
 			return
 		}
 
+		if app.config.problemJSON {
+			app.writeProblem(c, ProblemDetails{
+				Title: "Validation failed", Status: 422,
+				Detail: ve.Error(), Instance: c.Path(), Errors: ve.Errors,
+			})
+			return
+		}
+
 		// Default: use ValidationError's own JSON marshaling
 		c.Status(422)
 		data, _ := ve.MarshalJSON()
@@ -423,9 +431,29 @@ func (app *App) handleError(c *Ctx, err error) {
 		return
 	}
 
+	if app.config.problemJSON {
+		p := ProblemDetails{
+			Type: ke.Type, Title: http.StatusText(ke.Code), Status: ke.Code,
+			Detail:   orDefault(ke.Detail, ke.Message),
+			Instance: orDefault(ke.Instance, c.Path()), Extensions: ke.Extensions,
+		}
+		if errors.As(ke.Err, &ve) {
+			p.Errors = ve.Errors
+		}
+		app.writeProblem(c, p)
+		return
+	}
+
 	// Default: set status and send JSON error response
 	c.Status(ke.Code)
 	_ = c.JSON(ke)
+}
+
+func (app *App) writeProblem(c *Ctx, p ProblemDetails) {
+	c.Status(p.Status)
+	data, _ := p.MarshalJSON()
+	c.SetHeader("Content-Type", "application/problem+json; charset=utf-8")
+	_ = c.sendBytes(data)
 }
 
 // buildChain creates a pre-built handler chain from global, group, and route-level handlers.

@@ -9,11 +9,14 @@ import (
 // KrudaError is the standard error type for Kruda.
 // It carries an HTTP status code and is auto-serialized as JSON.
 type KrudaError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Detail  string `json:"detail,omitempty"`
-	Err     error  `json:"-"`
-	mapped  bool   // true when error was resolved via MapError/MapErrorFunc/MapErrorType
+	Code       int            `json:"code"`
+	Message    string         `json:"message"`
+	Detail     string         `json:"detail,omitempty"`
+	Err        error          `json:"-"`
+	Type       string         `json:"-"`
+	Instance   string         `json:"-"`
+	Extensions map[string]any `json:"-"`
+	mapped     bool           // true when error was resolved via MapError/MapErrorFunc/MapErrorType
 }
 
 // Error implements the error interface.
@@ -74,6 +77,25 @@ func TooManyRequests(message string) *KrudaError {
 // InternalError returns a 500 error.
 func InternalError(message string) *KrudaError {
 	return &KrudaError{Code: 500, Message: message}
+}
+
+// WithType sets the RFC 9457 problem "type" URI.
+func (e *KrudaError) WithType(uri string) *KrudaError { e.Type = uri; return e }
+
+// WithDetail sets the RFC 9457 "detail" (human-readable explanation).
+func (e *KrudaError) WithDetail(detail string) *KrudaError { e.Detail = detail; return e }
+
+// WithInstance sets the RFC 9457 "instance" URI (defaults to the request path).
+func (e *KrudaError) WithInstance(instance string) *KrudaError { e.Instance = instance; return e }
+
+// With adds an arbitrary problem extension member. Reserved member names
+// (type/title/status/detail/instance/errors) are ignored at render time.
+func (e *KrudaError) With(key string, value any) *KrudaError {
+	if e.Extensions == nil {
+		e.Extensions = make(map[string]any, 4)
+	}
+	e.Extensions[key] = value
+	return e
 }
 
 // ErrorMapping maps a Go error to an HTTP status code and message.

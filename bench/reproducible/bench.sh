@@ -164,11 +164,16 @@ write_environment() {
     echo "timestamp_utc=$TIMESTAMP"
     echo "script_dir=$SCRIPT_DIR"
     echo "repo_root=$REPO_ROOT"
-    echo "git_commit=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
-    if git -C "$REPO_ROOT" diff --quiet --ignore-submodules -- && git -C "$REPO_ROOT" diff --cached --quiet --ignore-submodules --; then
-      echo "git_tracked_dirty=0"
+    if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      echo "git_commit=$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+      if git -C "$REPO_ROOT" diff --quiet --ignore-submodules -- && git -C "$REPO_ROOT" diff --cached --quiet --ignore-submodules --; then
+        echo "git_tracked_dirty=0"
+      else
+        echo "git_tracked_dirty=1"
+      fi
     else
-      echo "git_tracked_dirty=1"
+      echo "git_commit=not-a-git-worktree"
+      echo "git_tracked_dirty=unknown"
     fi
     echo "result_dir=$RESULT_DIR"
     echo "bench_enable_db=$BENCH_ENABLE_DB_VALUE"
@@ -190,6 +195,11 @@ write_environment() {
     echo "frameworks=${FRAMEWORKS[*]}"
     echo "routes=${ROUTES[*]}"
     echo "profiles=${PROFILES[*]}"
+    echo "fiber_module=$(cd "$SCRIPT_DIR/fiber" && GOWORK=off go list -m github.com/gofiber/fiber/v2 2>/dev/null || true)"
+    echo "actix_web=$(awk '
+      $1 == "name" && $3 == "\"actix-web\"" { in_pkg = 1; next }
+      in_pkg && $1 == "version" { gsub(/"/, "", $3); print "actix-web " $3; exit }
+    ' "$SCRIPT_DIR/actix/Cargo.lock" 2>/dev/null || true)"
     echo
     echo "== CPU =="
     if command -v lscpu >/dev/null 2>&1; then
@@ -335,7 +345,8 @@ run_wrk() {
   local port
   port="$(port_for "$fw")"
   local url="http://127.0.0.1:$port/$route"
-  local raw="$RAW_DIR/$fw-$profile-$route-round-$round.txt"
+  local route_slug="${route//[^a-zA-Z0-9_.-]/_}"
+  local raw="$RAW_DIR/$fw-$profile-$route_slug-round-$round.txt"
 
   wrk --latency $wrk_args "$url" > "$raw" 2>&1
   local values
@@ -369,9 +380,10 @@ for fw in "${FRAMEWORKS[@]}"; do
     wrk_args="${profile_def#*:}"
     for route in "${ROUTES[@]}"; do
       port="$(port_for "$fw")"
+      route_slug="${route//[^a-zA-Z0-9_.-]/_}"
       echo "warmup: $fw $profile /$route"
       wrk --latency $wrk_args "http://127.0.0.1:$port/$route" \
-        > "$RAW_DIR/$fw-$profile-$route-warmup.txt" 2>&1
+        > "$RAW_DIR/$fw-$profile-$route_slug-warmup.txt" 2>&1
       for round in $(seq 1 "$BENCH_ROUNDS_VALUE"); do
         echo "round $round: $fw $profile /$route"
         run_wrk "$fw" "$route" "$profile" "$wrk_args" "$round"

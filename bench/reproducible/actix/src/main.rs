@@ -22,6 +22,32 @@ struct World {
     random_number: i32,
 }
 
+#[derive(Serialize)]
+struct RealworldProfileResponse {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    profile: RealworldProfile,
+    summary: RealworldProfileSummary,
+}
+
+#[derive(Serialize)]
+struct RealworldProfile {
+    id: i32,
+    name: &'static str,
+    email: &'static str,
+    #[serde(rename = "randomNumber")]
+    random_number: i32,
+    include: String,
+}
+
+#[derive(Serialize)]
+struct RealworldProfileSummary {
+    limit: i32,
+    features: [&'static str; 4],
+    #[serde(rename = "traceMode")]
+    trace_mode: &'static str,
+}
+
 struct Fortune {
     id: i32,
     message: String,
@@ -167,6 +193,69 @@ async fn updates(
     HttpResponse::Ok().json(worlds)
 }
 
+async fn realworld_profile(
+    req: actix_web::HttpRequest,
+    pool: web::Data<Pool>,
+    path: web::Path<i32>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> HttpResponse {
+    if query.get("token").map(|v| v.as_str()) != Some("benchmark-token") {
+        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "unauthorized"}));
+    }
+
+    let id = path.into_inner();
+    if !(1..=10000).contains(&id) {
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid profile id"}));
+    }
+
+    let include = query
+        .get("include")
+        .cloned()
+        .unwrap_or_else(|| "summary".to_string());
+    if include != "summary" && include != "detail" {
+        return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid include"}));
+    }
+
+    let limit = query
+        .get("limit")
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(3)
+        .max(1)
+        .min(20);
+
+    let request_id = req
+        .headers()
+        .get("X-Request-Id")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| format!("bench-{id}"));
+
+    let client = pool.get().await.unwrap();
+    let row = client
+        .query_one("SELECT randomnumber FROM world WHERE id=$1", &[&id])
+        .await
+        .unwrap();
+    let random_number: i32 = row.get(0);
+
+    HttpResponse::Ok()
+        .insert_header(("X-Request-Id", request_id.clone()))
+        .json(RealworldProfileResponse {
+            request_id,
+            profile: RealworldProfile {
+                id,
+                name: "Tiger Team",
+                email: "tiger@kruda.dev",
+                random_number,
+                include,
+            },
+            summary: RealworldProfileSummary {
+                limit,
+                features: ["auth", "validation", "postgres", "json"],
+                trace_mode: "request-id",
+            },
+        })
+}
+
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -227,6 +316,7 @@ async fn main() -> std::io::Result<()> {
                 .route("/queries", web::get().to(queries))
                 .route("/fortunes", web::get().to(fortunes))
                 .route("/updates", web::get().to(updates))
+                .route("/realworld-profile/{id}", web::get().to(realworld_profile))
         } else {
             app
         }

@@ -44,6 +44,26 @@ type UserResponse struct {
 	Email string `json:"email"`
 }
 
+type RealworldProfileResponse struct {
+	RequestID string                  `json:"requestId"`
+	Profile   RealworldProfile        `json:"profile"`
+	Summary   RealworldProfileSummary `json:"summary"`
+}
+
+type RealworldProfile struct {
+	ID           int32  `json:"id"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	RandomNumber int32  `json:"randomNumber"`
+	Include      string `json:"include"`
+}
+
+type RealworldProfileSummary struct {
+	Limit     int      `json:"limit"`
+	Features  []string `json:"features"`
+	TraceMode string   `json:"traceMode"`
+}
+
 var staticJSONBody = []byte(`{"message":"Hello, World!"}`)
 
 var pool *pgxpool.Pool
@@ -102,6 +122,7 @@ func main() {
 
 	if enableDB {
 		registerDBRoutes(app)
+		registerRealworldRoutes(app)
 	}
 
 	fmt.Printf("[fiber] listening on :%s\n", port)
@@ -192,6 +213,57 @@ func registerDBRoutes(app *fiber.App) {
 			ids, nums,
 		)
 		return c.JSON(worlds)
+	})
+}
+
+func registerRealworldRoutes(app *fiber.App) {
+	app.Get("/realworld-profile/:id", func(c *fiber.Ctx) error {
+		if c.Query("token") != "benchmark-token" {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
+
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil || id < 1 || id > 10000 {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid profile id"})
+		}
+
+		include := c.Query("include", "summary")
+		if include != "summary" && include != "detail" {
+			return c.Status(400).JSON(fiber.Map{"error": "invalid include"})
+		}
+		limit := clamp(queryCount(c.Query("limit")), 1, 20)
+		if c.Query("limit") == "" {
+			limit = 3
+		}
+
+		requestID := c.Get("X-Request-Id")
+		if requestID == "" {
+			requestID = "bench-" + strconv.Itoa(id)
+		}
+		c.Set("X-Request-Id", requestID)
+
+		w := World{ID: int32(id)}
+		if err := pool.QueryRow(context.Background(),
+			"SELECT randomnumber FROM world WHERE id=$1", w.ID,
+		).Scan(&w.RandomNumber); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(RealworldProfileResponse{
+			RequestID: requestID,
+			Profile: RealworldProfile{
+				ID:           w.ID,
+				Name:         "Tiger Team",
+				Email:        "tiger@kruda.dev",
+				RandomNumber: w.RandomNumber,
+				Include:      include,
+			},
+			Summary: RealworldProfileSummary{
+				Limit:     limit,
+				Features:  []string{"auth", "validation", "postgres", "json"},
+				TraceMode: "request-id",
+			},
+		})
 	})
 }
 

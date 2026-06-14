@@ -14,6 +14,21 @@ The default benchmark does not require PostgreSQL. It measures framework overhea
 
 DB, queries, fortunes, and updates are out of scope for the default comparison. Enable them explicitly with `BENCH_ENABLE_DB=1` when you want to study database-heavy workloads.
 
+## Realistic API Route
+
+`/realworld-profile/:id` is an opt-in realistic API route for checking whether
+the frameworks still hold up after common production work is added: route
+params, query validation, an auth gate, request-id header handling, one
+PostgreSQL read, and a nested JSON response envelope. It intentionally reuses
+the TechEmpower `world` table so the benchmark does not need a custom schema.
+
+This is not a TechEmpower route and should be claimed separately from the
+CPU-only and DB-only results.
+
+```bash
+BENCH_ENABLE_DB=1 ./bench.sh 'realworld-profile/42?include=summary&limit=3&token=benchmark-token'
+```
+
 ## v1.2.6 Candidate Boundary
 
 The post-v1.2.5 evidence does not support a broad CPU-bound +20% Actix claim on

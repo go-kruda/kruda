@@ -2,27 +2,25 @@ package kruda
 
 import "encoding/json"
 
-// ProblemDetails is an RFC 9457 (problem+json) error document. It is rendered for
-// error responses when the app is created with WithProblemJSON(). The non-standard
-// Extensions are flattened to top-level members; reserved member names are ignored.
+// ProblemDetails is an RFC 9457 (problem+json) error document, rendered for error
+// responses when the app is created with WithProblemJSON(). Extensions are flattened
+// to top-level members; reserved member names are ignored.
 type ProblemDetails struct {
-	Type       string         // RFC 9457 "type" URI; defaults to "about:blank"
-	Title      string         // RFC 9457 "title"
-	Status     int            // RFC 9457 "status"
-	Detail     string         // RFC 9457 "detail"; omitted when empty
-	Instance   string         // RFC 9457 "instance"; omitted when empty
-	Errors     []FieldError   // emitted as the "errors" member when non-empty
-	Extensions map[string]any // arbitrary top-level extension members
+	Type       string
+	Title      string
+	Status     int
+	Detail     string
+	Instance   string
+	Errors     []FieldError
+	Extensions map[string]any
 }
 
-// problemReserved holds the standard member names that Extensions may not override.
 var problemReserved = map[string]struct{}{
 	"type": {}, "title": {}, "status": {}, "detail": {}, "instance": {}, "errors": {},
 }
 
-// MarshalJSON renders the document with encoding/json. Error responses are not a hot
-// path, so using the standard library here keeps key order deterministic on every
-// build (Sonic and kruda_stdjson alike).
+// MarshalJSON flattens Extensions alongside the standard members. encoding/json keeps
+// key order deterministic across builds, and error responses are not a hot path.
 func (p ProblemDetails) MarshalJSON() ([]byte, error) {
 	m := make(map[string]any, 6+len(p.Extensions))
 	for k, v := range p.Extensions {
@@ -45,7 +43,6 @@ func (p ProblemDetails) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// orDefault returns s, or def when s is empty.
 func orDefault(s, def string) string {
 	if s == "" {
 		return def

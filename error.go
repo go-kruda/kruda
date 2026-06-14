@@ -13,9 +13,9 @@ type KrudaError struct {
 	Message    string         `json:"message"`
 	Detail     string         `json:"detail,omitempty"`
 	Err        error          `json:"-"`
-	Type       string         `json:"-"` // RFC 9457 type URI; default "about:blank"
-	Instance   string         `json:"-"` // RFC 9457 instance; default = request path
-	Extensions map[string]any `json:"-"` // RFC 9457 extension members
+	Type       string         `json:"-"`
+	Instance   string         `json:"-"`
+	Extensions map[string]any `json:"-"`
 	mapped     bool           // true when error was resolved via MapError/MapErrorFunc/MapErrorType
 }
 
@@ -79,7 +79,7 @@ func InternalError(message string) *KrudaError {
 	return &KrudaError{Code: 500, Message: message}
 }
 
-// WithType sets the RFC 9457 problem "type" URI. Returns the receiver for chaining.
+// WithType sets the RFC 9457 problem "type" URI.
 func (e *KrudaError) WithType(uri string) *KrudaError { e.Type = uri; return e }
 
 // WithDetail sets the RFC 9457 "detail" (human-readable explanation).

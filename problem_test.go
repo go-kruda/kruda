@@ -40,7 +40,7 @@ func TestProblemDetailsMarshal_defaultsAndErrors(t *testing.T) {
 func TestProblemDetailsMarshal_reservedExtensionIgnored(t *testing.T) {
 	p := ProblemDetails{
 		Title: "Bad Request", Status: 400,
-		Extensions: map[string]any{"status": 999, "x": "ok"}, // "status" must not override
+		Extensions: map[string]any{"status": 999, "x": "ok"},
 	}
 	got, _ := json.Marshal(p)
 	want := `{"status":400,"title":"Bad Request","type":"about:blank","x":"ok"}`
@@ -55,7 +55,7 @@ func TestKrudaErrorBuilders(t *testing.T) {
 		WithDetail("no such user").
 		WithInstance("/users/42").
 		With("userId", "42").
-		With("type", "ignored-but-stored") // stored; renderer drops reserved keys
+		With("type", "ignored-but-stored")
 
 	if e.Code != 404 || e.Type != "https://errors.example.com/not-found" ||
 		e.Detail != "no such user" || e.Instance != "/users/42" {

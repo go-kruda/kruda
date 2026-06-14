@@ -80,6 +80,18 @@ func ExamplePreset() {
 	// Output:
 }
 
+// ExampleWithProblemJSON shows opt-in RFC 9457 problem+json error responses.
+func ExampleWithProblemJSON() {
+	app := kruda.New(kruda.WithProblemJSON())
+	app.Get("/users/:id", func(c *kruda.Ctx) error {
+		return kruda.NotFound("user not found").
+			WithType("https://errors.example.com/not-found").
+			With("userId", c.Param("id"))
+	})
+	_ = app
+	// Output:
+}
+
 // Stub handlers used only so the Example* functions compile.
 func listUsersHandler(c *kruda.Ctx) error  { _ = c; return nil }
 func createUserHandler(c *kruda.Ctx) error { _ = c; return nil }

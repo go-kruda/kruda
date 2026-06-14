@@ -3,6 +3,18 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] — unreleased
+
+### Added
+
+- **Opt-in RFC 9457 problem+json error responses.** `kruda.New(kruda.WithProblemJSON())`
+  renders errors as `application/problem+json` (standard members plus a field-level
+  `errors` array for validation failures). Off by default — the standard error shape is
+  unchanged; `WithErrorHandler` still takes precedence.
+- **Fluent `KrudaError` builders** — `WithType`, `WithDetail`, `WithInstance`, and
+  `With(key, value)` for problem `type`/`detail`/`instance`/extension members, e.g.
+  `kruda.NotFound("…").WithType("https://…").With("userId", id)`.
+
 ## [1.3.1] — 2026-06-13
 
 ### Changed

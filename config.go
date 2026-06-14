@@ -51,6 +51,7 @@ type Config struct {
 
 	Logger       *slog.Logger
 	ErrorHandler func(c *Ctx, err *KrudaError)
+	problemJSON  bool
 	Validator    *Validator
 
 	// Views is the template engine for c.Render(). Nil = c.Render() returns error.
@@ -218,6 +219,13 @@ func WithLogger(l *slog.Logger) Option {
 // WithErrorHandler sets a custom error handler.
 func WithErrorHandler(h func(c *Ctx, err *KrudaError)) Option {
 	return func(a *App) { a.config.ErrorHandler = h }
+}
+
+// WithProblemJSON renders error responses as RFC 9457 application/problem+json.
+// Off by default; the standard error shape is unchanged. WithErrorHandler still
+// takes precedence when both are set.
+func WithProblemJSON() Option {
+	return func(a *App) { a.config.problemJSON = true }
 }
 
 // WithJSONEncoder sets a custom JSON encoder.

@@ -48,3 +48,20 @@ func TestProblemDetailsMarshal_reservedExtensionIgnored(t *testing.T) {
 		t.Fatalf("\n got: %s\nwant: %s", got, want)
 	}
 }
+
+func TestKrudaErrorBuilders(t *testing.T) {
+	e := NotFound("user not found").
+		WithType("https://errors.example.com/not-found").
+		WithDetail("no such user").
+		WithInstance("/users/42").
+		With("userId", "42").
+		With("type", "ignored-but-stored") // stored; renderer drops reserved keys
+
+	if e.Code != 404 || e.Type != "https://errors.example.com/not-found" ||
+		e.Detail != "no such user" || e.Instance != "/users/42" {
+		t.Fatalf("builder fields wrong: %+v", e)
+	}
+	if e.Extensions["userId"] != "42" {
+		t.Fatalf("With did not store extension: %+v", e.Extensions)
+	}
+}

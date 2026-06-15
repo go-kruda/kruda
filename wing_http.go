@@ -114,6 +114,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	accept := ""
 	forwardedFor := ""
 	realIP := ""
+	forwardedForSeen := false // first header wins even if its value is empty (net/http Get)
+	realIPSeen := false
 	hostUnsafe := false
 	acceptUnsafe := false
 	keepAlive := true // HTTP/1.1 default
@@ -206,12 +208,14 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			acceptUnsafe = unsafePath && len(val) > 0
 			continue
 		case headerForwardedFor:
-			if forwardedFor == "" { // first header wins (net/http Get semantics)
+			if !forwardedForSeen {
+				forwardedForSeen = true
 				forwardedFor = string(val)
 			}
 			continue
 		case headerRealIP:
-			if realIP == "" {
+			if !realIPSeen {
+				realIPSeen = true
 				realIP = string(val)
 			}
 			continue
@@ -255,11 +259,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
 		case headerForwardedFor:
-			if forwardedFor == "" { // first header wins (net/http Get semantics)
+			if !forwardedForSeen {
+				forwardedForSeen = true
 				forwardedFor = string(val)
 			}
 		case headerRealIP:
-			if realIP == "" {
+			if !realIPSeen {
+				realIPSeen = true
 				realIP = string(val)
 			}
 		default:
@@ -825,10 +831,10 @@ func (r *wingRequest) Header(key string) string {
 		}
 		return r.accept
 	}
-	if key == "X-Forwarded-For" || key == "x-forwarded-for" {
+	if strings.EqualFold(key, "x-forwarded-for") {
 		return r.forwardedFor
 	}
-	if key == "X-Real-IP" || key == "x-real-ip" {
+	if strings.EqualFold(key, "x-real-ip") {
 		return r.realIP
 	}
 	lk := strings.ToLower(key)

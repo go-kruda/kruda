@@ -633,6 +633,103 @@ func TestWing_Takeover_HeaderLineTooLarge431(t *testing.T) {
 	}
 }
 
+// TestWing_TrustProxy_EmptyFirstHeaderWins guards net/http Get semantics: when a
+// request sends an empty X-Forwarded-For before a non-empty one, the first
+// (empty) header wins and RemoteAddr falls back to the socket peer — a later
+// attacker-supplied value must not override it.
+func TestWing_TrustProxy_EmptyFirstHeaderWins(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(r.RemoteAddr()))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: \r\nX-Forwarded-For: 1.2.3.4\r\n\r\n")
+	body := readHTTPBody(t, conn)
+	if body == "1.2.3.4" {
+		t.Fatalf("empty first XFF must win; second value must not override, got %q", body)
+	}
+	if !strings.HasPrefix(body, "127.0.0.1:") && !strings.HasPrefix(body, "[::1]:") {
+		t.Fatalf("expected loopback fallback, got %q", body)
+	}
+}
+
+// TestWing_Takeover_LargeHeaderWithinLimit guards that the takeover path accepts
+// a header block larger than the 8 KB default pool buffer but within HeaderLimit,
+// matching the event loop (regression: takeover used a fixed 8 KB buffer and
+// wrongly 431'd / truncated large legal headers when HeaderLimit > 8 KB).
+func TestWing_Takeover_LargeHeaderWithinLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 16384, HeaderLimit: 16384, DefaultPreset: DB}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// req1 valid (enters takeover) + req2 with a ~12 KB header line (< HeaderLimit,
+	// > 8 KB default pool buffer); req2 closes the conn so the read ends promptly.
+	big := strings.Repeat("a", 12000)
+	pipelined := "GET / HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nX-Big: " + big + "\r\n\r\n"
+	if _, err := conn.Write([]byte(pipelined)); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var resp bytes.Buffer
+	tmp := make([]byte, 4096)
+	for {
+		n, rerr := conn.Read(tmp)
+		resp.Write(tmp[:n])
+		if rerr != nil {
+			break
+		}
+	}
+	s := resp.String()
+	if strings.Contains(s, " 431 ") {
+		t.Fatalf("legal large header on takeover wrongly 431'd: %q", s)
+	}
+	if strings.Count(s, " 200 ") < 2 {
+		t.Fatalf("expected both requests served 200, got: %q", s)
+	}
+}
+
+// TestWingRequest_HeaderXFFCaseInsensitive guards that the dedicated XFF/X-Real-IP
+// fields are reachable via Header()/RawHeader() regardless of key casing, matching
+// the case-insensitive lookup they had as generic extra headers.
+func TestWingRequest_HeaderXFFCaseInsensitive(t *testing.T) {
+	raw := []byte("GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 9.9.9.9\r\nX-Real-IP: 8.8.8.8\r\n\r\n")
+	r, _, ok := parseHTTPRequest(raw, parserLimits{maxHeaderCount: 100, maxHeaderSize: 8192})
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	defer releaseRequest(r)
+	for _, k := range []string{"X-Forwarded-For", "x-forwarded-for", "X-FORWARDED-FOR"} {
+		if got := r.Header(k); got != "9.9.9.9" {
+			t.Fatalf("Header(%q) = %q, want 9.9.9.9", k, got)
+		}
+	}
+	for _, k := range []string{"X-Real-IP", "x-real-ip", "X-REAL-IP"} {
+		if got := r.Header(k); got != "8.8.8.8" {
+			t.Fatalf("Header(%q) = %q, want 8.8.8.8", k, got)
+		}
+	}
+}
+
 // TestWing_BodyLimitInBuffer guards the case where a complete request body fits
 // entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
 // path alone never sees these, so the parser must reject them so the classifier

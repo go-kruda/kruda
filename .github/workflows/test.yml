@@ -34,6 +34,16 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Install revive
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.10'
+        run: |
+          go install github.com/mgechev/revive@v1.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check exported API docs
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.10'
+        run: scripts/check-godoc.sh
+
       - name: Go vet
         run: go vet -tags kruda_stdjson ./...
 

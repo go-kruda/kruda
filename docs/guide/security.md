@@ -17,7 +17,7 @@ When enabled via `WithSecureHeaders()`, normal handler responses include these h
 
 Kruda does not emit a `Server` header by default, so framework identity and version details are not exposed by normal responses.
 
-Prebuilt Wing static responses from `WingStaticText` and `WingStaticJSON` are written directly for maximum throughput and bypass middleware, lifecycle hooks, cookies, CORS, and secure-header injection. Prefer normal handlers when a response needs application behavior or `WithSecureHeaders()`.
+Prebuilt Wing static responses from `StaticText` and `StaticJSON` are written directly for maximum throughput and bypass middleware, lifecycle hooks, cookies, CORS, and secure-header injection. Prefer normal handlers when a response needs application behavior or `WithSecureHeaders()`.
 
 ```go
 // Explicitly enable security headers

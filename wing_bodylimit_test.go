@@ -4,11 +4,14 @@ package kruda
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 // sendRaw opens a loopback conn to a Wing server at addr, writes raw bytes,
@@ -85,4 +88,79 @@ func TestWingStatusClose(t *testing.T) {
 			t.Fatalf("status %d: bad response %q", code, b)
 		}
 	}
+}
+
+// startBodyLimitWingServer starts a Wing server with the given body limit.
+func startBodyLimitWingServer(t *testing.T, bodyLimit int, handler transport.Handler) (string, func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("find port: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	cfg := WingConfig{
+		Workers:     1,
+		RingSize:    256,
+		ReadBufSize: 8192,
+		BodyLimit:   bodyLimit,
+	}
+	cfg.defaults()
+	tr := NewWingTransport(cfg)
+	errCh := make(chan error, 1)
+	go func() { errCh <- tr.ListenAndServe(addr, handler) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return addr, func() { tr.Shutdown(context.Background()) }
+}
+
+// TestWing_AcceptsLegalBodyOverBuffer sends a 64KB POST body to a server with
+// a 1MB limit, verifying that Wing correctly accumulates across multiple recvs
+// and passes the body to the handler (response 200).
+func TestWing_AcceptsLegalBodyOverBuffer(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	})
+	addr, stop := startBodyLimitWingServer(t, 1<<20, handler)
+	defer stop()
+
+	st, _ := sendRaw(t, addr, postRaw("/u", 64*1024))
+	if !strings.Contains(st, "200") {
+		t.Fatalf("64KB body: want 200, got %q", st)
+	}
+}
+
+// TestWing_BodyLimitBoundary checks the exact boundary: a body at-limit gets 200,
+// a body one byte over limit gets 413.
+func TestWing_BodyLimitBoundary(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	})
+	addr, stop := startBodyLimitWingServer(t, 16*1024, handler)
+	defer stop()
+
+	if st, _ := sendRaw(t, addr, postRaw("/u", 16*1024)); !strings.Contains(st, "200") {
+		t.Fatalf("exact limit: want 200, got %q", st)
+	}
+	if st, _ := sendRaw(t, addr, postRaw("/u", 16*1024+1)); !strings.Contains(st, "413") {
+		t.Fatalf("limit+1: want 413, got %q", st)
+	}
+}
+
+// readStatusLine reads just the first line of an HTTP response.
+func readStatusLine(br *bufio.Reader) (string, error) {
+	line, err := br.ReadString('\n')
+	return strings.TrimSpace(line), err
 }

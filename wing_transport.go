@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -212,6 +213,10 @@ type conn struct {
 	cancel       context.CancelFunc
 	sendFileFd   int32 // sendfile: source fd (0 = none)
 	sendFileSize int64 // sendfile: remaining bytes
+	// Slow-path body accumulation (populated when a request body spans multiple recvs).
+	bodyNeed       int    // total Content-Length expected (0 = not accumulating)
+	headerSnapshot []byte // copy of header block for re-parse after body complete
+	bodyBuf        []byte // incrementally grown body buffer
 }
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -252,10 +257,12 @@ type worker struct {
 	lastPath1    string
 	shutdown     *atomic.Bool
 	hasTimeout   bool
-	readTimeout  int64 // nanoseconds (0 = disabled)
-	writeTimeout int64
-	idleTimeout  int64
-	sweepAt      int64 // next sweep unix nano
+	readTimeout     int64 // nanoseconds (0 = disabled)
+	writeTimeout    int64
+	idleTimeout     int64
+	maxInflightBody int   // per-worker budget (0 = unlimited)
+	inflightBody    int64 // current in-flight body bytes (atomic)
+	sweepAt         int64 // next sweep unix nano
 	now          int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
 	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
@@ -425,15 +432,16 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		eng:          eng,
 		handler:      handler,
 		config:       cfg,
-		limits:       parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
-		maxConns:     cfg.MaxConnsPerWorker,
-		conns:        make(map[int32]*conn, 1024),
-		evfd:         wakeR,
-		doneCh:       doneCh,
-		presets:      ft,
-		readTimeout:  int64(cfg.ReadTimeout),
-		writeTimeout: int64(cfg.WriteTimeout),
-		idleTimeout:  int64(cfg.IdleTimeout),
+		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
+		maxConns:        cfg.MaxConnsPerWorker,
+		conns:           make(map[int32]*conn, 1024),
+		evfd:            wakeR,
+		doneCh:          doneCh,
+		presets:         ft,
+		readTimeout:     int64(cfg.ReadTimeout),
+		writeTimeout:    int64(cfg.WriteTimeout),
+		idleTimeout:     int64(cfg.IdleTimeout),
+		maxInflightBody: cfg.MaxInflightBodyBytes,
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -608,6 +616,18 @@ func (w *worker) handleRecv(ev event) {
 			c.readDeadline = now + w.readTimeout
 		}
 	}
+	// If accumulating a multi-recv body, feed new bytes into the accumulator.
+	if c.bodyNeed > 0 {
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:c.readN], c.bodyNeed)
+		c.readN = 0
+		if len(c.bodyBuf) >= c.bodyNeed {
+			w.finishBodyAccum(c)
+		} else {
+			// Body not yet complete — arm the next recv.
+			submitIdleRecv(w.eng, c.fd, nil, 0)
+		}
+		return
+	}
 	w.tryParse(c)
 }
 
@@ -615,9 +635,46 @@ func (w *worker) tryParse(c *conn) {
 	for c.readN > 0 {
 		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
-			if c.readN >= len(c.readBuf) {
-				w.closeConn(c.fd)
-				return
+			if c.readN < len(c.readBuf) {
+				// Buffer has room — classify to decide whether to wait or error.
+				st, need := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				switch st {
+				case parseNeedHeaderMore:
+					// Not enough data yet; wait for more recvs.
+				case parseChunked:
+					w.writeAndClose(c, wingStatusClose(501))
+					return
+				case parseBodyTooLarge:
+					w.writeAndClose(c, wingStatusClose(413))
+					return
+				case parseNeedBody:
+					if !w.beginBodyAccum(c, need) {
+						w.writeAndClose(c, wingStatusClose(503))
+						return
+					}
+					return
+				default: // parseMalformed, parseHeaderTooLarge
+					w.closeConn(c.fd)
+					return
+				}
+			} else {
+				// Buffer full — classify; if body needed start accum, else error.
+				st, need := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				switch st {
+				case parseBodyTooLarge:
+					w.writeAndClose(c, wingStatusClose(413))
+					return
+				case parseNeedBody:
+					if !w.beginBodyAccum(c, need) {
+						w.writeAndClose(c, wingStatusClose(503))
+						return
+					}
+					return
+				default:
+					// Headers exceed buffer: 431 Request Header Fields Too Large.
+					w.writeAndClose(c, wingStatusClose(431))
+					return
+				}
 			}
 			break
 		}
@@ -824,6 +881,120 @@ func (w *worker) tryParse(c *conn) {
 	if len(c.sendBuf) > 0 {
 		c.sendN = 0
 		// Direct write — skip epoll EPOLLOUT round-trip for inline responses.
+		w.directSend(c)
+	} else {
+		submitIdleRecv(w.eng, c.fd, nil, 0)
+	}
+}
+
+// writeAndClose queues an error response and triggers a direct send, then closes.
+func (w *worker) writeAndClose(c *conn, resp []byte) {
+	c.keepAlive = false
+	c.sendBuf = append(c.sendBuf, resp...)
+	if len(c.sendBuf) > 0 {
+		c.sendN = 0
+		w.directSend(c)
+	}
+}
+
+// appendGrow appends src to dst, capping total length at maxCap bytes.
+func appendGrow(dst, src []byte, maxCap int) []byte {
+	avail := maxCap - len(dst)
+	if avail <= 0 {
+		return dst
+	}
+	if len(src) > avail {
+		src = src[:avail]
+	}
+	return append(dst, src...)
+}
+
+// beginBodyAccum starts body accumulation for a connection.
+// Returns false if the per-worker in-flight budget would be exceeded.
+func (w *worker) beginBodyAccum(c *conn, need int) bool {
+	if w.maxInflightBody > 0 {
+		newTotal := atomic.AddInt64(&w.inflightBody, int64(need))
+		if newTotal > int64(w.maxInflightBody) {
+			atomic.AddInt64(&w.inflightBody, -int64(need))
+			return false
+		}
+	}
+	headerEnd := bytes.Index(c.readBuf[:c.readN], crlfcrlf)
+	if headerEnd < 0 {
+		// Should not happen: classifyIncomplete confirmed headers are complete.
+		if w.maxInflightBody > 0 {
+			atomic.AddInt64(&w.inflightBody, -int64(need))
+		}
+		return false
+	}
+	headerEnd += 4 // past \r\n\r\n
+	c.headerSnapshot = append([]byte{}, c.readBuf[:headerEnd]...)
+	c.bodyNeed = need
+	initCap := need
+	if initCap > 8192 {
+		initCap = 8192
+	}
+	c.bodyBuf = make([]byte, 0, initCap)
+	// Copy any body bytes already present in the read buffer.
+	if have := c.readN - headerEnd; have > 0 {
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[headerEnd:c.readN], need)
+	}
+	c.readN = 0
+	if len(c.bodyBuf) >= need {
+		w.finishBodyAccum(c)
+	} else {
+		// Arm the next recv so the event loop delivers more body bytes.
+		submitIdleRecv(w.eng, c.fd, nil, 0)
+	}
+	return true
+}
+
+// finishBodyAccum re-parses the completed request and dispatches it inline.
+func (w *worker) finishBodyAccum(c *conn) {
+	if w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	// Reconstruct: header block + body bytes → full request bytes.
+	full := append(c.headerSnapshot, c.bodyBuf...)
+	c.bodyNeed = 0
+	c.headerSnapshot = nil
+	c.bodyBuf = nil
+	req, _, ok := parseHTTPRequest(full, w.limits)
+	if !ok {
+		w.closeConn(c.fd)
+		return
+	}
+	req.fd = c.fd
+	req.ctx = c.ctx
+	req.remoteAddrRef = &c.remoteAddr
+	if w.hasTimeout {
+		c.readDeadline = 0
+		c.lastActive = time.Now().UnixNano()
+	}
+	f := w.lookupPreset(req.method, req.path)
+	finalizeRequestPath(req, f)
+	w.dispatchAccumulated(c, req, f)
+}
+
+// dispatchAccumulated dispatches a body-accumulated request.
+// Accumulated bodies are always dispatched inline; non-inline presets
+// with large bodies are uncommon and correctness takes precedence here.
+func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
+	finalizeRequestCommonHeaders(req)
+	resp := acquireResponse()
+	resp.responseMode = f.ResponseMode
+	start := time.Now().UnixNano()
+	w.serveRoute(resp, req, f)
+	if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
+		advisorObserve(req.method, req.path, elapsed, f.explicit)
+	}
+	data := resp.buildZeroCopy()
+	c.keepAlive = req.keepAlive
+	c.sendBuf = append(c.sendBuf, data...)
+	releaseResponse(resp)
+	releaseRequest(req)
+	if len(c.sendBuf) > 0 {
+		c.sendN = 0
 		w.directSend(c)
 	} else {
 		submitIdleRecv(w.eng, c.fd, nil, 0)

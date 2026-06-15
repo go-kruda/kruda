@@ -678,6 +678,7 @@ type wingRequest struct {
 	accept        string
 	remoteAddr    string
 	remoteAddrRef *string
+	trustProxy    bool
 	keepAlive     bool
 	pathUnsafe    bool
 	hostUnsafe    bool
@@ -692,6 +693,18 @@ func (r *wingRequest) Method() string        { return r.method }
 func (r *wingRequest) Path() string          { return r.path }
 func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
 func (r *wingRequest) RemoteAddr() string {
+	if r.trustProxy {
+		if xff := r.RawHeader("x-forwarded-for"); len(xff) > 0 {
+			// Take the first (leftmost) IP — the original client.
+			if i := bytes.IndexByte(xff, ','); i >= 0 {
+				xff = bytes.TrimSpace(xff[:i])
+			}
+			return string(xff)
+		}
+		if xri := r.RawHeader("x-real-ip"); len(xri) > 0 {
+			return string(bytes.TrimSpace(xri))
+		}
+	}
 	if r.remoteAddr != "" {
 		return r.remoteAddr
 	}

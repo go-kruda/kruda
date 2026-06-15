@@ -262,6 +262,7 @@ type worker struct {
 	idleTimeout     int64
 	maxInflightBody int   // per-worker budget (0 = unlimited)
 	inflightBody    int64 // current in-flight body bytes (atomic)
+	trustProxy      bool
 	sweepAt         int64 // next sweep unix nano
 	now          int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
@@ -442,6 +443,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		writeTimeout:    int64(cfg.WriteTimeout),
 		idleTimeout:     int64(cfg.IdleTimeout),
 		maxInflightBody: cfg.MaxInflightBodyBytes,
+		trustProxy:      cfg.TrustProxy,
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -697,6 +699,7 @@ func (w *worker) tryParse(c *conn) {
 		req.fd = c.fd
 		req.ctx = c.ctx
 		req.remoteAddrRef = &c.remoteAddr
+		req.trustProxy = w.trustProxy
 		// Full request received — clear read deadline, update idle clock.
 		if w.hasTimeout {
 			c.readDeadline = 0
@@ -983,6 +986,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 	req.fd = c.fd
 	req.ctx = c.ctx
 	req.remoteAddrRef = &c.remoteAddr
+	req.trustProxy = w.trustProxy
 	if w.hasTimeout {
 		c.readDeadline = 0
 		c.lastActive = time.Now().UnixNano()
@@ -1194,6 +1198,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					r.fd = fd
 					r.ctx = connCtx
 					r.remoteAddrRef = remoteAddrRef
+					r.trustProxy = w.trustProxy
 					req = r
 					keepAlive = req.keepAlive
 					goto next

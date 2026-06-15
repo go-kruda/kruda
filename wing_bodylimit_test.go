@@ -4,6 +4,7 @@ package kruda
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -276,4 +277,119 @@ func TestWing_ChunkedRejected501(t *testing.T) {
 	if !strings.Contains(status, "501") {
 		t.Fatalf("chunked body: want 501, got %q", status)
 	}
+}
+
+// startWingServerWithConfig starts a Wing server with a fully-specified WingConfig.
+func startWingServerWithConfig(t *testing.T, cfg WingConfig, handler transport.Handler) (string, func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("find port: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	cfg.defaults()
+	tr := NewWingTransport(cfg)
+	go tr.ListenAndServe(addr, handler)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return addr, func() { tr.Shutdown(context.Background()) }
+}
+
+// readHTTPBody reads all response data from conn and returns the body after the
+// blank header line.
+func readHTTPBody(t *testing.T, conn net.Conn) string {
+	t.Helper()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	var buf bytes.Buffer
+	tmp := make([]byte, 4096)
+	for {
+		n, err := conn.Read(tmp)
+		buf.Write(tmp[:n])
+		if err != nil {
+			break
+		}
+	}
+	resp := buf.String()
+	idx := strings.Index(resp, "\r\n\r\n")
+	if idx < 0 {
+		return resp
+	}
+	return strings.TrimSpace(resp[idx+4:])
+}
+
+func TestWing_TrustProxy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	makeServer := func(trust bool) (string, func()) {
+		cfg := WingConfig{
+			Workers:     1,
+			ReadBufSize: 8192,
+			TrustProxy:  trust,
+		}
+		addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+			ip := r.RemoteAddr()
+			w.WriteHeader(200)
+			w.Write([]byte(ip))
+		}))
+		return addr, stop
+	}
+
+	t.Run("trusted_xff", func(t *testing.T) {
+		addr, stop := makeServer(true)
+		defer stop()
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 1.2.3.4, 5.6.7.8\r\n\r\n")
+		body := readHTTPBody(t, conn)
+		if body != "1.2.3.4" {
+			t.Fatalf("expected 1.2.3.4, got %q", body)
+		}
+	})
+
+	t.Run("trusted_xri", func(t *testing.T) {
+		addr, stop := makeServer(true)
+		defer stop()
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Real-IP: 9.9.9.9\r\n\r\n")
+		body := readHTTPBody(t, conn)
+		if body != "9.9.9.9" {
+			t.Fatalf("expected 9.9.9.9, got %q", body)
+		}
+	})
+
+	t.Run("untrusted_ignores_xff", func(t *testing.T) {
+		addr, stop := makeServer(false)
+		defer stop()
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 1.2.3.4\r\n\r\n")
+		body := readHTTPBody(t, conn)
+		// body should be 127.0.0.1:PORT (loopback socket addr), not 1.2.3.4
+		if body == "1.2.3.4" {
+			t.Fatalf("TrustProxy=false must not use XFF; got %q", body)
+		}
+		if !strings.HasPrefix(body, "127.0.0.1:") && !strings.HasPrefix(body, "[::1]:") {
+			t.Fatalf("expected loopback addr, got %q", body)
+		}
+	})
 }

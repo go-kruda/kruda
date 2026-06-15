@@ -403,6 +403,90 @@ func knownHeader(key []byte) uint8 {
 // noLimits is a zero-value parserLimits (all unlimited).
 var noLimits = parserLimits{}
 
+type parseStatus uint8
+
+const (
+	parseNeedHeaderMore parseStatus = iota // headers not complete, buffer not full
+	parseHeaderTooLarge                    // headers exceed limit / buffer
+	parseMalformed                         // protocol error
+	parseChunked                           // Transfer-Encoding: chunked body (unsupported)
+	parseBodyTooLarge                      // Content-Length > bodyLimit
+	parseNeedBody                          // valid headers, body incomplete; need N body bytes total
+)
+
+// classifyIncomplete inspects a buffer for which parseHTTPRequestFast returned
+// ok==false and decides why. It validates the request line + headers but does
+// not allocate a request. need is the total Content-Length when status==parseNeedBody.
+func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, need int) {
+	// strip leading CRLF (mirror parseHTTPRequestInternal)
+	for len(data) >= 2 && data[0] == '\r' && data[1] == '\n' {
+		data = data[2:]
+	}
+	headerEnd := bytes.Index(data, crlfcrlf)
+	if headerEnd < 0 {
+		if limits.maxHeaderSize > 0 && len(data) > limits.maxHeaderSize {
+			return parseHeaderTooLarge, 0
+		}
+		return parseNeedHeaderMore, 0
+	}
+	// Request line must be well-formed.
+	lineEnd := bytes.IndexByte(data[:headerEnd], '\n')
+	if lineEnd <= 0 {
+		return parseMalformed, 0
+	}
+	hasTE := false
+	hasCL := false
+	cl := 0
+	pos := lineEnd + 1
+	for pos < headerEnd {
+		nl := bytes.IndexByte(data[pos:headerEnd], '\n')
+		var hline []byte
+		if nl < 0 {
+			hline = data[pos:headerEnd]
+			pos = headerEnd
+		} else {
+			hline = data[pos : pos+nl]
+			pos += nl + 1
+		}
+		if n := len(hline); n > 0 && hline[n-1] == '\r' {
+			hline = hline[:n-1]
+		}
+		colon := bytes.IndexByte(hline, ':')
+		if colon <= 0 {
+			continue
+		}
+		name := bytes.ToLower(bytes.TrimSpace(hline[:colon]))
+		val := bytes.TrimSpace(hline[colon+1:])
+		switch knownHeader(name) {
+		case headerContentLength:
+			if hasCL {
+				return parseMalformed, 0 // duplicate CL
+			}
+			hasCL = true
+			n, err := strconv.Atoi(string(val))
+			if err != nil || n < 0 {
+				return parseMalformed, 0
+			}
+			cl = n
+		case headerTransferEncoding:
+			hasTE = true
+		}
+	}
+	if hasTE && hasCL {
+		return parseMalformed, 0
+	}
+	if hasTE {
+		return parseChunked, 0
+	}
+	if !hasCL || cl == 0 {
+		return parseMalformed, 0
+	}
+	if limits.bodyLimit > 0 && cl > limits.bodyLimit {
+		return parseBodyTooLarge, 0
+	}
+	return parseNeedBody, cl
+}
+
 // tokenTable is a lookup table for RFC 7230 token characters.
 // token = 1*tchar
 // tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /

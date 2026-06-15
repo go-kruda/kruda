@@ -194,6 +194,7 @@ const maxEventsPerWait = 128
 type parserLimits struct {
 	maxHeaderCount int
 	maxHeaderSize  int
+	bodyLimit      int
 }
 
 type conn struct {

@@ -48,3 +48,32 @@ func postRaw(path string, n int) string {
 	body := strings.Repeat("x", n)
 	return fmt.Sprintf("POST %s HTTP/1.1\r\nHost: h\r\nContent-Length: %d\r\n\r\n%s", path, n, body)
 }
+
+func TestClassifyIncomplete(t *testing.T) {
+	lim := parserLimits{maxHeaderCount: 100, maxHeaderSize: 8192, bodyLimit: 1024}
+
+	// headers complete, body not yet arrived, within limit -> NeedBody(need)
+	raw := []byte("POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 500\r\n\r\n")
+	st, need := classifyIncomplete(raw, lim)
+	if st != parseNeedBody || need != 500 {
+		t.Fatalf("got (%v,%d) want (NeedBody,500)", st, need)
+	}
+
+	// content-length over bodyLimit -> BodyTooLarge
+	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 99999\r\n\r\n")
+	if st, _ := classifyIncomplete(raw, lim); st != parseBodyTooLarge {
+		t.Fatalf("got %v want BodyTooLarge", st)
+	}
+
+	// chunked body -> Chunked
+	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n")
+	if st, _ := classifyIncomplete(raw, lim); st != parseChunked {
+		t.Fatalf("got %v want Chunked", st)
+	}
+
+	// no end-of-headers yet, buffer not full -> NeedHeaderMore
+	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\n")
+	if st, _ := classifyIncomplete(raw, lim); st != parseNeedHeaderMore {
+		t.Fatalf("got %v want NeedHeaderMore", st)
+	}
+}

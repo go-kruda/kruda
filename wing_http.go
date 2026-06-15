@@ -263,6 +263,11 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		return nil, 0, false
 	}
 
+	// Reject Transfer-Encoding: chunked (unsupported; HTTP/1.1 allows chunked only in responses).
+	if hasTE {
+		return nil, 0, false
+	}
+
 	// Verify body completeness.
 	if contentLength > maxContentLength {
 		return nil, 0, false // reject oversized requests

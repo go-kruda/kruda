@@ -241,3 +241,39 @@ func TestWing_SlowBodyTimesOut(t *testing.T) {
 		t.Fatal("expected server to close the stalled body connection")
 	}
 }
+
+// TestWing_ChunkedRejected501 verifies that Transfer-Encoding: chunked
+// request bodies are rejected with 501 Not Implemented (HTTP/1.1 does
+// not support chunked requests, only responses).
+func TestWing_ChunkedRejected501(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	})
+	addr, stop := startBodyLimitWingServer(t, 1<<20, handler)
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	raw := "POST /u HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
+	if _, err := conn.Write([]byte(raw)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// Read the entire response to avoid race conditions with server close.
+	r := bufio.NewReader(conn)
+	status, err := r.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	status = strings.TrimSpace(status)
+	if !strings.Contains(status, "501") {
+		t.Fatalf("chunked body: want 501, got %q", status)
+	}
+}

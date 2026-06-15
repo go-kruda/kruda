@@ -112,6 +112,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	cookie := ""
 	host := ""
 	accept := ""
+	forwardedFor := ""
+	realIP := ""
 	hostUnsafe := false
 	acceptUnsafe := false
 	keepAlive := true // HTTP/1.1 default
@@ -203,6 +205,12 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
 			continue
+		case headerForwardedFor:
+			forwardedFor = string(val)
+			continue
+		case headerRealIP:
+			realIP = string(val)
+			continue
 		}
 
 		key = trimHTTPSpaces(key)
@@ -242,6 +250,10 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		case headerAccept:
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
+		case headerForwardedFor:
+			forwardedFor = string(val)
+		case headerRealIP:
+			realIP = string(val)
 		default:
 			if extraN < len(extraHdrs) {
 				lk := make([]byte, len(key))
@@ -294,6 +306,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.cookie = cookie
 		r.host = host
 		r.accept = accept
+		r.forwardedFor = forwardedFor
+		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
 		r.extraHdrs = extraHdrs
@@ -311,6 +325,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.cookie = cookie
 	r.host = host
 	r.accept = accept
+	r.forwardedFor = forwardedFor
+	r.realIP = realIP
 	r.hostUnsafe = hostUnsafe
 	r.acceptUnsafe = acceptUnsafe
 	r.extraHdrs = extraHdrs
@@ -364,6 +380,8 @@ var (
 	bCookie            = []byte("cookie")
 	bHost              = []byte("host")
 	bAccept            = []byte("accept")
+	bForwardedFor      = []byte("x-forwarded-for")
+	bRealIP            = []byte("x-real-ip")
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
 	wing100Continue    = []byte("HTTP/1.1 100 Continue\r\n\r\n")
@@ -378,6 +396,8 @@ const (
 	headerCookie
 	headerHost
 	headerAccept
+	headerForwardedFor
+	headerRealIP
 )
 
 func knownHeader(key []byte) uint8 {
@@ -392,6 +412,14 @@ func knownHeader(key []byte) uint8 {
 		}
 		if asciiEqualFold(key, bAccept) {
 			return headerAccept
+		}
+	case 9:
+		if asciiEqualFold(key, bRealIP) {
+			return headerRealIP
+		}
+	case 15:
+		if asciiEqualFold(key, bForwardedFor) {
+			return headerForwardedFor
 		}
 	case 10:
 		if asciiEqualFold(key, bConnection) {
@@ -464,6 +492,11 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		}
 		if n := len(hline); n > 0 && hline[n-1] == '\r' {
 			hline = hline[:n-1]
+		}
+		// A single over-limit header line is 431, not a silent close — mirror
+		// the parser's per-line check so the client learns why it was rejected.
+		if limits.maxHeaderSize > 0 && len(hline) > limits.maxHeaderSize {
+			return parseHeaderTooLarge, 0, false
 		}
 		colon := bytes.IndexByte(hline, ':')
 		if colon <= 0 {
@@ -641,6 +674,8 @@ func releaseRequest(r *wingRequest) {
 	r.cookie = ""
 	r.host = ""
 	r.accept = ""
+	r.forwardedFor = ""
+	r.realIP = ""
 	r.hostUnsafe = false
 	r.acceptUnsafe = false
 	r.remoteAddr = ""
@@ -683,6 +718,8 @@ type wingRequest struct {
 	cookie        string
 	host          string
 	accept        string
+	forwardedFor  string
+	realIP        string
 	remoteAddr    string
 	remoteAddrRef *string
 	trustProxy    bool
@@ -701,15 +738,15 @@ func (r *wingRequest) Path() string          { return r.path }
 func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
 func (r *wingRequest) RemoteAddr() string {
 	if r.trustProxy {
-		if xff := r.RawHeader("x-forwarded-for"); len(xff) > 0 {
+		if xff := r.forwardedFor; xff != "" {
 			// Take the first (leftmost) IP — the original client.
-			if i := bytes.IndexByte(xff, ','); i >= 0 {
+			if i := strings.IndexByte(xff, ','); i >= 0 {
 				xff = xff[:i]
 			}
-			return string(bytes.TrimSpace(xff))
+			return strings.TrimSpace(xff)
 		}
-		if xri := r.RawHeader("x-real-ip"); len(xri) > 0 {
-			return string(bytes.TrimSpace(xri))
+		if r.realIP != "" {
+			return strings.TrimSpace(r.realIP)
 		}
 	}
 	if r.remoteAddr != "" {
@@ -776,6 +813,12 @@ func (r *wingRequest) Header(key string) string {
 			r.acceptUnsafe = false
 		}
 		return r.accept
+	}
+	if key == "X-Forwarded-For" || key == "x-forwarded-for" {
+		return r.forwardedFor
+	}
+	if key == "X-Real-IP" || key == "x-real-ip" {
+		return r.realIP
 	}
 	lk := strings.ToLower(key)
 	for i := range r.extraN {

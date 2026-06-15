@@ -491,6 +491,61 @@ func TestWing_TrustProxy(t *testing.T) {
 	})
 }
 
+// TestWing_TrustProxy_ManyHeaders guards that X-Forwarded-For is honored even when
+// the request carries more than the 8 generic extra-header slots — XFF is parsed
+// into a dedicated field, so it can no longer be dropped by slot overflow.
+func TestWing_TrustProxy_ManyHeaders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(r.RemoteAddr()))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 1.2.3.4\r\n")
+	for i := 0; i < 12; i++ { // 12 unknown headers — well past the 8-slot extra store
+		fmt.Fprintf(&b, "X-Custom-%d: v%d\r\n", i, i)
+	}
+	b.WriteString("\r\n")
+	if _, err := conn.Write([]byte(b.String())); err != nil {
+		t.Fatal(err)
+	}
+	body := readHTTPBody(t, conn)
+	if body != "1.2.3.4" {
+		t.Fatalf("XFF must survive >8 extra headers, got %q", body)
+	}
+}
+
+// TestWing_HeaderLineTooLarge431 guards that a single header line over HeaderLimit
+// (but within the read buffer) is rejected with 431, not a silent close.
+func TestWing_HeaderLineTooLarge431(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	// One ~2KB header line exceeds HeaderLimit 1024 but the whole request fits
+	// the 8KB read buffer, so it takes the "buffer has room" classifier path.
+	big := strings.Repeat("a", 2048)
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nX-Big: " + big + "\r\n\r\n"
+	st, _ := sendRaw(t, addr, raw)
+	if !strings.Contains(st, "431") {
+		t.Fatalf("oversized header line want 431, got %q", st)
+	}
+}
+
 // TestWing_BodyLimitInBuffer guards the case where a complete request body fits
 // entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
 // path alone never sees these, so the parser must reject them so the classifier

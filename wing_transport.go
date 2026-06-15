@@ -662,7 +662,10 @@ func (w *worker) tryParse(c *conn) {
 						return
 					}
 					return
-				default: // parseMalformed, parseHeaderTooLarge
+				case parseHeaderTooLarge:
+					w.writeAndClose(c, wingStatusClose(431))
+					return
+				default: // parseMalformed
 					w.closeConn(c.fd)
 					return
 				}

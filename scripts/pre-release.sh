@@ -66,19 +66,13 @@ for fuzz in FuzzRouterPattern FuzzRouterMatch FuzzBindJSON FuzzValidateString; d
   fi
 done
 
+section "current documentation correctness"
+scripts/check-docs.sh
+ok "current docs checked"
+
 section "godoc completeness on exported symbols (released code only)"
-# examples/ packages are runnable demos, not library API — revive noise there
-# is not a release blocker. Check core + contrib + transport.
-if command -v revive >/dev/null; then
-  missing=$(revive -config <(echo '[rule.exported]') ./... 2>&1 | grep "should have comment" | grep -vE '^examples/' || true)
-  if [[ -n "$missing" ]]; then
-    echo "$missing" | head -10
-    fail "missing godoc on exported symbols (released code)"
-  fi
-  ok "godoc complete on released code"
-else
-  echo "  (revive not installed, skipping godoc check)"
-fi
+scripts/check-godoc.sh
+ok "godoc complete on released code"
 
 section "examples build"
 for dir in examples/*/; do

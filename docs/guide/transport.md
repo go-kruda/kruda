@@ -47,7 +47,7 @@ KRUDA_TRANSPORT=fasthttp ./myapp   # force fasthttp
 
 Wing is optimized for raw throughput. It intentionally skips some HTTP features:
 
-- **Prebuilt static responses bypass middleware** — `WingStaticText` and `WingStaticJSON` write route-level prebuilt responses directly. Use normal handlers when a response needs middleware, lifecycle hooks, CORS, cookies, or `WithSecureHeaders()`.
+- **Prebuilt static responses bypass middleware** — `StaticText` and `StaticJSON` write route-level prebuilt responses directly. Use normal handlers when a response needs middleware, lifecycle hooks, CORS, cookies, or `WithSecureHeaders()`.
 - **No `http.Flusher`** — SSE streaming requires flushing, which Wing doesn't support.
 - **No HTTP/2** — Wing speaks HTTP/1.1 only. Use `kruda.NetHTTP()` with TLS for HTTP/2.
 - **No chunked transfer encoding** — Wing pre-computes Content-Length.

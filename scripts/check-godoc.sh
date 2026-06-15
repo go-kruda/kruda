@@ -1,4 +1,4 @@
-#!env bash
+#!/usr/bin/env bash
 # Checks exported symbol comments in released modules.
 set -euo pipefail
 

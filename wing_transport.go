@@ -1309,8 +1309,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					req = r2
 					keepAlive = req.keepAlive
 					goto next
+				case parseHeaderTooLarge:
+					f.Write(wingStatusClose(431))
+					keepAlive = false
+					goto done
 				default:
-					// parseMalformed, parseHeaderTooLarge — silent close.
+					// parseMalformed — silent close.
 					keepAlive = false
 					goto done
 				}

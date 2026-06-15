@@ -546,6 +546,93 @@ func TestWing_HeaderLineTooLarge431(t *testing.T) {
 	}
 }
 
+// TestWing_SplitHeadersNotWronglyRejected guards that a header block of small,
+// individually-legal lines is served even when a partial read snapshot exceeds
+// HeaderLimit before the terminating CRLF arrives. The verdict must not depend on
+// TCP segmentation (regression: the classifier's total-bytes early-out 431'd it).
+func TestWing_SplitHeadersNotWronglyRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: h\r\n")
+	for i := 0; i < 60; i++ { // ~60 small lines, each well under HeaderLimit 1024
+		fmt.Fprintf(&b, "X-H-%d: vvvvvvvvvv\r\n", i)
+	}
+	full := b.String() // > 1024 bytes total, no terminating CRLF yet
+	// Send a >1024 partial first (snapshot exceeds HeaderLimit), pause, then finish.
+	if _, err := conn.Write([]byte(full[:1100])); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := conn.Write([]byte(full[1100:] + "\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(line, "200") {
+		t.Fatalf("split small-header block wrongly rejected: got %q", strings.TrimSpace(line))
+	}
+}
+
+// TestWing_Takeover_HeaderLineTooLarge431 guards that the takeover keep-alive path
+// answers 431 for an oversized header line on a pipelined request, matching the
+// event-loop path (regression: takeover grouped it with malformed and closed silently).
+func TestWing_Takeover_HeaderLineTooLarge431(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024, DefaultPreset: DB}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Pipeline req1 (valid → enters takeover) + req2 (oversized header → 431 via takeover).
+	big := strings.Repeat("a", 2048)
+	pipelined := "GET / HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET / HTTP/1.1\r\nHost: h\r\nX-Big: " + big + "\r\n\r\n"
+	if _, err := conn.Write([]byte(pipelined)); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var resp bytes.Buffer
+	tmp := make([]byte, 4096)
+	for {
+		n, rerr := conn.Read(tmp)
+		resp.Write(tmp[:n])
+		if rerr != nil {
+			break
+		}
+	}
+	s := resp.String()
+	if !strings.Contains(s, " 200 ") {
+		t.Fatalf("expected req1 to be served 200, got: %q", s)
+	}
+	if !strings.Contains(s, " 431 ") {
+		t.Fatalf("expected req2 oversized header to get 431 on takeover path, got: %q", s)
+	}
+}
+
 // TestWing_BodyLimitInBuffer guards the case where a complete request body fits
 // entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
 // path alone never sees these, so the parser must reject them so the classifier

@@ -206,10 +206,14 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			acceptUnsafe = unsafePath && len(val) > 0
 			continue
 		case headerForwardedFor:
-			forwardedFor = string(val)
+			if forwardedFor == "" { // first header wins (net/http Get semantics)
+				forwardedFor = string(val)
+			}
 			continue
 		case headerRealIP:
-			realIP = string(val)
+			if realIP == "" {
+				realIP = string(val)
+			}
 			continue
 		}
 
@@ -251,9 +255,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
 		case headerForwardedFor:
-			forwardedFor = string(val)
+			if forwardedFor == "" { // first header wins (net/http Get semantics)
+				forwardedFor = string(val)
+			}
 		case headerRealIP:
-			realIP = string(val)
+			if realIP == "" {
+				realIP = string(val)
+			}
 		default:
 			if extraN < len(extraHdrs) {
 				lk := make([]byte, len(key))
@@ -466,9 +474,12 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 	}
 	headerEnd := bytes.Index(data, crlfcrlf)
 	if headerEnd < 0 {
-		if limits.maxHeaderSize > 0 && len(data) > limits.maxHeaderSize {
-			return parseHeaderTooLarge, 0, false
-		}
+		// Headers still arriving: wait for more. Don't reject on accumulated
+		// bytes here — that made the verdict depend on TCP segmentation (a
+		// small-line/large-total header block was served when it arrived in one
+		// read but 431'd when split). Oversized headers are caught per-line once
+		// the block is complete, or by the buffer-full path (ReadBufSize is the
+		// total backstop).
 		return parseNeedHeaderMore, 0, false
 	}
 	// Request line must be well-formed.

@@ -639,6 +639,7 @@ func releaseRequest(r *wingRequest) {
 	r.acceptUnsafe = false
 	r.remoteAddr = ""
 	r.remoteAddrRef = nil
+	r.trustProxy = false
 	r.keepAlive = false
 	r.pathUnsafe = false
 	r.fd = 0
@@ -697,9 +698,9 @@ func (r *wingRequest) RemoteAddr() string {
 		if xff := r.RawHeader("x-forwarded-for"); len(xff) > 0 {
 			// Take the first (leftmost) IP — the original client.
 			if i := bytes.IndexByte(xff, ','); i >= 0 {
-				xff = bytes.TrimSpace(xff[:i])
+				xff = xff[:i]
 			}
-			return string(xff)
+			return string(bytes.TrimSpace(xff))
 		}
 		if xri := r.RawHeader("x-real-ip"); len(xri) > 0 {
 			return string(bytes.TrimSpace(xri))

@@ -344,7 +344,7 @@ func TestWing_TrustProxy(t *testing.T) {
 		return addr, stop
 	}
 
-	t.Run("trusted_xff", func(t *testing.T) {
+	t.Run("trusted_xff_multi", func(t *testing.T) {
 		addr, stop := makeServer(true)
 		defer stop()
 		conn, err := net.Dial("tcp", addr)
@@ -356,6 +356,21 @@ func TestWing_TrustProxy(t *testing.T) {
 		body := readHTTPBody(t, conn)
 		if body != "1.2.3.4" {
 			t.Fatalf("expected 1.2.3.4, got %q", body)
+		}
+	})
+
+	t.Run("trusted_xff_single", func(t *testing.T) {
+		addr, stop := makeServer(true)
+		defer stop()
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For:  1.2.3.4 \r\n\r\n")
+		body := readHTTPBody(t, conn)
+		if body != "1.2.3.4" {
+			t.Fatalf("expected trimmed 1.2.3.4, got %q", body)
 		}
 	})
 

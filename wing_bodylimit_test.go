@@ -730,6 +730,43 @@ func TestWingRequest_HeaderXFFCaseInsensitive(t *testing.T) {
 	}
 }
 
+// TestWing_HeaderLineLengthBoundary pins the exact off-by-one contract of the
+// classifyIncomplete per-line check: len(hline) == HeaderLimit is accepted;
+// len(hline) == HeaderLimit+1 is rejected with 431.
+// hline is the header line after \r stripping (e.g. "X-Test: <value>").
+func TestWing_HeaderLineLengthBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const headerLimit = 512
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: headerLimit}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+	}))
+	defer stop()
+
+	prefix := "X-Test: " // 8 bytes; hline = prefix + value
+	baseLen := len(prefix)
+
+	for _, tc := range []struct {
+		name     string
+		valLen   int
+		wantCode string
+	}{
+		{"at_limit", headerLimit - baseLen, "200"},      // len(hline)==headerLimit → OK
+		{"over_limit", headerLimit - baseLen + 1, "431"}, // len(hline)==headerLimit+1 → 431
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hdr := prefix + strings.Repeat("a", tc.valLen)
+			raw := "GET / HTTP/1.1\r\nHost: h\r\n" + hdr + "\r\n\r\n"
+			st, _ := sendRaw(t, addr, raw)
+			if !strings.Contains(st, " "+tc.wantCode+" ") {
+				t.Fatalf("header line len=%d want %s, got %q", len(hdr), tc.wantCode, st)
+			}
+		})
+	}
+}
+
 // TestWing_BodyLimitInBuffer guards the case where a complete request body fits
 // entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
 // path alone never sees these, so the parser must reject them so the classifier

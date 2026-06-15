@@ -1178,15 +1178,21 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	// The pool's default buffer is 8 KB; grow it to the configured ReadBufSize so
 	// the takeover path accepts the same header sizes as the event loop (which
 	// sizes readBuf from ReadBufSize/HeaderLimit) and so copy() below never
-	// truncates leftover. The grown buffer is returned to the pool by the defer.
-	if w.config.ReadBufSize > len(buf) {
+	// truncates leftover.
+	grewBuf := w.config.ReadBufSize > len(buf)
+	if grewBuf {
 		buf = make([]byte, w.config.ReadBufSize)
 	}
 	readN := copy(buf, leftover)
 
 	var bodyBuf []byte
 	defer func() {
-		*bp = buf
+		if !grewBuf {
+			*bp = buf
+		}
+		// grewBuf: *bp still holds the original pool-sized buffer; the
+		// grown buf is dropped here and reclaimed by the GC, preventing
+		// oversized-buffer retention in the pool.
 		takeoverBufPool.Put(bp)
 		bodyBuf = nil
 	}()

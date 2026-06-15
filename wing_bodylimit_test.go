@@ -32,6 +32,17 @@ func sendRaw(t *testing.T, addr, raw string) (status string, closed bool) {
 	return strings.TrimSpace(line), false
 }
 
+func TestWingConfig_DerivesReadBufFromHeaderLimit(t *testing.T) {
+	c := WingConfig{HeaderLimit: 16384}
+	c.defaults()
+	if c.ReadBufSize < 16384 {
+		t.Fatalf("ReadBufSize=%d, want >= HeaderLimit 16384", c.ReadBufSize)
+	}
+	if c.MaxHeaderSize != 16384 {
+		t.Fatalf("MaxHeaderSize=%d, want 16384", c.MaxHeaderSize)
+	}
+}
+
 // postRaw builds a POST with an explicit Content-Length body of n 'x' bytes.
 func postRaw(path string, n int) string {
 	body := strings.Repeat("x", n)

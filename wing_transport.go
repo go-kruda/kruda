@@ -1153,6 +1153,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	buf := *bp
 	readN := copy(buf, leftover)
 
+	var bodyBuf []byte
+	defer func() {
+		*bp = buf
+		takeoverBufPool.Put(bp)
+		bodyBuf = nil
+	}()
+
 	remoteAddrRef := first.remoteAddrRef
 	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
@@ -1203,10 +1210,84 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					keepAlive = req.keepAlive
 					goto next
 				}
-			}
-			if readN >= len(buf) {
-				keepAlive = false
-				goto done
+				// Classify the incomplete/rejected request.
+				st, need, expectContinue := classifyIncomplete(buf[:readN], w.limits)
+				switch st {
+				case parseNeedHeaderMore:
+					// Need more header bytes — keep reading.
+					if readN >= len(buf) {
+						// Buffer full but headers still incomplete: 431.
+						f.Write(wingStatusClose(431))
+						keepAlive = false
+						goto done
+					}
+				case parseChunked:
+					f.Write(wingStatusClose(501))
+					keepAlive = false
+					goto done
+				case parseBodyTooLarge:
+					f.Write(wingStatusClose(413))
+					keepAlive = false
+					goto done
+				case parseNeedBody:
+					if expectContinue {
+						f.Write(wing100Continue)
+					}
+					// Locate end of header block.
+					headerEnd := bytes.Index(buf[:readN], crlfcrlf)
+					if headerEnd < 0 {
+						keepAlive = false
+						goto done
+					}
+					headerEnd += 4
+					headerSnapshot := make([]byte, headerEnd)
+					copy(headerSnapshot, buf[:headerEnd])
+					// Seed bodyBuf with already-received body bytes.
+					bodyBuf = bodyBuf[:0]
+					if have := readN - headerEnd; have > 0 {
+						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
+					}
+					readN = 0
+					// Read remaining body bytes, reusing buf as a temp chunk buffer.
+					for len(bodyBuf) < need {
+						if w.readTimeout > 0 {
+							f.SetReadDeadline(time.Now().Add(time.Duration(w.readTimeout)))
+						}
+						n, rerr := f.Read(buf)
+						if n > 0 {
+							bodyBuf = append(bodyBuf, buf[:n]...)
+						}
+						if rerr != nil {
+							if w.readTimeout > 0 {
+								f.SetReadDeadline(time.Time{})
+							}
+							keepAlive = false
+							goto done
+						}
+					}
+					if w.readTimeout > 0 {
+						f.SetReadDeadline(time.Time{})
+					}
+					// Reconstruct and re-parse with full body present.
+					full := append(headerSnapshot, bodyBuf[:need]...)
+					bodyBuf = bodyBuf[:0]
+					r2, _, ok2 := parseHTTPRequest(full, w.limits)
+					if !ok2 {
+						keepAlive = false
+						goto done
+					}
+					r2.fd = fd
+					r2.ctx = connCtx
+					r2.remoteAddrRef = remoteAddrRef
+					r2.trustProxy = w.trustProxy
+					req = r2
+					keepAlive = req.keepAlive
+					goto next
+				default:
+					// parseMalformed, parseHeaderTooLarge — silent close.
+					keepAlive = false
+					goto done
+				}
 			}
 			// Adaptive spin: a few non-blocking raw reads before parking on the
 			// netpoller. Catches an already-buffered next keep-alive request
@@ -1245,7 +1326,6 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	}
 
 done:
-	takeoverBufPool.Put(bp)
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
 	// and then closes through the File. Do NOT close here — the kernel
 	// could recycle the fd number while the conns map still references it.

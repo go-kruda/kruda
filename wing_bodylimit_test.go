@@ -326,6 +326,42 @@ func readHTTPBody(t *testing.T, conn net.Conn) string {
 	return strings.TrimSpace(resp[idx+4:])
 }
 
+// TestWing_Takeover_BodyAndLimit exercises body-limit enforcement and legal body
+// accumulation on the Takeover (DB/Spear) dispatch path specifically.
+func TestWing_Takeover_BodyAndLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const bodyLimit = 16 * 1024
+
+	cfg := WingConfig{
+		Workers:       1,
+		ReadBufSize:   8192,
+		BodyLimit:     bodyLimit,
+		DefaultPreset: DB, // Takeover dispatch
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		body, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(body))))
+	}))
+	defer stop()
+
+	t.Run("takeover_legal_body", func(t *testing.T) {
+		st, _ := sendRaw(t, addr, postRaw("/", bodyLimit/2))
+		if !strings.Contains(st, "200") {
+			t.Fatalf("legal body want 200, got %q", st)
+		}
+	})
+
+	t.Run("takeover_over_limit_413", func(t *testing.T) {
+		st, _ := sendRaw(t, addr, postRaw("/", bodyLimit+1))
+		if !strings.Contains(st, "413") {
+			t.Fatalf("over-limit on takeover path want 413, got %q", st)
+		}
+	})
+}
+
 func TestWing_TrustProxy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Wing integration test in short mode")

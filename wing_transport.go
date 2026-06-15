@@ -662,7 +662,10 @@ func (w *worker) tryParse(c *conn) {
 						return
 					}
 					return
-				default: // parseMalformed, parseHeaderTooLarge
+				case parseHeaderTooLarge:
+					w.writeAndClose(c, wingStatusClose(431))
+					return
+				default: // parseMalformed
 					w.closeConn(c.fd)
 					return
 				}
@@ -1172,11 +1175,24 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 
 	bp := takeoverBufPool.Get().(*[]byte)
 	buf := *bp
+	// The pool's default buffer is 8 KB; grow it to the configured ReadBufSize so
+	// the takeover path accepts the same header sizes as the event loop (which
+	// sizes readBuf from ReadBufSize/HeaderLimit) and so copy() below never
+	// truncates leftover.
+	grewBuf := w.config.ReadBufSize > len(buf)
+	if grewBuf {
+		buf = make([]byte, w.config.ReadBufSize)
+	}
 	readN := copy(buf, leftover)
 
 	var bodyBuf []byte
 	defer func() {
-		*bp = buf
+		if !grewBuf {
+			*bp = buf
+		}
+		// grewBuf: *bp still holds the original pool-sized buffer; the
+		// grown buf is dropped here and reclaimed by the GC, preventing
+		// oversized-buffer retention in the pool.
 		takeoverBufPool.Put(bp)
 		bodyBuf = nil
 	}()
@@ -1306,8 +1322,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					req = r2
 					keepAlive = req.keepAlive
 					goto next
+				case parseHeaderTooLarge:
+					f.Write(wingStatusClose(431))
+					keepAlive = false
+					goto done
 				default:
-					// parseMalformed, parseHeaderTooLarge — silent close.
+					// parseMalformed — silent close.
 					keepAlive = false
 					goto done
 				}

@@ -491,6 +491,282 @@ func TestWing_TrustProxy(t *testing.T) {
 	})
 }
 
+// TestWing_TrustProxy_ManyHeaders guards that X-Forwarded-For is honored even when
+// the request carries more than the 8 generic extra-header slots — XFF is parsed
+// into a dedicated field, so it can no longer be dropped by slot overflow.
+func TestWing_TrustProxy_ManyHeaders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(r.RemoteAddr()))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 1.2.3.4\r\n")
+	for i := 0; i < 12; i++ { // 12 unknown headers — well past the 8-slot extra store
+		fmt.Fprintf(&b, "X-Custom-%d: v%d\r\n", i, i)
+	}
+	b.WriteString("\r\n")
+	if _, err := conn.Write([]byte(b.String())); err != nil {
+		t.Fatal(err)
+	}
+	body := readHTTPBody(t, conn)
+	if body != "1.2.3.4" {
+		t.Fatalf("XFF must survive >8 extra headers, got %q", body)
+	}
+}
+
+// TestWing_HeaderLineTooLarge431 guards that a single header line over HeaderLimit
+// (but within the read buffer) is rejected with 431, not a silent close.
+func TestWing_HeaderLineTooLarge431(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	// One ~2KB header line exceeds HeaderLimit 1024 but the whole request fits
+	// the 8KB read buffer, so it takes the "buffer has room" classifier path.
+	big := strings.Repeat("a", 2048)
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nX-Big: " + big + "\r\n\r\n"
+	st, _ := sendRaw(t, addr, raw)
+	if !strings.Contains(st, "431") {
+		t.Fatalf("oversized header line want 431, got %q", st)
+	}
+}
+
+// TestWing_SplitHeadersNotWronglyRejected guards that a header block of small,
+// individually-legal lines is served even when a partial read snapshot exceeds
+// HeaderLimit before the terminating CRLF arrives. The verdict must not depend on
+// TCP segmentation (regression: the classifier's total-bytes early-out 431'd it).
+func TestWing_SplitHeadersNotWronglyRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: h\r\n")
+	for i := 0; i < 60; i++ { // ~60 small lines, each well under HeaderLimit 1024
+		fmt.Fprintf(&b, "X-H-%d: vvvvvvvvvv\r\n", i)
+	}
+	full := b.String() // > 1024 bytes total, no terminating CRLF yet
+	// Send a >1024 partial first (snapshot exceeds HeaderLimit), pause, then finish.
+	if _, err := conn.Write([]byte(full[:1100])); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := conn.Write([]byte(full[1100:] + "\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(line, "200") {
+		t.Fatalf("split small-header block wrongly rejected: got %q", strings.TrimSpace(line))
+	}
+}
+
+// TestWing_Takeover_HeaderLineTooLarge431 guards that the takeover keep-alive path
+// answers 431 for an oversized header line on a pipelined request, matching the
+// event-loop path (regression: takeover grouped it with malformed and closed silently).
+func TestWing_Takeover_HeaderLineTooLarge431(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: 1024, DefaultPreset: DB}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Pipeline req1 (valid → enters takeover) + req2 (oversized header → 431 via takeover).
+	big := strings.Repeat("a", 2048)
+	pipelined := "GET / HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET / HTTP/1.1\r\nHost: h\r\nX-Big: " + big + "\r\n\r\n"
+	if _, err := conn.Write([]byte(pipelined)); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var resp bytes.Buffer
+	tmp := make([]byte, 4096)
+	for {
+		n, rerr := conn.Read(tmp)
+		resp.Write(tmp[:n])
+		if rerr != nil {
+			break
+		}
+	}
+	s := resp.String()
+	if !strings.Contains(s, " 200 ") {
+		t.Fatalf("expected req1 to be served 200, got: %q", s)
+	}
+	if !strings.Contains(s, " 431 ") {
+		t.Fatalf("expected req2 oversized header to get 431 on takeover path, got: %q", s)
+	}
+}
+
+// TestWing_TrustProxy_EmptyFirstHeaderWins guards net/http Get semantics: when a
+// request sends an empty X-Forwarded-For before a non-empty one, the first
+// (empty) header wins and RemoteAddr falls back to the socket peer — a later
+// attacker-supplied value must not override it.
+func TestWing_TrustProxy_EmptyFirstHeaderWins(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte(r.RemoteAddr()))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: \r\nX-Forwarded-For: 1.2.3.4\r\n\r\n")
+	body := readHTTPBody(t, conn)
+	if body == "1.2.3.4" {
+		t.Fatalf("empty first XFF must win; second value must not override, got %q", body)
+	}
+	if !strings.HasPrefix(body, "127.0.0.1:") && !strings.HasPrefix(body, "[::1]:") {
+		t.Fatalf("expected loopback fallback, got %q", body)
+	}
+}
+
+// TestWing_Takeover_LargeHeaderWithinLimit guards that the takeover path accepts
+// a header block larger than the 8 KB default pool buffer but within HeaderLimit,
+// matching the event loop (regression: takeover used a fixed 8 KB buffer and
+// wrongly 431'd / truncated large legal headers when HeaderLimit > 8 KB).
+func TestWing_Takeover_LargeHeaderWithinLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 16384, HeaderLimit: 16384, DefaultPreset: DB}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// req1 valid (enters takeover) + req2 with a ~12 KB header line (< HeaderLimit,
+	// > 8 KB default pool buffer); req2 closes the conn so the read ends promptly.
+	big := strings.Repeat("a", 12000)
+	pipelined := "GET / HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nX-Big: " + big + "\r\n\r\n"
+	if _, err := conn.Write([]byte(pipelined)); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var resp bytes.Buffer
+	tmp := make([]byte, 4096)
+	for {
+		n, rerr := conn.Read(tmp)
+		resp.Write(tmp[:n])
+		if rerr != nil {
+			break
+		}
+	}
+	s := resp.String()
+	if strings.Contains(s, " 431 ") {
+		t.Fatalf("legal large header on takeover wrongly 431'd: %q", s)
+	}
+	if strings.Count(s, " 200 ") < 2 {
+		t.Fatalf("expected both requests served 200, got: %q", s)
+	}
+}
+
+// TestWingRequest_HeaderXFFCaseInsensitive guards that the dedicated XFF/X-Real-IP
+// fields are reachable via Header()/RawHeader() regardless of key casing, matching
+// the case-insensitive lookup they had as generic extra headers.
+func TestWingRequest_HeaderXFFCaseInsensitive(t *testing.T) {
+	raw := []byte("GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 9.9.9.9\r\nX-Real-IP: 8.8.8.8\r\n\r\n")
+	r, _, ok := parseHTTPRequest(raw, parserLimits{maxHeaderCount: 100, maxHeaderSize: 8192})
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	defer releaseRequest(r)
+	for _, k := range []string{"X-Forwarded-For", "x-forwarded-for", "X-FORWARDED-FOR"} {
+		if got := r.Header(k); got != "9.9.9.9" {
+			t.Fatalf("Header(%q) = %q, want 9.9.9.9", k, got)
+		}
+	}
+	for _, k := range []string{"X-Real-IP", "x-real-ip", "X-REAL-IP"} {
+		if got := r.Header(k); got != "8.8.8.8" {
+			t.Fatalf("Header(%q) = %q, want 8.8.8.8", k, got)
+		}
+	}
+}
+
+// TestWing_HeaderLineLengthBoundary pins the exact off-by-one contract of the
+// classifyIncomplete per-line check: len(hline) == HeaderLimit is accepted;
+// len(hline) == HeaderLimit+1 is rejected with 431.
+// hline is the header line after \r stripping (e.g. "X-Test: <value>").
+func TestWing_HeaderLineLengthBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const headerLimit = 512
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, HeaderLimit: headerLimit}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.WriteHeader(200)
+	}))
+	defer stop()
+
+	prefix := "X-Test: " // 8 bytes; hline = prefix + value
+	baseLen := len(prefix)
+
+	for _, tc := range []struct {
+		name     string
+		valLen   int
+		wantCode string
+	}{
+		{"at_limit", headerLimit - baseLen, "200"},      // len(hline)==headerLimit → OK
+		{"over_limit", headerLimit - baseLen + 1, "431"}, // len(hline)==headerLimit+1 → 431
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hdr := prefix + strings.Repeat("a", tc.valLen)
+			raw := "GET / HTTP/1.1\r\nHost: h\r\n" + hdr + "\r\n\r\n"
+			st, _ := sendRaw(t, addr, raw)
+			if !strings.Contains(st, " "+tc.wantCode+" ") {
+				t.Fatalf("header line len=%d want %s, got %q", len(hdr), tc.wantCode, st)
+			}
+		})
+	}
+}
+
 // TestWing_BodyLimitInBuffer guards the case where a complete request body fits
 // entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
 // path alone never sees these, so the parser must reject them so the classifier

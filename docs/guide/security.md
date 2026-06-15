@@ -91,12 +91,20 @@ Applies to `SetHeader`, `AddHeader`, and `SetCookie`.
 | Setting | Default | Option |
 |---------|---------|--------|
 | Max body size | 4 MB | `WithBodyLimit(bytes)` / `WithMaxBodySize(bytes)` |
+| Max header size | 8 KB | `WithHeaderLimit(bytes)` |
 | Read timeout | 30s | `WithReadTimeout(d)` |
 | Write timeout | 30s | `WithWriteTimeout(d)` |
 | Idle timeout | 120s | `WithIdleTimeout(d)` |
-| Max header size | 8 KB | config field |
+| Trust proxy headers | false | `WithTrustProxy(true)` |
 
-Bodies exceeding the limit return HTTP 413. Timeouts are enforced at the transport level.
+Body and header limits are enforced on all transports, including Wing:
+
+- Bodies exceeding `BodyLimit` return **HTTP 413** before the handler runs.
+- Headers exceeding `HeaderLimit` return **HTTP 431**.
+- Chunked transfer-encoded bodies are rejected with **HTTP 501** on Wing (Wing does not dechunk; use a proxy).
+- When `TrustProxy` is enabled, `X-Forwarded-For` and `X-Real-IP` are used for the client IP on all transports.
+
+Timeouts are enforced at the transport level and apply during body accumulation as well as idle connections.
 
 ```go
 app := kruda.New(

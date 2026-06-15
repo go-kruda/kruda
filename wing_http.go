@@ -263,11 +263,22 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		return nil, 0, false
 	}
 
+	// Reject Transfer-Encoding: chunked (unsupported; HTTP/1.1 allows chunked only in responses).
+	if hasTE {
+		return nil, 0, false
+	}
+
 	// Verify body completeness.
 	if contentLength > maxContentLength {
 		return nil, 0, false // reject oversized requests
 	}
 	if contentLength > 0 {
+		// Over BodyLimit — reject here so the slow-path classifier emits a 413.
+		// Catches complete in-buffer bodies that fit the read buffer but exceed
+		// the limit (the slow path alone only sees bodies larger than the buffer).
+		if limits.bodyLimit > 0 && contentLength > limits.bodyLimit {
+			return nil, 0, false
+		}
 		if bodyStart+contentLength > len(data) {
 			return nil, 0, false // incomplete body
 		}
@@ -349,11 +360,13 @@ var (
 	bConnection        = []byte("connection")
 	bClose             = []byte("close")
 	bTransferEncoding  = []byte("transfer-encoding")
+	bExpect            = []byte("expect")
 	bCookie            = []byte("cookie")
 	bHost              = []byte("host")
 	bAccept            = []byte("accept")
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
+	wing100Continue    = []byte("HTTP/1.1 100 Continue\r\n\r\n")
 )
 
 const (
@@ -402,6 +415,97 @@ func knownHeader(key []byte) uint8 {
 
 // noLimits is a zero-value parserLimits (all unlimited).
 var noLimits = parserLimits{}
+
+type parseStatus uint8
+
+const (
+	parseNeedHeaderMore parseStatus = iota // headers not complete, buffer not full
+	parseHeaderTooLarge                    // headers exceed limit / buffer
+	parseMalformed                         // protocol error
+	parseChunked                           // Transfer-Encoding: chunked body (unsupported)
+	parseBodyTooLarge                      // Content-Length > bodyLimit
+	parseNeedBody                          // valid headers, body incomplete; need N body bytes total
+)
+
+// classifyIncomplete inspects a buffer for which parseHTTPRequestFast returned
+// ok==false and decides why. It validates the request line + headers but does
+// not allocate a request. need is the total Content-Length when status==parseNeedBody.
+// expectContinue is true if the request has "Expect: 100-continue" header.
+func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, need int, expectContinue bool) {
+	// strip leading CRLF (mirror parseHTTPRequestInternal)
+	for len(data) >= 2 && data[0] == '\r' && data[1] == '\n' {
+		data = data[2:]
+	}
+	headerEnd := bytes.Index(data, crlfcrlf)
+	if headerEnd < 0 {
+		if limits.maxHeaderSize > 0 && len(data) > limits.maxHeaderSize {
+			return parseHeaderTooLarge, 0, false
+		}
+		return parseNeedHeaderMore, 0, false
+	}
+	// Request line must be well-formed.
+	lineEnd := bytes.IndexByte(data[:headerEnd], '\n')
+	if lineEnd <= 0 {
+		return parseMalformed, 0, false
+	}
+	hasTE := false
+	hasCL := false
+	cl := 0
+	pos := lineEnd + 1
+	for pos < headerEnd {
+		nl := bytes.IndexByte(data[pos:headerEnd], '\n')
+		var hline []byte
+		if nl < 0 {
+			hline = data[pos:headerEnd]
+			pos = headerEnd
+		} else {
+			hline = data[pos : pos+nl]
+			pos += nl + 1
+		}
+		if n := len(hline); n > 0 && hline[n-1] == '\r' {
+			hline = hline[:n-1]
+		}
+		colon := bytes.IndexByte(hline, ':')
+		if colon <= 0 {
+			continue
+		}
+		name := bytes.ToLower(bytes.TrimSpace(hline[:colon]))
+		val := bytes.TrimSpace(hline[colon+1:])
+		switch knownHeader(name) {
+		case headerContentLength:
+			if hasCL {
+				return parseMalformed, 0, false // duplicate CL
+			}
+			hasCL = true
+			n, err := strconv.Atoi(string(val))
+			if err != nil || n < 0 {
+				return parseMalformed, 0, false
+			}
+			cl = n
+		case headerTransferEncoding:
+			hasTE = true
+		default:
+			if asciiEqualFold(name, bExpect) {
+				if asciiEqualFold(val, []byte("100-continue")) {
+					expectContinue = true
+				}
+			}
+		}
+	}
+	if hasTE && hasCL {
+		return parseMalformed, 0, false
+	}
+	if hasTE {
+		return parseChunked, 0, false
+	}
+	if !hasCL || cl == 0 {
+		return parseMalformed, 0, false
+	}
+	if limits.bodyLimit > 0 && cl > limits.bodyLimit {
+		return parseBodyTooLarge, 0, expectContinue
+	}
+	return parseNeedBody, cl, expectContinue
+}
 
 // tokenTable is a lookup table for RFC 7230 token characters.
 // token = 1*tchar
@@ -541,6 +645,7 @@ func releaseRequest(r *wingRequest) {
 	r.acceptUnsafe = false
 	r.remoteAddr = ""
 	r.remoteAddrRef = nil
+	r.trustProxy = false
 	r.keepAlive = false
 	r.pathUnsafe = false
 	r.fd = 0
@@ -580,6 +685,7 @@ type wingRequest struct {
 	accept        string
 	remoteAddr    string
 	remoteAddrRef *string
+	trustProxy    bool
 	keepAlive     bool
 	pathUnsafe    bool
 	hostUnsafe    bool
@@ -594,6 +700,18 @@ func (r *wingRequest) Method() string        { return r.method }
 func (r *wingRequest) Path() string          { return r.path }
 func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
 func (r *wingRequest) RemoteAddr() string {
+	if r.trustProxy {
+		if xff := r.RawHeader("x-forwarded-for"); len(xff) > 0 {
+			// Take the first (leftmost) IP — the original client.
+			if i := bytes.IndexByte(xff, ','); i >= 0 {
+				xff = xff[:i]
+			}
+			return string(bytes.TrimSpace(xff))
+		}
+		if xri := r.RawHeader("x-real-ip"); len(xri) > 0 {
+			return string(bytes.TrimSpace(xri))
+		}
+	}
 	if r.remoteAddr != "" {
 		return r.remoteAddr
 	}
@@ -814,7 +932,8 @@ func init() {
 		{400, "Bad Request"}, {401, "Unauthorized"}, {403, "Forbidden"},
 		{404, "Not Found"}, {405, "Method Not Allowed"}, {409, "Conflict"},
 		{413, "Content Too Large"}, {422, "Unprocessable Entity"},
-		{429, "Too Many Requests"}, {500, "Internal Server Error"},
+		{429, "Too Many Requests"}, {431, "Request Header Fields Too Large"},
+		{500, "Internal Server Error"}, {501, "Not Implemented"},
 		{502, "Bad Gateway"}, {503, "Service Unavailable"},
 	}
 	for _, pair := range codes {
@@ -822,6 +941,35 @@ func init() {
 		text := pair[1].(string)
 		statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
 	}
+
+	// Pre-build status-close responses to avoid any lazy-init races.
+	for _, code := range []int{400, 413, 431, 500, 501, 503} {
+		if statusLines[code] == nil {
+			continue
+		}
+		b := append([]byte{}, statusLines[code]...)
+		b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
+		statusCloseCache[code] = b
+	}
+}
+
+// statusCloseCache holds pre-computed minimal status-close responses.
+var statusCloseCache [600][]byte
+
+// wingStatusClose returns a minimal HTTP/1.1 error response with an empty body
+// and Connection: close. Safe to call concurrently; responses are pre-built in init().
+func wingStatusClose(status int) []byte {
+	if status > 0 && status < len(statusCloseCache) && statusCloseCache[status] != nil {
+		return statusCloseCache[status]
+	}
+	// Fallback: build on the fly (won't be called in normal operation).
+	line := statusLines[200]
+	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
+		line = statusLines[status]
+	}
+	b := append([]byte{}, line...)
+	b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
+	return b
 }
 
 // buildZeroCopy serialises the HTTP response into r.buf and returns

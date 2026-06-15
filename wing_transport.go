@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -194,6 +195,7 @@ const maxEventsPerWait = 128
 type parserLimits struct {
 	maxHeaderCount int
 	maxHeaderSize  int
+	bodyLimit      int
 }
 
 type conn struct {
@@ -211,6 +213,10 @@ type conn struct {
 	cancel       context.CancelFunc
 	sendFileFd   int32 // sendfile: source fd (0 = none)
 	sendFileSize int64 // sendfile: remaining bytes
+	// Slow-path body accumulation (populated when a request body spans multiple recvs).
+	bodyNeed       int    // total Content-Length expected (0 = not accumulating)
+	headerSnapshot []byte // copy of header block for re-parse after body complete
+	bodyBuf        []byte // incrementally grown body buffer
 }
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -251,10 +257,13 @@ type worker struct {
 	lastPath1    string
 	shutdown     *atomic.Bool
 	hasTimeout   bool
-	readTimeout  int64 // nanoseconds (0 = disabled)
-	writeTimeout int64
-	idleTimeout  int64
-	sweepAt      int64 // next sweep unix nano
+	readTimeout     int64 // nanoseconds (0 = disabled)
+	writeTimeout    int64
+	idleTimeout     int64
+	maxInflightBody int   // per-worker budget (0 = unlimited)
+	inflightBody    int64 // current in-flight body bytes (atomic)
+	trustProxy      bool
+	sweepAt         int64 // next sweep unix nano
 	now          int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
 	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
@@ -424,15 +433,17 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		eng:          eng,
 		handler:      handler,
 		config:       cfg,
-		limits:       parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize},
-		maxConns:     cfg.MaxConnsPerWorker,
-		conns:        make(map[int32]*conn, 1024),
-		evfd:         wakeR,
-		doneCh:       doneCh,
-		presets:      ft,
-		readTimeout:  int64(cfg.ReadTimeout),
-		writeTimeout: int64(cfg.WriteTimeout),
-		idleTimeout:  int64(cfg.IdleTimeout),
+		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
+		maxConns:        cfg.MaxConnsPerWorker,
+		conns:           make(map[int32]*conn, 1024),
+		evfd:            wakeR,
+		doneCh:          doneCh,
+		presets:         ft,
+		readTimeout:     int64(cfg.ReadTimeout),
+		writeTimeout:    int64(cfg.WriteTimeout),
+		idleTimeout:     int64(cfg.IdleTimeout),
+		maxInflightBody: cfg.MaxInflightBodyBytes,
+		trustProxy:      cfg.TrustProxy,
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -603,9 +614,20 @@ func (w *worker) handleRecv(ev event) {
 			now = time.Now().UnixNano()
 		}
 		c.lastActive = now
-		if c.readN == int(nr) && w.readTimeout > 0 {
+		// Set the read deadline once, on the first byte of a request, and do not
+		// refresh it while accumulating a body — otherwise a slow client trickling
+		// body bytes resets the deadline forever (slowloris). The deadline then
+		// bounds the whole request read, matching net/http's ReadTimeout.
+		if c.readN == int(nr) && c.bodyNeed == 0 && w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
 		}
+	}
+	// If accumulating a multi-recv body, feed new bytes into the accumulator.
+	if c.bodyNeed > 0 {
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:c.readN], c.bodyNeed)
+		c.readN = 0
+		w.drainBodyAccum(c)
+		return
 	}
 	w.tryParse(c)
 }
@@ -614,15 +636,69 @@ func (w *worker) tryParse(c *conn) {
 	for c.readN > 0 {
 		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
-			if c.readN >= len(c.readBuf) {
-				w.closeConn(c.fd)
-				return
+			if c.readN < len(c.readBuf) {
+				// Buffer has room — classify to decide whether to wait or error.
+				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				switch st {
+				case parseNeedHeaderMore:
+					// Not enough data yet; wait for more recvs.
+				case parseChunked:
+					w.writeAndClose(c, wingStatusClose(501))
+					return
+				case parseBodyTooLarge:
+					w.writeAndClose(c, wingStatusClose(413))
+					return
+				case parseNeedBody:
+					if expectContinue {
+						c.sendBuf = append(c.sendBuf, wing100Continue...)
+						// Flush it immediately so the client sends the body.
+						if len(c.sendBuf) > 0 {
+							c.sendN = 0
+							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+						}
+					}
+					if !w.beginBodyAccum(c, need) {
+						w.writeAndClose(c, wingStatusClose(503))
+						return
+					}
+					return
+				default: // parseMalformed, parseHeaderTooLarge
+					w.closeConn(c.fd)
+					return
+				}
+			} else {
+				// Buffer full — classify; if body needed start accum, else error.
+				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				switch st {
+				case parseBodyTooLarge:
+					w.writeAndClose(c, wingStatusClose(413))
+					return
+				case parseNeedBody:
+					if expectContinue {
+						c.sendBuf = append(c.sendBuf, wing100Continue...)
+						// Flush it immediately so the client sends the body.
+						if len(c.sendBuf) > 0 {
+							c.sendN = 0
+							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+						}
+					}
+					if !w.beginBodyAccum(c, need) {
+						w.writeAndClose(c, wingStatusClose(503))
+						return
+					}
+					return
+				default:
+					// Headers exceed buffer: 431 Request Header Fields Too Large.
+					w.writeAndClose(c, wingStatusClose(431))
+					return
+				}
 			}
 			break
 		}
 		req.fd = c.fd
 		req.ctx = c.ctx
 		req.remoteAddrRef = &c.remoteAddr
+		req.trustProxy = w.trustProxy
 		// Full request received — clear read deadline, update idle clock.
 		if w.hasTimeout {
 			c.readDeadline = 0
@@ -829,6 +905,143 @@ func (w *worker) tryParse(c *conn) {
 	}
 }
 
+// writeAndClose queues an error response and triggers a direct send, then closes.
+func (w *worker) writeAndClose(c *conn, resp []byte) {
+	c.keepAlive = false
+	c.sendBuf = append(c.sendBuf, resp...)
+	if len(c.sendBuf) > 0 {
+		c.sendN = 0
+		w.directSend(c)
+	}
+}
+
+// appendGrow appends src to dst, capping total length at maxCap bytes.
+func appendGrow(dst, src []byte, maxCap int) []byte {
+	avail := maxCap - len(dst)
+	if avail <= 0 {
+		return dst
+	}
+	if len(src) > avail {
+		src = src[:avail]
+	}
+	return append(dst, src...)
+}
+
+// beginBodyAccum starts body accumulation for a connection.
+// Returns false if the per-worker in-flight budget would be exceeded.
+func (w *worker) beginBodyAccum(c *conn, need int) bool {
+	if w.maxInflightBody > 0 {
+		newTotal := atomic.AddInt64(&w.inflightBody, int64(need))
+		if newTotal > int64(w.maxInflightBody) {
+			atomic.AddInt64(&w.inflightBody, -int64(need))
+			return false
+		}
+	}
+	headerEnd := bytes.Index(c.readBuf[:c.readN], crlfcrlf)
+	if headerEnd < 0 {
+		// Should not happen: classifyIncomplete confirmed headers are complete.
+		if w.maxInflightBody > 0 {
+			atomic.AddInt64(&w.inflightBody, -int64(need))
+		}
+		return false
+	}
+	headerEnd += 4 // past \r\n\r\n
+	c.headerSnapshot = append([]byte{}, c.readBuf[:headerEnd]...)
+	c.bodyNeed = need
+	initCap := need
+	if initCap > 8192 {
+		initCap = 8192
+	}
+	c.bodyBuf = make([]byte, 0, initCap)
+	// Copy any body bytes already present in the read buffer.
+	if have := c.readN - headerEnd; have > 0 {
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[headerEnd:c.readN], need)
+	}
+	c.readN = 0
+	w.drainBodyAccum(c)
+	return true
+}
+
+// drainBodyAccum reads body bytes from the socket into c.bodyBuf until the body
+// is complete or the socket would block, then dispatches or arms the next recv.
+// Draining to EAGAIN is required for edge-triggered epoll on Linux: it does not
+// re-notify for bytes already buffered in the socket, so reading a single chunk
+// per event would stall a body that spans more than one read. Safe on kqueue too
+// (reads stop at EAGAIN). Returns true if the connection was closed.
+func (w *worker) drainBodyAccum(c *conn) bool {
+	for len(c.bodyBuf) < c.bodyNeed {
+		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+			break
+		}
+		if e != 0 || rn <= 0 {
+			w.closeConn(c.fd)
+			return true
+		}
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:int(rn)], c.bodyNeed)
+	}
+	if len(c.bodyBuf) >= c.bodyNeed {
+		w.finishBodyAccum(c)
+	} else {
+		// Socket drained but body still incomplete — wait for the next recv.
+		submitIdleRecv(w.eng, c.fd, nil, 0)
+	}
+	return false
+}
+
+// finishBodyAccum re-parses the completed request and dispatches it inline.
+func (w *worker) finishBodyAccum(c *conn) {
+	if w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	// Reconstruct: header block + body bytes → full request bytes.
+	full := append(c.headerSnapshot, c.bodyBuf...)
+	c.bodyNeed = 0
+	c.headerSnapshot = nil
+	c.bodyBuf = nil
+	req, _, ok := parseHTTPRequest(full, w.limits)
+	if !ok {
+		w.closeConn(c.fd)
+		return
+	}
+	req.fd = c.fd
+	req.ctx = c.ctx
+	req.remoteAddrRef = &c.remoteAddr
+	req.trustProxy = w.trustProxy
+	if w.hasTimeout {
+		c.readDeadline = 0
+		c.lastActive = time.Now().UnixNano()
+	}
+	f := w.lookupPreset(req.method, req.path)
+	finalizeRequestPath(req, f)
+	w.dispatchAccumulated(c, req, f)
+}
+
+// dispatchAccumulated dispatches a body-accumulated request.
+// Accumulated bodies are always dispatched inline; non-inline presets
+// with large bodies are uncommon and correctness takes precedence here.
+func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
+	finalizeRequestCommonHeaders(req)
+	resp := acquireResponse()
+	resp.responseMode = f.ResponseMode
+	start := time.Now().UnixNano()
+	w.serveRoute(resp, req, f)
+	if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
+		advisorObserve(req.method, req.path, elapsed, f.explicit)
+	}
+	data := resp.buildZeroCopy()
+	c.keepAlive = req.keepAlive
+	c.sendBuf = append(c.sendBuf, data...)
+	releaseResponse(resp)
+	releaseRequest(req)
+	if len(c.sendBuf) > 0 {
+		c.sendN = 0
+		w.directSend(c)
+	} else {
+		submitIdleRecv(w.eng, c.fd, nil, 0)
+	}
+}
+
 func (w *worker) handleDone(msg doneMsg) {
 	if msg.file != nil {
 		// Takeover conn finished: clean bookkeeping before closing through
@@ -961,6 +1174,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	buf := *bp
 	readN := copy(buf, leftover)
 
+	var bodyBuf []byte
+	defer func() {
+		*bp = buf
+		takeoverBufPool.Put(bp)
+		bodyBuf = nil
+	}()
+
 	remoteAddrRef := first.remoteAddrRef
 	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
@@ -1006,14 +1226,91 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					r.fd = fd
 					r.ctx = connCtx
 					r.remoteAddrRef = remoteAddrRef
+					r.trustProxy = w.trustProxy
 					req = r
 					keepAlive = req.keepAlive
 					goto next
 				}
-			}
-			if readN >= len(buf) {
-				keepAlive = false
-				goto done
+				// Classify the incomplete/rejected request.
+				st, need, expectContinue := classifyIncomplete(buf[:readN], w.limits)
+				switch st {
+				case parseNeedHeaderMore:
+					// Need more header bytes — keep reading.
+					if readN >= len(buf) {
+						// Buffer full but headers still incomplete: 431.
+						f.Write(wingStatusClose(431))
+						keepAlive = false
+						goto done
+					}
+				case parseChunked:
+					f.Write(wingStatusClose(501))
+					keepAlive = false
+					goto done
+				case parseBodyTooLarge:
+					f.Write(wingStatusClose(413))
+					keepAlive = false
+					goto done
+				case parseNeedBody:
+					if expectContinue {
+						f.Write(wing100Continue)
+					}
+					// Locate end of header block.
+					headerEnd := bytes.Index(buf[:readN], crlfcrlf)
+					if headerEnd < 0 {
+						keepAlive = false
+						goto done
+					}
+					headerEnd += 4
+					headerSnapshot := make([]byte, headerEnd)
+					copy(headerSnapshot, buf[:headerEnd])
+					// Seed bodyBuf with already-received body bytes.
+					bodyBuf = bodyBuf[:0]
+					if have := readN - headerEnd; have > 0 {
+						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
+					}
+					readN = 0
+					// Read remaining body bytes, reusing buf as a temp chunk buffer.
+					// One absolute deadline bounds the whole body read so a slow
+					// client cannot extend it indefinitely by trickling bytes.
+					if w.readTimeout > 0 {
+						f.SetReadDeadline(time.Now().Add(time.Duration(w.readTimeout)))
+					}
+					for len(bodyBuf) < need {
+						n, rerr := f.Read(buf)
+						if n > 0 {
+							bodyBuf = append(bodyBuf, buf[:n]...)
+						}
+						if rerr != nil {
+							if w.readTimeout > 0 {
+								f.SetReadDeadline(time.Time{})
+							}
+							keepAlive = false
+							goto done
+						}
+					}
+					if w.readTimeout > 0 {
+						f.SetReadDeadline(time.Time{})
+					}
+					// Reconstruct and re-parse with full body present.
+					full := append(headerSnapshot, bodyBuf[:need]...)
+					bodyBuf = bodyBuf[:0]
+					r2, _, ok2 := parseHTTPRequest(full, w.limits)
+					if !ok2 {
+						keepAlive = false
+						goto done
+					}
+					r2.fd = fd
+					r2.ctx = connCtx
+					r2.remoteAddrRef = remoteAddrRef
+					r2.trustProxy = w.trustProxy
+					req = r2
+					keepAlive = req.keepAlive
+					goto next
+				default:
+					// parseMalformed, parseHeaderTooLarge — silent close.
+					keepAlive = false
+					goto done
+				}
 			}
 			// Adaptive spin: a few non-blocking raw reads before parking on the
 			// netpoller. Catches an already-buffered next keep-alive request
@@ -1052,7 +1349,6 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	}
 
 done:
-	takeoverBufPool.Put(bp)
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
 	// and then closes through the File. Do NOT close here — the kernel
 	// could recycle the fd number while the conns map still references it.
@@ -1079,6 +1375,16 @@ func (w *worker) handleSend(ev event) {
 
 func (w *worker) closeConn(fd int32) {
 	if c, ok := w.conns[fd]; ok {
+		// Release any in-flight body reservation so a connection closed mid-
+		// accumulation (timeout, disconnect, parse failure) does not leak the
+		// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
+		// so this cannot double-decrement.
+		if c.bodyNeed > 0 && w.maxInflightBody > 0 {
+			atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+		}
+		c.bodyNeed = 0
+		c.bodyBuf = nil
+		c.headerSnapshot = nil
 		if c.cancel != nil {
 			c.cancel()
 		}

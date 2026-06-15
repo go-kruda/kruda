@@ -5,6 +5,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.4.0] — unreleased
 
+### Fixed
+
+- **Wing now honors the request-size contract on both read paths.** The default
+  Wing transport previously ignored `BodyLimit`/`HeaderLimit`/`TrustProxy` and
+  silently dropped any request body larger than its fixed read buffer (~8 KB).
+  Wing now accepts legal bodies of any size up to `BodyLimit` (incrementally
+  accumulated, capped by `BodyLimit` plus a per-worker in-flight budget) and
+  returns deterministic **413** (body over limit), **431** (headers over limit),
+  and **501** (chunked request bodies — Wing does not dechunk) before the handler
+  runs, on both the event-loop and Takeover paths. `Expect: 100-continue` is
+  answered (or rejected with 413) before the body is read, read deadlines bound
+  the whole request read, and `TrustProxy` reads `X-Forwarded-For`/`X-Real-IP`
+  with the same boolean semantics as net/http. The no-body hot path is unchanged
+  (parser fast path frozen, 0-alloc guard; tiger A/B shows no regression).
+
 ### Added
 
 - **Opt-in RFC 9457 problem+json error responses.** `kruda.New(kruda.WithProblemJSON())`

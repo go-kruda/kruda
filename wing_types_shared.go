@@ -24,9 +24,13 @@ type WingConfig struct {
 	HandlerPoolSize   int               // goroutine pool size per worker (Pool dispatch routes)
 	Presets           map[string]Preset // per-route preset config ("METHOD /path" → Preset)
 	DefaultPreset     Preset            // fallback preset for routes not in Presets
-	ReadTimeout       time.Duration     // max time to receive a complete request (0 = disabled)
-	WriteTimeout      time.Duration     // max time to send a response (0 = disabled)
-	IdleTimeout       time.Duration     // max time a keep-alive conn can be idle (0 = disabled)
+	ReadTimeout              time.Duration // max time to receive a complete request (0 = disabled)
+	WriteTimeout             time.Duration // max time to send a response (0 = disabled)
+	IdleTimeout              time.Duration // max time a keep-alive conn can be idle (0 = disabled)
+	BodyLimit                int           // max request body bytes (0 = disabled). Maps to a 413.
+	HeaderLimit              int           // max header bytes (0 = disabled). Maps to a 431.
+	TrustProxy               bool          // honor X-Forwarded-For / X-Real-IP
+	MaxInflightBodyBytes     int           // per-worker cap on concurrently-accumulating body bytes (0 = derived)
 }
 
 func (c *WingConfig) defaults() {
@@ -36,11 +40,24 @@ func (c *WingConfig) defaults() {
 	if c.RingSize == 0 {
 		c.RingSize = 4096
 	}
+	if c.HeaderLimit < 0 {
+		c.HeaderLimit = 0
+	}
 	if c.ReadBufSize <= 0 {
 		c.ReadBufSize = 8192
 	}
+	// Headers must fit the read buffer to be parseable; grow the buffer to honor HeaderLimit.
+	if c.HeaderLimit > c.ReadBufSize {
+		c.ReadBufSize = c.HeaderLimit
+	}
+	if c.MaxHeaderSize == 0 && c.HeaderLimit > 0 {
+		c.MaxHeaderSize = c.HeaderLimit
+	}
 	if c.HandlerPoolSize <= 0 {
 		c.HandlerPoolSize = c.Workers
+	}
+	if c.MaxInflightBodyBytes <= 0 && c.BodyLimit > 0 {
+		c.MaxInflightBodyBytes = 64 * c.BodyLimit
 	}
 }
 

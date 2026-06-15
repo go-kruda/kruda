@@ -643,11 +643,11 @@ func TestParseHTTPRequest_TEAndCLConflict(t *testing.T) {
 		t.Error("should reject TE+CL conflict (case-insensitive)")
 	}
 
-	// Transfer-Encoding alone → accept.
+	// Transfer-Encoding alone → reject (Wing does not dechunk; classifyIncomplete returns 501).
 	raw3 := "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw3), noLimits)
-	if !ok {
-		t.Error("Transfer-Encoding alone should be accepted")
+	if ok {
+		t.Error("Transfer-Encoding alone must be rejected so classifyIncomplete can return 501")
 	}
 }
 

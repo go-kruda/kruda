@@ -29,6 +29,13 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			readBufSize = n
 		}
 	}
+	if cfg.HeaderLimit > 0 && readBufSize > 0 && readBufSize < cfg.HeaderLimit {
+		panic("kruda: KRUDA_READ_BUF_SIZE is smaller than HeaderLimit; raise the read buffer or lower HeaderLimit")
+	}
+	bodyLimit := cfg.BodyLimit
+	if bodyLimit > maxContentLength {
+		bodyLimit = maxContentLength // Wing's parser cannot accept bodies larger than this
+	}
 	wcfg := WingConfig{
 		Workers:         workers,
 		HandlerPoolSize: poolSize,
@@ -36,6 +43,9 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		ReadTimeout:     cfg.ReadTimeout,
 		WriteTimeout:    cfg.WriteTimeout,
 		IdleTimeout:     cfg.IdleTimeout,
+		BodyLimit:       bodyLimit,
+		HeaderLimit:     cfg.HeaderLimit,
+		TrustProxy:      cfg.TrustProxy,
 	}
 	return NewWingTransport(wcfg)
 }

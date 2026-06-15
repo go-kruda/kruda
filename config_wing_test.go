@@ -90,7 +90,8 @@ func TestNewWingTransport_PoolSizeEnv_Invalid(t *testing.T) {
 }
 
 func TestNewWingTransport_ReadBufSizeEnv(t *testing.T) {
-	os.Setenv("KRUDA_READ_BUF_SIZE", "4096")
+	// 16384 >= default HeaderLimit (8192), so the size constraint is satisfied.
+	os.Setenv("KRUDA_READ_BUF_SIZE", "16384")
 	defer os.Unsetenv("KRUDA_READ_BUF_SIZE")
 
 	cfg := defaultConfig()
@@ -99,8 +100,8 @@ func TestNewWingTransport_ReadBufSizeEnv(t *testing.T) {
 	if !ok {
 		t.Fatal("newWingTransport did not return Wing transport")
 	}
-	if tr.config.ReadBufSize != 4096 {
-		t.Fatalf("ReadBufSize = %d, want 4096", tr.config.ReadBufSize)
+	if tr.config.ReadBufSize != 16384 {
+		t.Fatalf("ReadBufSize = %d, want 16384", tr.config.ReadBufSize)
 	}
 }
 

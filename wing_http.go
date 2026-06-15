@@ -907,28 +907,34 @@ func init() {
 		text := pair[1].(string)
 		statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
 	}
+
+	// Pre-build status-close responses to avoid any lazy-init races.
+	for _, code := range []int{400, 413, 431, 500, 501, 503} {
+		if statusLines[code] == nil {
+			continue
+		}
+		b := append([]byte{}, statusLines[code]...)
+		b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
+		statusCloseCache[code] = b
+	}
 }
 
 // statusCloseCache holds pre-computed minimal status-close responses.
 var statusCloseCache [600][]byte
 
 // wingStatusClose returns a minimal HTTP/1.1 error response with an empty body
-// and Connection: close. Safe to call concurrently; cached per status code.
+// and Connection: close. Safe to call concurrently; responses are pre-built in init().
 func wingStatusClose(status int) []byte {
-	if status > 0 && status < len(statusCloseCache) {
-		if b := statusCloseCache[status]; b != nil {
-			return b
-		}
+	if status > 0 && status < len(statusCloseCache) && statusCloseCache[status] != nil {
+		return statusCloseCache[status]
 	}
+	// Fallback: build on the fly (won't be called in normal operation).
 	line := statusLines[200]
 	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
 		line = statusLines[status]
 	}
 	b := append([]byte{}, line...)
 	b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
-	if status > 0 && status < len(statusCloseCache) {
-		statusCloseCache[status] = b
-	}
 	return b
 }
 

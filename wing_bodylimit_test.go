@@ -164,3 +164,62 @@ func readStatusLine(br *bufio.Reader) (string, error) {
 	line, err := br.ReadString('\n')
 	return strings.TrimSpace(line), err
 }
+
+// TestWing_SlowBodyTimesOut verifies that a connection stalled mid-body
+// is closed by the read timeout's sweep mechanism.
+func TestWing_SlowBodyTimesOut(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		_, _ = r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	})
+	// 100ms read timeout
+	cfg := WingConfig{
+		Workers:     1,
+		RingSize:    256,
+		ReadBufSize: 8192,
+		BodyLimit:   1 << 20,
+		ReadTimeout: 100 * time.Millisecond,
+	}
+	cfg.defaults()
+	tr := NewWingTransport(cfg)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	errCh := make(chan error, 1)
+	go func() { errCh <- tr.ListenAndServe(addr, handler) }()
+	// Wait for server ready.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c, err2 := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err2 == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	defer tr.Shutdown(context.Background())
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	// Send headers promising 100KB but never send the body.
+	_, err = fmt.Fprintf(conn, "POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 100000\r\n\r\n")
+	if err != nil {
+		t.Fatalf("write headers: %v", err)
+	}
+
+	// Expect the server to close within ~3× the read timeout.
+	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	buf := make([]byte, 1)
+	_, err = conn.Read(buf)
+	if err == nil {
+		t.Fatal("expected server to close the stalled body connection")
+	}
+}

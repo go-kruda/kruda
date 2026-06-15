@@ -637,7 +637,7 @@ func (w *worker) tryParse(c *conn) {
 		if !ok {
 			if c.readN < len(c.readBuf) {
 				// Buffer has room — classify to decide whether to wait or error.
-				st, need := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
 				switch st {
 				case parseNeedHeaderMore:
 					// Not enough data yet; wait for more recvs.
@@ -648,6 +648,14 @@ func (w *worker) tryParse(c *conn) {
 					w.writeAndClose(c, wingStatusClose(413))
 					return
 				case parseNeedBody:
+					if expectContinue {
+						c.sendBuf = append(c.sendBuf, wing100Continue...)
+						// Flush it immediately so the client sends the body.
+						if len(c.sendBuf) > 0 {
+							c.sendN = 0
+							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+						}
+					}
 					if !w.beginBodyAccum(c, need) {
 						w.writeAndClose(c, wingStatusClose(503))
 						return
@@ -659,12 +667,20 @@ func (w *worker) tryParse(c *conn) {
 				}
 			} else {
 				// Buffer full — classify; if body needed start accum, else error.
-				st, need := classifyIncomplete(c.readBuf[:c.readN], w.limits)
+				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
 				switch st {
 				case parseBodyTooLarge:
 					w.writeAndClose(c, wingStatusClose(413))
 					return
 				case parseNeedBody:
+					if expectContinue {
+						c.sendBuf = append(c.sendBuf, wing100Continue...)
+						// Flush it immediately so the client sends the body.
+						if len(c.sendBuf) > 0 {
+							c.sendN = 0
+							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+						}
+					}
 					if !w.beginBodyAccum(c, need) {
 						w.writeAndClose(c, wingStatusClose(503))
 						return

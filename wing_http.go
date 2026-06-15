@@ -349,11 +349,13 @@ var (
 	bConnection        = []byte("connection")
 	bClose             = []byte("close")
 	bTransferEncoding  = []byte("transfer-encoding")
+	bExpect            = []byte("expect")
 	bCookie            = []byte("cookie")
 	bHost              = []byte("host")
 	bAccept            = []byte("accept")
 	bHTTPVersionPrefix = []byte("HTTP/")
 	bStar              = []byte("*")
+	wing100Continue    = []byte("HTTP/1.1 100 Continue\r\n\r\n")
 )
 
 const (
@@ -417,7 +419,8 @@ const (
 // classifyIncomplete inspects a buffer for which parseHTTPRequestFast returned
 // ok==false and decides why. It validates the request line + headers but does
 // not allocate a request. need is the total Content-Length when status==parseNeedBody.
-func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, need int) {
+// expectContinue is true if the request has "Expect: 100-continue" header.
+func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, need int, expectContinue bool) {
 	// strip leading CRLF (mirror parseHTTPRequestInternal)
 	for len(data) >= 2 && data[0] == '\r' && data[1] == '\n' {
 		data = data[2:]
@@ -425,14 +428,14 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 	headerEnd := bytes.Index(data, crlfcrlf)
 	if headerEnd < 0 {
 		if limits.maxHeaderSize > 0 && len(data) > limits.maxHeaderSize {
-			return parseHeaderTooLarge, 0
+			return parseHeaderTooLarge, 0, false
 		}
-		return parseNeedHeaderMore, 0
+		return parseNeedHeaderMore, 0, false
 	}
 	// Request line must be well-formed.
 	lineEnd := bytes.IndexByte(data[:headerEnd], '\n')
 	if lineEnd <= 0 {
-		return parseMalformed, 0
+		return parseMalformed, 0, false
 	}
 	hasTE := false
 	hasCL := false
@@ -460,31 +463,37 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		switch knownHeader(name) {
 		case headerContentLength:
 			if hasCL {
-				return parseMalformed, 0 // duplicate CL
+				return parseMalformed, 0, false // duplicate CL
 			}
 			hasCL = true
 			n, err := strconv.Atoi(string(val))
 			if err != nil || n < 0 {
-				return parseMalformed, 0
+				return parseMalformed, 0, false
 			}
 			cl = n
 		case headerTransferEncoding:
 			hasTE = true
+		default:
+			if asciiEqualFold(name, bExpect) {
+				if asciiEqualFold(val, []byte("100-continue")) {
+					expectContinue = true
+				}
+			}
 		}
 	}
 	if hasTE && hasCL {
-		return parseMalformed, 0
+		return parseMalformed, 0, false
 	}
 	if hasTE {
-		return parseChunked, 0
+		return parseChunked, 0, false
 	}
 	if !hasCL || cl == 0 {
-		return parseMalformed, 0
+		return parseMalformed, 0, false
 	}
 	if limits.bodyLimit > 0 && cl > limits.bodyLimit {
-		return parseBodyTooLarge, 0
+		return parseBodyTooLarge, 0, expectContinue
 	}
-	return parseNeedBody, cl
+	return parseNeedBody, cl, expectContinue
 }
 
 // tokenTable is a lookup table for RFC 7230 token characters.

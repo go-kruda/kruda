@@ -57,26 +57,26 @@ func TestClassifyIncomplete(t *testing.T) {
 
 	// headers complete, body not yet arrived, within limit -> NeedBody(need)
 	raw := []byte("POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 500\r\n\r\n")
-	st, need := classifyIncomplete(raw, lim)
+	st, need, _ := classifyIncomplete(raw, lim)
 	if st != parseNeedBody || need != 500 {
 		t.Fatalf("got (%v,%d) want (NeedBody,500)", st, need)
 	}
 
 	// content-length over bodyLimit -> BodyTooLarge
 	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 99999\r\n\r\n")
-	if st, _ := classifyIncomplete(raw, lim); st != parseBodyTooLarge {
+	if st, _, _ := classifyIncomplete(raw, lim); st != parseBodyTooLarge {
 		t.Fatalf("got %v want BodyTooLarge", st)
 	}
 
 	// chunked body -> Chunked
 	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n")
-	if st, _ := classifyIncomplete(raw, lim); st != parseChunked {
+	if st, _, _ := classifyIncomplete(raw, lim); st != parseChunked {
 		t.Fatalf("got %v want Chunked", st)
 	}
 
 	// no end-of-headers yet, buffer not full -> NeedHeaderMore
 	raw = []byte("POST /u HTTP/1.1\r\nHost: h\r\n")
-	if st, _ := classifyIncomplete(raw, lim); st != parseNeedHeaderMore {
+	if st, _, _ := classifyIncomplete(raw, lim); st != parseNeedHeaderMore {
 		t.Fatalf("got %v want NeedHeaderMore", st)
 	}
 }
@@ -87,6 +87,24 @@ func TestWingStatusClose(t *testing.T) {
 		if !strings.Contains(b, fmt.Sprintf(" %d ", code)) || !strings.Contains(b, "Connection: close") {
 			t.Fatalf("status %d: bad response %q", code, b)
 		}
+	}
+}
+
+// TestWing_Expect100_OversizedGets413BeforeBody tests that Expect: 100-continue
+// with Content-Length > BodyLimit results in 413 immediately (before body arrives).
+func TestWing_Expect100_OversizedGets413BeforeBody(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	})
+	addr, stop := startBodyLimitWingServer(t, 1024, handler)
+	defer stop()
+	// Expect: 100-continue + oversized CL: server must answer 413 without waiting for a body.
+	raw := "POST /u HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\nContent-Length: 100000\r\n\r\n"
+	st, _ := sendRaw(t, addr, raw)
+	if !strings.Contains(st, "413") {
+		t.Fatalf("expect+oversized: want 413, got %q", st)
 	}
 }
 

@@ -273,6 +273,12 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		return nil, 0, false // reject oversized requests
 	}
 	if contentLength > 0 {
+		// Over BodyLimit — reject here so the slow-path classifier emits a 413.
+		// Catches complete in-buffer bodies that fit the read buffer but exceed
+		// the limit (the slow path alone only sees bodies larger than the buffer).
+		if limits.bodyLimit > 0 && contentLength > limits.bodyLimit {
+			return nil, 0, false
+		}
 		if bodyStart+contentLength > len(data) {
 			return nil, 0, false // incomplete body
 		}

@@ -614,7 +614,11 @@ func (w *worker) handleRecv(ev event) {
 			now = time.Now().UnixNano()
 		}
 		c.lastActive = now
-		if c.readN == int(nr) && w.readTimeout > 0 {
+		// Set the read deadline once, on the first byte of a request, and do not
+		// refresh it while accumulating a body — otherwise a slow client trickling
+		// body bytes resets the deadline forever (slowloris). The deadline then
+		// bounds the whole request read, matching net/http's ReadTimeout.
+		if c.readN == int(nr) && c.bodyNeed == 0 && w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
 		}
 	}
@@ -1249,10 +1253,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					}
 					readN = 0
 					// Read remaining body bytes, reusing buf as a temp chunk buffer.
+					// One absolute deadline bounds the whole body read so a slow
+					// client cannot extend it indefinitely by trickling bytes.
+					if w.readTimeout > 0 {
+						f.SetReadDeadline(time.Now().Add(time.Duration(w.readTimeout)))
+					}
 					for len(bodyBuf) < need {
-						if w.readTimeout > 0 {
-							f.SetReadDeadline(time.Now().Add(time.Duration(w.readTimeout)))
-						}
 						n, rerr := f.Read(buf)
 						if n > 0 {
 							bodyBuf = append(bodyBuf, buf[:n]...)
@@ -1352,6 +1358,16 @@ func (w *worker) handleSend(ev event) {
 
 func (w *worker) closeConn(fd int32) {
 	if c, ok := w.conns[fd]; ok {
+		// Release any in-flight body reservation so a connection closed mid-
+		// accumulation (timeout, disconnect, parse failure) does not leak the
+		// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
+		// so this cannot double-decrement.
+		if c.bodyNeed > 0 && w.maxInflightBody > 0 {
+			atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+		}
+		c.bodyNeed = 0
+		c.bodyBuf = nil
+		c.headerSnapshot = nil
 		if c.cancel != nil {
 			c.cancel()
 		}

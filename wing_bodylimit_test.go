@@ -496,3 +496,81 @@ func TestWing_TrustProxy(t *testing.T) {
 		}
 	})
 }
+
+// TestWing_BodyLimitInBuffer guards the case where a complete request body fits
+// entirely inside the read buffer but exceeds BodyLimit. The over-buffer slow
+// path alone never sees these, so the parser must reject them so the classifier
+// emits a 413 (regression: such bodies previously reached the handler).
+func TestWing_BodyLimitInBuffer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	})
+	// BodyLimit 512, default 8KB read buffer: a 2KB body is fully in-buffer.
+	addr, stop := startBodyLimitWingServer(t, 512, handler)
+	defer stop()
+
+	if st, _ := sendRaw(t, addr, postRaw("/u", 512)); !strings.Contains(st, "200") {
+		t.Fatalf("at-limit in-buffer body: want 200, got %q", st)
+	}
+	if st, _ := sendRaw(t, addr, postRaw("/u", 513)); !strings.Contains(st, "413") {
+		t.Fatalf("over-limit in-buffer body: want 413, got %q", st)
+	}
+	if st, _ := sendRaw(t, addr, postRaw("/u", 2048)); !strings.Contains(st, "413") {
+		t.Fatalf("over-limit in-buffer body (2KB): want 413, got %q", st)
+	}
+}
+
+// TestWing_BudgetReclaimedAfterClose verifies the per-worker in-flight body
+// budget is returned when a connection closes mid-accumulation. Two stalled
+// uploads exhaust the budget; after they close, a fresh legal upload that needs
+// the budget must still be accepted (regression: closeConn leaked the reservation).
+func TestWing_BudgetReclaimedAfterClose(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const bodyLimit = 16 * 1024
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          8192,
+		BodyLimit:            bodyLimit,
+		MaxInflightBodyBytes: 2 * bodyLimit, // exactly two concurrent uploads
+		ReadTimeout:          time.Second,   // backup reclaim path
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		b, _ := r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte(fmt.Sprintf("%d", len(b))))
+	}))
+	defer stop()
+
+	// Open two connections that promise a full body (exceeding the 8KB buffer so
+	// each reserves budget) but never send it — exhausting MaxInflightBodyBytes.
+	var stalled []net.Conn
+	for i := 0; i < 2; i++ {
+		c, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			t.Fatalf("dial stalled %d: %v", i, err)
+		}
+		fmt.Fprintf(c, "POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: %d\r\n\r\n", bodyLimit)
+		stalled = append(stalled, c)
+	}
+	// Give the server time to register both reservations.
+	time.Sleep(200 * time.Millisecond)
+
+	// Close them — the server's pending recv hits EOF and closeConn must reclaim.
+	for _, c := range stalled {
+		c.Close()
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	// A fresh legal upload that needs the budget (body exceeds the buffer) must
+	// be accepted. If the reservation leaked, this would be rejected with 503.
+	if st, _ := sendRaw(t, addr, postRaw("/u", bodyLimit)); !strings.Contains(st, "200") {
+		t.Fatalf("legal upload after budget reclaim: want 200, got %q (budget leaked?)", st)
+	}
+}

@@ -178,12 +178,6 @@ func TestWing_BodyLimitBoundary(t *testing.T) {
 	}
 }
 
-// readStatusLine reads just the first line of an HTTP response.
-func readStatusLine(br *bufio.Reader) (string, error) {
-	line, err := br.ReadString('\n')
-	return strings.TrimSpace(line), err
-}
-
 // TestWing_SlowBodyTimesOut verifies that a connection stalled mid-body
 // is closed by the read timeout's sweep mechanism.
 func TestWing_SlowBodyTimesOut(t *testing.T) {

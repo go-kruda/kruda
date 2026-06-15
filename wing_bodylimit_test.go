@@ -77,3 +77,12 @@ func TestClassifyIncomplete(t *testing.T) {
 		t.Fatalf("got %v want NeedHeaderMore", st)
 	}
 }
+
+func TestWingStatusClose(t *testing.T) {
+	for _, code := range []int{413, 431, 501} {
+		b := string(wingStatusClose(code))
+		if !strings.Contains(b, fmt.Sprintf(" %d ", code)) || !strings.Contains(b, "Connection: close") {
+			t.Fatalf("status %d: bad response %q", code, b)
+		}
+	}
+}

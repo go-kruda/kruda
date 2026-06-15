@@ -898,7 +898,8 @@ func init() {
 		{400, "Bad Request"}, {401, "Unauthorized"}, {403, "Forbidden"},
 		{404, "Not Found"}, {405, "Method Not Allowed"}, {409, "Conflict"},
 		{413, "Content Too Large"}, {422, "Unprocessable Entity"},
-		{429, "Too Many Requests"}, {500, "Internal Server Error"},
+		{429, "Too Many Requests"}, {431, "Request Header Fields Too Large"},
+		{500, "Internal Server Error"}, {501, "Not Implemented"},
 		{502, "Bad Gateway"}, {503, "Service Unavailable"},
 	}
 	for _, pair := range codes {
@@ -906,6 +907,29 @@ func init() {
 		text := pair[1].(string)
 		statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
 	}
+}
+
+// statusCloseCache holds pre-computed minimal status-close responses.
+var statusCloseCache [600][]byte
+
+// wingStatusClose returns a minimal HTTP/1.1 error response with an empty body
+// and Connection: close. Safe to call concurrently; cached per status code.
+func wingStatusClose(status int) []byte {
+	if status > 0 && status < len(statusCloseCache) {
+		if b := statusCloseCache[status]; b != nil {
+			return b
+		}
+	}
+	line := statusLines[200]
+	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
+		line = statusLines[status]
+	}
+	b := append([]byte{}, line...)
+	b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
+	if status > 0 && status < len(statusCloseCache) {
+		statusCloseCache[status] = b
+	}
+	return b
 }
 
 // buildZeroCopy serialises the HTTP response into r.buf and returns

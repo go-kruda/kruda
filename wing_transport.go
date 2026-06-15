@@ -626,12 +626,7 @@ func (w *worker) handleRecv(ev event) {
 	if c.bodyNeed > 0 {
 		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:c.readN], c.bodyNeed)
 		c.readN = 0
-		if len(c.bodyBuf) >= c.bodyNeed {
-			w.finishBodyAccum(c)
-		} else {
-			// Body not yet complete — arm the next recv.
-			submitIdleRecv(w.eng, c.fd, nil, 0)
-		}
+		w.drainBodyAccum(c)
 		return
 	}
 	w.tryParse(c)
@@ -963,13 +958,35 @@ func (w *worker) beginBodyAccum(c *conn, need int) bool {
 		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[headerEnd:c.readN], need)
 	}
 	c.readN = 0
-	if len(c.bodyBuf) >= need {
+	w.drainBodyAccum(c)
+	return true
+}
+
+// drainBodyAccum reads body bytes from the socket into c.bodyBuf until the body
+// is complete or the socket would block, then dispatches or arms the next recv.
+// Draining to EAGAIN is required for edge-triggered epoll on Linux: it does not
+// re-notify for bytes already buffered in the socket, so reading a single chunk
+// per event would stall a body that spans more than one read. Safe on kqueue too
+// (reads stop at EAGAIN). Returns true if the connection was closed.
+func (w *worker) drainBodyAccum(c *conn) bool {
+	for len(c.bodyBuf) < c.bodyNeed {
+		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+			break
+		}
+		if e != 0 || rn <= 0 {
+			w.closeConn(c.fd)
+			return true
+		}
+		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:int(rn)], c.bodyNeed)
+	}
+	if len(c.bodyBuf) >= c.bodyNeed {
 		w.finishBodyAccum(c)
 	} else {
-		// Arm the next recv so the event loop delivers more body bytes.
+		// Socket drained but body still incomplete — wait for the next recv.
 		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
-	return true
+	return false
 }
 
 // finishBodyAccum re-parses the completed request and dispatches it inline.

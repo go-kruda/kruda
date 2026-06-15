@@ -362,6 +362,58 @@ func TestWing_Takeover_BodyAndLimit(t *testing.T) {
 	})
 }
 
+// TestWing_ConcurrentPartialUploads_Bounded verifies that the per-worker in-flight
+// body budget (MaxInflightBodyBytes = 64 * BodyLimit) prevents unbounded memory
+// accumulation when many connections each promise a large body but never send it.
+// After the flood is drained by ReadTimeout, the server must still respond normally.
+func TestWing_ConcurrentPartialUploads_Bounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+
+	const bodyLimit = 1 << 20 // 1MB per request
+	cfg := WingConfig{
+		Workers:     1,
+		ReadBufSize: 8192,
+		BodyLimit:   bodyLimit,
+		ReadTimeout: time.Second,
+	}
+	cfg.defaults()
+	// MaxInflightBodyBytes is now derived: 64 * 1MB = 64MB.
+	// Opening >64 connections each promising 1MB should hit the budget.
+
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		_, _ = r.Body()
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	}))
+	defer stop()
+
+	// Open connections that each promise 1MB body but never send it.
+	var conns []net.Conn
+	for i := 0; i < 200; i++ {
+		c, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			break
+		}
+		// Send only the headers, withhold the body.
+		fmt.Fprintf(c, "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: %d\r\n\r\n", bodyLimit)
+		conns = append(conns, c)
+	}
+	// Close all partial connections.
+	for _, c := range conns {
+		c.Close()
+	}
+
+	// Wait for read timeouts to expire (ReadTimeout = 1s), then verify server is still alive.
+	time.Sleep(1500 * time.Millisecond)
+
+	// The server must still respond to a normal request.
+	if st, closed := sendRaw(t, addr, "GET / HTTP/1.1\r\nHost: h\r\n\r\n"); closed || st == "" {
+		t.Fatalf("server unresponsive after partial-upload flood; closed=%v status=%q", closed, st)
+	}
+}
+
 func TestWing_TrustProxy(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Wing integration test in short mode")

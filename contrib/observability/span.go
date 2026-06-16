@@ -14,10 +14,12 @@ import (
 
 const tracerName = "github.com/go-kruda/kruda/contrib/observability"
 
-// spanMiddleware starts a server span (panic-safe defer span.End) and arms the
-// in-flight counter Inc/Dec when m is non-nil. It runs only for matched routes,
-// so it marks reqState.matched=true — the metric hook uses that to decide the
-// route label (matched => c.Route(); unmatched 404/405 => sentinelRoute).
+// spanMiddleware arms the in-flight counter Inc/Dec when m is non-nil and, when
+// traces are enabled, starts a server span (panic-safe defer span.End). It runs
+// only for matched routes, so it marks reqState.matched=true — the metric hook
+// uses that to decide the route label (matched => c.Route(); unmatched 404/405
+// => sentinelRoute). reqState + in-flight run regardless of tracesOn because the
+// RED metrics path depends on them even in metrics-only mode.
 func spanMiddleware(prov *Providers, m *metrics, r resolved) kruda.HandlerFunc {
 	tracer := prov.Tracer.Tracer(tracerName)
 	prop := prov.Propagator
@@ -32,6 +34,11 @@ func spanMiddleware(prov *Providers, m *metrics, r resolved) kruda.HandlerFunc {
 			set := attribute.NewSet(attribute.String("http.route", c.Route()))
 			m.inflight.Add(c.Context(), 1, metric.WithAttributeSet(set))
 			defer m.inflight.Add(c.Context(), -1, metric.WithAttributeSet(set))
+		}
+
+		// Metrics-only mode (traces disabled): no span, just timing + in-flight.
+		if !r.tracesOn {
+			return c.Next()
 		}
 
 		ctx := prop.Extract(c.Context(), &headerCarrier{c: c})

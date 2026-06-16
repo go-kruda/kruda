@@ -20,7 +20,7 @@ type Config struct {
 
 	LivenessPath  string // default "/livez"
 	ReadinessPath string // default "/readyz"
-	HealthPath    string // default "/health" (readiness alias); empty disables the alias
+	HealthPath    string // default "/health"; a readiness alias of ReadinessPath. Not mounted when it equals ReadinessPath. To turn off all probes use HealthEnabled:false.
 
 	SampleRatio      float64  // <=0 => use OTEL_TRACES_SAMPLER / ParentBased default
 	RedactHeaders    []string // extra header names to redact (case-insensitive)

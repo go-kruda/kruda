@@ -37,3 +37,18 @@ func TestSpanMiddleware_NamedByRoutePattern(t *testing.T) {
 		t.Fatalf("span name = %q, want GET /users/:id", spans[0].Name())
 	}
 }
+
+// TestSpanMiddleware_TracesDisabledNoSpan verifies metrics-only mode records NO span
+// but still runs (in-flight/reqState path) so RED metrics keep working.
+func TestSpanMiddleware_TracesDisabledNoSpan(t *testing.T) {
+	prov, sr := newRecordingProviders(t)
+	r := Config{TracesEnabled: ptrBool(false)}.resolve()
+	app := kruda.New(kruda.NetHTTP())
+	app.Use(spanMiddleware(prov, nil, r))
+	app.Get("/x", func(c *kruda.Ctx) error { return c.Status(200).Text("ok") })
+	app.Compile()
+	doGET(t, app, "/x")
+	if n := len(sr.Ended()); n != 0 {
+		t.Fatalf("traces disabled must record 0 spans, got %d", n)
+	}
+}

@@ -58,6 +58,20 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 	//    no span (self-tracing skip). The metric hook (installed below) skips them too.
 	mountHealthRoutes(app, r)
 
+	// 1b. /metrics — a meta route mounted before the span middleware (no
+	//     self-tracing). Default is an internal loopback listener; opt into a
+	//     custom bind or a public mount on the app's own port.
+	if r.metricsOn && sdk.promReg != nil {
+		switch {
+		case cfg.MetricsBind != "":
+			startMetricsListener(app, cfg.MetricsBind, r.metricsPath, sdk.promReg, cfg.MetricsAuth)
+		case cfg.MetricsPublic:
+			app.Get(r.metricsPath, metricsKrudaHandler(sdk.promReg, cfg.MetricsAuth))
+		default:
+			startMetricsListener(app, "127.0.0.1:0", r.metricsPath, sdk.promReg, cfg.MetricsAuth)
+		}
+	}
+
 	// 2. RED metric hook (always-fires OnResponse).
 	var m *metrics
 	if r.metricsOn {

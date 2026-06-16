@@ -78,11 +78,8 @@ jobs:
         with:
           go-version: stable
           
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-        
-      - name: Run security scan
-        run: govulncheck ./...
+      - name: Run security scan (all modules)
+        run: ./scripts/govulncheck-modules.sh
         
   release:
     name: Create Release

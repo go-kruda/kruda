@@ -81,6 +81,34 @@ func TestTypedTestClientNoContent(t *testing.T) {
 	}
 }
 
+// TestTypedTestClientNon2xxBodyNotMistakenForSuccess documents the status-agnostic
+// decode contract: a non-2xx error body is still decoded into the typed success
+// struct without error, so callers MUST check StatusCode() — a non-error return
+// from the typed helper is not itself a success signal. The error body ({code,
+// message}) shares no fields with the success struct, so Body stays zero.
+func TestTypedTestClientNon2xxBodyNotMistakenForSuccess(t *testing.T) {
+	app := New()
+	Get[struct {
+		ID string `param:"id"`
+	}, typedClientUser](app, "/users/:id", func(c *C[struct {
+		ID string `param:"id"`
+	}]) (*typedClientUser, error) {
+		return nil, NotFound("user not found")
+	})
+	app.Compile()
+
+	resp, err := GetTyped[typedClientUser](NewTestClient(app), "/users/u1")
+	if err != nil {
+		t.Fatalf("decoding an error body must not error: %v", err)
+	}
+	if resp.StatusCode() != 404 {
+		t.Fatalf("status = %d, want 404", resp.StatusCode())
+	}
+	if resp.Body != (typedClientUser{}) {
+		t.Fatalf("body = %+v, want zero value (error body must not populate success fields)", resp.Body)
+	}
+}
+
 func TestTypedHandlerProblemErrorIncludesProblemFields(t *testing.T) {
 	type input struct {
 		ID string `param:"id"`

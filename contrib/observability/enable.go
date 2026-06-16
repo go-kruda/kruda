@@ -44,8 +44,15 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 		Meter:      sdk.mp,
 		Propagator: sdk.propagator,
 		Resource:   sdk.res,
-		Flush:      func(context.Context) error { return nil }, // bounded flush wired in Task 8
 	}
+
+	// Bounded, once-guarded flush: ForceFlush then Shutdown each provider. Shutdown
+	// leaves the providers unusable, which is correct for a flush-on-shutdown — the
+	// same closure backs both prov.Flush and the OnShutdown hook so Listen() users
+	// drain telemetry without an explicit call.
+	flush := flusher(r.flushTimeout, sdk.tp.ForceFlush, sdk.tp.Shutdown, sdk.mp.ForceFlush, sdk.mp.Shutdown)
+	prov.Flush = flush
+	app.OnShutdown(func() { _ = flush(context.Background()) })
 
 	// 1. Meta routes first — registered before the span middleware so they carry
 	//    no span (self-tracing skip). The metric hook (installed below) skips them too.

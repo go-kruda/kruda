@@ -22,6 +22,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Typed test-client helpers for typed handlers.** `GetTyped`, `PostTyped`,
+  `PutTyped`, `PatchTyped`, `DeleteTyped`, and `SendTyped` wrap the existing
+  in-memory `TestClient` and decode JSON responses into a typed
+  `TypedTestResponse[T]`, while body helpers accept typed request values.
+- **Richer OpenAPI metadata for typed routes.** Generated OpenAPI 3.1 specs can
+  now include explicit security schemes, per-route security requirements,
+  request/response examples, and error response content schemas aligned with
+  the default Kruda error shape or `WithProblemJSON()`.
 - **Opt-in RFC 9457 problem+json error responses.** `kruda.New(kruda.WithProblemJSON())`
   renders errors as `application/problem+json` (standard members plus a field-level
   `errors` array for validation failures). Off by default — the standard error shape is

@@ -95,7 +95,9 @@ func GroupPatch[In any, Out any](g *Group, path string, handler func(*C[In]) (*O
 ## RouteOption
 
 ```go
-type RouteOption func(*routeConfig)
+type RouteOption interface {
+    applyRoute(*routeConfig)
+}
 ```
 
 ### WithDescription
@@ -113,6 +115,31 @@ func WithTags(tags ...string) RouteOption
 ```
 
 Sets route tags (used by OpenAPI).
+
+### WithRequestExample
+
+```go
+func WithRequestExample(example any) RouteOption
+```
+
+Sets the OpenAPI request body example for a typed route.
+
+### WithResponseExample
+
+```go
+func WithResponseExample(example any) RouteOption
+```
+
+Sets the OpenAPI 200 response example for a typed route.
+
+### WithOpenAPISecurity
+
+```go
+func WithOpenAPISecurity(name string, scopes ...string) RouteOption
+```
+
+Adds an OpenAPI security requirement to a typed route. Define the scheme with
+`WithOpenAPISecurityScheme` or `WithOpenAPIBearerAuth`.
 
 ## Struct Tag Binding
 

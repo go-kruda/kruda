@@ -382,6 +382,119 @@ func TestBuildOpenAPISpec_WithValidation_Has422(t *testing.T) {
 	}
 }
 
+func TestBuildOpenAPISpec_ExamplesAndSecurity(t *testing.T) {
+	app := New(
+		WithOpenAPIInfo("Test", "1.0.0", ""),
+		WithOpenAPIBearerAuth("bearerAuth"),
+	)
+
+	Post[oaParamQuery, oaOut](app, "/users/:id", func(c *C[oaParamQuery]) (*oaOut, error) {
+		return &oaOut{ID: c.In.ID, Message: c.In.Name}, nil
+	},
+		WithOpenAPISecurity("bearerAuth"),
+		WithRequestExample(oaParamQuery{Name: "Ada"}),
+		WithResponseExample(oaOut{ID: "u1", Message: "created"}),
+	)
+
+	specJSON, err := app.buildOpenAPISpec()
+	if err != nil {
+		t.Fatalf("buildOpenAPISpec failed: %v", err)
+	}
+
+	var spec map[string]any
+	if err := json.Unmarshal(specJSON, &spec); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	components := spec["components"].(map[string]any)
+	securitySchemes := components["securitySchemes"].(map[string]any)
+	bearer := securitySchemes["bearerAuth"].(map[string]any)
+	if bearer["type"] != "http" || bearer["scheme"] != "bearer" {
+		t.Fatalf("bearerAuth = %#v, want http bearer scheme", bearer)
+	}
+
+	postOp := spec["paths"].(map[string]any)["/users/{id}"].(map[string]any)["post"].(map[string]any)
+	security := postOp["security"].([]any)
+	requirement := security[0].(map[string]any)
+	if _, ok := requirement["bearerAuth"]; !ok {
+		t.Fatalf("operation security = %#v, want bearerAuth requirement", security)
+	}
+
+	requestContent := postOp["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)
+	requestExample := requestContent["example"].(map[string]any)
+	if requestExample["name"] != "Ada" {
+		t.Fatalf("request example = %#v, want name Ada", requestExample)
+	}
+
+	responseContent := postOp["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)
+	responseExample := responseContent["example"].(map[string]any)
+	if responseExample["id"] != "u1" || responseExample["message"] != "created" {
+		t.Fatalf("response example = %#v, want u1/created", responseExample)
+	}
+}
+
+func TestBuildOpenAPISpec_ErrorResponseContent(t *testing.T) {
+	t.Run("problem json", func(t *testing.T) {
+		app := New(
+			WithProblemJSON(),
+			WithValidator(NewValidator()),
+			WithOpenAPIInfo("Test", "1.0.0", ""),
+		)
+
+		type valIn struct {
+			Name string `json:"name" validate:"required"`
+		}
+
+		Post[valIn, oaOut](app, "/items", func(c *C[valIn]) (*oaOut, error) {
+			return &oaOut{ID: "1"}, nil
+		})
+
+		specJSON, err := app.buildOpenAPISpec()
+		if err != nil {
+			t.Fatalf("buildOpenAPISpec failed: %v", err)
+		}
+
+		var spec map[string]any
+		if err := json.Unmarshal(specJSON, &spec); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+
+		responses := spec["paths"].(map[string]any)["/items"].(map[string]any)["post"].(map[string]any)["responses"].(map[string]any)
+		for _, code := range []string{"422", "default"} {
+			content := responses[code].(map[string]any)["content"].(map[string]any)
+			media := content["application/problem+json"].(map[string]any)
+			schema := media["schema"].(map[string]any)
+			if schema["$ref"] != "#/components/schemas/ProblemDetails" {
+				t.Fatalf("%s schema = %#v, want ProblemDetails ref", code, schema)
+			}
+		}
+	})
+
+	t.Run("default json", func(t *testing.T) {
+		app := New(WithOpenAPIInfo("Test", "1.0.0", ""))
+		Get[oaSimple, oaOut](app, "/items", func(c *C[oaSimple]) (*oaOut, error) {
+			return &oaOut{ID: "1"}, nil
+		})
+
+		specJSON, err := app.buildOpenAPISpec()
+		if err != nil {
+			t.Fatalf("buildOpenAPISpec failed: %v", err)
+		}
+
+		var spec map[string]any
+		if err := json.Unmarshal(specJSON, &spec); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+
+		defaultResponse := spec["paths"].(map[string]any)["/items"].(map[string]any)["get"].(map[string]any)["responses"].(map[string]any)["default"].(map[string]any)
+		media := defaultResponse["content"].(map[string]any)["application/json"].(map[string]any)
+		schema := media["schema"].(map[string]any)
+		if schema["$ref"] != "#/components/schemas/KrudaError" {
+			t.Fatalf("schema = %#v, want KrudaError ref", schema)
+		}
+	})
+}
+
 func TestBuildOpenAPISpec_NoConfig_Empty(t *testing.T) {
 	app := New() // no OpenAPI config
 
@@ -467,7 +580,7 @@ func TestBuildOperation_QueryParams(t *testing.T) {
 	}
 
 	components := make(map[string]*schemaRef)
-	op := buildOperation(ri, components)
+	op := buildOperation(ri, components, false)
 
 	queryParams := 0
 	for _, p := range op.Parameters {
@@ -492,7 +605,7 @@ func TestBuildOperation_RequestBody(t *testing.T) {
 	}
 
 	components := make(map[string]*schemaRef)
-	op := buildOperation(ri, components)
+	op := buildOperation(ri, components, false)
 
 	if op.RequestBody == nil {
 		t.Fatal("expected request body for POST with hasBody")
@@ -514,7 +627,7 @@ func TestBuildOperation_FormBody(t *testing.T) {
 	}
 
 	components := make(map[string]*schemaRef)
-	op := buildOperation(ri, components)
+	op := buildOperation(ri, components, false)
 
 	if op.RequestBody == nil {
 		t.Fatal("expected request body for form upload")

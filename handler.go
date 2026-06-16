@@ -20,11 +20,14 @@ type routeOptionFunc func(*routeConfig)
 func (f routeOptionFunc) applyRoute(rc *routeConfig) { f(rc) }
 
 type routeConfig struct {
-	description string
-	tags        []string
-	inType      reflect.Type // input type T (for OpenAPI schema generation)
-	outType     reflect.Type // output type Out (for OpenAPI schema generation)
-	preset      *Preset      // per-route Wing dispatch hint (nil = use defaults)
+	description     string
+	tags            []string
+	inType          reflect.Type // input type T (for OpenAPI schema generation)
+	outType         reflect.Type // output type Out (for OpenAPI schema generation)
+	requestExample  any
+	responseExample any
+	security        []map[string][]string
+	preset          *Preset // per-route Wing dispatch hint (nil = use defaults)
 }
 
 // WithDescription sets a route description (used by OpenAPI in Phase 2B).
@@ -35,6 +38,23 @@ func WithDescription(desc string) RouteOption {
 // WithTags sets route tags (used by OpenAPI in Phase 2B).
 func WithTags(tags ...string) RouteOption {
 	return routeOptionFunc(func(rc *routeConfig) { rc.tags = tags })
+}
+
+// WithRequestExample sets the OpenAPI request body example for a typed route.
+func WithRequestExample(example any) RouteOption {
+	return routeOptionFunc(func(rc *routeConfig) { rc.requestExample = example })
+}
+
+// WithResponseExample sets the OpenAPI 200 response example for a typed route.
+func WithResponseExample(example any) RouteOption {
+	return routeOptionFunc(func(rc *routeConfig) { rc.responseExample = example })
+}
+
+// WithOpenAPISecurity adds an OpenAPI security requirement to a typed route.
+func WithOpenAPISecurity(name string, scopes ...string) RouteOption {
+	return routeOptionFunc(func(rc *routeConfig) {
+		rc.security = append(rc.security, map[string][]string{name: scopes})
+	})
 }
 
 // buildTypedHandler creates the handler closure with pre-compiled parser and validators.

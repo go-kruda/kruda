@@ -106,6 +106,25 @@ Body and header limits are enforced on all transports, including Wing:
 
 Timeouts are enforced at the transport level and apply during body accumulation as well as idle connections.
 
+### Wing request pipeline and parser-level rejects
+
+Well-formed requests route through Wing's full `serveKruda` pipeline, so
+middleware, lifecycle hooks, and error handling all run — including for
+app-level rejections such as 404, 405, and path-traversal 400. Anything wired to
+the `OnResponse` hook (e.g. the [`contrib/observability`](https://github.com/go-kruda/kruda/tree/main/contrib/observability)
+RED-metrics hook) sees those responses.
+
+Parser-level rejects are different and **bypass the app pipeline entirely** — no
+middleware, no hooks, no span or metric — by design, because the request never
+becomes a valid app request:
+
+- **413 / 431 / 501** write a minimal status line and then **close** the connection.
+- **Malformed requests** close the connection **silently**, with no HTTP response written.
+
+This is intentional: attack and malformed traffic should not consume app
+resources or pollute telemetry. (Note: `serve_fast.go` is the **fasthttp**
+transport path, not Wing.)
+
 ```go
 app := kruda.New(
     kruda.WithMaxBodySize(1024 * 1024), // 1MB

@@ -74,6 +74,7 @@ examples/health-checks/health-checks
 examples/hello/hello
 examples/json-api/json-api
 examples/middleware/middleware
+examples/observability/observability
 examples/openapi/openapi
 examples/ratelimit/ratelimit
 examples/session/session

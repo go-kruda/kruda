@@ -72,15 +72,50 @@ func (c *Ctx) SetContext(ctx context.Context) {
 
 // Log returns a request-scoped logger with pre-set attributes: request_id, method, path.
 // The logger is lazy-initialized on first call and cached for the request lifetime.
+// When an enricher is registered (WithLogEnricher), the logger's handler is wrapped
+// so enricher attributes are evaluated per record at emit time.
 func (c *Ctx) Log() *slog.Logger {
 	if c.logger == nil {
-		c.logger = c.app.config.Logger.With(
+		base := c.app.config.Logger
+		if c.app.logEnricher != nil {
+			base = slog.New(&enricherHandler{inner: base.Handler(), c: c})
+		}
+		c.logger = base.With(
 			"request_id", c.Get("request_id"),
 			"method", c.method,
 			"path", c.path,
 		)
 	}
 	return c.logger
+}
+
+// enricherHandler wraps a slog.Handler and appends App.logEnricher(c)'s attrs
+// to each record at Handle time. The *Ctx is request-scoped; the wrapped logger
+// must not outlive the request (it is cleared with the Ctx on cleanup).
+type enricherHandler struct {
+	inner slog.Handler
+	c     *Ctx
+}
+
+func (h *enricherHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.inner.Enabled(ctx, l)
+}
+
+func (h *enricherHandler) Handle(ctx context.Context, r slog.Record) error {
+	if fn := h.c.app.logEnricher; fn != nil {
+		if attrs := fn(h.c); len(attrs) > 0 {
+			r.AddAttrs(attrs...)
+		}
+	}
+	return h.inner.Handle(ctx, r)
+}
+
+func (h *enricherHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &enricherHandler{inner: h.inner.WithAttrs(attrs), c: h.c}
+}
+
+func (h *enricherHandler) WithGroup(name string) slog.Handler {
+	return &enricherHandler{inner: h.inner.WithGroup(name), c: h.c}
 }
 
 // Provide stores a typed value in the request context for later retrieval via Need.

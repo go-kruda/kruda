@@ -33,6 +33,7 @@ cd examples/hello && go run .
 | [websocket](websocket/) | WebSocket upgrade + echo |
 | [ratelimit](ratelimit/) | Token bucket rate limiting |
 | [health-checks](health-checks/) | Liveness + readiness probes |
+| [observability](observability/) | Turnkey OpenTelemetry: tracing, RED metrics, probes |
 | [testing](testing/) | Test client, table-driven tests |
 
 ## Architecture Patterns

@@ -35,6 +35,12 @@ type App struct {
 	// Precomputed security headers (nil if SecurityHeaders=false)
 	secHeaders [][2]string
 
+	// logEnricher, when non-nil, appends per-record attributes to the request
+	// logger returned by c.Log(). Resolved at log-emit time so a cached logger
+	// still picks up attrs (e.g. trace_id) that became available after c.Log()
+	// was first called. Dep-free generic seam (see WithLogEnricher).
+	logEnricher func(*Ctx) []slog.Attr
+
 	// hasLifecycle is true when any request lifecycle hook is registered.
 	// Set once at Compile() time. ServeFast() checks this single bool
 	// to skip the entire lifecycle path — zero-cost when no hooks.

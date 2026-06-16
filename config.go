@@ -216,6 +216,24 @@ func WithLogger(l *slog.Logger) Option {
 	return func(a *App) { a.config.Logger = l }
 }
 
+// WithLogEnricher registers a function that appends attributes to the
+// per-request logger returned by c.Log(). The function runs once per log
+// record at emit time (not when the logger is constructed), so attributes
+// that become available after c.Log() was first called — such as a trace_id
+// set by an observability middleware — still appear on every line.
+//
+// The function MUST be allocation-frugal and nil-safe: return nil when there
+// is nothing to add; never panic. It receives the live request *Ctx and MUST
+// NOT retain it beyond the call (the *Ctx is pooled and reused).
+func WithLogEnricher(fn func(c *Ctx) []slog.Attr) Option {
+	return func(a *App) { a.logEnricher = fn }
+}
+
+// SetLogEnricher sets the per-request log enricher after construction. It is the
+// setter half of the WithLogEnricher seam, for plugins that receive an
+// already-built *App (e.g. observability.Enable). Replaces any prior enricher.
+func (a *App) SetLogEnricher(fn func(c *Ctx) []slog.Attr) { a.logEnricher = fn }
+
 // WithErrorHandler sets a custom error handler.
 func WithErrorHandler(h func(c *Ctx, err *KrudaError)) Option {
 	return func(a *App) { a.config.ErrorHandler = h }

@@ -1007,12 +1007,38 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 		}
 	}
 	if len(c.bodyBuf) >= c.bodyNeed {
+		// Capture any pipelined request that already arrived behind the body
+		// before dispatching: edge-triggered epoll will not re-notify for bytes
+		// buffered in the socket before the body completed, so a request split
+		// across the completion boundary would otherwise stall.
+		w.drainPipelinedAfterBody(c)
 		w.finishBodyAccum(c)
 	} else {
 		// Socket drained but body still incomplete — wait for the next recv.
 		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
 	return false
+}
+
+// drainPipelinedAfterBody appends socket bytes that follow a just-completed body
+// (the start of the next pipelined request) into readBuf after any surplus
+// already relocated to its front. Non-blocking: it stops at EAGAIN or a full
+// buffer, so on the common case where no pipelined request is waiting it costs a
+// single EAGAIN read. A pipelined burst exceeding the read buffer is bounded by
+// the same buffer-size limit as ordinary pipelining.
+func (w *worker) drainPipelinedAfterBody(c *conn) {
+	for c.readN < len(c.readBuf) {
+		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
+		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+			return
+		}
+		if e != 0 || rn <= 0 {
+			// Error or EOF: the accumulated request is still dispatched; teardown
+			// happens on the post-response keep-alive read.
+			return
+		}
+		c.readN += int(rn)
+	}
 }
 
 // finishBodyAccum re-parses the completed request and dispatches it inline.

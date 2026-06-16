@@ -58,3 +58,37 @@ func TestBuildSDK_SetGlobalGate(t *testing.T) {
 	}
 	span.End()
 }
+
+// TestBuildSDK_PerAppRegistryNoCollision verifies two metrics-enabled SDKs each
+// get an independent Prometheus registry (no global DefaultRegisterer collision),
+// so both can be gathered without "collected before" errors.
+func TestBuildSDK_PerAppRegistryNoCollision(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+	t.Setenv("OTEL_METRICS_EXPORTER", "none") // keep autoexport off; otelprom reader still added
+	r := Config{SetGlobal: ptrBool(false)}.resolve()
+
+	s1, err := buildSDK(context.Background(), r)
+	if err != nil {
+		t.Fatalf("buildSDK 1: %v", err)
+	}
+	t.Cleanup(func() { _ = s1.shutdown(context.Background()) })
+	s2, err := buildSDK(context.Background(), r)
+	if err != nil {
+		t.Fatalf("buildSDK 2: %v", err)
+	}
+	t.Cleanup(func() { _ = s2.shutdown(context.Background()) })
+
+	if s1.promReg == nil || s2.promReg == nil {
+		t.Fatal("metrics-on SDK must have a dedicated promReg")
+	}
+	if s1.promReg == s2.promReg {
+		t.Fatal("each app must get its OWN registry, not a shared one")
+	}
+	// Both registries must Gather without error (would fail if they shared the global).
+	if _, err := s1.promReg.Gather(); err != nil {
+		t.Fatalf("registry 1 Gather: %v", err)
+	}
+	if _, err := s2.promReg.Gather(); err != nil {
+		t.Fatalf("registry 2 Gather: %v", err)
+	}
+}

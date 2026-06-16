@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	otelglobal "go.opentelemetry.io/otel"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
@@ -21,6 +23,7 @@ type sdkBundle struct {
 	mp         *metric.MeterProvider
 	res        *resource.Resource
 	propagator propagation.TextMapPropagator
+	promReg    *prometheus.Registry // dedicated registry the /metrics handler serves; nil if metrics off
 }
 
 func (s *sdkBundle) shutdown(ctx context.Context) error {
@@ -54,20 +57,30 @@ func buildSDK(ctx context.Context, r resolved) (*sdkBundle, error) {
 	}
 	tp := sdktrace.NewTracerProvider(tpOpts...)
 
-	// Meter readers: a Prometheus exporter reader (into the default registry that
-	// promhttp serves) makes the turnkey /metrics scrape work out of the box; an
-	// env-driven autoexport reader is added only for an explicit OTLP/console push.
+	// Meter readers: a Prometheus exporter reader into a dedicated registry (which
+	// the /metrics handler serves) makes the turnkey scrape work out of the box
+	// without colliding on the global DefaultRegisterer when several apps Enable in
+	// the same process; an env-driven autoexport reader is added only for an
+	// explicit OTLP/console push.
+	//
+	// tp is already constructed, so any error past this point must shut it down to
+	// avoid leaking its batch-span-processor goroutine (the module documents
+	// retry-after-failure).
 	mpOpts := []metric.Option{metric.WithResource(res)}
+	var promReg *prometheus.Registry
 	if r.metricsOn {
-		promExp, perr := otelprom.New()
+		promReg = prometheus.NewRegistry()
+		promExp, perr := otelprom.New(otelprom.WithRegisterer(promReg))
 		if perr != nil {
+			_ = tp.Shutdown(context.Background())
 			return nil, perr
 		}
 		mpOpts = append(mpOpts, metric.WithReader(promExp))
 	}
-	if exp := os.Getenv("OTEL_METRICS_EXPORTER"); exp != "" && exp != "prometheus" && exp != "none" {
+	if exp := strings.ToLower(os.Getenv("OTEL_METRICS_EXPORTER")); exp != "" && exp != "prometheus" && exp != "none" {
 		reader, rerr := autoexport.NewMetricReader(ctx)
 		if rerr != nil {
+			_ = tp.Shutdown(context.Background())
 			return nil, rerr
 		}
 		mpOpts = append(mpOpts, metric.WithReader(reader))
@@ -86,7 +99,7 @@ func buildSDK(ctx context.Context, r resolved) (*sdkBundle, error) {
 
 	warnIfNoEndpoint()
 
-	return &sdkBundle{tp: tp, mp: mp, res: res, propagator: prop}, nil
+	return &sdkBundle{tp: tp, mp: mp, res: res, propagator: prop, promReg: promReg}, nil
 }
 
 // buildResource builds the OTel resource. The service.name chain is explicit

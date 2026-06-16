@@ -58,5 +58,6 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 	if r.tracesOn || m != nil {
 		app.Use(spanMiddleware(prov, m, r))
 	}
+	app.SetLogEnricher(logEnricher)
 	return prov, nil
 }

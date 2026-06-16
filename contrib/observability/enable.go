@@ -47,6 +47,11 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 		Flush:      func(context.Context) error { return nil }, // bounded flush wired in Task 8
 	}
 
+	// 1. Meta routes first — registered before the span middleware so they carry
+	//    no span (self-tracing skip). The metric hook (installed below) skips them too.
+	mountHealthRoutes(app, r)
+
+	// 2. RED metric hook (always-fires OnResponse).
 	var m *metrics
 	if r.metricsOn {
 		m, err = newMetrics(prov)
@@ -55,9 +60,14 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 		}
 		app.OnResponse(m.onResponse(r))
 	}
+
+	// 3. Span middleware — only instruments routes registered AFTER this point,
+	//    which is why Enable must run before user routes.
 	if r.tracesOn || m != nil {
 		app.Use(spanMiddleware(prov, m, r))
 	}
+
+	// 4. Log enricher (trace_id/span_id into c.Log()).
 	app.SetLogEnricher(logEnricher)
 	return prov, nil
 }

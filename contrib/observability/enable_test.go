@@ -10,6 +10,8 @@ import (
 
 // TestEnable_ReturnsProviders verifies Enable returns non-nil Providers with a Flush.
 func TestEnable_ReturnsProviders(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+	t.Setenv("OTEL_METRICS_EXPORTER", "none")
 	app := kruda.New()
 	prov, err := Enable(app, Config{ServiceName: "test-svc", SetGlobal: ptrBool(false)})
 	if err != nil {
@@ -23,6 +25,8 @@ func TestEnable_ReturnsProviders(t *testing.T) {
 
 // TestEnable_DoubleEnableErrors verifies the meta-side guard.
 func TestEnable_DoubleEnableErrors(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+	t.Setenv("OTEL_METRICS_EXPORTER", "none")
 	app := kruda.New()
 	if _, err := Enable(app, Config{SetGlobal: ptrBool(false)}); err != nil {
 		t.Fatalf("first Enable: %v", err)
@@ -34,6 +38,8 @@ func TestEnable_DoubleEnableErrors(t *testing.T) {
 
 // TestEnable_ConcurrentSameApp verifies exactly one concurrent Enable wins.
 func TestEnable_ConcurrentSameApp(t *testing.T) {
+	t.Setenv("OTEL_TRACES_EXPORTER", "none")
+	t.Setenv("OTEL_METRICS_EXPORTER", "none")
 	app := kruda.New()
 	var wg sync.WaitGroup
 	var okCount int32

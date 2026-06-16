@@ -30,9 +30,21 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 
 	r := cfg.resolve()
 
-	prov := &Providers{
-		Flush: func(context.Context) error { return nil },
+	ctx := context.Background()
+	sdk, err := buildSDK(ctx, r)
+	if err != nil {
+		enabledMu.Lock()
+		delete(enabledApps, app) // allow retry after a build failure
+		enabledMu.Unlock()
+		return nil, err
 	}
-	_ = r
+
+	prov := &Providers{
+		Tracer:     sdk.tp,
+		Meter:      sdk.mp,
+		Propagator: sdk.propagator,
+		Resource:   sdk.res,
+		Flush:      func(context.Context) error { return nil }, // bounded flush wired in Task 8
+	}
 	return prov, nil
 }

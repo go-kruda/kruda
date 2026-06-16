@@ -46,5 +46,9 @@ func Enable(app *kruda.App, cfg Config) (*Providers, error) {
 		Resource:   sdk.res,
 		Flush:      func(context.Context) error { return nil }, // bounded flush wired in Task 8
 	}
+
+	if r.tracesOn {
+		app.Use(spanMiddleware(prov, nil, r)) // m wired in Task 5
+	}
 	return prov, nil
 }

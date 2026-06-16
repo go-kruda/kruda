@@ -53,6 +53,12 @@ func WithResponseExample(example any) RouteOption {
 // WithOpenAPISecurity adds an OpenAPI security requirement to a typed route.
 func WithOpenAPISecurity(name string, scopes ...string) RouteOption {
 	return routeOptionFunc(func(rc *routeConfig) {
+		// OpenAPI requires the scopes value to be an array, never null — use an
+		// empty slice when no scopes are given (e.g. bearer auth) so it
+		// serializes as [] not null.
+		if scopes == nil {
+			scopes = []string{}
+		}
 		rc.security = append(rc.security, map[string][]string{name: scopes})
 	})
 }

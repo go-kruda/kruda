@@ -416,8 +416,12 @@ func TestBuildOpenAPISpec_ExamplesAndSecurity(t *testing.T) {
 	postOp := spec["paths"].(map[string]any)["/users/{id}"].(map[string]any)["post"].(map[string]any)
 	security := postOp["security"].([]any)
 	requirement := security[0].(map[string]any)
-	if _, ok := requirement["bearerAuth"]; !ok {
-		t.Fatalf("operation security = %#v, want bearerAuth requirement", security)
+	scopes, ok := requirement["bearerAuth"].([]any)
+	if !ok {
+		t.Fatalf("operation security bearerAuth = %#v, want a [] array (not null)", requirement["bearerAuth"])
+	}
+	if len(scopes) != 0 {
+		t.Fatalf("bearerAuth scopes = %#v, want empty array", scopes)
 	}
 
 	requestContent := postOp["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)
@@ -493,6 +497,63 @@ func TestBuildOpenAPISpec_ErrorResponseContent(t *testing.T) {
 			t.Fatalf("schema = %#v, want KrudaError ref", schema)
 		}
 	})
+
+	t.Run("default json validation 422 uses ValidationError", func(t *testing.T) {
+		app := New(WithValidator(NewValidator()), WithOpenAPIInfo("Test", "1.0.0", ""))
+
+		type valIn struct {
+			Name string `json:"name" validate:"required"`
+		}
+		Post[valIn, oaOut](app, "/items", func(c *C[valIn]) (*oaOut, error) {
+			return &oaOut{ID: "1"}, nil
+		})
+
+		specJSON, err := app.buildOpenAPISpec()
+		if err != nil {
+			t.Fatalf("buildOpenAPISpec failed: %v", err)
+		}
+		var spec map[string]any
+		if err := json.Unmarshal(specJSON, &spec); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+
+		// 422 must reference ValidationError ({code,message,errors[]}), not KrudaError.
+		resp422 := spec["paths"].(map[string]any)["/items"].(map[string]any)["post"].(map[string]any)["responses"].(map[string]any)["422"].(map[string]any)
+		schema := resp422["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+		if schema["$ref"] != "#/components/schemas/ValidationError" {
+			t.Fatalf("422 schema = %#v, want ValidationError ref", schema)
+		}
+
+		schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
+
+		// ValidationError requires code, message, errors.
+		ve := schemas["ValidationError"].(map[string]any)
+		veReq := toStringSet(ve["required"].([]any))
+		for _, f := range []string{"code", "message", "errors"} {
+			if !veReq[f] {
+				t.Fatalf("ValidationError.required missing %q: %#v", f, ve["required"])
+			}
+		}
+
+		// FieldError requires all five always-emitted fields.
+		fe := schemas["FieldError"].(map[string]any)
+		feReq := toStringSet(fe["required"].([]any))
+		for _, f := range []string{"field", "rule", "param", "message", "value"} {
+			if !feReq[f] {
+				t.Fatalf("FieldError.required missing %q: %#v", f, fe["required"])
+			}
+		}
+	})
+}
+
+func toStringSet(items []any) map[string]bool {
+	out := make(map[string]bool, len(items))
+	for _, it := range items {
+		if s, ok := it.(string); ok {
+			out[s] = true
+		}
+	}
+	return out
 }
 
 func TestBuildOpenAPISpec_NoConfig_Empty(t *testing.T) {

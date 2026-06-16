@@ -386,7 +386,7 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 	}
 
 	if ri.hasValidate {
-		contentType, schema := errorResponseSchema(components, problemJSON)
+		contentType, schema := validationResponseSchema(components, problemJSON)
 		op.Responses["422"] = &openAPIResponse{
 			Description: "Validation failed",
 			Content: map[string]*openAPIMediaType{
@@ -395,7 +395,7 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 		}
 	}
 
-	contentType, schema := errorResponseSchema(components, problemJSON)
+	contentType, schema := defaultErrorResponseSchema(components, problemJSON)
 	op.Responses["default"] = &openAPIResponse{
 		Description: "Error response",
 		Content: map[string]*openAPIMediaType{
@@ -406,7 +406,21 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 	return op
 }
 
-func errorResponseSchema(components map[string]*schemaRef, problemJSON bool) (string, *schemaRef) {
+// validationResponseSchema returns the media type + schema for a 422 validation
+// response. With problem+json it is a ProblemDetails; otherwise it is the
+// ValidationError shape the validator actually marshals ({code, message, errors}).
+func validationResponseSchema(components map[string]*schemaRef, problemJSON bool) (string, *schemaRef) {
+	if problemJSON {
+		ensureProblemDetailsSchema(components)
+		return "application/problem+json", &schemaRef{Ref: "#/components/schemas/ProblemDetails"}
+	}
+	ensureValidationErrorSchema(components)
+	return "application/json", &schemaRef{Ref: "#/components/schemas/ValidationError"}
+}
+
+// defaultErrorResponseSchema returns the media type + schema for a generic error
+// response. With problem+json it is a ProblemDetails; otherwise it is a KrudaError.
+func defaultErrorResponseSchema(components map[string]*schemaRef, problemJSON bool) (string, *schemaRef) {
 	if problemJSON {
 		ensureProblemDetailsSchema(components)
 		return "application/problem+json", &schemaRef{Ref: "#/components/schemas/ProblemDetails"}
@@ -415,10 +429,30 @@ func errorResponseSchema(components map[string]*schemaRef, problemJSON bool) (st
 	return "application/json", &schemaRef{Ref: "#/components/schemas/KrudaError"}
 }
 
+// ensureFieldErrorSchema documents FieldError. All five fields lack omitempty,
+// so they are always present on the wire and are marked required.
+func ensureFieldErrorSchema(components map[string]*schemaRef) {
+	if _, ok := components["FieldError"]; ok {
+		return
+	}
+	components["FieldError"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"field":   {Type: "string"},
+			"rule":    {Type: "string"},
+			"param":   {Type: "string"},
+			"message": {Type: "string"},
+			"value":   {Type: "string"},
+		},
+		Required: []string{"field", "rule", "param", "message", "value"},
+	}
+}
+
 func ensureProblemDetailsSchema(components map[string]*schemaRef) {
 	if _, ok := components["ProblemDetails"]; ok {
 		return
 	}
+	ensureFieldErrorSchema(components)
 	components["ProblemDetails"] = &schemaRef{
 		Type: "object",
 		Properties: map[string]*schemaRef{
@@ -429,10 +463,31 @@ func ensureProblemDetailsSchema(components map[string]*schemaRef) {
 			"instance": {Type: "string"},
 			"errors": {
 				Type:  "array",
-				Items: generateSchema(reflect.TypeOf(FieldError{}), components),
+				Items: &schemaRef{Ref: "#/components/schemas/FieldError"},
 			},
 		},
 		Required: []string{"type", "title", "status"},
+	}
+}
+
+// ensureValidationErrorSchema documents the ValidationError wire shape the
+// validator marshals: {code, message, errors[]} — all required.
+func ensureValidationErrorSchema(components map[string]*schemaRef) {
+	if _, ok := components["ValidationError"]; ok {
+		return
+	}
+	ensureFieldErrorSchema(components)
+	components["ValidationError"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"code":    {Type: "integer"},
+			"message": {Type: "string"},
+			"errors": {
+				Type:  "array",
+				Items: &schemaRef{Ref: "#/components/schemas/FieldError"},
+			},
+		},
+		Required: []string{"code", "message", "errors"},
 	}
 }
 

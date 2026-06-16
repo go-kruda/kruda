@@ -68,6 +68,42 @@ resp, err := tc.Request("POST", "/users").
 | `ContentType(ct)` | Set Content-Type header |
 | `Send()` | Execute the request, returns `(*TestResponse, error)` |
 
+## Typed Helpers
+
+Generic helpers send requests through the same in-memory client and decode a
+non-empty JSON response into a typed body:
+
+```go
+resp, err := kruda.PostTyped[CreateUser, User](tc, "/users", CreateUser{Name: "Ada"})
+if err != nil {
+    t.Fatal(err)
+}
+if resp.Body.ID == "" {
+    t.Fatal("missing id")
+}
+```
+
+Available helpers:
+
+```go
+resp, err := kruda.GetTyped[User](tc, "/users/123")
+resp, err := kruda.PostTyped[CreateUser, User](tc, "/users", body)
+resp, err := kruda.PutTyped[UpdateUser, User](tc, "/users/123", body)
+resp, err := kruda.PatchTyped[UpdateUser, User](tc, "/users/123", body)
+resp, err := kruda.DeleteTyped[DeleteResult](tc, "/users/123")
+```
+
+Use `SendTyped` with the request builder when a test needs query parameters,
+headers, cookies, or a custom content type:
+
+```go
+resp, err := kruda.SendTyped[SearchResult](
+    tc.Request("GET", "/search").
+        Query("q", "ada").
+        Header("Authorization", "Bearer test-token"),
+)
+```
+
 ## TestResponse
 
 ### StatusCode

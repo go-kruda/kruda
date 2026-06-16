@@ -102,6 +102,60 @@ func (tc *TestClient) Request(method, path string) *TestRequest {
 	}
 }
 
+// TypedTestResponse wraps a TestResponse and carries a decoded JSON body.
+type TypedTestResponse[T any] struct {
+	*TestResponse
+	Body T
+}
+
+// SendTyped executes a request builder and decodes a non-empty JSON response
+// body into Out.
+func SendTyped[Out any](req *TestRequest) (*TypedTestResponse[Out], error) {
+	resp, err := req.Send()
+	if err != nil {
+		return nil, err
+	}
+	return decodeTypedResponse[Out](resp)
+}
+
+// GetTyped sends a GET request and decodes a non-empty JSON response body into Out.
+func GetTyped[Out any](tc *TestClient, path string) (*TypedTestResponse[Out], error) {
+	return SendTyped[Out](tc.Request(http.MethodGet, path))
+}
+
+// DeleteTyped sends a DELETE request and decodes a non-empty JSON response body into Out.
+func DeleteTyped[Out any](tc *TestClient, path string) (*TypedTestResponse[Out], error) {
+	return SendTyped[Out](tc.Request(http.MethodDelete, path))
+}
+
+// PostTyped sends a POST request with a typed JSON body and decodes a
+// non-empty JSON response body into Out.
+func PostTyped[In any, Out any](tc *TestClient, path string, body In) (*TypedTestResponse[Out], error) {
+	return SendTyped[Out](tc.Request(http.MethodPost, path).Body(body))
+}
+
+// PutTyped sends a PUT request with a typed JSON body and decodes a non-empty
+// JSON response body into Out.
+func PutTyped[In any, Out any](tc *TestClient, path string, body In) (*TypedTestResponse[Out], error) {
+	return SendTyped[Out](tc.Request(http.MethodPut, path).Body(body))
+}
+
+// PatchTyped sends a PATCH request with a typed JSON body and decodes a
+// non-empty JSON response body into Out.
+func PatchTyped[In any, Out any](tc *TestClient, path string, body In) (*TypedTestResponse[Out], error) {
+	return SendTyped[Out](tc.Request(http.MethodPatch, path).Body(body))
+}
+
+func decodeTypedResponse[Out any](resp *TestResponse) (*TypedTestResponse[Out], error) {
+	var out Out
+	if len(resp.Body()) > 0 {
+		if err := resp.JSON(&out); err != nil {
+			return nil, err
+		}
+	}
+	return &TypedTestResponse[Out]{TestResponse: resp, Body: out}, nil
+}
+
 // TestRequest is a builder for constructing test HTTP requests.
 type TestRequest struct {
 	client      *TestClient

@@ -57,9 +57,10 @@ type Config struct {
 	// Views is the template engine for c.Render(). Nil = c.Render() returns error.
 	Views ViewEngine
 
-	openAPIInfo openAPIInfo
-	openAPIPath string
-	openAPITags []openAPITagDef
+	openAPIInfo            openAPIInfo
+	openAPIPath            string
+	openAPITags            []openAPITagDef
+	openAPISecuritySchemes map[string]OpenAPISecurityScheme
 }
 
 // SecurityConfig controls security headers and behavior.
@@ -384,6 +385,15 @@ func WithContainer(c *Container) Option {
 	return func(a *App) { a.container = c }
 }
 
+// OpenAPISecurityScheme describes an OpenAPI security scheme.
+type OpenAPISecurityScheme struct {
+	Type         string `json:"type"`
+	Scheme       string `json:"scheme,omitempty"`
+	BearerFormat string `json:"bearerFormat,omitempty"`
+	Name         string `json:"name,omitempty"`
+	In           string `json:"in,omitempty"`
+}
+
 // WithOpenAPIInfo enables OpenAPI spec generation with the given metadata.
 // When configured, a GET handler is auto-registered at the OpenAPI path (default: /openapi.json).
 func WithOpenAPIInfo(title, version, description string) Option {
@@ -411,6 +421,27 @@ func WithOpenAPITag(name, description string) Option {
 			Name: name, Description: description,
 		})
 	}
+}
+
+// WithOpenAPISecurityScheme adds an OpenAPI security scheme to components.
+func WithOpenAPISecurityScheme(name string, scheme OpenAPISecurityScheme) Option {
+	return func(a *App) {
+		if a.config.openAPISecuritySchemes == nil {
+			a.config.openAPISecuritySchemes = make(map[string]OpenAPISecurityScheme)
+		}
+		a.config.openAPISecuritySchemes[name] = scheme
+	}
+}
+
+// WithOpenAPIBearerAuth adds a standard HTTP bearer security scheme.
+func WithOpenAPIBearerAuth(name string) Option {
+	if name == "" {
+		name = "bearerAuth"
+	}
+	return WithOpenAPISecurityScheme(name, OpenAPISecurityScheme{
+		Type:   "http",
+		Scheme: "bearer",
+	})
 }
 
 // selectTransport chooses the transport based on config, env, and OS.

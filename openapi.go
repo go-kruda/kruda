@@ -35,6 +35,7 @@ type openAPIOperation struct {
 	Parameters  []openAPIParameter          `json:"parameters,omitempty"`
 	RequestBody *openAPIRequestBody         `json:"requestBody,omitempty"`
 	Responses   map[string]*openAPIResponse `json:"responses"`
+	Security    []map[string][]string       `json:"security,omitempty"`
 }
 
 type openAPIParameter struct {
@@ -50,7 +51,8 @@ type openAPIRequestBody struct {
 }
 
 type openAPIMediaType struct {
-	Schema *schemaRef `json:"schema"`
+	Schema  *schemaRef `json:"schema"`
+	Example any        `json:"example,omitempty"`
 }
 
 type openAPIResponse struct {
@@ -59,7 +61,8 @@ type openAPIResponse struct {
 }
 
 type openAPIComponents struct {
-	Schemas map[string]*schemaRef `json:"schemas,omitempty"`
+	Schemas         map[string]*schemaRef            `json:"schemas,omitempty"`
+	SecuritySchemes map[string]OpenAPISecurityScheme `json:"securitySchemes,omitempty"`
 }
 
 type openAPITagDef struct {
@@ -297,7 +300,7 @@ func (app *App) buildOpenAPISpec() ([]byte, error) {
 			spec.Paths[oaPath] = pathItem
 		}
 
-		op := buildOperation(ri, components)
+		op := buildOperation(ri, components, app.config.problemJSON)
 
 		switch ri.method {
 		case "GET":
@@ -313,19 +316,23 @@ func (app *App) buildOpenAPISpec() ([]byte, error) {
 		}
 	}
 
-	if len(components) > 0 {
-		spec.Components = &openAPIComponents{Schemas: components}
+	if len(components) > 0 || len(app.config.openAPISecuritySchemes) > 0 {
+		spec.Components = &openAPIComponents{
+			Schemas:         components,
+			SecuritySchemes: app.config.openAPISecuritySchemes,
+		}
 	}
 
 	return app.config.JSONEncoder(spec)
 }
 
 // buildOperation creates an OpenAPI operation from route info.
-func buildOperation(ri routeInfo, components map[string]*schemaRef) *openAPIOperation {
+func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON bool) *openAPIOperation {
 	op := &openAPIOperation{
 		Description: ri.config.description,
 		Tags:        ri.config.tags,
 		Responses:   make(map[string]*openAPIResponse),
+		Security:    ri.config.security,
 	}
 
 	inType := ri.config.inType
@@ -362,7 +369,7 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef) *openAPIOper
 			op.RequestBody = &openAPIRequestBody{
 				Required: true,
 				Content: map[string]*openAPIMediaType{
-					contentType: {Schema: bodySchema},
+					contentType: {Schema: bodySchema, Example: ri.config.requestExample},
 				},
 			}
 		}
@@ -373,20 +380,128 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef) *openAPIOper
 		op.Responses["200"] = &openAPIResponse{
 			Description: "Successful response",
 			Content: map[string]*openAPIMediaType{
-				"application/json": {Schema: outSchema},
+				"application/json": {Schema: outSchema, Example: ri.config.responseExample},
 			},
 		}
 	}
 
 	if ri.hasValidate {
+		contentType, schema := validationResponseSchema(components, problemJSON)
 		op.Responses["422"] = &openAPIResponse{
 			Description: "Validation failed",
+			Content: map[string]*openAPIMediaType{
+				contentType: {Schema: schema},
+			},
 		}
 	}
 
+	contentType, schema := defaultErrorResponseSchema(components, problemJSON)
 	op.Responses["default"] = &openAPIResponse{
 		Description: "Error response",
+		Content: map[string]*openAPIMediaType{
+			contentType: {Schema: schema},
+		},
 	}
 
 	return op
+}
+
+// validationResponseSchema returns the media type + schema for a 422 validation
+// response. With problem+json it is a ProblemDetails; otherwise it is the
+// ValidationError shape the validator actually marshals ({code, message, errors}).
+func validationResponseSchema(components map[string]*schemaRef, problemJSON bool) (string, *schemaRef) {
+	if problemJSON {
+		ensureProblemDetailsSchema(components)
+		return "application/problem+json", &schemaRef{Ref: "#/components/schemas/ProblemDetails"}
+	}
+	ensureValidationErrorSchema(components)
+	return "application/json", &schemaRef{Ref: "#/components/schemas/ValidationError"}
+}
+
+// defaultErrorResponseSchema returns the media type + schema for a generic error
+// response. With problem+json it is a ProblemDetails; otherwise it is a KrudaError.
+func defaultErrorResponseSchema(components map[string]*schemaRef, problemJSON bool) (string, *schemaRef) {
+	if problemJSON {
+		ensureProblemDetailsSchema(components)
+		return "application/problem+json", &schemaRef{Ref: "#/components/schemas/ProblemDetails"}
+	}
+	ensureKrudaErrorSchema(components)
+	return "application/json", &schemaRef{Ref: "#/components/schemas/KrudaError"}
+}
+
+// ensureFieldErrorSchema documents FieldError. All five fields lack omitempty,
+// so they are always present on the wire and are marked required.
+func ensureFieldErrorSchema(components map[string]*schemaRef) {
+	if _, ok := components["FieldError"]; ok {
+		return
+	}
+	components["FieldError"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"field":   {Type: "string"},
+			"rule":    {Type: "string"},
+			"param":   {Type: "string"},
+			"message": {Type: "string"},
+			"value":   {Type: "string"},
+		},
+		Required: []string{"field", "rule", "param", "message", "value"},
+	}
+}
+
+func ensureProblemDetailsSchema(components map[string]*schemaRef) {
+	if _, ok := components["ProblemDetails"]; ok {
+		return
+	}
+	ensureFieldErrorSchema(components)
+	components["ProblemDetails"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"type":     {Type: "string"},
+			"title":    {Type: "string"},
+			"status":   {Type: "integer"},
+			"detail":   {Type: "string"},
+			"instance": {Type: "string"},
+			"errors": {
+				Type:  "array",
+				Items: &schemaRef{Ref: "#/components/schemas/FieldError"},
+			},
+		},
+		Required: []string{"type", "title", "status"},
+	}
+}
+
+// ensureValidationErrorSchema documents the ValidationError wire shape the
+// validator marshals: {code, message, errors[]} — all required.
+func ensureValidationErrorSchema(components map[string]*schemaRef) {
+	if _, ok := components["ValidationError"]; ok {
+		return
+	}
+	ensureFieldErrorSchema(components)
+	components["ValidationError"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"code":    {Type: "integer"},
+			"message": {Type: "string"},
+			"errors": {
+				Type:  "array",
+				Items: &schemaRef{Ref: "#/components/schemas/FieldError"},
+			},
+		},
+		Required: []string{"code", "message", "errors"},
+	}
+}
+
+func ensureKrudaErrorSchema(components map[string]*schemaRef) {
+	if _, ok := components["KrudaError"]; ok {
+		return
+	}
+	components["KrudaError"] = &schemaRef{
+		Type: "object",
+		Properties: map[string]*schemaRef{
+			"code":    {Type: "integer"},
+			"message": {Type: "string"},
+			"detail":  {Type: "string"},
+		},
+		Required: []string{"code", "message"},
+	}
 }

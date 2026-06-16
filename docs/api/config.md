@@ -204,6 +204,23 @@ func WithOpenAPITag(name, description string) Option
 
 Adds an OpenAPI tag definition.
 
+### WithOpenAPISecurityScheme
+
+```go
+func WithOpenAPISecurityScheme(name string, scheme OpenAPISecurityScheme) Option
+```
+
+Adds an OpenAPI security scheme under `components.securitySchemes`.
+
+### WithOpenAPIBearerAuth
+
+```go
+func WithOpenAPIBearerAuth(name string) Option
+```
+
+Adds a standard HTTP bearer security scheme. An empty name defaults to
+`bearerAuth`.
+
 ## Defaults Summary
 
 | Option | Default |

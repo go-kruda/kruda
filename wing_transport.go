@@ -249,14 +249,14 @@ type worker struct {
 	presets  PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
-	lastPreset0  Preset
-	lastPreset1  Preset
-	lastMethod0  string
-	lastMethod1  string
-	lastPath0    string
-	lastPath1    string
-	shutdown     *atomic.Bool
-	hasTimeout   bool
+	lastPreset0     Preset
+	lastPreset1     Preset
+	lastMethod0     string
+	lastMethod1     string
+	lastPath0       string
+	lastPath1       string
+	shutdown        *atomic.Bool
+	hasTimeout      bool
 	readTimeout     int64 // nanoseconds (0 = disabled)
 	writeTimeout    int64
 	idleTimeout     int64
@@ -264,7 +264,7 @@ type worker struct {
 	inflightBody    int64 // current in-flight body bytes (atomic)
 	trustProxy      bool
 	sweepAt         int64 // next sweep unix nano
-	now          int64 // unix nano cached once per event batch
+	now             int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
 	// for in-flight RawSyscall(SYS_WRITE) / blocking syscall.Write calls to
 	// finish before closing fds. Pool goroutines are tracked separately by
@@ -428,11 +428,11 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewPresetTable(cfg.Presets, cfg.DefaultPreset)
 	w := &worker{
-		id:           id,
-		listenFd:     listenFd,
-		eng:          eng,
-		handler:      handler,
-		config:       cfg,
+		id:              id,
+		listenFd:        listenFd,
+		eng:             eng,
+		handler:         handler,
+		config:          cfg,
 		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
 		maxConns:        cfg.MaxConnsPerWorker,
 		conns:           make(map[int32]*conn, 1024),
@@ -624,8 +624,15 @@ func (w *worker) handleRecv(ev event) {
 	}
 	// If accumulating a multi-recv body, feed new bytes into the accumulator.
 	if c.bodyNeed > 0 {
-		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:c.readN], c.bodyNeed)
-		c.readN = 0
+		var surplus []byte
+		c.bodyBuf, surplus = accumBody(c.bodyBuf, c.readBuf[:c.readN], c.bodyNeed)
+		if len(surplus) > 0 {
+			// Body completed with trailing pipelined bytes — relocate them to the
+			// front of readBuf so the post-dispatch parse sees the next request.
+			c.readN = copy(c.readBuf, surplus)
+		} else {
+			c.readN = 0
+		}
 		w.drainBodyAccum(c)
 		return
 	}
@@ -654,7 +661,7 @@ func (w *worker) tryParse(c *conn) {
 						// Flush it immediately so the client sends the body.
 						if len(c.sendBuf) > 0 {
 							c.sendN = 0
-							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+							w.directSend(c) // non-blocking; rest of buf stays queued if partial
 						}
 					}
 					if !w.beginBodyAccum(c, need) {
@@ -682,7 +689,7 @@ func (w *worker) tryParse(c *conn) {
 						// Flush it immediately so the client sends the body.
 						if len(c.sendBuf) > 0 {
 							c.sendN = 0
-							w.directSend(c)  // non-blocking; rest of buf stays queued if partial
+							w.directSend(c) // non-blocking; rest of buf stays queued if partial
 						}
 					}
 					if !w.beginBodyAccum(c, need) {
@@ -918,16 +925,18 @@ func (w *worker) writeAndClose(c *conn, resp []byte) {
 	}
 }
 
-// appendGrow appends src to dst, capping total length at maxCap bytes.
-func appendGrow(dst, src []byte, maxCap int) []byte {
-	avail := maxCap - len(dst)
-	if avail <= 0 {
-		return dst
+// accumBody appends as much of src as the body still needs into bodyBuf (capped
+// at need) and returns the grown buffer plus any surplus — the start of the next
+// pipelined request that arrived in the same read. The surplus aliases src's
+// backing array, so callers must relocate it (to the front of c.readBuf) before
+// reusing that array.
+func accumBody(bodyBuf, src []byte, need int) (out, surplus []byte) {
+	take := need - len(bodyBuf)
+	if take > len(src) {
+		take = len(src)
 	}
-	if len(src) > avail {
-		src = src[:avail]
-	}
-	return append(dst, src...)
+	out = append(bodyBuf, src[:take]...)
+	return out, src[take:]
 }
 
 // beginBodyAccum starts body accumulation for a connection.
@@ -957,10 +966,17 @@ func (w *worker) beginBodyAccum(c *conn, need int) bool {
 	}
 	c.bodyBuf = make([]byte, 0, initCap)
 	// Copy any body bytes already present in the read buffer.
+	var surplus []byte
 	if have := c.readN - headerEnd; have > 0 {
-		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[headerEnd:c.readN], need)
+		c.bodyBuf, surplus = accumBody(c.bodyBuf, c.readBuf[headerEnd:c.readN], need)
 	}
-	c.readN = 0
+	if len(surplus) > 0 {
+		// The initial buffer already holds the full body plus the start of the
+		// next pipelined request — preserve that surplus for the post-dispatch parse.
+		c.readN = copy(c.readBuf, surplus)
+	} else {
+		c.readN = 0
+	}
 	w.drainBodyAccum(c)
 	return true
 }
@@ -981,15 +997,48 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 			w.closeConn(c.fd)
 			return true
 		}
-		c.bodyBuf = appendGrow(c.bodyBuf, c.readBuf[:int(rn)], c.bodyNeed)
+		var surplus []byte
+		c.bodyBuf, surplus = accumBody(c.bodyBuf, c.readBuf[:int(rn)], c.bodyNeed)
+		if len(surplus) > 0 {
+			// The read overshot the body — the body is now complete, so this loop
+			// exits. Relocate the trailing pipelined bytes to the front of readBuf
+			// for the post-dispatch parse.
+			c.readN = copy(c.readBuf, surplus)
+		}
 	}
 	if len(c.bodyBuf) >= c.bodyNeed {
+		// Capture any pipelined request that already arrived behind the body
+		// before dispatching: edge-triggered epoll will not re-notify for bytes
+		// buffered in the socket before the body completed, so a request split
+		// across the completion boundary would otherwise stall.
+		w.drainPipelinedAfterBody(c)
 		w.finishBodyAccum(c)
 	} else {
 		// Socket drained but body still incomplete — wait for the next recv.
 		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
 	return false
+}
+
+// drainPipelinedAfterBody appends socket bytes that follow a just-completed body
+// (the start of the next pipelined request) into readBuf after any surplus
+// already relocated to its front. Non-blocking: it stops at EAGAIN or a full
+// buffer, so on the common case where no pipelined request is waiting it costs a
+// single EAGAIN read. A pipelined burst exceeding the read buffer is bounded by
+// the same buffer-size limit as ordinary pipelining.
+func (w *worker) drainPipelinedAfterBody(c *conn) {
+	for c.readN < len(c.readBuf) {
+		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
+		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+			return
+		}
+		if e != 0 || rn <= 0 {
+			// Error or EOF: the accumulated request is still dispatched; teardown
+			// happens on the post-response keep-alive read.
+			return
+		}
+		c.readN += int(rn)
+	}
 }
 
 // finishBodyAccum re-parses the completed request and dispatches it inline.
@@ -1277,6 +1326,19 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 						goto done
 					}
 					headerEnd += 4
+					// Charge the shared per-worker in-flight body budget so a flood
+					// of concurrent takeover uploads cannot allocate unbounded memory
+					// (mirrors the event-loop beginBodyAccum). Refunded on every exit
+					// below — completion, read error — since takeover never reaches
+					// closeConn while accumulating.
+					if w.maxInflightBody > 0 {
+						if atomic.AddInt64(&w.inflightBody, int64(need)) > int64(w.maxInflightBody) {
+							atomic.AddInt64(&w.inflightBody, -int64(need))
+							f.Write(wingStatusClose(503))
+							keepAlive = false
+							goto done
+						}
+					}
 					headerSnapshot := make([]byte, headerEnd)
 					copy(headerSnapshot, buf[:headerEnd])
 					// Seed bodyBuf with already-received body bytes.
@@ -1300,6 +1362,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 							if w.readTimeout > 0 {
 								f.SetReadDeadline(time.Time{})
 							}
+							if w.maxInflightBody > 0 {
+								atomic.AddInt64(&w.inflightBody, -int64(need))
+							}
 							keepAlive = false
 							goto done
 						}
@@ -1307,8 +1372,20 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 					if w.readTimeout > 0 {
 						f.SetReadDeadline(time.Time{})
 					}
+					// Body fully accumulated — release the budget reservation
+					// (mirrors finishBodyAccum). Any later exit on this iteration is
+					// post-accumulation, so it must not refund again.
+					if w.maxInflightBody > 0 {
+						atomic.AddInt64(&w.inflightBody, -int64(need))
+					}
 					// Reconstruct and re-parse with full body present.
 					full := append(headerSnapshot, bodyBuf[:need]...)
+					// Carry bytes beyond the body (start of the next pipelined
+					// request) back into buf so the next iteration parses them
+					// instead of dropping them.
+					if surplus := len(bodyBuf) - need; surplus > 0 {
+						readN = copy(buf, bodyBuf[need:])
+					}
 					bodyBuf = bodyBuf[:0]
 					r2, _, ok2 := parseHTTPRequest(full, w.limits)
 					if !ok2 {

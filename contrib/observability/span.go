@@ -64,7 +64,11 @@ func spanMiddleware(prov *Providers, m *metrics, r resolved) kruda.HandlerFunc {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 		}
-		prop.Inject(ctx, &responseHeaderCarrier{c: c})
+		// Deliberately no response-side traceparent inject: echoing trace context
+		// back in the response is non-standard, and it cannot work in Kruda anyway —
+		// c.Next() has already committed the response, and injecting before c.Next()
+		// would populate respHeaders and disable the string/JSON fast lane on every
+		// traced route.
 		return err
 	}
 }
@@ -81,9 +85,3 @@ type headerCarrier struct{ c *kruda.Ctx }
 func (h *headerCarrier) Get(k string) string { return h.c.Header(k) }
 func (h *headerCarrier) Set(k, v string)     { h.c.SetHeader(k, v) }
 func (h *headerCarrier) Keys() []string      { return []string{"traceparent", "tracestate", "baggage"} }
-
-type responseHeaderCarrier struct{ c *kruda.Ctx }
-
-func (h *responseHeaderCarrier) Get(string) string { return "" }
-func (h *responseHeaderCarrier) Set(k, v string)   { h.c.SetHeader(k, v) }
-func (h *responseHeaderCarrier) Keys() []string    { return nil }

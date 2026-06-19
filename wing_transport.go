@@ -206,6 +206,7 @@ type conn struct {
 	sendN        int
 	keepAlive    bool
 	pending      int    // in-flight handler goroutines
+	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
 	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
 	lastActive   int64  // unix nano — updated on accept + each recv
 	readDeadline int64  // unix nano — set when first byte arrives, cleared on full request
@@ -856,6 +857,7 @@ func (w *worker) tryParse(c *conn) {
 			// Detach fd from epoll so the goroutine owns it exclusively.
 			c.keepAlive = req.keepAlive
 			c.pending++
+			c.takenOver = true
 			w.eng.Detach(c.fd)
 			var leftover []byte
 			if c.readN > 0 {
@@ -1524,8 +1526,15 @@ func (w *worker) cleanup() {
 	go func() {
 		for {
 			select {
-			case <-w.doneCh:
-				// discard — ioLoop has stopped, nothing left to process
+			case msg := <-w.doneCh:
+				// A Takeover completion carries the fd's *os.File. Close it here
+				// to release the fd now; discarding it would leak the File to a
+				// finalizer that later closes a recycled fd. Non-Takeover
+				// completions carry no file and are simply dropped (ioLoop has
+				// stopped, nothing left to process).
+				if msg.file != nil {
+					msg.file.Close()
+				}
 			case <-drainStop:
 				return
 			}
@@ -1534,12 +1543,31 @@ func (w *worker) cleanup() {
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()
 	close(drainStop)
+	// Close any Takeover Files still buffered in doneCh that the concurrent
+	// drain did not consume before it stopped — same recycled-fd hazard.
+drainBuffered:
+	for {
+		select {
+		case msg := <-w.doneCh:
+			if msg.file != nil {
+				msg.file.Close()
+			}
+		default:
+			break drainBuffered
+		}
+	}
 	for fd, c := range w.conns {
 		if c.cancel != nil {
 			c.cancel()
 		}
 		if c.sendFileFd > 0 {
 			syscall.Close(int(c.sendFileFd))
+		}
+		if c.takenOver {
+			// fd is owned by the Takeover *os.File and was already closed via the
+			// drain above; raw-closing it here would double-close a possibly-
+			// recycled fd.
+			continue
 		}
 		closeFd(int(fd))
 	}

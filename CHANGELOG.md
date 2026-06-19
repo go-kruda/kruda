@@ -19,6 +19,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the whole request read, and `TrustProxy` reads `X-Forwarded-For`/`X-Real-IP`
   with the same boolean semantics as net/http. The no-body hot path is unchanged
   (parser fast path frozen, 0-alloc guard; tiger A/B shows no regression).
+- **Wing no longer double-closes a Takeover connection's fd on shutdown.**
+  Graceful shutdown discarded the `*os.File` that owns a Takeover connection's
+  fd without closing it while also raw-closing the same fd; the leaked File's
+  finalizer then closed the fd after the kernel had recycled the number for a
+  new socket, surfacing as intermittent `bad file descriptor` errors on a
+  subsequent `net.Listen`/`net.Dial` when Takeover-preset servers were restarted
+  under load. Shutdown now closes each Takeover fd exactly once.
 
 ### Added
 

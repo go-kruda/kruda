@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/contrib/observability"
 	krudajson "github.com/go-kruda/kruda/json"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,6 +122,20 @@ func main() {
 	startPprof()
 
 	app := kruda.New(kruda.Wing())
+
+	// Opt-in observability for the D3 enabled-path A/B. Enable MUST run before any
+	// route so the span middleware bakes into every route chain. Run the baseline
+	// arm with BENCH_ENABLE_OBS unset; the enabled arm with BENCH_ENABLE_OBS=1
+	// (typically OTEL_TRACES_EXPORTER=none so no collector is required — the span
+	// is still created and traceparent still injected, so the fast-lane cost is
+	// measured).
+	if os.Getenv("BENCH_ENABLE_OBS") == "1" {
+		if _, err := observability.Enable(app, observability.Config{ServiceName: "bench-kruda"}); err != nil {
+			fmt.Fprintf(os.Stderr, "observability.Enable: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("[kruda] observability: ENABLED")
+	}
 
 	plaintext := func(c *kruda.Ctx) error {
 		return c.Text("Hello, World!")

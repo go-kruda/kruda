@@ -49,7 +49,8 @@ run_arm() {
 
 echo "arm,route,round,rps,p99" > "$OUT/summary.csv"
 run_arm off
-run_arm on BENCH_ENABLE_OBS=1 OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none
+run_arm metrics BENCH_ENABLE_OBS=1 BENCH_OBS_TRACES=0 OTEL_METRICS_EXPORTER=none
+run_arm full BENCH_ENABLE_OBS=1 OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none
 echo "=== summary.csv ==="
 cat "$OUT/summary.csv"
 echo "OUT=$OUT"

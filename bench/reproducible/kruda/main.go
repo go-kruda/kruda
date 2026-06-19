@@ -130,11 +130,16 @@ func main() {
 	// is still created and traceparent still injected, so the fast-lane cost is
 	// measured).
 	if os.Getenv("BENCH_ENABLE_OBS") == "1" {
-		if _, err := observability.Enable(app, observability.Config{ServiceName: "bench-kruda"}); err != nil {
+		traces := os.Getenv("BENCH_OBS_TRACES") != "0" // =0 isolates the RED-metrics cost
+		obsCfg := observability.Config{ServiceName: "bench-kruda"}
+		if !traces {
+			obsCfg.TracesEnabled = &traces
+		}
+		if _, err := observability.Enable(app, obsCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "observability.Enable: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("[kruda] observability: ENABLED")
+		fmt.Printf("[kruda] observability: ENABLED (traces=%v)\n", traces)
 	}
 
 	plaintext := func(c *kruda.Ctx) error {

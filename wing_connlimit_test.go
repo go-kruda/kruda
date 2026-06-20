@@ -248,19 +248,6 @@ func TestHandleRecv_PanicRecoveryClosesFd(t *testing.T) {
 	t.Skip("v1.5: panic recovery in handlerWorker — see integration tests")
 }
 
-func TestWorkerMaxConnsFromConfig(t *testing.T) {
-	cfg := WingConfig{Workers: 1, MaxConnsPerWorker: 5000}
-	cfg.defaults()
-	if cfg.MaxConnsPerWorker != 5000 {
-		t.Errorf("MaxConnsPerWorker = %d, want 5000", cfg.MaxConnsPerWorker)
-	}
-	cfg2 := WingConfig{}
-	cfg2.defaults()
-	if cfg2.MaxConnsPerWorker != 0 {
-		t.Errorf("default MaxConnsPerWorker = %d, want 0 (unlimited)", cfg2.MaxConnsPerWorker)
-	}
-}
-
 func TestTransportConnectionLimit(t *testing.T) {
 	skipIfNoEngine(t)
 
@@ -271,7 +258,7 @@ func TestTransportConnectionLimit(t *testing.T) {
 		Workers:     1,
 		RingSize:    64,
 		ReadBufSize: 4096,
-		MaxConns:    2, // global total cap (MaxConnsPerWorker is dead since v1.3.x)
+		MaxConns:    2, // global total cap
 	})
 
 	var wg sync.WaitGroup

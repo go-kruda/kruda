@@ -21,7 +21,6 @@ type WingConfig struct {
 	ReadBufSize          int
 	MaxHeaderCount       int
 	MaxHeaderSize        int
-	MaxConnsPerWorker    int
 	HandlerPoolSize      int               // goroutine pool size per worker (Pool dispatch routes)
 	Presets              map[string]Preset // per-route preset config ("METHOD /path" → Preset)
 	DefaultPreset        Preset            // fallback preset for routes not in Presets

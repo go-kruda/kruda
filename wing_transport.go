@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"sync"
@@ -200,6 +201,7 @@ type parserLimits struct {
 
 type conn struct {
 	fd           int32
+	peerIP       netip.Addr // peer IP captured at accept (zero value if unknown)
 	readBuf      []byte
 	readN        int
 	sendBuf      []byte
@@ -219,6 +221,11 @@ type conn struct {
 	headerSnapshot []byte // copy of header block for re-parse after body complete
 	bodyBuf        []byte // incrementally grown body buffer
 }
+
+// testAcceptPeerHook, when non-nil, receives the accept-time peer IP for each
+// accepted connection. Tests set it to pin assertions to the accept path rather
+// than the lazy getpeername used by RemoteAddr/IP. Always nil in production.
+var testAcceptPeerHook func(ip netip.Addr, ok bool)
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -561,9 +568,13 @@ func (w *worker) handleAccept(ev event) {
 	}
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
+	if testAcceptPeerHook != nil {
+		testAcceptPeerHook(ev.PeerIP, ev.HasPeer)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
 		fd:      fd,
+		peerIP:  ev.PeerIP,
 		readBuf: make([]byte, w.config.ReadBufSize),
 		ctx:     ctx,
 		cancel:  cancel,

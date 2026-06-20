@@ -3,6 +3,8 @@
 package kruda
 
 import (
+	"net/netip"
+	"strconv"
 	"syscall"
 	"unsafe"
 )
@@ -145,13 +147,24 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 		}
 
 		if int(kev.Ident) == e.listenFd && kev.Filter == syscall.EVFILT_READ {
-			nfd, _, err := syscall.Accept(e.listenFd)
-			if err != nil {
+			// Raw accept(2) with a stack-allocated RawSockaddrAny so the peer
+			// address can be captured without syscall.Accept's per-call boxed
+			// Sockaddr, which would heap-allocate on the accept path. Darwin's
+			// accept() has no flags argument, so non-block/cloexec are set after.
+			var rsa syscall.RawSockaddrAny
+			salen := socklen(unsafe.Sizeof(rsa))
+			r1, _, errno := syscall.Syscall(syscall.SYS_ACCEPT,
+				uintptr(e.listenFd),
+				uintptr(unsafe.Pointer(&rsa)),
+				uintptr(unsafe.Pointer(&salen)))
+			if errno != 0 {
 				events[count] = event{Op: opAccept, Fd: 0, Res: -1}
 			} else {
+				nfd := int(r1)
+				ip, ok := parseRawSockaddr(&rsa)
 				syscall.SetNonblock(nfd, true)
 				syscall.CloseOnExec(nfd)
-				events[count] = event{Op: opAccept, Fd: 0, Res: int32(nfd)}
+				events[count] = event{Op: opAccept, Fd: 0, Res: int32(nfd), PeerIP: ip, HasPeer: ok}
 			}
 			count++
 			continue
@@ -228,4 +241,27 @@ func (e *kqueueEngine) Close() {
 	if e.kqfd > 0 {
 		syscall.Close(e.kqfd)
 	}
+}
+
+// socklen mirrors the kernel socklen_t passed to accept(2). syscall's own
+// _Socklen is unexported, so we declare a local alias.
+type socklen = uint32
+
+// parseRawSockaddr extracts the peer IP from a kernel sockaddr without heap
+// allocation (no interface boxing, unlike syscall.Accept's Sockaddr return).
+// The IPv4 path is zero-alloc; the rare IPv6+scope path may allocate in WithZone.
+func parseRawSockaddr(rsa *syscall.RawSockaddrAny) (netip.Addr, bool) {
+	switch rsa.Addr.Family {
+	case syscall.AF_INET:
+		p := (*syscall.RawSockaddrInet4)(unsafe.Pointer(rsa))
+		return netip.AddrFrom4(p.Addr), true
+	case syscall.AF_INET6:
+		p := (*syscall.RawSockaddrInet6)(unsafe.Pointer(rsa))
+		a := netip.AddrFrom16(p.Addr)
+		if p.Scope_id != 0 {
+			a = a.WithZone(strconv.FormatUint(uint64(p.Scope_id), 10))
+		}
+		return a, true
+	}
+	return netip.Addr{}, false
 }

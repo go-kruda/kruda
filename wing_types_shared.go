@@ -31,6 +31,10 @@ type WingConfig struct {
 	HeaderLimit              int           // max header bytes (0 = disabled). Maps to a 431.
 	TrustProxy               bool          // honor X-Forwarded-For / X-Real-IP
 	MaxInflightBodyBytes     int           // per-worker cap on concurrently-accumulating body bytes (0 = derived)
+	MaxConns                 int           // resolved absolute total cap (0 = unlimited)
+	MaxConnsPerIP            int           // concurrent connections per source IP (0 = off)
+	AcceptRatePerSec         int           // new-connection rate limit per second (0 = off)
+	AcceptRateBurst          int           // burst allowance for AcceptRatePerSec
 }
 
 func (c *WingConfig) defaults() {

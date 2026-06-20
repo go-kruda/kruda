@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"syscall"
 
 	"github.com/go-kruda/kruda/transport"
 )
@@ -36,16 +37,35 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	if bodyLimit > maxContentLength {
 		bodyLimit = maxContentLength // Wing's parser cannot accept bodies larger than this
 	}
+	maxConns := cfg.MaxConns
+	if maxConns < 0 { // unset → derive from fd ulimit
+		var rl syscall.Rlimit
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rl); err == nil {
+			maxConns = deriveMaxConns(rl.Cur, workers)
+		} else {
+			maxConns = 0 // can't read ulimit → unlimited (no surprise cap)
+		}
+	}
+	if maxConns > 0 && maxConns < acceptCapLowFloor {
+		logger.Warn("kruda/wing: derived connection cap is low; raise the fd ulimit or set WithMaxConns", "cap", maxConns)
+	}
+	if maxConns > 0 {
+		logger.Info("kruda/wing: connection cap", "max", maxConns)
+	}
 	wcfg := WingConfig{
-		Workers:         workers,
-		HandlerPoolSize: poolSize,
-		ReadBufSize:     readBufSize,
-		ReadTimeout:     cfg.ReadTimeout,
-		WriteTimeout:    cfg.WriteTimeout,
-		IdleTimeout:     cfg.IdleTimeout,
-		BodyLimit:       bodyLimit,
-		HeaderLimit:     cfg.HeaderLimit,
-		TrustProxy:      cfg.TrustProxy,
+		Workers:          workers,
+		HandlerPoolSize:  poolSize,
+		ReadBufSize:      readBufSize,
+		ReadTimeout:      cfg.ReadTimeout,
+		WriteTimeout:     cfg.WriteTimeout,
+		IdleTimeout:      cfg.IdleTimeout,
+		BodyLimit:        bodyLimit,
+		HeaderLimit:      cfg.HeaderLimit,
+		TrustProxy:       cfg.TrustProxy,
+		MaxConns:         maxConns,
+		MaxConnsPerIP:    cfg.MaxConnsPerIP,
+		AcceptRatePerSec: cfg.AcceptRatePerSec,
+		AcceptRateBurst:  cfg.AcceptRateBurst,
 	}
 	return NewWingTransport(wcfg)
 }

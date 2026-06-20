@@ -241,6 +241,41 @@ func TestWingAccept_PerIPReclaimedWhenGlobalCapOff(t *testing.T) {
 	}
 }
 
+// TestWingAccept_RateLimit verifies that the token-bucket accept-rate limit
+// drops connections once the burst is exhausted. One worker is forced via
+// KRUDA_WORKERS=1 so the rate is not divided across workers, making the refusal
+// deterministic on both linux (io_uring) and darwin (kqueue).
+func TestWingAccept_RateLimit(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+
+	app := New(Wing(), WithMaxAcceptRate(5, 5)) // 5/s burst 5
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skip("wing only")
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+	defer shutdown()
+
+	refused := 0
+	for i := 0; i < 20; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			refused++
+			continue
+		}
+		_ = c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+		_, _ = c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"))
+		if n, _ := c.Read(make([]byte, 64)); n == 0 {
+			refused++
+		}
+		c.Close()
+	}
+	if refused == 0 {
+		t.Fatal("expected some accepts to be rate-limited")
+	}
+}
+
 // readOnce reads a single response chunk with a short deadline, failing the
 // test if nothing arrives. Used to confirm a held keep-alive conn was served.
 func readOnce(t *testing.T, c net.Conn) {

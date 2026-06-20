@@ -79,10 +79,11 @@ type Transport struct {
 	// to a Linux A/B before adding padding.
 	shutdown  atomic.Bool
 	connCnt   int64 // accepted connections currently admitted (atomic)
-	rejectTtl int64 // connections refused by the total cap (atomic)
-	rejectIP  int64 // connections refused by the per-IP cap (atomic)
-	wg        sync.WaitGroup
-	ready     chan struct{}
+	rejectTtl  int64 // connections refused by the total cap (atomic)
+	rejectIP   int64 // connections refused by the per-IP cap (atomic)
+	rejectRate int64 // connections refused by the accept-rate bucket (atomic)
+	wg         sync.WaitGroup
+	ready      chan struct{}
 }
 
 // connCount returns the number of currently-admitted connections across all
@@ -96,6 +97,10 @@ func (t *Transport) RejectStats() int64 { return atomic.LoadInt64(&t.rejectTtl) 
 // RejectIPStats returns the number of connections refused by the per-IP cap
 // since startup (sum across all workers).
 func (t *Transport) RejectIPStats() int64 { return atomic.LoadInt64(&t.rejectIP) }
+
+// RejectRateStats returns the number of connections refused by the accept-rate
+// token bucket since startup (sum across all workers).
+func (t *Transport) RejectRateStats() int64 { return atomic.LoadInt64(&t.rejectRate) }
 
 // NewWingTransport builds a Wing transport from cfg, applying defaults to any
 // zero fields. The transport does not bind a listener until ListenAndServe is
@@ -118,7 +123,7 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 			t.cleanupWorkers(i)
 			return fmt.Errorf("wing: listen: %w", err)
 		}
-		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl, &t.rejectIP)
+		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl, &t.rejectIP, &t.rejectRate)
 		if err != nil {
 			closeFd(fd)
 			t.cleanupWorkers(i)
@@ -270,11 +275,12 @@ type worker struct {
 	config   WingConfig
 	limits   parserLimits
 	maxConns int
-	// connCount/rejectTotal/rejectIP point at the shared Transport atomics so
-	// the total cap is enforced server-wide (not per-worker). Set in newWorker.
+	// connCount/rejectTotal/rejectIP/rejectRate point at the shared Transport
+	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
 	connCount   *int64
 	rejectTotal *int64
 	rejectIP    *int64 // per-IP reject counter; nil when per-IP cap is disabled
+	rejectRate  *int64 // accept-rate reject counter; nil when rate limiting is disabled
 	// Per-worker per-IP connection tracking. Allocated only when maxConnsPerIP>0.
 	// Per-worker means no locks: this map is touched only on accept and close,
 	// both on the same event-loop goroutine. Under SO_REUSEPORT the same source
@@ -297,7 +303,8 @@ type worker struct {
 	lastPath1       string
 	shutdown        *atomic.Bool
 	hasTimeout      bool
-	readTimeout     int64 // nanoseconds (0 = disabled)
+	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
+	readTimeout     int64        // nanoseconds (0 = disabled)
 	writeTimeout    int64
 	idleTimeout     int64
 	maxInflightBody int   // per-worker budget (0 = unlimited)
@@ -446,7 +453,7 @@ func (w *worker) lookupPreset(method, path string) Preset {
 	return f
 }
 
-func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP *int64) (*worker, error) {
+func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP, rejectRate *int64) (*worker, error) {
 	eng := newEngine()
 	wakeR, wakeW, err := createWakeFds()
 	if err != nil {
@@ -478,6 +485,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		connCount:       connCount,
 		rejectTotal:     rejectTotal,
 		rejectIP:        rejectIP,
+		rejectRate:      rejectRate,
 		maxConnsPerIP:   cfg.MaxConnsPerIP,
 		conns:           make(map[int32]*conn, 1024),
 		evfd:            wakeR,
@@ -492,6 +500,24 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 	if cfg.MaxConnsPerIP > 0 {
 		w.connsPerIP = make(map[netip.Addr]int, 64)
 	}
+	if cfg.AcceptRatePerSec > 0 {
+		// Divide the rate and burst across workers so the server-wide rate stays
+		// at the configured value under SO_REUSEPORT load distribution.
+		// min(1) prevents the per-worker rate from rounding to zero.
+		workers := cfg.Workers
+		if workers < 1 {
+			workers = 1
+		}
+		perWorkerRate := cfg.AcceptRatePerSec / workers
+		if perWorkerRate < 1 {
+			perWorkerRate = 1
+		}
+		perWorkerBurst := cfg.AcceptRateBurst / workers
+		if perWorkerBurst < 1 {
+			perWorkerBurst = 1
+		}
+		w.bucket = newTokenBucket(perWorkerRate, perWorkerBurst)
+	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
 	}
@@ -501,6 +527,17 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 func (w *worker) run(shutdown *atomic.Bool) {
 	w.shutdown = shutdown
 	w.ioLoop(shutdown)
+}
+
+// clockNow returns the cached w.now if it is non-zero (set by the ioLoop when
+// hasClock is true), otherwise falls back to a live time.Now(). The fallback
+// path is defensive — it should only trigger for the first event in a batch
+// when neither timeouts nor rate-limiting are configured.
+func (w *worker) clockNow() int64 {
+	if w.now != 0 {
+		return w.now
+	}
+	return time.Now().UnixNano()
 }
 
 func (w *worker) ioLoop(shutdown *atomic.Bool) {
@@ -513,6 +550,10 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	hasAsync := w.config.needsAsync()
 	hasTimeout := w.readTimeout > 0 || w.writeTimeout > 0 || w.idleTimeout > 0
 	w.hasTimeout = hasTimeout
+	// hasClock is true when any subsystem needs a fresh w.now per event batch.
+	// The rate bucket needs a real clock even when no connection timeouts are set.
+	// Zero cost when both are off: w.now stays 0 and clockNow() falls back lazily.
+	hasClock := hasTimeout || w.bucket != nil
 	if hasTimeout {
 		w.sweepAt = time.Now().UnixNano() + int64(time.Second)
 	}
@@ -537,7 +578,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 			}
 			continue
 		}
-		if hasTimeout {
+		if hasClock {
 			w.now = time.Now().UnixNano()
 		}
 		for i := 0; i < n; i++ {
@@ -606,9 +647,15 @@ func (w *worker) handleAccept(ev event) {
 		w.eng.SubmitAccept(w.listenFd)
 	}
 	fd := ev.Res
-	// Admission order at accept: (1) accept-rate — Task 5, (2) per-IP precheck
-	// (read-only, no mutation), (3) global total reserve via CAS against the
-	// shared Transport.connCnt so the cap holds server-wide, not per-worker.
+	// Admission order at accept: (1) accept-rate — cheapest, no map lookup;
+	// (2) per-IP precheck (read-only, no mutation);
+	// (3) global total reserve via CAS against the shared Transport.connCnt.
+	if w.bucket != nil && !w.bucket.allow(w.clockNow()) {
+		atomic.AddInt64(w.rejectRate, 1)
+		rejectWarnOnce(w, rejectKindRate, 0)
+		closeFd(int(fd))
+		return
+	}
 	if w.maxConnsPerIP > 0 && ev.HasPeer && w.connsPerIP[ev.PeerIP] >= w.maxConnsPerIP {
 		atomic.AddInt64(w.rejectIP, 1)
 		rejectWarnOnce(w, rejectKindIP, w.maxConnsPerIP)

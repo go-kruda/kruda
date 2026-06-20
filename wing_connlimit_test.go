@@ -42,7 +42,7 @@ func newTestWorker(maxConns int) (*worker, *mockEngine) {
 	// Back the shared total-cap atomics with per-worker storage so the CAS
 	// reserve in handleAccept has somewhere to count (production wires these to
 	// the Transport's connCnt/rejectTtl).
-	var connCount, rejectTotal, rejectIP int64
+	var connCount, rejectTotal, rejectIP, rejectRate int64
 	w := &worker{
 		id:          0,
 		listenFd:    100,
@@ -52,6 +52,7 @@ func newTestWorker(maxConns int) (*worker, *mockEngine) {
 		connCount:   &connCount,
 		rejectTotal: &rejectTotal,
 		rejectIP:    &rejectIP,
+		rejectRate:  &rejectRate,
 		conns:       make(map[int32]*conn, 16),
 	}
 	return w, eng

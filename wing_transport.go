@@ -227,7 +227,7 @@ type conn struct {
 	sendBuf      []byte
 	sendN        int
 	keepAlive    bool
-	admitted     bool   // counted in Transport.connCnt; cleared once by removeConnBookkeeping
+	admitted     bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
 	pending      int    // in-flight handler goroutines
 	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
 	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
@@ -638,7 +638,7 @@ func (w *worker) handleAccept(ev event) {
 	c := &conn{
 		fd:       fd,
 		peerIP:   ev.PeerIP,
-		admitted: w.maxConns > 0, // counted in connCnt only when the cap reserved a slot
+		admitted: true, // tracked for bookkeeping; per-counter gates inside removeConnBookkeeping decide what to decrement
 		readBuf:  make([]byte, w.config.ReadBufSize),
 		ctx:      ctx,
 		cancel:   cancel,
@@ -1543,19 +1543,27 @@ func (w *worker) handleSend(ev event) {
 }
 
 // removeConnBookkeeping is the single chokepoint for releasing a connection's
-// accounting: it decrements the global connCount (idempotently, guarded by
-// c.admitted — mirrors the body-budget zero-before-delete idiom), releases the
-// in-flight body reservation, cancels the conn context, and closes any sendfile
-// source fd. It does NOT close the connection fd or delete the conns entry —
-// each caller owns its own fd-close policy (closeConn → engine SubmitClose;
-// takeover-done → *os.File; opClose → engine already closed).
+// accounting: it decrements the global connCount and/or per-IP count
+// (idempotently, guarded by c.admitted — mirrors the body-budget
+// zero-before-delete idiom), releases the in-flight body reservation, cancels
+// the conn context, and closes any sendfile source fd. It does NOT close the
+// connection fd or delete the conns entry — each caller owns its own fd-close
+// policy (closeConn → engine SubmitClose; takeover-done → *os.File; opClose →
+// engine already closed).
+//
+// The two decrements are independently gated: global connCount only when the
+// global cap is active (maxConns > 0, matching the CAS reserve); per-IP only
+// when per-IP is active. This lets WithMaxConns(0)+WithMaxConnsPerIP(n) work
+// correctly — admitted is always true so per-IP reclamation always fires.
 func (w *worker) removeConnBookkeeping(fd int32) {
 	c, ok := w.conns[fd]
 	if !ok {
 		return
 	}
 	if c.admitted {
-		atomic.AddInt64(w.connCount, -1)
+		if w.maxConns > 0 {
+			atomic.AddInt64(w.connCount, -1)
+		}
 		if w.maxConnsPerIP > 0 && c.peerIP.IsValid() {
 			if n := w.connsPerIP[c.peerIP] - 1; n <= 0 {
 				delete(w.connsPerIP, c.peerIP) // delete-at-0 keeps map bounded

@@ -177,6 +177,70 @@ func TestWingAccept_TotalCapAndNoLeak(t *testing.T) {
 	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
 }
 
+// TestWingAccept_PerIPReclaimedWhenGlobalCapOff verifies that per-IP slot
+// reclamation works correctly when WithMaxConns(0) (global cap disabled) is
+// combined with WithMaxConnsPerIP(n).
+//
+// Before the fix, conn.admitted was set to (w.maxConns > 0), so with maxConns==0
+// the flag was false and removeConnBookkeeping never decremented connsPerIP.
+// The per-IP count stayed at the cap after connections closed, permanently
+// blocking new connections from that IP.
+func TestWingAccept_PerIPReclaimedWhenGlobalCapOff(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+
+	// MaxConns(0) = global cap disabled; MaxConnsPerIP(2) = per-IP cap active.
+	app := New(Wing(), WithMaxConns(0), WithMaxConnsPerIP(2))
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skip("wing only")
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+	defer shutdown()
+
+	// Wait for any readiness-probe connection to drain.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+
+	// Open 2 connections (at per-IP cap), each do a round-trip, then close.
+	for i := 0; i < 2; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("open conn %d: %v", i, err)
+		}
+		if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")); err != nil {
+			c.Close()
+			t.Fatalf("write conn %d: %v", i, err)
+		}
+		readOnce(t, c)
+		c.Close()
+	}
+
+	// Wait for the server-side per-IP count to drain (close is async in Wing).
+	// We poll by successfully opening+closing connections; once the per-IP map
+	// is decremented a new connection from the same loopback IP must succeed.
+	// Try up to 3 sequential open/request/close cycles; each must get a response.
+	for round := 1; round <= 3; round++ {
+		// Brief grace so Wing's epoll-driven close path processes the previous fd.
+		time.Sleep(30 * time.Millisecond)
+
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("round %d: dial failed: %v", round, err)
+		}
+		_ = c.SetDeadline(time.Now().Add(2 * time.Second))
+		if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")); err != nil {
+			c.Close()
+			t.Fatalf("round %d: write failed: %v", round, err)
+		}
+		buf := make([]byte, 256)
+		n, _ := c.Read(buf)
+		c.Close()
+		if n == 0 {
+			t.Fatalf("round %d: per-IP slot not reclaimed after closing 2 conns (per-IP count leaked)", round)
+		}
+	}
+}
+
 // readOnce reads a single response chunk with a short deadline, failing the
 // test if nothing arrives. Used to confirm a held keep-alive conn was served.
 func readOnce(t *testing.T, c net.Conn) {

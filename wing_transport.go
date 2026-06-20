@@ -80,6 +80,7 @@ type Transport struct {
 	shutdown  atomic.Bool
 	connCnt   int64 // accepted connections currently admitted (atomic)
 	rejectTtl int64 // connections refused by the total cap (atomic)
+	rejectIP  int64 // connections refused by the per-IP cap (atomic)
 	wg        sync.WaitGroup
 	ready     chan struct{}
 }
@@ -91,6 +92,10 @@ func (t *Transport) connCount() int64 { return atomic.LoadInt64(&t.connCnt) }
 // RejectStats returns the number of connections refused by the global total
 // connection cap since startup.
 func (t *Transport) RejectStats() int64 { return atomic.LoadInt64(&t.rejectTtl) }
+
+// RejectIPStats returns the number of connections refused by the per-IP cap
+// since startup (sum across all workers).
+func (t *Transport) RejectIPStats() int64 { return atomic.LoadInt64(&t.rejectIP) }
 
 // NewWingTransport builds a Wing transport from cfg, applying defaults to any
 // zero fields. The transport does not bind a listener until ListenAndServe is
@@ -113,7 +118,7 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 			t.cleanupWorkers(i)
 			return fmt.Errorf("wing: listen: %w", err)
 		}
-		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl)
+		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl, &t.rejectIP)
 		if err != nil {
 			closeFd(fd)
 			t.cleanupWorkers(i)
@@ -265,10 +270,17 @@ type worker struct {
 	config   WingConfig
 	limits   parserLimits
 	maxConns int
-	// connCount/rejectTotal point at the shared Transport atomics so the total
-	// cap is enforced server-wide (not per-worker). Set in newWorker.
+	// connCount/rejectTotal/rejectIP point at the shared Transport atomics so
+	// the total cap is enforced server-wide (not per-worker). Set in newWorker.
 	connCount   *int64
 	rejectTotal *int64
+	rejectIP    *int64 // per-IP reject counter; nil when per-IP cap is disabled
+	// Per-worker per-IP connection tracking. Allocated only when maxConnsPerIP>0.
+	// Per-worker means no locks: this map is touched only on accept and close,
+	// both on the same event-loop goroutine. Under SO_REUSEPORT the same source
+	// IP may spread across workers, so the cap is approximate across workers.
+	connsPerIP    map[netip.Addr]int
+	maxConnsPerIP int
 	conns       map[int32]*conn
 	events      [maxEventsPerWait]event
 	evfd        int // eventfd for wake signaling
@@ -434,7 +446,7 @@ func (w *worker) lookupPreset(method, path string) Preset {
 	return f
 }
 
-func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal *int64) (*worker, error) {
+func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP *int64) (*worker, error) {
 	eng := newEngine()
 	wakeR, wakeW, err := createWakeFds()
 	if err != nil {
@@ -465,6 +477,8 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		maxConns:        cfg.MaxConns, // global total cap; enforced against shared connCount via CAS
 		connCount:       connCount,
 		rejectTotal:     rejectTotal,
+		rejectIP:        rejectIP,
+		maxConnsPerIP:   cfg.MaxConnsPerIP,
 		conns:           make(map[int32]*conn, 1024),
 		evfd:            wakeR,
 		doneCh:          doneCh,
@@ -474,6 +488,9 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		idleTimeout:     int64(cfg.IdleTimeout),
 		maxInflightBody: cfg.MaxInflightBodyBytes,
 		trustProxy:      cfg.TrustProxy,
+	}
+	if cfg.MaxConnsPerIP > 0 {
+		w.connsPerIP = make(map[netip.Addr]int, 64)
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -589,9 +606,15 @@ func (w *worker) handleAccept(ev event) {
 		w.eng.SubmitAccept(w.listenFd)
 	}
 	fd := ev.Res
-	// Admission order at accept: (1) accept-rate — Task 5, (2) per-IP precheck —
-	// Task 4, both added above this. (3) global total reserve via CAS against the
+	// Admission order at accept: (1) accept-rate — Task 5, (2) per-IP precheck
+	// (read-only, no mutation), (3) global total reserve via CAS against the
 	// shared Transport.connCnt so the cap holds server-wide, not per-worker.
+	if w.maxConnsPerIP > 0 && ev.HasPeer && w.connsPerIP[ev.PeerIP] >= w.maxConnsPerIP {
+		atomic.AddInt64(w.rejectIP, 1)
+		rejectWarnOnce(w, rejectKindIP, w.maxConnsPerIP)
+		closeFd(int(fd))
+		return
+	}
 	if max := w.maxConns; max > 0 {
 		for {
 			cur := atomic.LoadInt64(w.connCount)
@@ -631,6 +654,9 @@ func (w *worker) handleAccept(ev event) {
 		}
 	}
 	w.conns[fd] = c
+	if w.maxConnsPerIP > 0 && ev.HasPeer {
+		w.connsPerIP[c.peerIP]++
+	}
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
 	// Try direct read — data often arrives with SYN-ACK.
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
@@ -1530,7 +1556,13 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	}
 	if c.admitted {
 		atomic.AddInt64(w.connCount, -1)
-		// Per-IP decrement is added by Task 4 here.
+		if w.maxConnsPerIP > 0 && c.peerIP.IsValid() {
+			if n := w.connsPerIP[c.peerIP] - 1; n <= 0 {
+				delete(w.connsPerIP, c.peerIP) // delete-at-0 keeps map bounded
+			} else {
+				w.connsPerIP[c.peerIP] = n
+			}
+		}
 		c.admitted = false
 	}
 	// Release any in-flight body reservation so a connection closed mid-

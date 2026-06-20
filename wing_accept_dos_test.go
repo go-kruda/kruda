@@ -9,6 +9,56 @@ import (
 	"time"
 )
 
+// TestWingAccept_PerIPCap verifies that the per-IP connection limit closes the
+// fd immediately (no HTTP response) once a source IP reaches its cap.
+//
+// The test forces 1 worker via KRUDA_WORKERS=1 so SO_REUSEPORT does not scatter
+// loopback connections across workers. With a single worker every loopback
+// connection lands in the same per-worker map, making the cap deterministic.
+func TestWingAccept_PerIPCap(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+
+	app := New(Wing(), WithMaxConnsPerIP(2))
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skip("wing only")
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+	defer shutdown()
+
+	// Wait for any readiness-probe connection to drain so its slot does not
+	// consume from the per-IP budget.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+
+	var held []net.Conn
+	for i := 0; i < 2; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("dial %d: %v", i, err)
+		}
+		if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+		readOnce(t, c)
+		held = append(held, c)
+	}
+	// 3rd connection from the same loopback IP must be refused (fd closed, no response).
+	c3, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial 3: %v", err)
+	}
+	_ = c3.SetReadDeadline(time.Now().Add(time.Second))
+	_, _ = c3.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+	if n, _ := c3.Read(make([]byte, 64)); n > 0 {
+		t.Fatal("3rd conn from same IP over per-IP cap got response, want refusal")
+	}
+	c3.Close()
+	for _, c := range held {
+		c.Close()
+	}
+}
+
 // TestWingAccept_CapturesPeerIP drives a real connection through the Wing
 // transport and asserts the peer IP captured at accept time (conn.peerIP),
 // not the lazy getpeername that c.IP() would otherwise use. The accept-time

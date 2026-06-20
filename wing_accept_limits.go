@@ -12,6 +12,7 @@ type rejectKind int
 
 const (
 	rejectKindTotal rejectKind = iota // global total connection cap
+	rejectKindIP                      // per-source-IP connection cap
 )
 
 // rejectWarnOnce is a no-op stub until Task 6 wires the warn-once reject logger.

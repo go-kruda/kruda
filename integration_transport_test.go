@@ -258,7 +258,10 @@ func startSmokeApp(t *testing.T, app *App, readyPath string) (string, func()) {
 
 	// Wait until the app can serve an actual HTTP request. A bare TCP dial can
 	// succeed before an async transport has registered its read loop.
-	client := &http.Client{Timeout: 250 * time.Millisecond}
+	// DisableKeepAlives so the probe never holds a connection slot — otherwise a
+	// lingering idle keep-alive conn counts against a tight WithMaxConns cap.
+	rt := &http.Transport{DisableKeepAlives: true}
+	client := &http.Client{Timeout: 250 * time.Millisecond, Transport: rt}
 	readyURL := "http://" + addr + readyPath
 	var lastErr error
 	deadline := time.Now().Add(5 * time.Second)
@@ -268,6 +271,7 @@ func startSmokeApp(t *testing.T, app *App, readyPath string) (string, func()) {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				rt.CloseIdleConnections()
 				return addr, shutdown
 			}
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)

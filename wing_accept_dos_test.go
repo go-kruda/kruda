@@ -77,3 +77,85 @@ func TestWingAccept_HandleAcceptWiresPeerIP(t *testing.T) {
 		t.Fatalf("conn.peerIP = %v, want %v", c.peerIP, want)
 	}
 }
+
+// TestWingAccept_TotalCapAndNoLeak drives real sockets through the Wing accept
+// path: the global total cap (WithMaxConns) must refuse the connection past the
+// cap (RST/immediate close, no HTTP response), and the shared connCount must
+// return to 0 once every admitted connection closes.
+func TestWingAccept_TotalCapAndNoLeak(t *testing.T) {
+	app := New(Wing(), WithMaxConns(3))
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skipf("wing not selected: %q", app.transportType)
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+	defer shutdown()
+
+	// The readiness probe's (now keep-alive-disabled) connection must fully
+	// close server-side before we fill the cap, or its lingering slot skews
+	// the count.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+
+	// Hold 3 keep-alive conns open.
+	var held []net.Conn
+	for i := 0; i < 3; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+			t.Fatal(err)
+		}
+		readOnce(t, c)
+		held = append(held, c)
+	}
+	// 4th must be refused (RST / immediate close on write+read).
+	c4, err := net.Dial("tcp", addr)
+	if err == nil {
+		_ = c4.SetReadDeadline(time.Now().Add(time.Second))
+		_, _ = c4.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+		if n, _ := c4.Read(make([]byte, 64)); n > 0 {
+			t.Fatal("4th connection over cap got a response, want refusal")
+		}
+		c4.Close()
+	}
+	// Release all; counter must return to 0.
+	for _, c := range held {
+		c.Close()
+	}
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+}
+
+// readOnce reads a single response chunk with a short deadline, failing the
+// test if nothing arrives. Used to confirm a held keep-alive conn was served.
+func readOnce(t *testing.T, c net.Conn) {
+	t.Helper()
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if n, err := c.Read(make([]byte, 256)); n == 0 {
+		t.Fatalf("readOnce: no response bytes: %v", err)
+	}
+	_ = c.SetReadDeadline(time.Time{})
+}
+
+// waitFor polls cond until it returns true or the bound elapses.
+func waitFor(t *testing.T, bound time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(bound)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("waitFor: condition not met within %s", bound)
+}
+
+// wingConnCount reads the shared accepted-connection counter for tests. Returns
+// -1 if the active transport is not Wing.
+func (a *App) wingConnCount() int64 {
+	if tr, ok := a.transport.(*Transport); ok {
+		return tr.connCount()
+	}
+	return -1
+}

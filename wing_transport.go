@@ -70,12 +70,27 @@ func (c *WingConfig) needsAsync() bool {
 // loop on a dedicated OS thread. Implements transport.Transport and
 // transport.PresetConfigurator.
 type Transport struct {
-	config   WingConfig
-	workers  []*worker
-	shutdown atomic.Bool
-	wg       sync.WaitGroup
-	ready    chan struct{}
+	config  WingConfig
+	workers []*worker
+	// shutdown/connCnt/rejectTtl are shared cold-path atomics touched only on
+	// accept and connection close (never per-request). Co-located so they share
+	// cache lines away from the hot per-conn state; whether connCnt warrants its
+	// own cache line vs. shutdown (false-sharing under an accept storm) is left
+	// to a Linux A/B before adding padding.
+	shutdown  atomic.Bool
+	connCnt   int64 // accepted connections currently admitted (atomic)
+	rejectTtl int64 // connections refused by the total cap (atomic)
+	wg        sync.WaitGroup
+	ready     chan struct{}
 }
+
+// connCount returns the number of currently-admitted connections across all
+// workers. Test/diagnostics accessor; reads the shared atomic.
+func (t *Transport) connCount() int64 { return atomic.LoadInt64(&t.connCnt) }
+
+// RejectStats returns the number of connections refused by the global total
+// connection cap since startup.
+func (t *Transport) RejectStats() int64 { return atomic.LoadInt64(&t.rejectTtl) }
 
 // NewWingTransport builds a Wing transport from cfg, applying defaults to any
 // zero fields. The transport does not bind a listener until ListenAndServe is
@@ -98,7 +113,7 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 			t.cleanupWorkers(i)
 			return fmt.Errorf("wing: listen: %w", err)
 		}
-		w, err := newWorker(i, fd, t.config, handler)
+		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl)
 		if err != nil {
 			closeFd(fd)
 			t.cleanupWorkers(i)
@@ -207,6 +222,7 @@ type conn struct {
 	sendBuf      []byte
 	sendN        int
 	keepAlive    bool
+	admitted     bool   // counted in Transport.connCnt; cleared once by removeConnBookkeeping
 	pending      int    // in-flight handler goroutines
 	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
 	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
@@ -249,12 +265,16 @@ type worker struct {
 	config   WingConfig
 	limits   parserLimits
 	maxConns int
-	conns    map[int32]*conn
-	events   [maxEventsPerWait]event
-	evfd     int // eventfd for wake signaling
-	doneCh   chan doneMsg
-	pool     *workerPool
-	presets  PresetTable
+	// connCount/rejectTotal point at the shared Transport atomics so the total
+	// cap is enforced server-wide (not per-worker). Set in newWorker.
+	connCount   *int64
+	rejectTotal *int64
+	conns       map[int32]*conn
+	events      [maxEventsPerWait]event
+	evfd        int // eventfd for wake signaling
+	doneCh      chan doneMsg
+	pool        *workerPool
+	presets     PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
 	lastPreset0     Preset
@@ -414,7 +434,7 @@ func (w *worker) lookupPreset(method, path string) Preset {
 	return f
 }
 
-func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
+func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal *int64) (*worker, error) {
 	eng := newEngine()
 	wakeR, wakeW, err := createWakeFds()
 	if err != nil {
@@ -442,7 +462,9 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		handler:         handler,
 		config:          cfg,
 		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
-		maxConns:        cfg.MaxConnsPerWorker,
+		maxConns:        cfg.MaxConns, // global total cap; enforced against shared connCount via CAS
+		connCount:       connCount,
+		rejectTotal:     rejectTotal,
 		conns:           make(map[int32]*conn, 1024),
 		evfd:            wakeR,
 		doneCh:          doneCh,
@@ -547,6 +569,11 @@ func (w *worker) handleEvent(ev event) {
 	case opSend:
 		w.handleSend(ev)
 	case opClose:
+		// opClose: vestigial on Linux and darwin — both engines' SubmitClose is
+		// synchronous (EpollCtl(DEL)/syscall.Close inline) and never enqueues an
+		// opClose event. Routed through the chokepoint anyway for safety/kqueue
+		// parity should a future async-close engine emit it.
+		w.removeConnBookkeeping(ev.Fd)
 		delete(w.conns, ev.Fd)
 	case opWake:
 		// eventfd re-arms automatically (edge-triggered)
@@ -562,9 +589,22 @@ func (w *worker) handleAccept(ev event) {
 		w.eng.SubmitAccept(w.listenFd)
 	}
 	fd := ev.Res
-	if w.maxConns > 0 && len(w.conns) >= w.maxConns {
-		closeFd(int(fd))
-		return
+	// Admission order at accept: (1) accept-rate — Task 5, (2) per-IP precheck —
+	// Task 4, both added above this. (3) global total reserve via CAS against the
+	// shared Transport.connCnt so the cap holds server-wide, not per-worker.
+	if max := w.maxConns; max > 0 {
+		for {
+			cur := atomic.LoadInt64(w.connCount)
+			if cur >= int64(max) {
+				atomic.AddInt64(w.rejectTotal, 1)
+				rejectWarnOnce(w, rejectKindTotal, max)
+				closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
+				return
+			}
+			if atomic.CompareAndSwapInt64(w.connCount, cur, cur+1) {
+				break
+			}
+		}
 	}
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
@@ -573,11 +613,12 @@ func (w *worker) handleAccept(ev event) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
-		fd:      fd,
-		peerIP:  ev.PeerIP,
-		readBuf: make([]byte, w.config.ReadBufSize),
-		ctx:     ctx,
-		cancel:  cancel,
+		fd:       fd,
+		peerIP:   ev.PeerIP,
+		admitted: w.maxConns > 0, // counted in connCnt only when the cap reserved a slot
+		readBuf:  make([]byte, w.config.ReadBufSize),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 	if w.hasTimeout {
 		now := w.now
@@ -1112,17 +1153,9 @@ func (w *worker) handleDone(msg doneMsg) {
 		// Takeover conn finished: clean bookkeeping before closing through
 		// the File so the fd number cannot be recycled mid-cleanup. The fd
 		// was Detached from the engine at takeover, so SubmitClose must not
-		// run here.
-		if c, ok := w.conns[msg.fd]; ok {
-			if c.cancel != nil {
-				c.cancel()
-			}
-			if c.sendFileFd > 0 {
-				syscall.Close(int(c.sendFileFd))
-				c.sendFileFd = 0
-			}
-			delete(w.conns, msg.fd)
-		}
+		// run here — the *os.File owns the close.
+		w.removeConnBookkeeping(msg.fd)
+		delete(w.conns, msg.fd)
 		msg.file.Close()
 		return
 	}
@@ -1483,26 +1516,44 @@ func (w *worker) handleSend(ev event) {
 	w.directSend(c)
 }
 
-func (w *worker) closeConn(fd int32) {
-	if c, ok := w.conns[fd]; ok {
-		// Release any in-flight body reservation so a connection closed mid-
-		// accumulation (timeout, disconnect, parse failure) does not leak the
-		// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
-		// so this cannot double-decrement.
-		if c.bodyNeed > 0 && w.maxInflightBody > 0 {
-			atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
-		}
-		c.bodyNeed = 0
-		c.bodyBuf = nil
-		c.headerSnapshot = nil
-		if c.cancel != nil {
-			c.cancel()
-		}
-		if c.sendFileFd > 0 {
-			syscall.Close(int(c.sendFileFd))
-			c.sendFileFd = 0
-		}
+// removeConnBookkeeping is the single chokepoint for releasing a connection's
+// accounting: it decrements the global connCount (idempotently, guarded by
+// c.admitted — mirrors the body-budget zero-before-delete idiom), releases the
+// in-flight body reservation, cancels the conn context, and closes any sendfile
+// source fd. It does NOT close the connection fd or delete the conns entry —
+// each caller owns its own fd-close policy (closeConn → engine SubmitClose;
+// takeover-done → *os.File; opClose → engine already closed).
+func (w *worker) removeConnBookkeeping(fd int32) {
+	c, ok := w.conns[fd]
+	if !ok {
+		return
 	}
+	if c.admitted {
+		atomic.AddInt64(w.connCount, -1)
+		// Per-IP decrement is added by Task 4 here.
+		c.admitted = false
+	}
+	// Release any in-flight body reservation so a connection closed mid-
+	// accumulation (timeout, disconnect, parse failure) does not leak the
+	// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
+	// so this cannot double-decrement.
+	if c.bodyNeed > 0 && w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	c.bodyNeed = 0
+	c.bodyBuf = nil
+	c.headerSnapshot = nil
+	if c.cancel != nil {
+		c.cancel()
+	}
+	if c.sendFileFd > 0 {
+		syscall.Close(int(c.sendFileFd))
+		c.sendFileFd = 0
+	}
+}
+
+func (w *worker) closeConn(fd int32) {
+	w.removeConnBookkeeping(fd)
 	delete(w.conns, fd)
 	w.eng.SubmitClose(fd)
 }

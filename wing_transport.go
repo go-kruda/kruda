@@ -78,8 +78,8 @@ type Transport struct {
 	// cache lines away from the hot per-conn state; whether connCnt warrants its
 	// own cache line vs. shutdown (false-sharing under an accept storm) is left
 	// to a Linux A/B before adding padding.
-	shutdown  atomic.Bool
-	connCnt   int64 // accepted connections currently admitted (atomic)
+	shutdown   atomic.Bool
+	connCnt    int64 // accepted connections currently admitted (atomic)
 	rejectTtl  int64 // connections refused by the total cap (atomic)
 	rejectIP   int64 // connections refused by the per-IP cap (atomic)
 	rejectRate int64 // connections refused by the accept-rate bucket (atomic)
@@ -279,8 +279,8 @@ type worker struct {
 	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
 	connCount    *int64
 	rejectTotal  *int64
-	rejectIP     *int64 // per-IP reject counter; nil when per-IP cap is disabled
-	rejectRate   *int64 // accept-rate reject counter; nil when rate limiting is disabled
+	rejectIP     *int64  // per-IP reject counter (always wired; connsPerIP map is nil when the cap is off)
+	rejectRate   *int64  // accept-rate reject counter (always wired; bucket is nil when rate limiting is off)
 	rejectWarned [3]bool // warn-once flags indexed by rejectKind; per-worker so no lock needed
 	// Per-worker per-IP connection tracking. Allocated only when maxConnsPerIP>0.
 	// Per-worker means no locks: this map is touched only on accept and close,
@@ -288,12 +288,12 @@ type worker struct {
 	// IP may spread across workers, so the cap is approximate across workers.
 	connsPerIP    map[netip.Addr]int
 	maxConnsPerIP int
-	conns       map[int32]*conn
-	events      [maxEventsPerWait]event
-	evfd        int // eventfd for wake signaling
-	doneCh      chan doneMsg
-	pool        *workerPool
-	presets     PresetTable
+	conns         map[int32]*conn
+	events        [maxEventsPerWait]event
+	evfd          int // eventfd for wake signaling
+	doneCh        chan doneMsg
+	pool          *workerPool
+	presets       PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
 	lastPreset0     Preset
@@ -1712,12 +1712,13 @@ drainBuffered:
 		}
 	}
 	for fd, c := range w.conns {
-		if c.cancel != nil {
-			c.cancel()
-		}
-		if c.sendFileFd > 0 {
-			syscall.Close(int(c.sendFileFd))
-		}
+		// Decrement connCnt and per-IP counts for every connection still open at
+		// shutdown. removeConnBookkeeping is idempotent (c.admitted guard) so
+		// connections already closed normally before shutdown are a no-op. It also
+		// cancels ctx and releases any sendFileFd reservation, so the manual calls
+		// below are replaced by the chokepoint. This satisfies the design §7
+		// invariant: "Shutdown … bookkeeping decremented via the chokepoint."
+		w.removeConnBookkeeping(fd)
 		if c.takenOver {
 			// fd is owned by the Takeover *os.File and was already closed via the
 			// drain above; raw-closing it here would double-close a possibly-

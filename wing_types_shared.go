@@ -16,27 +16,27 @@ import (
 // macOS (where Wing has a real implementation); on other platforms the stub
 // transport accepts the same struct but does not act on it.
 type WingConfig struct {
-	Workers           int
-	RingSize          uint32
-	ReadBufSize       int
-	MaxHeaderCount    int
-	MaxHeaderSize     int
-	MaxConnsPerWorker int
-	HandlerPoolSize   int               // goroutine pool size per worker (Pool dispatch routes)
-	Presets           map[string]Preset // per-route preset config ("METHOD /path" → Preset)
-	DefaultPreset     Preset            // fallback preset for routes not in Presets
-	ReadTimeout              time.Duration // max time to receive a complete request (0 = disabled)
-	WriteTimeout             time.Duration // max time to send a response (0 = disabled)
-	IdleTimeout              time.Duration // max time a keep-alive conn can be idle (0 = disabled)
-	BodyLimit                int           // max request body bytes (0 = disabled). Maps to a 413.
-	HeaderLimit              int           // max header bytes (0 = disabled). Maps to a 431.
-	TrustProxy               bool          // honor X-Forwarded-For / X-Real-IP
-	MaxInflightBodyBytes     int           // per-worker cap on concurrently-accumulating body bytes (0 = derived)
-	MaxConns                 int           // resolved absolute total cap (0 = unlimited)
-	MaxConnsPerIP            int           // concurrent connections per source IP (0 = off)
-	AcceptRatePerSec         int           // new-connection rate limit per second (0 = off)
-	AcceptRateBurst          int           // burst allowance for AcceptRatePerSec
-	Logger                   *slog.Logger  // logger for accept-side warnings (nil → slog default)
+	Workers              int
+	RingSize             uint32
+	ReadBufSize          int
+	MaxHeaderCount       int
+	MaxHeaderSize        int
+	MaxConnsPerWorker    int
+	HandlerPoolSize      int               // goroutine pool size per worker (Pool dispatch routes)
+	Presets              map[string]Preset // per-route preset config ("METHOD /path" → Preset)
+	DefaultPreset        Preset            // fallback preset for routes not in Presets
+	ReadTimeout          time.Duration     // max time to receive a complete request (0 = disabled)
+	WriteTimeout         time.Duration     // max time to send a response (0 = disabled)
+	IdleTimeout          time.Duration     // max time a keep-alive conn can be idle (0 = disabled)
+	BodyLimit            int               // max request body bytes (0 = disabled). Maps to a 413.
+	HeaderLimit          int               // max header bytes (0 = disabled). Maps to a 431.
+	TrustProxy           bool              // honor X-Forwarded-For / X-Real-IP
+	MaxInflightBodyBytes int               // per-worker cap on concurrently-accumulating body bytes (0 = derived)
+	MaxConns             int               // resolved absolute total cap (0 = unlimited)
+	MaxConnsPerIP        int               // concurrent connections per source IP (0 = off)
+	AcceptRatePerSec     int               // new-connection rate limit per second (0 = off)
+	AcceptRateBurst      int               // burst allowance for AcceptRatePerSec
+	Logger               *slog.Logger      // logger for accept-side warnings (nil → slog default)
 }
 
 func (c *WingConfig) defaults() {

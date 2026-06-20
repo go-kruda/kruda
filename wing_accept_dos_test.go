@@ -358,3 +358,52 @@ func TestWingAccept_RejectCounters(t *testing.T) {
 		c2.Close()
 	}
 }
+
+// TestWingAccept_ShutdownDecrementsCount verifies that cleanup() decrements
+// connCnt (and per-IP counts) for every admitted connection that is still open
+// at shutdown time. Before Fix 2, cleanup() closed fds without calling
+// removeConnBookkeeping, so the counter leaked (stayed at N instead of 0).
+func TestWingAccept_ShutdownDecrementsCount(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+
+	app := New(Wing(), WithMaxConns(8))
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skip("wing only")
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+
+	// Wait for the readiness-probe connection to drain fully.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+
+	// Open 3 keep-alive connections and confirm each is served (admitted).
+	var held []net.Conn
+	for i := 0; i < 3; i++ {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("dial %d: %v", i, err)
+		}
+		if _, err := c.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+		readOnce(t, c)
+		held = append(held, c)
+	}
+
+	// All 3 connections must be admitted.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 3 })
+
+	// Trigger graceful shutdown without closing client connections — the
+	// cleanup() path must decrement the counter for every open connection.
+	shutdown()
+
+	// After shutdown, connCnt must be 0.
+	if got := app.wingConnCount(); got != 0 {
+		t.Errorf("wingConnCount after shutdown = %d, want 0 (cleanup did not decrement counter)", got)
+	}
+
+	for _, c := range held {
+		c.Close()
+	}
+}

@@ -66,6 +66,7 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		MaxConnsPerIP:    cfg.MaxConnsPerIP,
 		AcceptRatePerSec: cfg.AcceptRatePerSec,
 		AcceptRateBurst:  cfg.AcceptRateBurst,
+		Logger:           logger,
 	}
 	return NewWingTransport(wcfg)
 }

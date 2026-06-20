@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -90,17 +91,15 @@ type Transport struct {
 // workers. Test/diagnostics accessor; reads the shared atomic.
 func (t *Transport) connCount() int64 { return atomic.LoadInt64(&t.connCnt) }
 
-// RejectStats returns the number of connections refused by the global total
-// connection cap since startup.
-func (t *Transport) RejectStats() int64 { return atomic.LoadInt64(&t.rejectTtl) }
-
-// RejectIPStats returns the number of connections refused by the per-IP cap
-// since startup (sum across all workers).
-func (t *Transport) RejectIPStats() int64 { return atomic.LoadInt64(&t.rejectIP) }
-
-// RejectRateStats returns the number of connections refused by the accept-rate
-// token bucket since startup (sum across all workers).
-func (t *Transport) RejectRateStats() int64 { return atomic.LoadInt64(&t.rejectRate) }
+// RejectStats returns accept-side rejection counters for all three limit kinds
+// (total cap, per-IP cap, accept-rate bucket) since startup.
+func (t *Transport) RejectStats() RejectStats {
+	return RejectStats{
+		Total: atomic.LoadInt64(&t.rejectTtl),
+		PerIP: atomic.LoadInt64(&t.rejectIP),
+		Rate:  atomic.LoadInt64(&t.rejectRate),
+	}
+}
 
 // NewWingTransport builds a Wing transport from cfg, applying defaults to any
 // zero fields. The transport does not bind a listener until ListenAndServe is
@@ -275,12 +274,14 @@ type worker struct {
 	config   WingConfig
 	limits   parserLimits
 	maxConns int
+	logger   *slog.Logger
 	// connCount/rejectTotal/rejectIP/rejectRate point at the shared Transport
 	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
-	connCount   *int64
-	rejectTotal *int64
-	rejectIP    *int64 // per-IP reject counter; nil when per-IP cap is disabled
-	rejectRate  *int64 // accept-rate reject counter; nil when rate limiting is disabled
+	connCount    *int64
+	rejectTotal  *int64
+	rejectIP     *int64 // per-IP reject counter; nil when per-IP cap is disabled
+	rejectRate   *int64 // accept-rate reject counter; nil when rate limiting is disabled
+	rejectWarned [3]bool // warn-once flags indexed by rejectKind; per-worker so no lock needed
 	// Per-worker per-IP connection tracking. Allocated only when maxConnsPerIP>0.
 	// Per-worker means no locks: this map is touched only on accept and close,
 	// both on the same event-loop goroutine. Under SO_REUSEPORT the same source
@@ -474,6 +475,10 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 	}
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewPresetTable(cfg.Presets, cfg.DefaultPreset)
+	lg := cfg.Logger
+	if lg == nil {
+		lg = slog.Default()
+	}
 	w := &worker{
 		id:              id,
 		listenFd:        listenFd,
@@ -482,6 +487,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		config:          cfg,
 		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
 		maxConns:        cfg.MaxConns, // global total cap; enforced against shared connCount via CAS
+		logger:          lg,
 		connCount:       connCount,
 		rejectTotal:     rejectTotal,
 		rejectIP:        rejectIP,
@@ -653,13 +659,13 @@ func (w *worker) handleAccept(ev event) {
 	if w.bucket != nil && !w.bucket.allow(w.clockNow()) {
 		atomic.AddInt64(w.rejectRate, 1)
 		rejectWarnOnce(w, rejectKindRate, 0)
-		closeFd(int(fd))
+		closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
 		return
 	}
 	if w.maxConnsPerIP > 0 && ev.HasPeer && w.connsPerIP[ev.PeerIP] >= w.maxConnsPerIP {
 		atomic.AddInt64(w.rejectIP, 1)
 		rejectWarnOnce(w, rejectKindIP, w.maxConnsPerIP)
-		closeFd(int(fd))
+		closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
 		return
 	}
 	if max := w.maxConns; max > 0 {

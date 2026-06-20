@@ -7,6 +7,7 @@
 package kruda
 
 import (
+	"log/slog"
 	"runtime"
 	"time"
 )
@@ -35,6 +36,7 @@ type WingConfig struct {
 	MaxConnsPerIP            int           // concurrent connections per source IP (0 = off)
 	AcceptRatePerSec         int           // new-connection rate limit per second (0 = off)
 	AcceptRateBurst          int           // burst allowance for AcceptRatePerSec
+	Logger                   *slog.Logger  // logger for accept-side warnings (nil → slog default)
 }
 
 func (c *WingConfig) defaults() {
@@ -182,6 +184,14 @@ var (
 	// Render — Spear dispatch tagged for DB + template/HTML responses.
 	Render = Preset{Dispatch: Takeover, ResponseMode: responseRender}
 )
+
+// RejectStats holds accept-side rejection counters populated by the Wing transport.
+// On platforms without Wing support (not Linux or macOS), these will always be zero.
+type RejectStats struct {
+	Total int64 // connections refused by the global total cap
+	PerIP int64 // connections refused by the per-IP cap (sum across workers)
+	Rate  int64 // connections refused by the accept-rate bucket (sum across workers)
+}
 
 // RawRequest provides low-level access to Wing's request data.
 // Obtain via transport.Request.RawRequest():

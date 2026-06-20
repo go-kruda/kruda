@@ -1,4 +1,8 @@
+//go:build linux || darwin
+
 package kruda
+
+import "log/slog"
 
 const (
 	acceptCapCeiling  = 262144 // bounds the DERIVED default only; explicit WithMaxConns may exceed
@@ -6,8 +10,7 @@ const (
 	acceptCapLowFloor = 1024   // below this, warn at startup
 )
 
-// rejectKind identifies which accept-side limit refused a connection. Task 6
-// replaces rejectWarnOnce with the real warn-once-per-route/kind logger.
+// rejectKind identifies which accept-side limit refused a connection.
 type rejectKind int
 
 const (
@@ -16,8 +19,26 @@ const (
 	rejectKindRate                    // per-worker accept-rate token bucket
 )
 
-// rejectWarnOnce is a no-op stub until Task 6 wires the warn-once reject logger.
-func rejectWarnOnce(_ *worker, _ rejectKind, _ int) {}
+// rejectWarnOnce logs the first rejection of each kind per worker (blocking-advisor
+// pattern) so a flood does not flood the log. Each worker may warn once per kind.
+func rejectWarnOnce(w *worker, k rejectKind, limit int) {
+	if w.rejectWarned[k] {
+		return
+	}
+	w.rejectWarned[k] = true
+	lg := w.logger
+	if lg == nil {
+		lg = slog.Default()
+	}
+	switch k {
+	case rejectKindTotal:
+		lg.Warn("kruda/wing: connection cap reached, rejecting (RST); raise WithMaxConns or investigate abuse", "max", limit)
+	case rejectKindIP:
+		lg.Warn("kruda/wing: per-IP connection limit reached, rejecting (RST)", "perIP", limit)
+	case rejectKindRate:
+		lg.Warn("kruda/wing: accept-rate limit reached, rejecting (RST)")
+	}
+}
 
 // tokenBucket is a single-threaded (no locks needed on the event-loop goroutine)
 // leaky-bucket rate limiter for accept-side rate limiting. Per-worker, so the

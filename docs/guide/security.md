@@ -132,6 +132,37 @@ app := kruda.New(
 )
 ```
 
+### Connection limits (Wing)
+
+The three accept-side connection limits below are **Wing-only**. They are enforced before any request is parsed. The net/http and fasthttp transports do not implement them and silently ignore the options.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `WithMaxConns(n)` | derived from ulimit | Global total concurrent connections. 0 = unlimited. |
+| `WithMaxConnsPerIP(n)` | 0 (off) | Per-source-IP concurrent connections. 0 = unlimited. |
+| `WithMaxAcceptRate(perSec, burst)` | 0 (off) | New-connection rate cap per worker per second with burst. |
+
+**Derived default for `WithMaxConns`:** when `MaxConns` is not set explicitly (default), Wing computes the cap from the process fd soft limit: `min(RLIMIT_NOFILE.soft − headroom, 262144)`, where `headroom = 3×workers + 256` (listen, epoll/kqueue, and eventfd fds per worker plus a fixed reserve for stdio and DB-pool fds). If the result is below 1024, a warning is logged at startup. Pass `WithMaxConns(0)` to disable the cap entirely.
+
+**SO_REUSEPORT approximation:** Wing binds one `SO_REUSEPORT` socket per worker; the kernel distributes incoming connections across workers by 4-tuple hash.
+
+- The **global total cap** (`WithMaxConns`) is enforced via a single shared atomic counter, so it is a hard server-wide bound regardless of worker count.
+- The **per-IP ceiling** (`WithMaxConnsPerIP`) is tracked per-worker, so the effective per-IP limit across the whole server is approximately `perIP × workers`. An attacker who can steer source ports (e.g. from a single host) can bias connections toward one worker and stay within the per-worker limit.
+- The **accept-rate limit** (`WithMaxAcceptRate`) is per-worker. The configured `perSec` and `burst` are divided across workers so the server-wide rate stays at the configured value under uniform load, but an attacker who steers connections to one worker can consume the full server-wide budget from a single worker.
+
+**Rejection is a TCP RST, not an HTTP status code.** When any of the three limits fires, Wing closes the file descriptor immediately at accept time — before a request is parsed, before any HTTP response is written, and before any middleware or lifecycle hook runs. The connection receives a TCP RST. This is intentional: the request never becomes a valid app request, so it should not consume app resources or appear in telemetry.
+
+```go
+app := kruda.New(
+    kruda.Wing(),
+    kruda.WithMaxConns(10000),          // hard total cap
+    kruda.WithMaxConnsPerIP(50),        // per-source-IP cap (approximate; × workers)
+    kruda.WithMaxAcceptRate(5000, 500), // 5000 new conns/s, burst 500 (per worker)
+)
+```
+
+`Transport.RejectStats()` returns a `kruda.RejectStats` struct with `Total`, `PerIP`, and `Rate` fields. These are monotonic counters (sum since startup) read from shared atomics — safe to poll from any goroutine. Construct the transport via `kruda.NewWingTransport` to hold a typed reference for metrics collection.
+
 ## CORS Configuration
 
 **Source:** `middleware/cors.go`

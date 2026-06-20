@@ -308,3 +308,53 @@ func (a *App) wingConnCount() int64 {
 	}
 	return -1
 }
+
+// wingRejectStats reads the accept-side rejection counters for tests.
+// Returns a zero RejectStats if the active transport is not Wing.
+func (a *App) wingRejectStats() RejectStats {
+	if tr, ok := a.transport.(*Transport); ok {
+		return tr.RejectStats()
+	}
+	return RejectStats{}
+}
+
+// TestWingAccept_RejectCounters verifies that a connection refused by the global
+// total cap increments Transport.RejectStats().Total.
+func TestWingAccept_RejectCounters(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+
+	app := New(Wing(), WithMaxConns(1))
+	app.Get("/", func(c *Ctx) error { return c.Text("ok") })
+	app.Compile()
+	if app.transportType != "wing" {
+		t.Skip("wing only")
+	}
+	addr, shutdown := startSmokeApp(t, app, "/")
+	defer shutdown()
+
+	// Wait for any readiness-probe connection to drain before filling the cap.
+	waitFor(t, 2*time.Second, func() bool { return app.wingConnCount() == 0 })
+
+	// c1 fills the cap (max 1 conn).
+	c1, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("dial c1: %v", err)
+	}
+	_, _ = c1.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+	readOnce(t, c1)
+
+	// c2 must be refused because the cap is full; counter must reach ≥1.
+	c2, _ := net.Dial("tcp", addr)
+	if c2 != nil {
+		_ = c2.SetReadDeadline(time.Now().Add(time.Second))
+		_, _ = c2.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))
+		_, _ = c2.Read(make([]byte, 64))
+	}
+
+	waitFor(t, 2*time.Second, func() bool { return app.wingRejectStats().Total >= 1 })
+
+	c1.Close()
+	if c2 != nil {
+		c2.Close()
+	}
+}

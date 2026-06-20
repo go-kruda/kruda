@@ -47,3 +47,7 @@ func (t *Transport) SetRoutePreset(_, _ string, _ any) {}
 // Shutdown is a no-op on this platform because the stub Wing transport
 // never starts any workers.
 func (t *Transport) Shutdown(_ context.Context) error { return nil }
+
+// RejectStats returns a zero RejectStats on this platform — the stub Wing
+// transport never accepts connections and thus never rejects them.
+func (t *Transport) RejectStats() RejectStats { return RejectStats{} }

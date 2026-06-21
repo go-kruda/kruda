@@ -131,6 +131,19 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 		t.workers[i] = w
 	}
 	close(t.ready)
+	// Startup banner: log the resolved connection cap once, at actual serve
+	// time (not at construction — see newWingTransport). Serve() routes through
+	// here too, so this fires exactly once per server start.
+	if t.config.MaxConns > 0 {
+		lg := t.config.Logger
+		if lg == nil {
+			lg = slog.Default()
+		}
+		if t.config.MaxConns < acceptCapLowFloor {
+			lg.Warn("kruda/wing: derived connection cap is low; raise the fd ulimit or set WithMaxConns", "cap", t.config.MaxConns)
+		}
+		lg.Info("kruda/wing: connection cap", "max", t.config.MaxConns)
+	}
 	for _, w := range t.workers {
 		t.wg.Add(1)
 		go func(w *worker) {

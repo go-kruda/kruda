@@ -46,12 +46,11 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 			maxConns = 0 // can't read ulimit → unlimited (no surprise cap)
 		}
 	}
-	if maxConns > 0 && maxConns < acceptCapLowFloor {
-		logger.Warn("kruda/wing: derived connection cap is low; raise the fd ulimit or set WithMaxConns", "cap", maxConns)
-	}
-	if maxConns > 0 {
-		logger.Info("kruda/wing: connection cap", "max", maxConns)
-	}
+	// The connection-cap startup banner is logged at actual serve time
+	// (Transport.ListenAndServe), not here: newWingTransport runs at New(), and
+	// logging a startup banner from a constructor pollutes any app built with a
+	// captured logger (e.g. the log-enricher tests). The resolved cap rides on
+	// WingConfig.MaxConns.
 	wcfg := WingConfig{
 		Workers:          workers,
 		HandlerPoolSize:  poolSize,

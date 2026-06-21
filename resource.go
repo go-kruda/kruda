@@ -329,25 +329,34 @@ func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg
 	}
 }
 
+// resourceParseID parses a path segment into the resource ID type. It switches
+// on reflect.Kind (not the concrete type) so it stays in lockstep with the
+// Kind-based registration gate: a named type such as `type UserID int64` has
+// Kind Int64 and parses end-to-end, instead of slipping past registration only
+// to 400 here. The parsed value is converted back to ID via reflect so the
+// caller gets its exact (possibly named) type.
 func resourceParseID[ID comparable](raw string) (ID, error) {
-	var zero ID
-	switch any(zero).(type) {
-	case string:
-		return any(raw).(ID), nil
-	case int:
-		v, err := strconv.Atoi(raw)
-		return any(v).(ID), err
-	case int64:
+	idType := reflect.TypeOf((*ID)(nil)).Elem()
+	switch idType.Kind() {
+	case reflect.String:
+		return reflect.ValueOf(raw).Convert(idType).Interface().(ID), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		v, err := strconv.ParseInt(raw, 10, 64)
-		return any(v).(ID), err
-	case uint:
+		if err != nil {
+			var zero ID
+			return zero, err
+		}
+		return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v, err := strconv.ParseUint(raw, 10, 64)
-		return any(uint(v)).(ID), err
-	case uint64:
-		v, err := strconv.ParseUint(raw, 10, 64)
-		return any(v).(ID), err
+		if err != nil {
+			var zero ID
+			return zero, err
+		}
+		return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
 	default:
-		return zero, fmt.Errorf("unsupported ID type: %T", zero)
+		var zero ID
+		return zero, fmt.Errorf("unsupported ID type: %s", idType)
 	}
 }
 

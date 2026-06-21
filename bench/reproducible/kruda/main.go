@@ -127,8 +127,8 @@ func main() {
 	// route so the span middleware bakes into every route chain. Run the baseline
 	// arm with BENCH_ENABLE_OBS unset; the enabled arm with BENCH_ENABLE_OBS=1
 	// (typically OTEL_TRACES_EXPORTER=none so no collector is required — the span
-	// is still created and traceparent still injected, so the fast-lane cost is
-	// measured).
+	// is still created and the RED-metrics OnResponse hook still fires, which
+	// drops the Wing fast lane, so the per-request hot-path cost is measured).
 	if os.Getenv("BENCH_ENABLE_OBS") == "1" {
 		traces := os.Getenv("BENCH_OBS_TRACES") != "0" // =0 isolates the RED-metrics cost
 		obsCfg := observability.Config{ServiceName: "bench-kruda"}

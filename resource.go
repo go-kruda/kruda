@@ -141,11 +141,13 @@ func registerResource[T any, ID comparable](r routeRegistrar, app *App, pathPref
 	}
 
 	idType := reflect.TypeOf((*ID)(nil)).Elem()
-	switch idType.Kind() {
-	case reflect.String, reflect.Int, reflect.Int64, reflect.Uint, reflect.Uint64:
-	default:
+	if !resourceIDKindSupported(idType.Kind()) {
 		panic(fmt.Sprintf("kruda: Resource ID type %s unsupported; use string/int/int64/uint/uint64", idType))
 	}
+	// Build the path-segment→ID parser once at registration so the per-request
+	// handlers do no reflect.Type lookup (the resource path is opt-in, but it
+	// still need not pay avoidable per-request reflection).
+	parseID := buildResourceIDParser[ID](idType)
 
 	// Precompile validators once, gated exactly like the typed path
 	// (handler.go): only when a *Validator is configured. No auto-default.
@@ -169,7 +171,7 @@ func registerResource[T any, ID comparable](r routeRegistrar, app *App, pathPref
 			method: "GET", path: fullPath(path),
 			resourceOp: &resourceOp{needsListQuery: true, respType: listRespType, successCode: "200"},
 		})
-		r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg)))
+		r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg, parseID)))
 		app.routeInfos = append(app.routeInfos, routeInfo{
 			method: "GET", path: fullPath(idPath),
 			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: bodyType, successCode: "200"},
@@ -183,7 +185,7 @@ func registerResource[T any, ID comparable](r routeRegistrar, app *App, pathPref
 			})
 		}
 		if resourceShouldRegister(cfg, "GET_BY_ID") {
-			r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg)))
+			r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg, parseID)))
 			app.routeInfos = append(app.routeInfos, routeInfo{
 				method: "GET", path: fullPath(idPath),
 				resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: bodyType, successCode: "200"},
@@ -198,14 +200,14 @@ func registerResource[T any, ID comparable](r routeRegistrar, app *App, pathPref
 		})
 	}
 	if resourceShouldRegister(cfg, "PUT") {
-		r.Put(idPath, resourceWrapMW(cfg.middleware, resourceUpdateHandler[T, ID](svc, cfg, validators, msgs)))
+		r.Put(idPath, resourceWrapMW(cfg.middleware, resourceUpdateHandler[T, ID](svc, cfg, validators, msgs, parseID)))
 		app.routeInfos = append(app.routeInfos, routeInfo{
 			method: "PUT", path: fullPath(idPath),
 			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, bodyType: bodyType, respType: bodyType, successCode: "200", hasValidate: hasValidate},
 		})
 	}
 	if resourceShouldRegister(cfg, "DELETE") {
-		r.Delete(idPath, resourceWrapMW(cfg.middleware, resourceDeleteHandler[T, ID](svc, cfg)))
+		r.Delete(idPath, resourceWrapMW(cfg.middleware, resourceDeleteHandler[T, ID](svc, cfg, parseID)))
 		app.routeInfos = append(app.routeInfos, routeInfo{
 			method: "DELETE", path: fullPath(idPath),
 			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: nil, successCode: "204"},
@@ -260,9 +262,9 @@ func wrapBindErr(err error) error {
 	return BadRequest("invalid request body")
 }
 
-func resourceGetHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig) HandlerFunc {
+func resourceGetHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
@@ -293,9 +295,9 @@ func resourceCreateHandler[T any, ID comparable](svc ResourceService[T, ID], val
 	}
 }
 
-func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, validators []fieldValidator, msgs map[string]string) HandlerFunc {
+func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, validators []fieldValidator, msgs map[string]string, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
@@ -316,9 +318,9 @@ func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg
 	}
 }
 
-func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig) HandlerFunc {
+func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
@@ -329,35 +331,65 @@ func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg
 	}
 }
 
-// resourceParseID parses a path segment into the resource ID type. It switches
-// on reflect.Kind (not the concrete type) so it stays in lockstep with the
-// Kind-based registration gate: a named type such as `type UserID int64` has
-// Kind Int64 and parses end-to-end, instead of slipping past registration only
-// to 400 here. The parsed value is converted back to ID via reflect so the
-// caller gets its exact (possibly named) type.
-func resourceParseID[ID comparable](raw string) (ID, error) {
-	idType := reflect.TypeOf((*ID)(nil)).Elem()
-	switch idType.Kind() {
-	case reflect.String:
-		return reflect.ValueOf(raw).Convert(idType).Interface().(ID), nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			var zero ID
-			return zero, err
-		}
-		return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			var zero ID
-			return zero, err
-		}
-		return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
-	default:
-		var zero ID
-		return zero, fmt.Errorf("unsupported ID type: %s", idType)
+// resourceIDKindSupported reports whether a reflect.Kind is an ID type the
+// resource router can parse from a path segment. The registration gate and the
+// parser both consult this single predicate so the two can never drift.
+func resourceIDKindSupported(k reflect.Kind) bool {
+	switch k {
+	case reflect.String, reflect.Int, reflect.Int64, reflect.Uint, reflect.Uint64:
+		return true
 	}
+	return false
+}
+
+// buildResourceIDParser returns a path-segment→ID parser computed once at
+// registration. Hoisting the reflect.Type lookup out of the per-request path
+// keeps the resource handlers off any per-request reflection beyond the
+// unavoidable Convert. It switches on reflect.Kind (not the concrete type) so a
+// named type such as `type UserID int64` parses end-to-end, and the parsed value
+// is converted back to ID so the caller gets its exact (possibly named) type.
+//
+// The integer bit width comes from the ID type itself (idType.Bits()), so a
+// value that overflows the target width is rejected as a 400 rather than being
+// silently truncated by the conversion — this matters for `int`/`uint` IDs on
+// 32-bit builds, where a fixed 64-bit parse would wrap.
+func buildResourceIDParser[ID comparable](idType reflect.Type) func(string) (ID, error) {
+	kind := idType.Kind()
+	var bits int
+	switch kind {
+	case reflect.Int, reflect.Int64, reflect.Uint, reflect.Uint64:
+		bits = idType.Bits()
+	}
+	return func(raw string) (ID, error) {
+		switch kind {
+		case reflect.String:
+			return reflect.ValueOf(raw).Convert(idType).Interface().(ID), nil
+		case reflect.Int, reflect.Int64:
+			v, err := strconv.ParseInt(raw, 10, bits)
+			if err != nil {
+				var zero ID
+				return zero, err
+			}
+			return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
+		case reflect.Uint, reflect.Uint64:
+			v, err := strconv.ParseUint(raw, 10, bits)
+			if err != nil {
+				var zero ID
+				return zero, err
+			}
+			return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
+		default:
+			var zero ID
+			return zero, fmt.Errorf("unsupported ID type: %s", idType)
+		}
+	}
+}
+
+// resourceParseID parses a single path segment into the ID type. It is a
+// convenience wrapper over buildResourceIDParser for callers that do not hold a
+// precomputed parser; the request handlers use the hoisted parser directly.
+func resourceParseID[ID comparable](raw string) (ID, error) {
+	return buildResourceIDParser[ID](reflect.TypeOf((*ID)(nil)).Elem())(raw)
 }
 
 func resourceShouldRegister(cfg resourceConfig, method string) bool {

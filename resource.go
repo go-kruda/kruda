@@ -2,10 +2,26 @@ package kruda
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 )
+
+// maxResourceListLimit caps the per-page item count an auto-CRUD list endpoint
+// will request. A larger ?limit is clamped to this value (not rejected).
+const maxResourceListLimit = 100
+
+// ResourceList is the response envelope for an auto-CRUD list endpoint. It is
+// used as the OpenAPI response type for list operations and marshals to the
+// same JSON the list handler has always produced ({data, total, page, limit}).
+type ResourceList[T any] struct {
+	Data  []T `json:"data"`
+	Total int `json:"total"`
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
 
 // ResourceService is the generic interface for auto-wired CRUD endpoints.
 // Implement this interface to get 5 REST endpoints (List, Create, Get, Update, Delete)
@@ -95,62 +111,160 @@ func (g groupRegistrar) Delete(p string, h HandlerFunc) routeRegistrar {
 
 // Resource auto-wires 5 REST endpoints from a ResourceService on the App.
 // It registers: GET (list), GET/:id (get), POST (create), PUT/:id (update), DELETE/:id (delete).
+//
+// Create and update validate the decoded body using the same machinery and
+// error contract as typed C[T] handlers: validation runs only when a *Validator
+// is configured (via WithValidator) and T carries validate tags, emitting a 422
+// on failure. Malformed JSON yields a 400 ("invalid request body").
+//
+// Service errors propagate unchanged: a ResourceService returning a *KrudaError
+// (e.g. NotFound) gets that status; a plain error becomes the generic 500. The
+// framework never synthesizes a 404, and OpenAPI advertises only the success
+// code, a 422 when validation is engaged, and the default error response.
 func Resource[T any, ID comparable](app *App, path string, svc ResourceService[T, ID], opts ...ResourceOption) *App {
-	registerResource(appRegistrar{app}, path, svc, opts...)
+	registerResource(appRegistrar{app}, app, "", path, svc, opts...)
 	return app
 }
 
 // GroupResource auto-wires 5 REST endpoints from a ResourceService on a Group.
 // It registers: GET (list), GET/:id (get), POST (create), PUT/:id (update), DELETE/:id (delete).
+// Behavior matches Resource (validation, error propagation, OpenAPI); see Resource.
 func GroupResource[T any, ID comparable](g *Group, path string, svc ResourceService[T, ID], opts ...ResourceOption) *Group {
-	registerResource(groupRegistrar{g}, path, svc, opts...)
+	registerResource(groupRegistrar{g}, g.app, g.prefix, path, svc, opts...)
 	return g
 }
 
-func registerResource[T any, ID comparable](r routeRegistrar, path string, svc ResourceService[T, ID], opts ...ResourceOption) {
+func registerResource[T any, ID comparable](r routeRegistrar, app *App, pathPrefix, path string, svc ResourceService[T, ID], opts ...ResourceOption) {
 	cfg := defaultResourceConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+
+	idType := reflect.TypeOf((*ID)(nil)).Elem()
+	if !resourceIDKindSupported(idType.Kind()) {
+		panic(fmt.Sprintf("kruda: Resource ID type %s unsupported; use string/int/int64/uint/uint64", idType))
+	}
+	// Build the path-segment→ID parser once at registration so the per-request
+	// handlers do no reflect.Type lookup (the resource path is opt-in, but it
+	// still need not pay avoidable per-request reflection).
+	parseID := buildResourceIDParser[ID](idType)
+
+	// Precompile validators once, gated exactly like the typed path
+	// (handler.go): only when a *Validator is configured. No auto-default.
+	var validators []fieldValidator
+	var msgs map[string]string
+	if app.config.Validator != nil {
+		validators = buildValidators[T](app.config.Validator)
+		msgs = app.config.Validator.messages
+	}
+	hasValidate := len(validators) > 0
+
+	bodyType := reflect.TypeOf((*T)(nil)).Elem()
+	listRespType := reflect.TypeOf(ResourceList[T]{})
+
 	idPath := path + "/:" + cfg.idParam
+	fullPath := func(rel string) string { return joinPath(pathPrefix, rel) }
 
 	if resourceShouldRegister(cfg, "GET") {
 		r.Get(path, resourceWrapMW(cfg.middleware, resourceListHandler(svc)))
-		r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg)))
+		app.routeInfos = append(app.routeInfos, routeInfo{
+			method: "GET", path: fullPath(path),
+			resourceOp: &resourceOp{needsListQuery: true, respType: listRespType, successCode: "200"},
+		})
+		r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg, parseID)))
+		app.routeInfos = append(app.routeInfos, routeInfo{
+			method: "GET", path: fullPath(idPath),
+			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: bodyType, successCode: "200"},
+		})
 	} else {
 		if resourceShouldRegister(cfg, "LIST") {
 			r.Get(path, resourceWrapMW(cfg.middleware, resourceListHandler(svc)))
+			app.routeInfos = append(app.routeInfos, routeInfo{
+				method: "GET", path: fullPath(path),
+				resourceOp: &resourceOp{needsListQuery: true, respType: listRespType, successCode: "200"},
+			})
 		}
 		if resourceShouldRegister(cfg, "GET_BY_ID") {
-			r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg)))
+			r.Get(idPath, resourceWrapMW(cfg.middleware, resourceGetHandler[T, ID](svc, cfg, parseID)))
+			app.routeInfos = append(app.routeInfos, routeInfo{
+				method: "GET", path: fullPath(idPath),
+				resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: bodyType, successCode: "200"},
+			})
 		}
 	}
 	if resourceShouldRegister(cfg, "POST") {
-		r.Post(path, resourceWrapMW(cfg.middleware, resourceCreateHandler[T, ID](svc)))
+		r.Post(path, resourceWrapMW(cfg.middleware, resourceCreateHandler[T, ID](svc, validators, msgs)))
+		app.routeInfos = append(app.routeInfos, routeInfo{
+			method: "POST", path: fullPath(path),
+			resourceOp: &resourceOp{bodyType: bodyType, respType: bodyType, successCode: "201", hasValidate: hasValidate},
+		})
 	}
 	if resourceShouldRegister(cfg, "PUT") {
-		r.Put(idPath, resourceWrapMW(cfg.middleware, resourceUpdateHandler[T, ID](svc, cfg)))
+		r.Put(idPath, resourceWrapMW(cfg.middleware, resourceUpdateHandler[T, ID](svc, cfg, validators, msgs, parseID)))
+		app.routeInfos = append(app.routeInfos, routeInfo{
+			method: "PUT", path: fullPath(idPath),
+			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, bodyType: bodyType, respType: bodyType, successCode: "200", hasValidate: hasValidate},
+		})
 	}
 	if resourceShouldRegister(cfg, "DELETE") {
-		r.Delete(idPath, resourceWrapMW(cfg.middleware, resourceDeleteHandler[T, ID](svc, cfg)))
+		r.Delete(idPath, resourceWrapMW(cfg.middleware, resourceDeleteHandler[T, ID](svc, cfg, parseID)))
+		app.routeInfos = append(app.routeInfos, routeInfo{
+			method: "DELETE", path: fullPath(idPath),
+			resourceOp: &resourceOp{idParam: cfg.idParam, idType: idType, respType: nil, successCode: "204"},
+		})
 	}
 }
 
 func resourceListHandler[T any, ID comparable](svc ResourceService[T, ID]) HandlerFunc {
 	return func(c *Ctx) error {
-		page := c.QueryInt("page", 1)
-		limit := c.QueryInt("limit", 20)
+		page, err := resourceParsePositiveInt(c.Query("page"), "page", 1)
+		if err != nil {
+			return err
+		}
+		limit, err := resourceParsePositiveInt(c.Query("limit"), "limit", 20)
+		if err != nil {
+			return err
+		}
+		if limit > maxResourceListLimit {
+			limit = maxResourceListLimit
+		}
 		items, total, err := svc.List(c.Context(), page, limit)
 		if err != nil {
 			return err
 		}
-		return c.JSON(Map{"data": items, "total": total, "page": page, "limit": limit})
+		return c.JSON(ResourceList[T]{Data: items, Total: total, Page: page, Limit: limit})
 	}
 }
 
-func resourceGetHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig) HandlerFunc {
+// resourceParsePositiveInt parses a pagination query value. Absent (empty) →
+// def. Present must parse as an int >= 1, else a 400 with the typed-path
+// message format ("invalid query parameter \"<name>\": expected int").
+func resourceParsePositiveInt(raw, name string, def int) (int, error) {
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0, BadRequest(fmt.Sprintf("invalid query parameter %q: expected int", name))
+	}
+	return n, nil
+}
+
+// wrapBindErr normalizes a c.Bind error: an existing *KrudaError (e.g. a 413
+// from an oversized body, or the empty-body 400) passes through untouched; a
+// raw decoder error becomes a 400 "invalid request body", matching the typed
+// path instead of falling through to a 500.
+func wrapBindErr(err error) error {
+	var ke *KrudaError
+	if errors.As(err, &ke) {
+		return err
+	}
+	return BadRequest("invalid request body")
+}
+
+func resourceGetHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
@@ -162,11 +276,16 @@ func resourceGetHandler[T any, ID comparable](svc ResourceService[T, ID], cfg re
 	}
 }
 
-func resourceCreateHandler[T any, ID comparable](svc ResourceService[T, ID]) HandlerFunc {
+func resourceCreateHandler[T any, ID comparable](svc ResourceService[T, ID], validators []fieldValidator, msgs map[string]string) HandlerFunc {
 	return func(c *Ctx) error {
 		var item T
 		if err := c.Bind(&item); err != nil {
-			return err
+			return wrapBindErr(err)
+		}
+		if len(validators) > 0 {
+			if ve := validate(validators, reflect.ValueOf(item), msgs); ve != nil {
+				return ve
+			}
 		}
 		created, err := svc.Create(c.Context(), item)
 		if err != nil {
@@ -176,15 +295,20 @@ func resourceCreateHandler[T any, ID comparable](svc ResourceService[T, ID]) Han
 	}
 }
 
-func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig) HandlerFunc {
+func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, validators []fieldValidator, msgs map[string]string, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
 		var item T
 		if err := c.Bind(&item); err != nil {
-			return err
+			return wrapBindErr(err)
+		}
+		if len(validators) > 0 {
+			if ve := validate(validators, reflect.ValueOf(item), msgs); ve != nil {
+				return ve
+			}
 		}
 		updated, err := svc.Update(c.Context(), id, item)
 		if err != nil {
@@ -194,9 +318,9 @@ func resourceUpdateHandler[T any, ID comparable](svc ResourceService[T, ID], cfg
 	}
 }
 
-func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig) HandlerFunc {
+func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg resourceConfig, parseID func(string) (ID, error)) HandlerFunc {
 	return func(c *Ctx) error {
-		id, err := resourceParseID[ID](c.Param(cfg.idParam))
+		id, err := parseID(c.Param(cfg.idParam))
 		if err != nil {
 			return BadRequest("invalid id")
 		}
@@ -207,26 +331,65 @@ func resourceDeleteHandler[T any, ID comparable](svc ResourceService[T, ID], cfg
 	}
 }
 
-func resourceParseID[ID comparable](raw string) (ID, error) {
-	var zero ID
-	switch any(zero).(type) {
-	case string:
-		return any(raw).(ID), nil
-	case int:
-		v, err := strconv.Atoi(raw)
-		return any(v).(ID), err
-	case int64:
-		v, err := strconv.ParseInt(raw, 10, 64)
-		return any(v).(ID), err
-	case uint:
-		v, err := strconv.ParseUint(raw, 10, 64)
-		return any(uint(v)).(ID), err
-	case uint64:
-		v, err := strconv.ParseUint(raw, 10, 64)
-		return any(v).(ID), err
-	default:
-		return zero, fmt.Errorf("unsupported ID type: %T", zero)
+// resourceIDKindSupported reports whether a reflect.Kind is an ID type the
+// resource router can parse from a path segment. The registration gate and the
+// parser both consult this single predicate so the two can never drift.
+func resourceIDKindSupported(k reflect.Kind) bool {
+	switch k {
+	case reflect.String, reflect.Int, reflect.Int64, reflect.Uint, reflect.Uint64:
+		return true
 	}
+	return false
+}
+
+// buildResourceIDParser returns a path-segment→ID parser computed once at
+// registration. Hoisting the reflect.Type lookup out of the per-request path
+// keeps the resource handlers off any per-request reflection beyond the
+// unavoidable Convert. It switches on reflect.Kind (not the concrete type) so a
+// named type such as `type UserID int64` parses end-to-end, and the parsed value
+// is converted back to ID so the caller gets its exact (possibly named) type.
+//
+// The integer bit width comes from the ID type itself (idType.Bits()), so a
+// value that overflows the target width is rejected as a 400 rather than being
+// silently truncated by the conversion — this matters for `int`/`uint` IDs on
+// 32-bit builds, where a fixed 64-bit parse would wrap.
+func buildResourceIDParser[ID comparable](idType reflect.Type) func(string) (ID, error) {
+	kind := idType.Kind()
+	var bits int
+	switch kind {
+	case reflect.Int, reflect.Int64, reflect.Uint, reflect.Uint64:
+		bits = idType.Bits()
+	}
+	return func(raw string) (ID, error) {
+		switch kind {
+		case reflect.String:
+			return reflect.ValueOf(raw).Convert(idType).Interface().(ID), nil
+		case reflect.Int, reflect.Int64:
+			v, err := strconv.ParseInt(raw, 10, bits)
+			if err != nil {
+				var zero ID
+				return zero, err
+			}
+			return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
+		case reflect.Uint, reflect.Uint64:
+			v, err := strconv.ParseUint(raw, 10, bits)
+			if err != nil {
+				var zero ID
+				return zero, err
+			}
+			return reflect.ValueOf(v).Convert(idType).Interface().(ID), nil
+		default:
+			var zero ID
+			return zero, fmt.Errorf("unsupported ID type: %s", idType)
+		}
+	}
+}
+
+// resourceParseID parses a single path segment into the ID type. It is a
+// convenience wrapper over buildResourceIDParser for callers that do not hold a
+// precomputed parser; the request handlers use the hoisted parser directly.
+func resourceParseID[ID comparable](raw string) (ID, error) {
+	return buildResourceIDParser[ID](reflect.TypeOf((*ID)(nil)).Elem())(raw)
 }
 
 func resourceShouldRegister(cfg resourceConfig, method string) bool {

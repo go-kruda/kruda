@@ -85,9 +85,10 @@ type schemaRef struct {
 	MaxLength  *int                  `json:"maxLength,omitempty"`
 	Nullable   bool                  `json:"nullable,omitempty"`
 
-	// pkgPath tracks the originating package for collision detection.
-	// Not serialized to JSON — internal bookkeeping only.
-	pkgPath string `json:"-"`
+	// typeID is the fully-qualified type string ("pkg/path.Name" or the generic
+	// instantiation name) used to tell two types apart when their sanitized keys
+	// collide. Not serialized — internal bookkeeping only.
+	typeID string `json:"-"`
 }
 
 // routeInfo holds metadata for a single registered typed route.
@@ -98,6 +99,20 @@ type routeInfo struct {
 	hasBody     bool
 	hasForm     bool
 	hasValidate bool
+	resourceOp  *resourceOp // non-nil for kruda.Resource routes; nil for typed routes
+}
+
+// resourceOp carries the explicit OpenAPI metadata for a single auto-CRUD
+// operation registered by kruda.Resource. Rendering is fully determined by
+// these fields (no kind discriminator). Consumed by buildOperation.
+type resourceOp struct {
+	idParam        string       // path-param name (cfg.idParam); "" for list/create
+	idType         reflect.Type // ID type for the path-param schema; nil for list/create
+	bodyType       reflect.Type // T for create/update; nil otherwise
+	respType       reflect.Type // T (get/create/update) | ResourceList[T] (list) | nil (delete → 204)
+	successCode    string       // "200" | "201" | "204"
+	needsListQuery bool         // emit page/limit integer query params
+	hasValidate    bool         // T has validate tags AND a Validator is configured → add 422
 }
 
 // generateSchema converts a Go reflect.Type to a JSON Schema.
@@ -136,24 +151,51 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	if name == "" {
 		name = "Anonymous"
 	}
+	// id is the type's fully-qualified identity. For a generic instantiation,
+	// t.Name() already embeds the full type-arg paths (e.g.
+	// "ResourceList[github.com/app/models.User]"); for a plain named type we
+	// prepend its package path so two same-short-name types from different
+	// packages are distinguishable.
+	id := name
+	if pkg := t.PkgPath(); pkg != "" && !strings.ContainsAny(name, "[") {
+		id = pkg + "." + name
+	}
 
-	// Detect collision: if a schema with the same short name exists but from a
-	// different package, disambiguate by appending the last segment of PkgPath.
-	componentKey := name
-	if existing, exists := components[name]; exists {
-		// Check if it's truly the same type (same PkgPath) — if so, return ref.
-		if existing.pkgPath == t.PkgPath() {
+	// A generic instantiation's name embeds "/", "[", "]", ".", and "*" for
+	// pointer args — characters that make the derived $ref an invalid JSON
+	// pointer. sanitizeComponentName maps the full instantiation name (incl. each
+	// type arg's package path) to a valid key, so cross-package or value/pointer
+	// args never collapse. Non-generic names (no /[].* ) are returned unchanged,
+	// so existing keys never move (the golden guard relies on this no-op).
+	componentKey := sanitizeComponentName(name)
+
+	// Resolve key collisions by true type identity. An entry under this key that
+	// shares our id is the same type → return a $ref. A different id is a genuine
+	// cross-package short-name clash (only possible for plain named types, whose
+	// sanitized key is the bare short name): disambiguate with the full package
+	// path, then a numeric counter, so distinct types never share a key and an
+	// existing schema is never overwritten — even three+ types whose packages
+	// share a trailing segment (e.g. several ".../models.User"). Generic keys
+	// already encode full identity, so they rarely reach the clash branch; the
+	// counter keeps even a pathological generic clash safe.
+	if existing, exists := components[componentKey]; exists {
+		if existing.typeID == id {
 			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 		}
-		// Different package, same name — disambiguate with package suffix.
-		pkg := t.PkgPath()
-		if idx := strings.LastIndexByte(pkg, '/'); idx >= 0 {
-			pkg = pkg[idx+1:]
+		base := componentKey
+		if pkg := sanitizeComponentName(t.PkgPath()); pkg != "" {
+			base += "_" + pkg
 		}
-		componentKey = name + "_" + pkg
-		// If even this disambiguated key exists and matches, return ref.
-		if _, exists2 := components[componentKey]; exists2 {
-			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+		componentKey = base
+		for n := 2; ; n++ {
+			again, taken := components[componentKey]
+			if !taken {
+				break
+			}
+			if again.typeID == id {
+				return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+			}
+			componentKey = base + "_" + strconv.Itoa(n)
 		}
 	}
 
@@ -162,7 +204,7 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	schema := &schemaRef{
 		Type:       "object",
 		Properties: make(map[string]*schemaRef),
-		pkgPath:    t.PkgPath(),
+		typeID:     id,
 	}
 	components[componentKey] = schema
 
@@ -239,6 +281,77 @@ func containsRule(vtag, rule string) bool {
 		}
 	}
 	return false
+}
+
+// sanitizeComponentName turns a reflect type name into a valid OpenAPI
+// component key (and thus a valid "#/components/schemas/<key>" JSON pointer).
+//
+// A name made up only of key-safe runes ([A-Za-z0-9_-]) is returned unchanged,
+// so plain named types keep their existing keys (the golden guard depends on
+// this no-op). "-" is preserved because module paths such as "go-kruda" contain
+// it and it is legal in a component key.
+//
+// Generic instantiation names such as "ResourceList[github.com/app/models.User]"
+// embed characters that are illegal in a JSON-pointer segment — "/[].*", the
+// "," between multiple type args, parentheses in func-typed args, and spaces.
+// Rather than collapse each type argument to its short identifier — which
+// silently merges distinct types that share a short name across packages, or a
+// value type with its pointer — this preserves the FULL qualified name: every
+// maximal run of non-key-safe runes becomes a single "_", repeats are collapsed,
+// and surrounding "_" is trimmed. The mapping is injective up to that
+// punctuation, so distinct Go types yield distinct keys:
+//
+//	ResourceList[a/b.User]          → ResourceList_a_b_User
+//	ResourceList[c/d.User]          → ResourceList_c_d_User   (distinct package)
+//	genWrap[*a/b.User]              → genWrap_a_b_User_Ptr    (pointer marker)
+//	ResourceList[map[string]int]    → ResourceList_map_string_int (no brackets)
+//	Pair[a.Foo,b.Bar]               → Pair_a_Foo_b_Bar        (comma separated)
+func sanitizeComponentName(name string) string {
+	clean := true
+	for _, r := range name {
+		if !isKeySafeRune(r) {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return name
+	}
+
+	// A "*" run marks a pointer type arg; without a distinct marker "*T" and "T"
+	// would both lose the star to the separator and collapse to the same key.
+	// Append a "Ptr" token per pointer star so value vs pointer args stay distinct.
+	pointerStars := strings.Count(name, "*")
+
+	var b strings.Builder
+	prevUnderscore := false
+	for _, r := range name {
+		if isKeySafeRune(r) {
+			b.WriteRune(r)
+			prevUnderscore = false
+			continue
+		}
+		if !prevUnderscore {
+			b.WriteByte('_')
+			prevUnderscore = true
+		}
+	}
+	key := strings.Trim(b.String(), "_")
+	for i := 0; i < pointerStars; i++ {
+		key += "_Ptr"
+	}
+	return key
+}
+
+// isKeySafeRune reports whether r may appear verbatim in an OpenAPI component
+// key. The spec restricts keys to ^[a-zA-Z0-9._-]+$; "." is treated as unsafe
+// here even though the spec allows it, because it separates a package path from
+// a type name and collapsing it keeps the key→type mapping injective.
+func isKeySafeRune(r rune) bool {
+	return r == '_' || r == '-' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
 }
 
 // convertPath converts Kruda path format to OpenAPI format: ":id" → "{id}".
@@ -335,6 +448,11 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 		Security:    ri.config.security,
 	}
 
+	if ri.resourceOp != nil {
+		buildResourceOperation(op, ri.resourceOp, components, problemJSON)
+		return op
+	}
+
 	inType := ri.config.inType
 	outType := ri.config.outType
 
@@ -404,6 +522,76 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 	}
 
 	return op
+}
+
+// buildResourceOperation renders a kruda.Resource auto-CRUD operation
+// explicitly from its resourceOp metadata, covering the list/get/create/update/
+// delete shapes (200/201/204), a 422 only when validation is engaged, and the
+// same default error response as typed routes.
+func buildResourceOperation(op *openAPIOperation, rop *resourceOp, components map[string]*schemaRef, problemJSON bool) {
+	if rop.idParam != "" {
+		var idSchema *schemaRef
+		if rop.idType != nil {
+			idSchema = generateSchema(rop.idType, components)
+		} else {
+			idSchema = &schemaRef{Type: "string"}
+		}
+		op.Parameters = append(op.Parameters, openAPIParameter{
+			Name:     rop.idParam,
+			In:       "path",
+			Required: true,
+			Schema:   idSchema,
+		})
+	}
+
+	if rop.needsListQuery {
+		op.Parameters = append(op.Parameters,
+			openAPIParameter{Name: "page", In: "query", Schema: &schemaRef{Type: "integer"}},
+			openAPIParameter{Name: "limit", In: "query", Schema: &schemaRef{Type: "integer"}},
+		)
+	}
+
+	if rop.bodyType != nil {
+		op.RequestBody = &openAPIRequestBody{
+			Required: true,
+			Content: map[string]*openAPIMediaType{
+				"application/json": {Schema: generateSchema(rop.bodyType, components)},
+			},
+		}
+	}
+
+	code := rop.successCode
+	if code == "" {
+		code = "200"
+	}
+	if rop.respType != nil {
+		op.Responses[code] = &openAPIResponse{
+			Description: "Successful response",
+			Content: map[string]*openAPIMediaType{
+				"application/json": {Schema: generateSchema(rop.respType, components)},
+			},
+		}
+	} else {
+		op.Responses[code] = &openAPIResponse{Description: "No Content"}
+	}
+
+	if rop.hasValidate {
+		contentType, schema := validationResponseSchema(components, problemJSON)
+		op.Responses["422"] = &openAPIResponse{
+			Description: "Validation failed",
+			Content: map[string]*openAPIMediaType{
+				contentType: {Schema: schema},
+			},
+		}
+	}
+
+	contentType, schema := defaultErrorResponseSchema(components, problemJSON)
+	op.Responses["default"] = &openAPIResponse{
+		Description: "Error response",
+		Content: map[string]*openAPIMediaType{
+			contentType: {Schema: schema},
+		},
+	}
 }
 
 // validationResponseSchema returns the media type + schema for a 422 validation

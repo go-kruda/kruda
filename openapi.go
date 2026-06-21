@@ -98,6 +98,20 @@ type routeInfo struct {
 	hasBody     bool
 	hasForm     bool
 	hasValidate bool
+	resourceOp  *resourceOp // non-nil for kruda.Resource routes; nil for typed routes
+}
+
+// resourceOp carries the explicit OpenAPI metadata for a single auto-CRUD
+// operation registered by kruda.Resource. Rendering is fully determined by
+// these fields (no kind discriminator). Consumed by buildOperation.
+type resourceOp struct {
+	idParam        string       // path-param name (cfg.idParam); "" for list/create
+	idType         reflect.Type // ID type for the path-param schema; nil for list/create
+	bodyType       reflect.Type // T for create/update; nil otherwise
+	respType       reflect.Type // T (get/create/update) | ResourceList[T] (list) | nil (delete → 204)
+	successCode    string       // "200" | "201" | "204"
+	needsListQuery bool         // emit page/limit integer query params
+	hasValidate    bool         // T has validate tags AND a Validator is configured → add 422
 }
 
 // generateSchema converts a Go reflect.Type to a JSON Schema.
@@ -136,6 +150,11 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	if name == "" {
 		name = "Anonymous"
 	}
+	// A generic instantiation's name (e.g. "ResourceList[github.com/app/models.User]")
+	// embeds "/", "[", "]", and "." — characters that make the derived $ref an
+	// invalid JSON pointer. Sanitize to a deterministic component key. Non-generic
+	// names (no /[].) are returned unchanged, so existing keys never move.
+	name = sanitizeComponentName(name)
 
 	// Detect collision: if a schema with the same short name exists but from a
 	// different package, disambiguate by appending the last segment of PkgPath.
@@ -241,6 +260,58 @@ func containsRule(vtag, rule string) bool {
 	return false
 }
 
+// sanitizeComponentName turns a reflect type name into a valid OpenAPI
+// component key (and thus a valid "#/components/schemas/<key>" JSON pointer).
+//
+// Non-generic names contain none of "/[]." and are returned unchanged, so they
+// keep their existing keys. Generic instantiation names such as
+// "ResourceList[github.com/app/models.User]" are reduced to "ResourceList_User"
+// deterministically: the base type name, then each type argument trimmed to its
+// final identifier (package path + qualifier dropped), joined by "_".
+func sanitizeComponentName(name string) string {
+	if !strings.ContainsAny(name, "/[].") {
+		return name
+	}
+
+	base := name
+	args := ""
+	if i := strings.IndexByte(name, '['); i >= 0 {
+		base = name[:i]
+		args = strings.TrimSuffix(name[i+1:], "]")
+	}
+
+	var b strings.Builder
+	b.WriteString(lastIdentSegment(base))
+	if args != "" {
+		for _, arg := range strings.Split(args, ",") {
+			seg := lastIdentSegment(arg)
+			if seg == "" {
+				continue
+			}
+			b.WriteByte('_')
+			b.WriteString(seg)
+		}
+	}
+	return b.String()
+}
+
+// lastIdentSegment returns the final identifier of a (possibly qualified,
+// possibly pointer/bracketed) type token: the substring after the last "/" or
+// ".", with leading "*", "[", "]" stripped. e.g. "github.com/app/models.User"
+// → "User", "*models.User" → "User".
+func lastIdentSegment(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "*[]")
+	if i := strings.LastIndexByte(s, '/'); i >= 0 {
+		s = s[i+1:]
+	}
+	if i := strings.LastIndexByte(s, '.'); i >= 0 {
+		s = s[i+1:]
+	}
+	s = strings.Trim(s, "*[]")
+	return s
+}
+
 // convertPath converts Kruda path format to OpenAPI format: ":id" → "{id}".
 // Strips regex constraints (":id<[0-9]+>" → "{id}") and optional markers (":id?" → "{id}").
 func convertPath(path string) string {
@@ -335,6 +406,11 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 		Security:    ri.config.security,
 	}
 
+	if ri.resourceOp != nil {
+		buildResourceOperation(op, ri.resourceOp, components, problemJSON)
+		return op
+	}
+
 	inType := ri.config.inType
 	outType := ri.config.outType
 
@@ -404,6 +480,76 @@ func buildOperation(ri routeInfo, components map[string]*schemaRef, problemJSON 
 	}
 
 	return op
+}
+
+// buildResourceOperation renders a kruda.Resource auto-CRUD operation
+// explicitly from its resourceOp metadata, covering the list/get/create/update/
+// delete shapes (200/201/204), a 422 only when validation is engaged, and the
+// same default error response as typed routes.
+func buildResourceOperation(op *openAPIOperation, rop *resourceOp, components map[string]*schemaRef, problemJSON bool) {
+	if rop.idParam != "" {
+		var idSchema *schemaRef
+		if rop.idType != nil {
+			idSchema = generateSchema(rop.idType, components)
+		} else {
+			idSchema = &schemaRef{Type: "string"}
+		}
+		op.Parameters = append(op.Parameters, openAPIParameter{
+			Name:     rop.idParam,
+			In:       "path",
+			Required: true,
+			Schema:   idSchema,
+		})
+	}
+
+	if rop.needsListQuery {
+		op.Parameters = append(op.Parameters,
+			openAPIParameter{Name: "page", In: "query", Schema: &schemaRef{Type: "integer"}},
+			openAPIParameter{Name: "limit", In: "query", Schema: &schemaRef{Type: "integer"}},
+		)
+	}
+
+	if rop.bodyType != nil {
+		op.RequestBody = &openAPIRequestBody{
+			Required: true,
+			Content: map[string]*openAPIMediaType{
+				"application/json": {Schema: generateSchema(rop.bodyType, components)},
+			},
+		}
+	}
+
+	code := rop.successCode
+	if code == "" {
+		code = "200"
+	}
+	if rop.respType != nil {
+		op.Responses[code] = &openAPIResponse{
+			Description: "Successful response",
+			Content: map[string]*openAPIMediaType{
+				"application/json": {Schema: generateSchema(rop.respType, components)},
+			},
+		}
+	} else {
+		op.Responses[code] = &openAPIResponse{Description: "No Content"}
+	}
+
+	if rop.hasValidate {
+		contentType, schema := validationResponseSchema(components, problemJSON)
+		op.Responses["422"] = &openAPIResponse{
+			Description: "Validation failed",
+			Content: map[string]*openAPIMediaType{
+				contentType: {Schema: schema},
+			},
+		}
+	}
+
+	contentType, schema := defaultErrorResponseSchema(components, problemJSON)
+	op.Responses["default"] = &openAPIResponse{
+		Description: "Error response",
+		Content: map[string]*openAPIMediaType{
+			contentType: {Schema: schema},
+		},
+	}
 }
 
 // validationResponseSchema returns the media type + schema for a 422 validation

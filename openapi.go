@@ -172,20 +172,30 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	// Resolve key collisions by true type identity. An entry under this key that
 	// shares our id is the same type → return a $ref. A different id is a genuine
 	// cross-package short-name clash (only possible for plain named types, whose
-	// sanitized key is the bare short name): disambiguate by appending the last
-	// package segment. Generic keys already encode full identity, so they never
-	// reach the clash branch.
+	// sanitized key is the bare short name): disambiguate with the full package
+	// path, then a numeric counter, so distinct types never share a key and an
+	// existing schema is never overwritten — even three+ types whose packages
+	// share a trailing segment (e.g. several ".../models.User"). Generic keys
+	// already encode full identity, so they rarely reach the clash branch; the
+	// counter keeps even a pathological generic clash safe.
 	if existing, exists := components[componentKey]; exists {
 		if existing.typeID == id {
 			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 		}
-		pkg := t.PkgPath()
-		if idx := strings.LastIndexByte(pkg, '/'); idx >= 0 {
-			pkg = pkg[idx+1:]
+		base := componentKey
+		if pkg := sanitizeComponentName(t.PkgPath()); pkg != "" {
+			base += "_" + pkg
 		}
-		componentKey += "_" + pkg
-		if again, exists2 := components[componentKey]; exists2 && again.typeID == id {
-			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+		componentKey = base
+		for n := 2; ; n++ {
+			again, taken := components[componentKey]
+			if !taken {
+				break
+			}
+			if again.typeID == id {
+				return &schemaRef{Ref: "#/components/schemas/" + componentKey}
+			}
+			componentKey = base + "_" + strconv.Itoa(n)
 		}
 	}
 
@@ -276,46 +286,54 @@ func containsRule(vtag, rule string) bool {
 // sanitizeComponentName turns a reflect type name into a valid OpenAPI
 // component key (and thus a valid "#/components/schemas/<key>" JSON pointer).
 //
-// Non-generic names contain none of "/[].* " and are returned unchanged, so
-// they keep their existing keys (the golden guard depends on this no-op).
+// A name made up only of key-safe runes ([A-Za-z0-9_-]) is returned unchanged,
+// so plain named types keep their existing keys (the golden guard depends on
+// this no-op). "-" is preserved because module paths such as "go-kruda" contain
+// it and it is legal in a component key.
 //
 // Generic instantiation names such as "ResourceList[github.com/app/models.User]"
-// embed characters that are illegal in a JSON-pointer segment. Rather than
-// collapse each type argument to its short identifier — which silently merges
-// distinct types that share a short name across packages, or a value type with
-// its pointer — this preserves the FULL qualified name: every maximal run of
-// the illegal characters (/ . [ ] * and spaces) becomes a single "_", repeats
-// are collapsed, and surrounding "_" is trimmed. The mapping is injective up to
-// that punctuation, so distinct Go types yield distinct keys:
+// embed characters that are illegal in a JSON-pointer segment — "/[].*", the
+// "," between multiple type args, parentheses in func-typed args, and spaces.
+// Rather than collapse each type argument to its short identifier — which
+// silently merges distinct types that share a short name across packages, or a
+// value type with its pointer — this preserves the FULL qualified name: every
+// maximal run of non-key-safe runes becomes a single "_", repeats are collapsed,
+// and surrounding "_" is trimmed. The mapping is injective up to that
+// punctuation, so distinct Go types yield distinct keys:
 //
 //	ResourceList[a/b.User]          → ResourceList_a_b_User
 //	ResourceList[c/d.User]          → ResourceList_c_d_User   (distinct package)
-//	genWrap[a/b.User]               → genWrap_a_b_User
 //	genWrap[*a/b.User]              → genWrap_a_b_User_Ptr    (pointer marker)
 //	ResourceList[map[string]int]    → ResourceList_map_string_int (no brackets)
+//	Pair[a.Foo,b.Bar]               → Pair_a_Foo_b_Bar        (comma separated)
 func sanitizeComponentName(name string) string {
-	if !strings.ContainsAny(name, "/[].* ") {
+	clean := true
+	for _, r := range name {
+		if !isKeySafeRune(r) {
+			clean = false
+			break
+		}
+	}
+	if clean {
 		return name
 	}
 
-	// A trailing "*" run anywhere marks a pointer type arg; without a distinct
-	// marker "*T" and "T" would both lose the star to the generic separator and
-	// collapse to the same key. Append a "Ptr" token per pointer star so value
-	// vs pointer args stay distinct.
+	// A "*" run marks a pointer type arg; without a distinct marker "*T" and "T"
+	// would both lose the star to the separator and collapse to the same key.
+	// Append a "Ptr" token per pointer star so value vs pointer args stay distinct.
 	pointerStars := strings.Count(name, "*")
 
 	var b strings.Builder
 	prevUnderscore := false
 	for _, r := range name {
-		switch r {
-		case '/', '.', '[', ']', '*', ' ':
-			if !prevUnderscore {
-				b.WriteByte('_')
-				prevUnderscore = true
-			}
-		default:
+		if isKeySafeRune(r) {
 			b.WriteRune(r)
 			prevUnderscore = false
+			continue
+		}
+		if !prevUnderscore {
+			b.WriteByte('_')
+			prevUnderscore = true
 		}
 	}
 	key := strings.Trim(b.String(), "_")
@@ -323,6 +341,17 @@ func sanitizeComponentName(name string) string {
 		key += "_Ptr"
 	}
 	return key
+}
+
+// isKeySafeRune reports whether r may appear verbatim in an OpenAPI component
+// key. The spec restricts keys to ^[a-zA-Z0-9._-]+$; "." is treated as unsafe
+// here even though the spec allows it, because it separates a package path from
+// a type name and collapsing it keeps the key→type mapping injective.
+func isKeySafeRune(r rune) bool {
+	return r == '_' || r == '-' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
 }
 
 // convertPath converts Kruda path format to OpenAPI format: ":id" → "{id}".

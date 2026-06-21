@@ -403,16 +403,17 @@ func TestNew_ServerName(t *testing.T) {
 	}
 }
 
-func TestNew_InjectResponseHeaders(t *testing.T) {
+// TestNew_NoResponseSideTraceparent guards the deliberate decision not to echo
+// trace context in the response. Doing so is non-standard, and injecting before
+// c.Next() (the only way to make it appear) would disable the string/JSON fast
+// lane on every traced route.
+func TestNew_NoResponseSideTraceparent(t *testing.T) {
 	_, tp := setupTracer()
 	defer tp.Shutdown(context.Background())
 
-	// Use W3C TraceContext propagator for injection.
-	prop := propagation.TraceContext{}
-
 	srv := newTestApp(Config{
 		TracerProvider: tp,
-		Propagators:    prop,
+		Propagators:    propagation.TraceContext{},
 	}, "GET", "/inject", func(c *kruda.Ctx) error {
 		return c.Text("ok")
 	})
@@ -424,10 +425,7 @@ func TestNew_InjectResponseHeaders(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// The traceparent header should be present in the response
-	// because we inject trace context after handling.
-	tp2 := resp.Header.Get("Traceparent")
-	if tp2 == "" {
-		t.Log("traceparent header not in response (may depend on transport); skipping assertion")
+	if got := resp.Header.Get("Traceparent"); got != "" {
+		t.Errorf("response carried Traceparent=%q; Kruda must not echo trace context in responses", got)
 	}
 }

@@ -144,9 +144,24 @@ Collector `tail_sampling` processor with a status-code policy).
 
 Enabling observability installs an `OnResponse` hook. On Wing, the presence of a
 response hook **drops the single-handler fast lane** for instrumented routes
-(the fast lane only applies when no hook needs the response). Throughput will
-shift versus an un-instrumented build, so **re-baseline your HPA / autoscaling
-targets after enabling** rather than reusing pre-observability numbers.
+(the fast lane only applies when no hook needs the response), and per-request
+tracing adds span work on top.
+
+Measured on a paired loopback A/B (i5-13500, `wrk -t4 -c128`, fast-lane routes
+`/`, `/json`, `/json-static` serving ~760K RPS uninstrumented — see
+`bench/reproducible/results/2026-06-20-d3-observability-ab-evidence.md`):
+
+| config                              | RPS vs off | p99       |
+|-------------------------------------|------------|-----------|
+| RED metrics only (`TracesEnabled:false`) | ~−22%  | ~+27%     |
+| full bundle (traces + metrics)      | ~−47%      | ~+55%     |
+
+This is the worst case: handler-bound routes that do real I/O (DB, cache,
+upstream calls) spend that fixed overhead against a much larger budget, so the
+relative hit is far smaller. To trim the cost on hot routes, sample traces
+(`Config.SampleRatio`) — tracing is the larger half — or run metrics-only. Either
+way, **re-baseline your HPA / autoscaling targets against an instrumented build**
+rather than reusing pre-observability numbers.
 
 ## gRPC and outbound HTTP propagation
 

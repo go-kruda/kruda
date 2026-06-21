@@ -44,6 +44,10 @@ func Logger(config ...LoggerConfig) kruda.HandlerFunc {
 			return c.Next()
 		}
 
+		// Record the start time so c.Latency() reports real elapsed time.
+		// MarkStart is opt-in (this middleware is its intended caller) so
+		// non-logging apps skip the time.Now() cost.
+		c.MarkStart()
 		err := c.Next()
 
 		status := c.StatusCode()

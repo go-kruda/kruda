@@ -3,7 +3,9 @@
 package kruda
 
 import (
+	"net/netip"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
@@ -177,20 +179,54 @@ func (e *epollEngine) drainAccept(events []event) int {
 	// Re-arm listen fd (ET, persistent — no need to re-add)
 	count := 0
 	for count < len(events) {
-		nfd, _, err := syscall.Accept4(e.listenFd, syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC)
-		if err != nil {
-			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+		// Raw accept4 with a stack-allocated RawSockaddrAny so the peer address
+		// can be captured without syscall.Accept4's per-call boxed Sockaddr,
+		// which would heap-allocate on the accept path.
+		var rsa syscall.RawSockaddrAny
+		salen := socklen(unsafe.Sizeof(rsa))
+		r1, _, errno := syscall.RawSyscall6(syscall.SYS_ACCEPT4,
+			uintptr(e.listenFd),
+			uintptr(unsafe.Pointer(&rsa)),
+			uintptr(unsafe.Pointer(&salen)),
+			uintptr(syscall.SOCK_NONBLOCK|syscall.SOCK_CLOEXEC), 0, 0)
+		if errno != 0 {
+			if errno == syscall.EAGAIN || errno == syscall.EWOULDBLOCK {
 				break
 			}
 			events[count] = event{Op: opAccept, Res: -1}
 			count++
 			break
 		}
+		nfd := int(r1)
+		ip, ok := parseRawSockaddr(&rsa)
 		e.epollAdd(int32(nfd), 0)
-		events[count] = event{Op: opAccept, Res: int32(nfd), Flags: cqeFMore}
+		events[count] = event{Op: opAccept, Res: int32(nfd), Flags: cqeFMore, PeerIP: ip, HasPeer: ok}
 		count++
 	}
 	return count
+}
+
+// socklen mirrors the kernel socklen_t passed to accept4. syscall's own
+// _Socklen is unexported, so we declare a local alias.
+type socklen = uint32
+
+// parseRawSockaddr extracts the peer IP from a kernel sockaddr without heap
+// allocation (no interface boxing, unlike syscall.Accept4's Sockaddr return).
+// The IPv4 path is zero-alloc; the rare IPv6+scope path may allocate in WithZone.
+func parseRawSockaddr(rsa *syscall.RawSockaddrAny) (netip.Addr, bool) {
+	switch rsa.Addr.Family {
+	case syscall.AF_INET:
+		p := (*syscall.RawSockaddrInet4)(unsafe.Pointer(rsa))
+		return netip.AddrFrom4(p.Addr), true
+	case syscall.AF_INET6:
+		p := (*syscall.RawSockaddrInet6)(unsafe.Pointer(rsa))
+		a := netip.AddrFrom16(p.Addr)
+		if p.Scope_id != 0 {
+			a = a.WithZone(strconv.FormatUint(uint64(p.Scope_id), 10))
+		}
+		return a, true
+	}
+	return netip.Addr{}, false
 }
 
 func (e *epollEngine) Flush() error { return nil }

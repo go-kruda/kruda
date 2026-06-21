@@ -33,6 +33,13 @@ type Config struct {
 	// TrustProxy enables trusting X-Forwarded-For/X-Real-IP headers. Default: false.
 	TrustProxy bool
 
+	// MaxConns is the total accepted-connection cap for the Wing transport.
+	// <0 = unset (derive default from fd ulimit); 0 = unlimited; >0 = explicit total.
+	MaxConns         int
+	MaxConnsPerIP    int // 0 = off
+	AcceptRatePerSec int // 0 = off
+	AcceptRateBurst  int
+
 	JSONEncoder func(v any) ([]byte, error)
 	JSONDecoder func(data []byte, v any) error
 
@@ -82,6 +89,7 @@ func defaultConfig() Config {
 		IdleTimeout:       120 * time.Second,
 		BodyLimit:         4 * 1024 * 1024, // 4MB
 		HeaderLimit:       8 * 1024,        // 8KB
+		MaxConns:          -1,              // unset → derive from fd ulimit at Wing startup
 		ShutdownTimeout:   10 * time.Second,
 		JSONEncoder:       krudajson.Marshal,
 		JSONDecoder:       krudajson.Unmarshal,
@@ -278,6 +286,21 @@ func WithShutdownTimeout(d time.Duration) Option {
 // Default is false — only the direct connection's remote address is used.
 func WithTrustProxy(trust bool) Option {
 	return func(a *App) { a.config.TrustProxy = trust }
+}
+
+// WithMaxConns sets the total accepted-connection cap across the whole server
+// (Wing only). 0 disables the cap; if never called, a default is derived from
+// the file-descriptor soft limit.
+func WithMaxConns(n int) Option { return func(a *App) { a.config.MaxConns = n } }
+
+// WithMaxConnsPerIP caps concurrent connections per source IP (Wing only,
+// per-worker/approximate; see docs). 0 (default) disables it.
+func WithMaxConnsPerIP(n int) Option { return func(a *App) { a.config.MaxConnsPerIP = n } }
+
+// WithMaxAcceptRate throttles new-connection accepts to perSec with burst slack
+// (Wing only, per-worker/approximate). perSec 0 (default) disables it.
+func WithMaxAcceptRate(perSec, burst int) Option {
+	return func(a *App) { a.config.AcceptRatePerSec = perSec; a.config.AcceptRateBurst = burst }
 }
 
 // WithTLS configures TLS for HTTPS and HTTP/2 auto-negotiation.

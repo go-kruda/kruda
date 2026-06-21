@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -38,13 +39,21 @@ func (m *mockEngine) Close()                                 {}
 
 func newTestWorker(maxConns int) (*worker, *mockEngine) {
 	eng := &mockEngine{}
+	// Back the shared total-cap atomics with per-worker storage so the CAS
+	// reserve in handleAccept has somewhere to count (production wires these to
+	// the Transport's connCnt/rejectTtl).
+	var connCount, rejectTotal, rejectIP, rejectRate int64
 	w := &worker{
-		id:       0,
-		listenFd: 100,
-		eng:      eng,
-		config:   WingConfig{ReadBufSize: 4096},
-		maxConns: maxConns,
-		conns:    make(map[int32]*conn, 16),
+		id:          0,
+		listenFd:    100,
+		eng:         eng,
+		config:      WingConfig{ReadBufSize: 4096},
+		maxConns:    maxConns,
+		connCount:   &connCount,
+		rejectTotal: &rejectTotal,
+		rejectIP:    &rejectIP,
+		rejectRate:  &rejectRate,
+		conns:       make(map[int32]*conn, 16),
 	}
 	return w, eng
 }
@@ -62,16 +71,19 @@ func expectedIdleRecvArms() int {
 
 func TestHandleAccept_ConnectionLimitReached(t *testing.T) {
 	w, eng := newTestWorker(2)
-	w.conns[10] = newTestConn(10)
-	w.conns[11] = newTestConn(11)
+	// The cap now reserves against the shared connCount, not len(w.conns).
+	atomic.StoreInt64(w.connCount, 2)
 
 	w.handleAccept(event{Op: opAccept, Res: 12, Flags: cqeFMore})
 
 	if _, has := w.conns[12]; has {
 		t.Error("fd 12 should NOT be in conns map after limit reached")
 	}
-	if len(w.conns) != 2 {
-		t.Errorf("conns count = %d, want 2", len(w.conns))
+	if got := atomic.LoadInt64(w.connCount); got != 2 {
+		t.Errorf("connCount = %d, want 2 (reserve refused)", got)
+	}
+	if got := atomic.LoadInt64(w.rejectTotal); got != 1 {
+		t.Errorf("rejectTotal = %d, want 1", got)
 	}
 	// v1.5: no duplicate SubmitAccept when cqeFMore is set and at limit
 	if eng.acceptArmed != 0 {
@@ -84,15 +96,15 @@ func TestHandleAccept_ConnectionLimitReached(t *testing.T) {
 
 func TestHandleAccept_ConnectionLimitNotReached(t *testing.T) {
 	w, eng := newTestWorker(3)
-	w.conns[10] = newTestConn(10)
+	atomic.StoreInt64(w.connCount, 1)
 
 	w.handleAccept(event{Op: opAccept, Res: 11, Flags: cqeFMore})
 
 	if _, has := w.conns[11]; !has {
 		t.Error("fd 11 should be in conns map")
 	}
-	if len(w.conns) != 2 {
-		t.Errorf("conns count = %d, want 2", len(w.conns))
+	if got := atomic.LoadInt64(w.connCount); got != 2 {
+		t.Errorf("connCount = %d, want 2 (reserve admitted)", got)
 	}
 	wantRecvArmed := expectedIdleRecvArms()
 	if eng.recvArmed != wantRecvArmed {
@@ -102,14 +114,16 @@ func TestHandleAccept_ConnectionLimitNotReached(t *testing.T) {
 
 func TestHandleAccept_UnlimitedConnections(t *testing.T) {
 	w, eng := newTestWorker(0)
-	for i := int32(0); i < 100; i++ {
-		w.conns[i] = newTestConn(i)
-	}
+	atomic.StoreInt64(w.connCount, 100)
 
 	w.handleAccept(event{Op: opAccept, Res: 200, Flags: cqeFMore})
 
 	if _, has := w.conns[200]; !has {
 		t.Error("fd 200 should be in conns map (unlimited mode)")
+	}
+	// Unlimited mode does not touch connCount (admitted stays false).
+	if got := atomic.LoadInt64(w.connCount); got != 100 {
+		t.Errorf("connCount = %d, want 100 (unlimited mode untouched)", got)
 	}
 	wantRecvArmed := expectedIdleRecvArms()
 	if eng.recvArmed != wantRecvArmed {
@@ -135,15 +149,15 @@ func TestHandleAccept_NegativeResult(t *testing.T) {
 
 func TestHandleAccept_AtExactLimit(t *testing.T) {
 	w, _ := newTestWorker(1)
-	w.conns[10] = newTestConn(10)
+	atomic.StoreInt64(w.connCount, 1)
 
 	w.handleAccept(event{Op: opAccept, Res: 11, Flags: cqeFMore})
 
 	if _, has := w.conns[11]; has {
 		t.Error("fd 11 should NOT be in conns (at exact limit)")
 	}
-	if len(w.conns) != 1 {
-		t.Errorf("conns count = %d, want 1", len(w.conns))
+	if got := atomic.LoadInt64(w.connCount); got != 1 {
+		t.Errorf("connCount = %d, want 1 (reserve refused at exact limit)", got)
 	}
 }
 
@@ -234,19 +248,6 @@ func TestHandleRecv_PanicRecoveryClosesFd(t *testing.T) {
 	t.Skip("v1.5: panic recovery in handlerWorker — see integration tests")
 }
 
-func TestWorkerMaxConnsFromConfig(t *testing.T) {
-	cfg := WingConfig{Workers: 1, MaxConnsPerWorker: 5000}
-	cfg.defaults()
-	if cfg.MaxConnsPerWorker != 5000 {
-		t.Errorf("MaxConnsPerWorker = %d, want 5000", cfg.MaxConnsPerWorker)
-	}
-	cfg2 := WingConfig{}
-	cfg2.defaults()
-	if cfg2.MaxConnsPerWorker != 0 {
-		t.Errorf("default MaxConnsPerWorker = %d, want 0 (unlimited)", cfg2.MaxConnsPerWorker)
-	}
-}
-
 func TestTransportConnectionLimit(t *testing.T) {
 	skipIfNoEngine(t)
 
@@ -254,10 +255,10 @@ func TestTransportConnectionLimit(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	tr := NewWingTransport(WingConfig{
-		Workers:           1,
-		RingSize:          64,
-		ReadBufSize:       4096,
-		MaxConnsPerWorker: 2,
+		Workers:     1,
+		RingSize:    64,
+		ReadBufSize: 4096,
+		MaxConns:    2, // global total cap
 	})
 
 	var wg sync.WaitGroup

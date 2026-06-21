@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"sync"
@@ -69,11 +71,34 @@ func (c *WingConfig) needsAsync() bool {
 // loop on a dedicated OS thread. Implements transport.Transport and
 // transport.PresetConfigurator.
 type Transport struct {
-	config   WingConfig
-	workers  []*worker
-	shutdown atomic.Bool
-	wg       sync.WaitGroup
-	ready    chan struct{}
+	config  WingConfig
+	workers []*worker
+	// shutdown/connCnt/rejectTtl are shared cold-path atomics touched only on
+	// accept and connection close (never per-request). Co-located so they share
+	// cache lines away from the hot per-conn state; whether connCnt warrants its
+	// own cache line vs. shutdown (false-sharing under an accept storm) is left
+	// to a Linux A/B before adding padding.
+	shutdown   atomic.Bool
+	connCnt    int64 // accepted connections currently admitted (atomic)
+	rejectTtl  int64 // connections refused by the total cap (atomic)
+	rejectIP   int64 // connections refused by the per-IP cap (atomic)
+	rejectRate int64 // connections refused by the accept-rate bucket (atomic)
+	wg         sync.WaitGroup
+	ready      chan struct{}
+}
+
+// connCount returns the number of currently-admitted connections across all
+// workers. Test/diagnostics accessor; reads the shared atomic.
+func (t *Transport) connCount() int64 { return atomic.LoadInt64(&t.connCnt) }
+
+// RejectStats returns accept-side rejection counters for all three limit kinds
+// (total cap, per-IP cap, accept-rate bucket) since startup.
+func (t *Transport) RejectStats() RejectStats {
+	return RejectStats{
+		Total: atomic.LoadInt64(&t.rejectTtl),
+		PerIP: atomic.LoadInt64(&t.rejectIP),
+		Rate:  atomic.LoadInt64(&t.rejectRate),
+	}
 }
 
 // NewWingTransport builds a Wing transport from cfg, applying defaults to any
@@ -97,7 +122,7 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 			t.cleanupWorkers(i)
 			return fmt.Errorf("wing: listen: %w", err)
 		}
-		w, err := newWorker(i, fd, t.config, handler)
+		w, err := newWorker(i, fd, t.config, handler, &t.connCnt, &t.rejectTtl, &t.rejectIP, &t.rejectRate)
 		if err != nil {
 			closeFd(fd)
 			t.cleanupWorkers(i)
@@ -106,6 +131,19 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 		t.workers[i] = w
 	}
 	close(t.ready)
+	// Startup banner: log the resolved connection cap once, at actual serve
+	// time (not at construction — see newWingTransport). Serve() routes through
+	// here too, so this fires exactly once per server start.
+	if t.config.MaxConns > 0 {
+		lg := t.config.Logger
+		if lg == nil {
+			lg = slog.Default()
+		}
+		if t.config.MaxConns < acceptCapLowFloor {
+			lg.Warn("kruda/wing: derived connection cap is low; raise the fd ulimit or set WithMaxConns", "cap", t.config.MaxConns)
+		}
+		lg.Info("kruda/wing: connection cap", "max", t.config.MaxConns)
+	}
 	for _, w := range t.workers {
 		t.wg.Add(1)
 		go func(w *worker) {
@@ -200,11 +238,13 @@ type parserLimits struct {
 
 type conn struct {
 	fd           int32
+	peerIP       netip.Addr // peer IP captured at accept (zero value if unknown)
 	readBuf      []byte
 	readN        int
 	sendBuf      []byte
 	sendN        int
 	keepAlive    bool
+	admitted     bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
 	pending      int    // in-flight handler goroutines
 	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
 	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
@@ -219,6 +259,11 @@ type conn struct {
 	headerSnapshot []byte // copy of header block for re-parse after body complete
 	bodyBuf        []byte // incrementally grown body buffer
 }
+
+// testAcceptPeerHook, when non-nil, receives the accept-time peer IP for each
+// accepted connection. Tests set it to pin assertions to the accept path rather
+// than the lazy getpeername used by RemoteAddr/IP. Always nil in production.
+var testAcceptPeerHook func(ip netip.Addr, ok bool)
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -242,12 +287,26 @@ type worker struct {
 	config   WingConfig
 	limits   parserLimits
 	maxConns int
-	conns    map[int32]*conn
-	events   [maxEventsPerWait]event
-	evfd     int // eventfd for wake signaling
-	doneCh   chan doneMsg
-	pool     *workerPool
-	presets  PresetTable
+	logger   *slog.Logger
+	// connCount/rejectTotal/rejectIP/rejectRate point at the shared Transport
+	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
+	connCount    *int64
+	rejectTotal  *int64
+	rejectIP     *int64  // per-IP reject counter (always wired; connsPerIP map is nil when the cap is off)
+	rejectRate   *int64  // accept-rate reject counter (always wired; bucket is nil when rate limiting is off)
+	rejectWarned [3]bool // warn-once flags indexed by rejectKind; per-worker so no lock needed
+	// Per-worker per-IP connection tracking. Allocated only when maxConnsPerIP>0.
+	// Per-worker means no locks: this map is touched only on accept and close,
+	// both on the same event-loop goroutine. Under SO_REUSEPORT the same source
+	// IP may spread across workers, so the cap is approximate across workers.
+	connsPerIP    map[netip.Addr]int
+	maxConnsPerIP int
+	conns         map[int32]*conn
+	events        [maxEventsPerWait]event
+	evfd          int // eventfd for wake signaling
+	doneCh        chan doneMsg
+	pool          *workerPool
+	presets       PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
 	lastPreset0     Preset
@@ -258,7 +317,8 @@ type worker struct {
 	lastPath1       string
 	shutdown        *atomic.Bool
 	hasTimeout      bool
-	readTimeout     int64 // nanoseconds (0 = disabled)
+	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
+	readTimeout     int64        // nanoseconds (0 = disabled)
 	writeTimeout    int64
 	idleTimeout     int64
 	maxInflightBody int   // per-worker budget (0 = unlimited)
@@ -407,7 +467,7 @@ func (w *worker) lookupPreset(method, path string) Preset {
 	return f
 }
 
-func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*worker, error) {
+func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP, rejectRate *int64) (*worker, error) {
 	eng := newEngine()
 	wakeR, wakeW, err := createWakeFds()
 	if err != nil {
@@ -428,6 +488,10 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 	}
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewPresetTable(cfg.Presets, cfg.DefaultPreset)
+	lg := cfg.Logger
+	if lg == nil {
+		lg = slog.Default()
+	}
 	w := &worker{
 		id:              id,
 		listenFd:        listenFd,
@@ -435,7 +499,13 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		handler:         handler,
 		config:          cfg,
 		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
-		maxConns:        cfg.MaxConnsPerWorker,
+		maxConns:        cfg.MaxConns, // global total cap; enforced against shared connCount via CAS
+		logger:          lg,
+		connCount:       connCount,
+		rejectTotal:     rejectTotal,
+		rejectIP:        rejectIP,
+		rejectRate:      rejectRate,
+		maxConnsPerIP:   cfg.MaxConnsPerIP,
 		conns:           make(map[int32]*conn, 1024),
 		evfd:            wakeR,
 		doneCh:          doneCh,
@@ -445,6 +515,27 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler) (*wo
 		idleTimeout:     int64(cfg.IdleTimeout),
 		maxInflightBody: cfg.MaxInflightBodyBytes,
 		trustProxy:      cfg.TrustProxy,
+	}
+	if cfg.MaxConnsPerIP > 0 {
+		w.connsPerIP = make(map[netip.Addr]int, 64)
+	}
+	if cfg.AcceptRatePerSec > 0 {
+		// Divide the rate and burst across workers so the server-wide rate stays
+		// at the configured value under SO_REUSEPORT load distribution.
+		// min(1) prevents the per-worker rate from rounding to zero.
+		workers := cfg.Workers
+		if workers < 1 {
+			workers = 1
+		}
+		perWorkerRate := cfg.AcceptRatePerSec / workers
+		if perWorkerRate < 1 {
+			perWorkerRate = 1
+		}
+		perWorkerBurst := cfg.AcceptRateBurst / workers
+		if perWorkerBurst < 1 {
+			perWorkerBurst = 1
+		}
+		w.bucket = newTokenBucket(perWorkerRate, perWorkerBurst)
 	}
 	if cfg.needsPool() {
 		w.pool = newWorkerPool(cfg.HandlerPoolSize, handler, doneCh, eng.PostWake)
@@ -457,6 +548,17 @@ func (w *worker) run(shutdown *atomic.Bool) {
 	w.ioLoop(shutdown)
 }
 
+// clockNow returns the cached w.now if it is non-zero (set by the ioLoop when
+// hasClock is true), otherwise falls back to a live time.Now(). The fallback
+// path is defensive — it should only trigger for the first event in a batch
+// when neither timeouts nor rate-limiting are configured.
+func (w *worker) clockNow() int64 {
+	if w.now != 0 {
+		return w.now
+	}
+	return time.Now().UnixNano()
+}
+
 func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -467,6 +569,10 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	hasAsync := w.config.needsAsync()
 	hasTimeout := w.readTimeout > 0 || w.writeTimeout > 0 || w.idleTimeout > 0
 	w.hasTimeout = hasTimeout
+	// hasClock is true when any subsystem needs a fresh w.now per event batch.
+	// The rate bucket needs a real clock even when no connection timeouts are set.
+	// Zero cost when both are off: w.now stays 0 and clockNow() falls back lazily.
+	hasClock := hasTimeout || w.bucket != nil
 	if hasTimeout {
 		w.sweepAt = time.Now().UnixNano() + int64(time.Second)
 	}
@@ -491,7 +597,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 			}
 			continue
 		}
-		if hasTimeout {
+		if hasClock {
 			w.now = time.Now().UnixNano()
 		}
 		for i := 0; i < n; i++ {
@@ -540,6 +646,11 @@ func (w *worker) handleEvent(ev event) {
 	case opSend:
 		w.handleSend(ev)
 	case opClose:
+		// opClose: vestigial on Linux and darwin — both engines' SubmitClose is
+		// synchronous (EpollCtl(DEL)/syscall.Close inline) and never enqueues an
+		// opClose event. Routed through the chokepoint anyway for safety/kqueue
+		// parity should a future async-close engine emit it.
+		w.removeConnBookkeeping(ev.Fd)
 		delete(w.conns, ev.Fd)
 	case opWake:
 		// eventfd re-arms automatically (edge-triggered)
@@ -555,18 +666,48 @@ func (w *worker) handleAccept(ev event) {
 		w.eng.SubmitAccept(w.listenFd)
 	}
 	fd := ev.Res
-	if w.maxConns > 0 && len(w.conns) >= w.maxConns {
-		closeFd(int(fd))
+	// Admission order at accept: (1) accept-rate — cheapest, no map lookup;
+	// (2) per-IP precheck (read-only, no mutation);
+	// (3) global total reserve via CAS against the shared Transport.connCnt.
+	if w.bucket != nil && !w.bucket.allow(w.clockNow()) {
+		atomic.AddInt64(w.rejectRate, 1)
+		rejectWarnOnce(w, rejectKindRate, 0)
+		closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
 		return
+	}
+	if w.maxConnsPerIP > 0 && ev.HasPeer && w.connsPerIP[ev.PeerIP] >= w.maxConnsPerIP {
+		atomic.AddInt64(w.rejectIP, 1)
+		rejectWarnOnce(w, rejectKindIP, w.maxConnsPerIP)
+		closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
+		return
+	}
+	if max := w.maxConns; max > 0 {
+		for {
+			cur := atomic.LoadInt64(w.connCount)
+			if cur >= int64(max) {
+				atomic.AddInt64(w.rejectTotal, 1)
+				rejectWarnOnce(w, rejectKindTotal, max)
+				closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
+				return
+			}
+			if atomic.CompareAndSwapInt64(w.connCount, cur, cur+1) {
+				break
+			}
+		}
 	}
 	setTCPNodelay(fd)
 	setTCPQuickACK(fd)
+	if testAcceptPeerHook != nil {
+		testAcceptPeerHook(ev.PeerIP, ev.HasPeer)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
-		fd:      fd,
-		readBuf: make([]byte, w.config.ReadBufSize),
-		ctx:     ctx,
-		cancel:  cancel,
+		fd:       fd,
+		peerIP:   ev.PeerIP,
+		admitted: true, // tracked for bookkeeping; per-counter gates inside removeConnBookkeeping decide what to decrement
+		readBuf:  make([]byte, w.config.ReadBufSize),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 	if w.hasTimeout {
 		now := w.now
@@ -579,6 +720,9 @@ func (w *worker) handleAccept(ev event) {
 		}
 	}
 	w.conns[fd] = c
+	if w.maxConnsPerIP > 0 && ev.HasPeer {
+		w.connsPerIP[c.peerIP]++
+	}
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
 	// Try direct read — data often arrives with SYN-ACK.
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
@@ -1101,17 +1245,9 @@ func (w *worker) handleDone(msg doneMsg) {
 		// Takeover conn finished: clean bookkeeping before closing through
 		// the File so the fd number cannot be recycled mid-cleanup. The fd
 		// was Detached from the engine at takeover, so SubmitClose must not
-		// run here.
-		if c, ok := w.conns[msg.fd]; ok {
-			if c.cancel != nil {
-				c.cancel()
-			}
-			if c.sendFileFd > 0 {
-				syscall.Close(int(c.sendFileFd))
-				c.sendFileFd = 0
-			}
-			delete(w.conns, msg.fd)
-		}
+		// run here — the *os.File owns the close.
+		w.removeConnBookkeeping(msg.fd)
+		delete(w.conns, msg.fd)
 		msg.file.Close()
 		return
 	}
@@ -1472,26 +1608,58 @@ func (w *worker) handleSend(ev event) {
 	w.directSend(c)
 }
 
-func (w *worker) closeConn(fd int32) {
-	if c, ok := w.conns[fd]; ok {
-		// Release any in-flight body reservation so a connection closed mid-
-		// accumulation (timeout, disconnect, parse failure) does not leak the
-		// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
-		// so this cannot double-decrement.
-		if c.bodyNeed > 0 && w.maxInflightBody > 0 {
-			atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
-		}
-		c.bodyNeed = 0
-		c.bodyBuf = nil
-		c.headerSnapshot = nil
-		if c.cancel != nil {
-			c.cancel()
-		}
-		if c.sendFileFd > 0 {
-			syscall.Close(int(c.sendFileFd))
-			c.sendFileFd = 0
-		}
+// removeConnBookkeeping is the single chokepoint for releasing a connection's
+// accounting: it decrements the global connCount and/or per-IP count
+// (idempotently, guarded by c.admitted — mirrors the body-budget
+// zero-before-delete idiom), releases the in-flight body reservation, cancels
+// the conn context, and closes any sendfile source fd. It does NOT close the
+// connection fd or delete the conns entry — each caller owns its own fd-close
+// policy (closeConn → engine SubmitClose; takeover-done → *os.File; opClose →
+// engine already closed).
+//
+// The two decrements are independently gated: global connCount only when the
+// global cap is active (maxConns > 0, matching the CAS reserve); per-IP only
+// when per-IP is active. This lets WithMaxConns(0)+WithMaxConnsPerIP(n) work
+// correctly — admitted is always true so per-IP reclamation always fires.
+func (w *worker) removeConnBookkeeping(fd int32) {
+	c, ok := w.conns[fd]
+	if !ok {
+		return
 	}
+	if c.admitted {
+		if w.maxConns > 0 {
+			atomic.AddInt64(w.connCount, -1)
+		}
+		if w.maxConnsPerIP > 0 && c.peerIP.IsValid() {
+			if n := w.connsPerIP[c.peerIP] - 1; n <= 0 {
+				delete(w.connsPerIP, c.peerIP) // delete-at-0 keeps map bounded
+			} else {
+				w.connsPerIP[c.peerIP] = n
+			}
+		}
+		c.admitted = false
+	}
+	// Release any in-flight body reservation so a connection closed mid-
+	// accumulation (timeout, disconnect, parse failure) does not leak the
+	// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
+	// so this cannot double-decrement.
+	if c.bodyNeed > 0 && w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	c.bodyNeed = 0
+	c.bodyBuf = nil
+	c.headerSnapshot = nil
+	if c.cancel != nil {
+		c.cancel()
+	}
+	if c.sendFileFd > 0 {
+		syscall.Close(int(c.sendFileFd))
+		c.sendFileFd = 0
+	}
+}
+
+func (w *worker) closeConn(fd int32) {
+	w.removeConnBookkeeping(fd)
 	delete(w.conns, fd)
 	w.eng.SubmitClose(fd)
 }
@@ -1557,12 +1725,13 @@ drainBuffered:
 		}
 	}
 	for fd, c := range w.conns {
-		if c.cancel != nil {
-			c.cancel()
-		}
-		if c.sendFileFd > 0 {
-			syscall.Close(int(c.sendFileFd))
-		}
+		// Decrement connCnt and per-IP counts for every connection still open at
+		// shutdown. removeConnBookkeeping is idempotent (c.admitted guard) so
+		// connections already closed normally before shutdown are a no-op. It also
+		// cancels ctx and releases any sendFileFd reservation, so the manual calls
+		// below are replaced by the chokepoint. This satisfies the design §7
+		// invariant: "Shutdown … bookkeeping decremented via the chokepoint."
+		w.removeConnBookkeeping(fd)
 		if c.takenOver {
 			// fd is owned by the Takeover *os.File and was already closed via the
 			// drain above; raw-closing it here would double-close a possibly-

@@ -2,7 +2,10 @@
 
 package kruda
 
-import "unsafe"
+import (
+	"net/netip"
+	"unsafe"
+)
 
 // engine abstracts the OS-specific async I/O backend.
 // On Linux: epoll (event-driven).
@@ -38,6 +41,8 @@ type event struct {
 	Res     int32          // bytes transferred (>0) or negative errno
 	Flags   uint32         // CQE flags (e.g. IORING_CQE_F_MORE for multishot)
 	ConnPtr unsafe.Pointer // *conn pointer (epoll data, avoids map lookup)
+	PeerIP  netip.Addr     // peer IP captured at accept (valid when HasPeer)
+	HasPeer bool           // true when PeerIP was extracted from the accept sockaddr
 }
 
 // Operation types for events.

@@ -209,8 +209,9 @@ func TestOpenAPI_Resource_ListEnvelopeComponentSanitized(t *testing.T) {
 
 	comps, _ := spec["components"].(map[string]any)
 	schemas, _ := comps["schemas"].(map[string]any)
-	// ResourceList[kruda.mockUser] → sanitized to ResourceList_mockUser.
-	if _, ok := schemas["ResourceList_mockUser"]; !ok {
+	// ResourceList[github.com/go-kruda/kruda.mockUser] → sanitized to a key that
+	// preserves the type arg's full package path (every illegal-char run → "_").
+	if _, ok := schemas["ResourceList_github_com_go-kruda_kruda_mockUser"]; !ok {
 		t.Errorf("missing sanitized ResourceList component; schemas=%v", keysOf(schemas))
 	}
 	for k := range schemas {

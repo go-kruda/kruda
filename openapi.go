@@ -85,9 +85,10 @@ type schemaRef struct {
 	MaxLength  *int                  `json:"maxLength,omitempty"`
 	Nullable   bool                  `json:"nullable,omitempty"`
 
-	// pkgPath tracks the originating package for collision detection.
-	// Not serialized to JSON — internal bookkeeping only.
-	pkgPath string `json:"-"`
+	// typeID is the fully-qualified type string ("pkg/path.Name" or the generic
+	// instantiation name) used to tell two types apart when their sanitized keys
+	// collide. Not serialized — internal bookkeeping only.
+	typeID string `json:"-"`
 }
 
 // routeInfo holds metadata for a single registered typed route.
@@ -150,28 +151,40 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	if name == "" {
 		name = "Anonymous"
 	}
-	// A generic instantiation's name (e.g. "ResourceList[github.com/app/models.User]")
-	// embeds "/", "[", "]", and "." — characters that make the derived $ref an
-	// invalid JSON pointer. Sanitize to a deterministic component key. Non-generic
-	// names (no /[].) are returned unchanged, so existing keys never move.
-	name = sanitizeComponentName(name)
+	// id is the type's fully-qualified identity. For a generic instantiation,
+	// t.Name() already embeds the full type-arg paths (e.g.
+	// "ResourceList[github.com/app/models.User]"); for a plain named type we
+	// prepend its package path so two same-short-name types from different
+	// packages are distinguishable.
+	id := name
+	if pkg := t.PkgPath(); pkg != "" && !strings.ContainsAny(name, "[") {
+		id = pkg + "." + name
+	}
 
-	// Detect collision: if a schema with the same short name exists but from a
-	// different package, disambiguate by appending the last segment of PkgPath.
-	componentKey := name
-	if existing, exists := components[name]; exists {
-		// Check if it's truly the same type (same PkgPath) — if so, return ref.
-		if existing.pkgPath == t.PkgPath() {
+	// A generic instantiation's name embeds "/", "[", "]", ".", and "*" for
+	// pointer args — characters that make the derived $ref an invalid JSON
+	// pointer. sanitizeComponentName maps the full instantiation name (incl. each
+	// type arg's package path) to a valid key, so cross-package or value/pointer
+	// args never collapse. Non-generic names (no /[].* ) are returned unchanged,
+	// so existing keys never move (the golden guard relies on this no-op).
+	componentKey := sanitizeComponentName(name)
+
+	// Resolve key collisions by true type identity. An entry under this key that
+	// shares our id is the same type → return a $ref. A different id is a genuine
+	// cross-package short-name clash (only possible for plain named types, whose
+	// sanitized key is the bare short name): disambiguate by appending the last
+	// package segment. Generic keys already encode full identity, so they never
+	// reach the clash branch.
+	if existing, exists := components[componentKey]; exists {
+		if existing.typeID == id {
 			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 		}
-		// Different package, same name — disambiguate with package suffix.
 		pkg := t.PkgPath()
 		if idx := strings.LastIndexByte(pkg, '/'); idx >= 0 {
 			pkg = pkg[idx+1:]
 		}
-		componentKey = name + "_" + pkg
-		// If even this disambiguated key exists and matches, return ref.
-		if _, exists2 := components[componentKey]; exists2 {
+		componentKey += "_" + pkg
+		if again, exists2 := components[componentKey]; exists2 && again.typeID == id {
 			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 		}
 	}
@@ -181,7 +194,7 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	schema := &schemaRef{
 		Type:       "object",
 		Properties: make(map[string]*schemaRef),
-		pkgPath:    t.PkgPath(),
+		typeID:     id,
 	}
 	components[componentKey] = schema
 
@@ -263,53 +276,53 @@ func containsRule(vtag, rule string) bool {
 // sanitizeComponentName turns a reflect type name into a valid OpenAPI
 // component key (and thus a valid "#/components/schemas/<key>" JSON pointer).
 //
-// Non-generic names contain none of "/[]." and are returned unchanged, so they
-// keep their existing keys. Generic instantiation names such as
-// "ResourceList[github.com/app/models.User]" are reduced to "ResourceList_User"
-// deterministically: the base type name, then each type argument trimmed to its
-// final identifier (package path + qualifier dropped), joined by "_".
+// Non-generic names contain none of "/[].* " and are returned unchanged, so
+// they keep their existing keys (the golden guard depends on this no-op).
+//
+// Generic instantiation names such as "ResourceList[github.com/app/models.User]"
+// embed characters that are illegal in a JSON-pointer segment. Rather than
+// collapse each type argument to its short identifier — which silently merges
+// distinct types that share a short name across packages, or a value type with
+// its pointer — this preserves the FULL qualified name: every maximal run of
+// the illegal characters (/ . [ ] * and spaces) becomes a single "_", repeats
+// are collapsed, and surrounding "_" is trimmed. The mapping is injective up to
+// that punctuation, so distinct Go types yield distinct keys:
+//
+//	ResourceList[a/b.User]          → ResourceList_a_b_User
+//	ResourceList[c/d.User]          → ResourceList_c_d_User   (distinct package)
+//	genWrap[a/b.User]               → genWrap_a_b_User
+//	genWrap[*a/b.User]              → genWrap_a_b_User_Ptr    (pointer marker)
+//	ResourceList[map[string]int]    → ResourceList_map_string_int (no brackets)
 func sanitizeComponentName(name string) string {
-	if !strings.ContainsAny(name, "/[].") {
+	if !strings.ContainsAny(name, "/[].* ") {
 		return name
 	}
 
-	base := name
-	args := ""
-	if i := strings.IndexByte(name, '['); i >= 0 {
-		base = name[:i]
-		args = strings.TrimSuffix(name[i+1:], "]")
-	}
+	// A trailing "*" run anywhere marks a pointer type arg; without a distinct
+	// marker "*T" and "T" would both lose the star to the generic separator and
+	// collapse to the same key. Append a "Ptr" token per pointer star so value
+	// vs pointer args stay distinct.
+	pointerStars := strings.Count(name, "*")
 
 	var b strings.Builder
-	b.WriteString(lastIdentSegment(base))
-	if args != "" {
-		for _, arg := range strings.Split(args, ",") {
-			seg := lastIdentSegment(arg)
-			if seg == "" {
-				continue
+	prevUnderscore := false
+	for _, r := range name {
+		switch r {
+		case '/', '.', '[', ']', '*', ' ':
+			if !prevUnderscore {
+				b.WriteByte('_')
+				prevUnderscore = true
 			}
-			b.WriteByte('_')
-			b.WriteString(seg)
+		default:
+			b.WriteRune(r)
+			prevUnderscore = false
 		}
 	}
-	return b.String()
-}
-
-// lastIdentSegment returns the final identifier of a (possibly qualified,
-// possibly pointer/bracketed) type token: the substring after the last "/" or
-// ".", with leading "*", "[", "]" stripped. e.g. "github.com/app/models.User"
-// → "User", "*models.User" → "User".
-func lastIdentSegment(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.Trim(s, "*[]")
-	if i := strings.LastIndexByte(s, '/'); i >= 0 {
-		s = s[i+1:]
+	key := strings.Trim(b.String(), "_")
+	for i := 0; i < pointerStars; i++ {
+		key += "_Ptr"
 	}
-	if i := strings.LastIndexByte(s, '.'); i >= 0 {
-		s = s[i+1:]
-	}
-	s = strings.Trim(s, "*[]")
-	return s
+	return key
 }
 
 // convertPath converts Kruda path format to OpenAPI format: ":id" → "{id}".

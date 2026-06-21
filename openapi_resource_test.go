@@ -69,8 +69,10 @@ func TestGenerateSchema_GenericNameSanitized(t *testing.T) {
 	}
 
 	// (b) The component key derived from the generic must be sanitized to a
-	// deterministic form: base + "_" + last segment of the type arg.
-	wantKey := "resourceListLike_User"
+	// deterministic form that preserves the type argument's FULL qualified name
+	// (every illegal-char run → "_"), so cross-package same-short-name args never
+	// collide. The arg lives at github.com/go-kruda/kruda/internal/testtypes.User.
+	wantKey := "resourceListLike_github_com_go-kruda_kruda_internal_testtypes_User"
 	if _, ok := components[wantKey]; !ok {
 		var keys []string
 		for k := range components {

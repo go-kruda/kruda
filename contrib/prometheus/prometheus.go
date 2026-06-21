@@ -86,6 +86,7 @@ func New(config ...Config) kruda.HandlerFunc {
 		}
 
 		requestsInFlight.Inc()
+		defer requestsInFlight.Dec() // deferred so a panicking handler can't leak the gauge
 		start := time.Now()
 
 		// Execute next handler in chain.
@@ -105,8 +106,6 @@ func New(config ...Config) kruda.HandlerFunc {
 		// needed, set Content-Length explicitly and it will be captured here in
 		// future Kruda versions that expose response metadata.
 		responseSizeBytes.WithLabelValues(method, status, path).Observe(0)
-
-		requestsInFlight.Dec()
 
 		return err
 	}

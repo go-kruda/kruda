@@ -38,6 +38,24 @@ func TestSpanMiddleware_NamedByRoutePattern(t *testing.T) {
 	}
 }
 
+// TestSpanMiddleware_NoResponseSideTraceparent guards the deliberate decision not
+// to echo trace context back in the response. Echoing traceparent is non-standard,
+// and injecting before c.Next() — the only point at which it could reach the wire —
+// would populate respHeaders and disable the string/JSON fast lane on every traced
+// route. The header must never appear on the response.
+func TestSpanMiddleware_NoResponseSideTraceparent(t *testing.T) {
+	prov, _ := newRecordingProviders(t)
+	app := kruda.New(kruda.NetHTTP())
+	app.Use(spanMiddleware(prov, nil, Config{}.resolve()))
+	app.Get("/x", func(c *kruda.Ctx) error { return c.Text("ok") })
+	app.Compile()
+
+	rec := doGET(t, app, "/x")
+	if got := rec.Header().Get("Traceparent"); got != "" {
+		t.Fatalf("response carried Traceparent=%q; Kruda must not echo trace context in responses", got)
+	}
+}
+
 // TestSpanMiddleware_TracesDisabledNoSpan verifies metrics-only mode records NO span
 // but still runs (in-flight/reqState path) so RED metrics keep working.
 func TestSpanMiddleware_TracesDisabledNoSpan(t *testing.T) {

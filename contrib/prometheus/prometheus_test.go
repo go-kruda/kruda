@@ -215,6 +215,34 @@ func TestNew_InFlight(t *testing.T) {
 	}
 }
 
+// TestNew_InFlightNoLeakOnPanic guards that the in-flight gauge is decremented
+// even when a handler panics. The prometheus middleware is the only one
+// installed, so the panic propagates through its c.Next() to Kruda's
+// serve-level recovery — exercising the Dec path under a panic. With a
+// non-deferred Dec(), the gauge would leak to 1 on every panic.
+func TestNew_InFlightNoLeakOnPanic(t *testing.T) {
+	reg := newTestRegistry()
+	app := kruda.New(kruda.NetHTTP())
+
+	app.Use(New(Config{Registry: reg}))
+	app.Get("/boom", func(c *kruda.Ctx) error {
+		panic("boom")
+	})
+	app.Compile()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/boom")
+	if err == nil {
+		resp.Body.Close()
+	}
+
+	family := gatherMetric(reg, "http_requests_in_flight")
+	if val := findGaugeValue(family); val != 0 {
+		t.Errorf("in_flight after panicking handler = %v, want 0 (Dec must be deferred)", val)
+	}
+}
+
 func TestNew_StatusLabels(t *testing.T) {
 	_, srv, reg := newTestApp(Config{})
 	defer srv.Close()

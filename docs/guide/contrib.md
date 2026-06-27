@@ -16,6 +16,7 @@ Kruda ships optional contrib modules as separate Go modules with their own `go.m
 | [otel](https://github.com/go-kruda/kruda/tree/main/contrib/otel) | `go get github.com/go-kruda/kruda/contrib/otel` | OpenTelemetry tracing |
 | [prometheus](https://github.com/go-kruda/kruda/tree/main/contrib/prometheus) | `go get github.com/go-kruda/kruda/contrib/prometheus` | Prometheus metrics |
 | [swagger](https://github.com/go-kruda/kruda/tree/main/contrib/swagger) | `go get github.com/go-kruda/kruda/contrib/swagger` | Swagger UI HTML |
+| [observability](https://github.com/go-kruda/kruda/tree/main/contrib/observability) | `go get github.com/go-kruda/kruda/contrib/observability` | Turnkey OpenTelemetry — one-call `Enable()`: tracing + RED metrics + K8s probes + `/metrics` |
 
 ## Example: JWT Authentication
 

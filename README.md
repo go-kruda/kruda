@@ -157,7 +157,7 @@ With the Wing netpoll takeover plus the v1.3.1 adaptive-spin dispatch, Kruda's s
 
 Evidence: `bench/reproducible/results/2026-06-13-v1-3-1-consolidated-evidence.md` (5 rounds per cell, zero errors). Read it by workload: the CPU routes and `/fortunes` are decisive RPS *and* p99 wins; `/db` and `/queries` are pool-bound and sit at the pgx ceiling (`2026-06-13-db-route-ceiling-evidence.md`), so Kruda **matches** Fiber on their RPS and **beats** it on p99. The v1.3.1 takeover-spin (`2026-06-13-takeover-spin-p99-evidence.md`) removed the v1.3.0 `db`/`queries` p99 trade rather than chasing RPS the floor will not yield.
 
-These figures were measured at the v1.3.1 runtime and **revalidated at the v1.4.0 code** (`12d6a80`): a paired `v1.3.1 → HEAD` A/B over the same six routes (Kruda-only, default Sonic, both checkout orders, 5 rounds, zero socket errors / zero non-2xx) shows no regression — RPS parity on every route and p99 parity once shared-box run-order noise is controlled — so the standing comparisons carry forward to the released code. Evidence: `bench/reproducible/results/2026-06-27-v1-4-0-consolidated-ab-evidence.md`.
+These figures were measured at the v1.3.1 runtime and **revalidated at the v1.4.0 code** (`12d6a80`): a paired `v1.3.1 → HEAD` A/B (Kruda-only, default Sonic, 5 rounds, zero socket errors / zero non-2xx) shows **RPS parity on all six routes**. The DB-bound routes (`/fortunes`, `/db`, `/queries`) were additionally re-run in reversed checkout order, which confirmed their forward-pass p99 spikes as shared-box run-order contention rather than a code change; the CPU routes' p99 deltas are sub-millisecond and within measurement noise at ~800K RPS. So the standing comparisons carry forward to the released code. Evidence: `bench/reproducible/results/2026-06-27-v1-4-0-consolidated-ab-evidence.md`.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 
@@ -245,6 +245,7 @@ api := app.Group("/api").Guard(jwt.New(jwt.Config{
 | [contrib/otel](contrib/otel/) | `go get github.com/go-kruda/kruda/contrib/otel` | OpenTelemetry tracing |
 | [contrib/prometheus](contrib/prometheus/) | `go get github.com/go-kruda/kruda/contrib/prometheus` | Prometheus metrics |
 | [contrib/swagger](contrib/swagger/) | `go get github.com/go-kruda/kruda/contrib/swagger` | Swagger UI HTML |
+| [contrib/observability](contrib/observability/) | `go get github.com/go-kruda/kruda/contrib/observability` | Turnkey OpenTelemetry — one-call `Enable()`: tracing + RED metrics + K8s probes + `/metrics` |
 
 ### Pre-release Checklist
 

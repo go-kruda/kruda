@@ -34,5 +34,5 @@ features:
     details: Built-in MCP server for AI coding assistants. Typed API means AI generates correct code on first try.
   - icon: 🛡
     title: Minimal Dependencies
-    details: Sonic JSON (opt-out via build tag). 10 contrib modules. Pluggable transport.
+    details: Sonic JSON (opt-out via build tag). 11 contrib modules. Pluggable transport.
 ---

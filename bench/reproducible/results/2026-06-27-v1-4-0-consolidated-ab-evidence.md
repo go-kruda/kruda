@@ -35,5 +35,18 @@ Method: paired A/B run in BOTH checkout orders to separate code effects from the
 
 db throughput p99 (ms): forward head=11.83 vs v131=10.11; reversed head=12.13 vs v131=12.02. Whichever commit runs **second** lands at ~12 ms regardless of commit → the tail is set by box contention/run position, not by the Wing changes. RPS stays within the pgx-ceiling noise band (±1.6% fwd / ±1.1% rev) in both orders.
 
+## CPU-route p99 is sub-millisecond (forward-only Δ% swings on a tiny denominator)
+
+The CPU routes were not re-run in reversed order because their p99 is sub-millisecond, so a
+fraction-of-a-ms jitter shows as a large percentage. Absolute median p99 (ms), v1.3.1 → HEAD:
+
+| route | throughput p99 | latency p99 |
+|---|---|---|
+| plaintext-handler | 1.17 → 1.18 | 0.83 → 1.16 |
+| json-static | 1.01 → 1.10 | 0.85 → 0.90 |
+| json-serialize | 1.16 → 1.20 | 0.90 → 1.05 |
+
+These are ~1 ms tails at ~800K RPS; the swings are measurement noise, not a regression (RPS is parity on all three, ±1.5%).
+
 Raw CSVs: results-v131, results-head (forward); results-rev-head, results-rev-v131 (reversed). All on tiger run dir `kruda-v140-ab-20260627T095416Z`.
 

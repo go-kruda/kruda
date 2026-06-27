@@ -14,8 +14,9 @@ import (
 const tracerName = "github.com/go-kruda/kruda/contrib/otel"
 
 // New creates an OpenTelemetry tracing middleware.
-// It extracts trace context from incoming headers, creates a server span,
-// sets standard HTTP attributes, and injects trace context into response headers.
+// It extracts trace context from incoming request headers, creates a server span,
+// and sets standard HTTP semantic-convention attributes. It does not inject trace
+// context back into the response (see the note in the handler for why).
 func New(config ...Config) kruda.HandlerFunc {
 	var cfg Config
 	if len(config) > 0 {

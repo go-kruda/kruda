@@ -14,7 +14,7 @@ go get github.com/go-kruda/kruda/contrib/otel
 import "github.com/go-kruda/kruda/contrib/otel"
 
 app.Use(otel.New(otel.Config{
-    ServiceName: "my-api",
+    ServerName: "my-api",
 }))
 
 app.Get("/users", func(c *kruda.Ctx) error {
@@ -27,7 +27,9 @@ app.Get("/users", func(c *kruda.Ctx) error {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| ServiceName | string | "kruda-app" | Service name in traces |
-| Skip | func(*kruda.Ctx) bool | nil | Skip tracing condition |
-| SpanNameFormatter | func(*kruda.Ctx) string | "METHOD /path" | Custom span names |
-| ExtraAttributes | []attribute.KeyValue | nil | Additional span attributes |
+| TracerProvider | trace.TracerProvider | global provider | OTel tracer provider |
+| Propagators | propagation.TextMapPropagator | global propagator | Propagators for context extraction |
+| ServerName | string | "" (omitted) | Server name in span attributes |
+| Skip | func(*kruda.Ctx) bool | nil | Skip tracing for matching requests |
+| SpanNameFunc | func(*kruda.Ctx) string | "METHOD route" | Custom span names |
+| Attributes | []attribute.KeyValue | nil | Extra attributes on every span |

@@ -3,6 +3,17 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] — unreleased
+
+### Breaking
+
+- **Removed the no-op `WithHTTP3` option and the `Config.HTTP3` field.** They advertised
+  HTTP/3 (QUIC) serving, but it was never implemented — nothing consumed the flag, so a
+  caller got the standard net/http fallback (HTTP/1.1 + HTTP/2), not QUIC. HTTP/3 is not on
+  the roadmap, so the dead API is removed rather than left as a misleading promise
+  (rationale: `docs/decisions/0001-break-api-in-v1-minor.md`). TLS is unaffected — use
+  `WithTLS(certFile, keyFile)`.
+
 ## [1.4.0] — 2026-06-27
 
 ### Breaking

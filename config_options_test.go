@@ -87,20 +87,6 @@ func TestWingOption_SetsTransportName(t *testing.T) {
 	}
 }
 
-func TestWithHTTP3_SetsConfig(t *testing.T) {
-	app := &App{config: defaultConfig()}
-	WithHTTP3("cert.pem", "key.pem")(app)
-	if app.config.TLSCertFile != "cert.pem" {
-		t.Errorf("TLSCertFile = %q", app.config.TLSCertFile)
-	}
-	if app.config.TLSKeyFile != "key.pem" {
-		t.Errorf("TLSKeyFile = %q", app.config.TLSKeyFile)
-	}
-	if !app.config.HTTP3 {
-		t.Error("HTTP3 should be true")
-	}
-}
-
 func TestSelectTransport_FastHTTPWithTLS(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Logger = discardLogger()

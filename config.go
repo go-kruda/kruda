@@ -28,7 +28,6 @@ type Config struct {
 	TransportName string // "wing" (default on Linux), "fasthttp" (default on macOS), "nethttp" (default on Windows)
 	TLSCertFile   string
 	TLSKeyFile    string
-	HTTP3         bool
 
 	// TrustProxy enables trusting X-Forwarded-For/X-Real-IP headers. Default: false.
 	TrustProxy bool
@@ -308,17 +307,6 @@ func WithTLS(certFile, keyFile string) Option {
 	return func(a *App) {
 		a.config.TLSCertFile = certFile
 		a.config.TLSKeyFile = keyFile
-	}
-}
-
-// WithHTTP3 enables HTTP/3 dual-stack serving (QUIC on UDP + HTTP/2 on TCP).
-// Requires TLS certificate and key since QUIC mandates TLS 1.3.
-// When enabled, the Alt-Svc header is auto-injected to advertise HTTP/3.
-func WithHTTP3(certFile, keyFile string) Option {
-	return func(a *App) {
-		a.config.TLSCertFile = certFile
-		a.config.TLSKeyFile = keyFile
-		a.config.HTTP3 = true
 	}
 }
 

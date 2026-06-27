@@ -39,8 +39,7 @@
 //   - Windows: net/http
 //
 // Override with the [WithTransport], [NetHTTP], or [FastHTTP] options. TLS
-// (via [WithTLS] / [WithHTTP3]) auto-falls back to net/http on every
-// platform.
+// (via [WithTLS]) auto-falls back to net/http on every platform.
 //
 // Wing is built into core since v1.2.0; import github.com/go-kruda/kruda
 // directly and use the kruda.Wing option. The legacy

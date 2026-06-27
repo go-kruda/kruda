@@ -15,10 +15,14 @@ v1 minor release — rationale in `docs/decisions/0001-break-api-in-v1-minor.md`
 |---------|-------------|
 | `WingConfig.MaxConnsPerWorker` | `kruda.WithMaxConns(n)` (total cap) — plus `kruda.WithMaxConnsPerIP(n)` and `kruda.WithMaxAcceptRate(perSec, burst)` for per-IP and accept-rate limits |
 
+The semantics also change from a **per-worker** cap to a **server-wide total** cap, so size
+the new value as the old per-worker limit times the worker count (workers default to
+`runtime.NumCPU()`):
+
 ```go
-// before
+// before — per-worker cap (effective total ≈ MaxConnsPerWorker × worker count)
 kruda.New(kruda.Wing(kruda.WingConfig{MaxConnsPerWorker: 1024}))
-// after
+// after — single server-wide total cap (e.g. 1024 × 8 workers)
 kruda.New(kruda.Wing(), kruda.WithMaxConns(8192))
 ```
 

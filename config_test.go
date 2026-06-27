@@ -61,13 +61,22 @@ func TestApplyEnvConfig(t *testing.T) {
 	os.Setenv("TEST_WRITE_TIMEOUT", "15s")
 	os.Setenv("TEST_IDLE_TIMEOUT", "60s")
 	os.Setenv("TEST_BODY_LIMIT", "8MB")
+	os.Setenv("TEST_HEADER_LIMIT", "16KB")
 	os.Setenv("TEST_SHUTDOWN_TIMEOUT", "20s")
+	os.Setenv("TEST_TRUST_PROXY", "true")
+	os.Setenv("TEST_MAX_CONNS", "50000")
+	os.Setenv("TEST_MAX_CONNS_PER_IP", "128")
+	os.Setenv("TEST_ACCEPT_RATE_PER_SEC", "2000")
+	os.Setenv("TEST_ACCEPT_RATE_BURST", "4000")
 	defer func() {
-		os.Unsetenv("TEST_READ_TIMEOUT")
-		os.Unsetenv("TEST_WRITE_TIMEOUT")
-		os.Unsetenv("TEST_IDLE_TIMEOUT")
-		os.Unsetenv("TEST_BODY_LIMIT")
-		os.Unsetenv("TEST_SHUTDOWN_TIMEOUT")
+		for _, k := range []string{
+			"TEST_READ_TIMEOUT", "TEST_WRITE_TIMEOUT", "TEST_IDLE_TIMEOUT",
+			"TEST_BODY_LIMIT", "TEST_HEADER_LIMIT", "TEST_SHUTDOWN_TIMEOUT",
+			"TEST_TRUST_PROXY", "TEST_MAX_CONNS", "TEST_MAX_CONNS_PER_IP",
+			"TEST_ACCEPT_RATE_PER_SEC", "TEST_ACCEPT_RATE_BURST",
+		} {
+			os.Unsetenv(k)
+		}
 	}()
 
 	cfg := defaultConfig()
@@ -85,8 +94,34 @@ func TestApplyEnvConfig(t *testing.T) {
 	if cfg.BodyLimit != 8*1024*1024 {
 		t.Errorf("BodyLimit = %d, want %d", cfg.BodyLimit, 8*1024*1024)
 	}
+	if cfg.HeaderLimit != 16*1024 {
+		t.Errorf("HeaderLimit = %d, want %d", cfg.HeaderLimit, 16*1024)
+	}
 	if cfg.ShutdownTimeout != 20*time.Second {
 		t.Errorf("ShutdownTimeout = %v, want 20s", cfg.ShutdownTimeout)
+	}
+	if !cfg.TrustProxy {
+		t.Error("TrustProxy = false, want true")
+	}
+	if cfg.MaxConns != 50000 {
+		t.Errorf("MaxConns = %d, want 50000", cfg.MaxConns)
+	}
+	if cfg.MaxConnsPerIP != 128 {
+		t.Errorf("MaxConnsPerIP = %d, want 128", cfg.MaxConnsPerIP)
+	}
+	if cfg.AcceptRatePerSec != 2000 {
+		t.Errorf("AcceptRatePerSec = %d, want 2000", cfg.AcceptRatePerSec)
+	}
+	if cfg.AcceptRateBurst != 4000 {
+		t.Errorf("AcceptRateBurst = %d, want 4000", cfg.AcceptRateBurst)
+	}
+}
+
+func TestWithHeaderLimit(t *testing.T) {
+	app := &App{config: defaultConfig()}
+	WithHeaderLimit(16 * 1024)(app)
+	if app.config.HeaderLimit != 16*1024 {
+		t.Errorf("HeaderLimit = %d, want %d", app.config.HeaderLimit, 16*1024)
 	}
 }
 

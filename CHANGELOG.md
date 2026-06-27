@@ -5,6 +5,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.5.0] — unreleased
 
+### Added
+
+- **`WithHeaderLimit(n)` option.** Configures the maximum total request-header size
+  (default 8 KB → HTTP 431). Clients sending large `Authorization`/`Cookie` headers (big
+  JWTs) previously hit a spurious 431 with no escape hatch.
+- **Environment configuration for the Wing safety bundle.** `WithEnvPrefix` now also reads
+  `<PREFIX>_HEADER_LIMIT`, `<PREFIX>_TRUST_PROXY`, `<PREFIX>_MAX_CONNS`,
+  `<PREFIX>_MAX_CONNS_PER_IP`, `<PREFIX>_ACCEPT_RATE_PER_SEC`, and
+  `<PREFIX>_ACCEPT_RATE_BURST`, so Kubernetes/ConfigMap deployments can tune the v1.4.0
+  accept-side DoS limits and proxy trust without code changes.
+
 ### Breaking
 
 - **Removed the no-op `WithHTTP3` option and the `Config.HTTP3` field.** They advertised

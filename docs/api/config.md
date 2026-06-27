@@ -122,15 +122,6 @@ func WithTLS(certFile, keyFile string) Option
 
 Enables TLS with the given certificate and key files.
 
-### WithHTTP3
-
-```go
-func WithHTTP3(certFile, keyFile string) Option
-```
-
-Configures HTTP/3 certificate settings. HTTP/3 serving depends on the selected
-transport and must be verified in the target deployment before release.
-
 ### WithTrustProxy
 
 ```go

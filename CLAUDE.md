@@ -105,6 +105,7 @@ app := kruda.New().
 - `contrib/otel/` — OpenTelemetry tracing
 - `contrib/prometheus/` — Prometheus metrics
 - `contrib/swagger/` — Swagger UI
+- `contrib/observability/` — Turnkey observability: one-call `Enable()` for otel tracing + RED metrics + trace/log correlation + K8s probes + `/metrics`
 
 ### Wing transport (in core since v1.2.0 — `wing_*.go` at repo root)
 - Wing: custom async I/O transport (epoll+eventfd on Linux, kqueue on macOS)
@@ -112,7 +113,7 @@ app := kruda.New().
 - String fast lane: `c.Text`/`c.HTML`/`c.JSON` with no custom headers/cookies serialize through zero-copy responders (`transport.StringResponder`/`JSONResponder`) gated by `canBypassHeaderWrite`
 - Blocking advisor: inline routes that block the event loop (>100µs, 10×) log one warning per route per process; no auto-switching ever
 - All Wing types live in `wing_types_shared.go` (no build tag) so cross-platform stubs can never drift
-- `transport/wing/` deprecation shim was removed in v1.3.0 (module tags ≤ transport/wing/v1.2.0 keep serving pinned users)
+- `transport/wing/` deprecation shim was removed in v1.3.0 (module tags ≤ transport/wing/v1.1.3 keep serving pinned users)
 
 ### Wing model vocabulary (ครุฑ)
 - Kruda (ครุฑ) = the bird: the framework
@@ -127,9 +128,12 @@ app := kruda.New().
 - `kruda new` — project scaffolding
 - `kruda dev` — hot reload dev server
 - `kruda generate` — code generation
+- `kruda validate` — validate Kruda project configuration
+- `kruda mcp` — run as an MCP stdio server for AI coding assistants
+- `kruda pgo` — generate a PGO (Profile-Guided Optimization) profile
 
 ### Examples (`examples/`)
-- 22 runnable examples covering all major features
+- 23 runnable examples covering all major features
 - Each has `main.go` + `README.md`
 
 ## Code Style

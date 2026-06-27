@@ -16,7 +16,7 @@ Fast by default, type-safe by design.
 - Pluggable transport — Wing in core (Linux, epoll+eventfd), fasthttp, or net/http
 - Single-tag releases — one `vX.Y.Z` covers core and contrib (no more sub-module coordination)
 - Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
-- AI-friendly — typed API + 22 examples = AI generates correct code on first try
+- AI-friendly — typed API + 23 examples = AI generates correct code on first try
 
 ## Quick Start
 
@@ -162,7 +162,7 @@ Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp 
 ## Documentation
 
 - [API Reference (pkg.go.dev)](https://pkg.go.dev/github.com/go-kruda/kruda)
-- [Examples](examples/) — 22 runnable examples
+- [Examples](examples/) — 23 runnable examples
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
 - [Benchmark Charts](https://go-kruda.github.io/kruda/benchmarks/)

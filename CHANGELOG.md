@@ -5,6 +5,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.4.0] — unreleased
 
+### Breaking
+
+The Wing accept-limit work removed the now-dead per-worker connection field in favor
+of server-wide options. With effectively zero external adopters, the removal ships in a
+v1 minor release — rationale in `docs/decisions/0001-break-api-in-v1-minor.md`. Migration:
+
+| Removed | Replacement |
+|---------|-------------|
+| `WingConfig.MaxConnsPerWorker` | `kruda.WithMaxConns(n)` (total cap) — plus `kruda.WithMaxConnsPerIP(n)` and `kruda.WithMaxAcceptRate(perSec, burst)` for per-IP and accept-rate limits |
+
+```go
+// before
+kruda.New(kruda.Wing(kruda.WingConfig{MaxConnsPerWorker: 1024}))
+// after
+kruda.New(kruda.Wing(), kruda.WithMaxConns(8192))
+```
+
 ### Fixed
 
 - **Wing now honors the request-size contract on both read paths.** The default
@@ -26,6 +43,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   new socket, surfacing as intermittent `bad file descriptor` errors on a
   subsequent `net.Listen`/`net.Dial` when Takeover-preset servers were restarted
   under load. Shutdown now closes each Takeover fd exactly once.
+- **Wing bounds total in-flight body memory across both read paths.** The Takeover
+  path now charges and refunds the per-worker in-flight body budget
+  (`MaxInflightBodyBytes`), returning **503** when the budget is exceeded, so the
+  event-loop and Takeover paths share one bound on concurrent body memory. Pipelined
+  bytes that arrive in the same read as a request body are preserved — surplus past
+  `Content-Length` is relocated, and already-buffered pipelined bytes are drained once
+  the body completes (edge-triggered epoll does not re-notify for bytes already in the
+  read buffer).
+- **Logger middleware records real request latency.** The built-in Logger reported a
+  latency of `0` for every request; it now measures and logs the actual handler
+  duration.
+- **Prometheus in-flight gauge no longer leaks on panic.** The in-flight request gauge
+  `Dec` is now deferred, so a panic inside a handler can no longer leave the gauge
+  permanently incremented.
 
 ### Added
 
@@ -44,6 +75,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Fluent `KrudaError` builders** — `WithType`, `WithDetail`, `WithInstance`, and
   `With(key, value)` for problem `type`/`detail`/`instance`/extension members, e.g.
   `kruda.NotFound("…").WithType("https://…").With("userId", id)`.
+- **Wing accept-side DoS limits.** New options `WithMaxConns(n)`,
+  `WithMaxConnsPerIP(n)`, and `WithMaxAcceptRate(perSec, burst)` cap accepted
+  connections at the accept path: a global total cap (CAS-reserved; when unset, derived
+  from `RLIMIT_NOFILE` at Wing startup), an opt-in per-IP concurrent-connection limit,
+  and an accept-rate token bucket. Enforcement is accept-only — over-limit connections
+  are closed with a TCP **RST**, never an HTTP **503**. The peer IP is captured zero-alloc
+  via raw `accept4`. These thread the new `WingConfig` fields `MaxConns`,
+  `MaxConnsPerIP`, `AcceptRatePerSec`, and `AcceptRateBurst`. Per-IP caps key on the
+  socket peer address, not `X-Forwarded-For`. Linux/epoll only enforces the accept path;
+  the no-limit hot path is unchanged (tiger A/B shows no regression).
+- **Turnkey observability — new `contrib/observability` module.** A single
+  `observability.Enable(app, cfg)` call wires OpenTelemetry tracing (otel v1.44.0),
+  RED metrics, trace/log correlation, Kubernetes liveness/readiness probes, and a
+  `/metrics` endpoint. The core gains a `WithLogEnricher(fn)` option and
+  `App.SetLogEnricher(fn)` seam for attaching per-request log attributes (e.g. the
+  active trace/span IDs).
+- **Auto-CRUD `Resource` input validation and OpenAPI 3.1 schemas.**
+  `kruda.Resource` create/update routes now decode and validate the request body
+  through the typed-handler contract (gated identically to typed routes — Validator
+  configured and `T` carrying validation tags), return **400** on bad pagination, and
+  emit explicit OpenAPI 3.1 operations (list/get/create/update/delete) with correct
+  `200`/`201`/`204` status codes, page/limit query params, a request body, a `422` only
+  when validation is engaged, and the same default error response as typed routes.
+  Generic instantiation component names (e.g. `ResourceList[…/models.User]`) are
+  sanitized to valid JSON-pointer `$ref` names.
 
 ## [1.3.1] — 2026-06-13
 
@@ -100,7 +156,7 @@ in `docs/decisions/0001-break-api-in-v1-minor.md`. Migration table:
 | `transport.StaticTextResponder` | removed — `c.Text`/`c.HTML` ride the string fast lane |
 | `RouteOption` (func type) | interface — presets implement it; custom func options wrap internally |
 | `KRUDA_ASYNC`, `KRUDA_POOL_ROUTES`, `KRUDA_SPAWN_ROUTES`, `KRUDA_STATIC` | removed — use route presets or `WingConfig.Presets` |
-| `github.com/go-kruda/kruda/transport/wing` | removed — import `github.com/go-kruda/kruda` (tags up to `transport/wing/v1.2.0` keep working for pinned users) |
+| `github.com/go-kruda/kruda/transport/wing` | removed — import `github.com/go-kruda/kruda` (tags up to `transport/wing/v1.1.3` keep working for pinned users) |
 
 ### Added
 - Wing string response fast lane: `c.Text` and `c.HTML` now serialize

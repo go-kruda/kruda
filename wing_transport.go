@@ -675,6 +675,8 @@ func (w *worker) handleAccept(ev event) {
 		closeFd(int(fd)) // RST, not 503 — no request parsed at accept time
 		return
 	}
+	// Keyed on ev.PeerIP (kernel accept-time socket peer), never RemoteAddr()/XFF — the latter is
+	// attacker-spoofable under TrustProxy, so trusting it here would let one client evade the per-IP cap.
 	if w.maxConnsPerIP > 0 && ev.HasPeer && w.connsPerIP[ev.PeerIP] >= w.maxConnsPerIP {
 		atomic.AddInt64(w.rejectIP, 1)
 		rejectWarnOnce(w, rejectKindIP, w.maxConnsPerIP)

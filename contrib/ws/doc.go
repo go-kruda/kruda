@@ -23,10 +23,11 @@
 // # Transport compatibility
 //
 //   - net/http: supported (via http.Hijacker)
-//   - fasthttp: supported (via RequestCtx.Hijack)
+//   - fasthttp: not supported in v1 — the upgrade returns an error directing
+//     callers to net/http (avoids pulling fasthttp into the hijack path).
 //   - Wing:     not supported in v1 — Wing manages the fd directly via
 //     epoll/kqueue and does not expose a hijack API. Routes that
-//     need WebSocket should run under net/http or fasthttp.
+//     need WebSocket should run under net/http.
 //
 // # What it does
 //

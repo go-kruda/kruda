@@ -158,3 +158,12 @@ func TestDispatchOption(t *testing.T) {
 		t.Errorf("Dispatch = %v, want Takeover", f.Dispatch)
 	}
 }
+
+func TestStreamPreset(t *testing.T) {
+	if Stream.Dispatch != Takeover {
+		t.Errorf("Stream.Dispatch = %v, want Takeover", Stream.Dispatch)
+	}
+	if Stream.ResponseMode != responseStream {
+		t.Errorf("Stream.ResponseMode = %v, want responseStream", Stream.ResponseMode)
+	}
+}

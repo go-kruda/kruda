@@ -114,6 +114,7 @@ const (
 	responseGeneric responseMode = iota
 	responseJSON
 	responseRender // intent/diagnostics tag for the Render preset; does not gate the lane
+	responseStream // Stream preset: incremental streaming writer on the Takeover path
 )
 
 // Preset is the per-route tuning hint passed to Wing. Construct via the
@@ -182,6 +183,10 @@ var (
 	DB = Spear
 	// Render — Spear dispatch tagged for DB + template/HTML responses.
 	Render = Preset{Dispatch: Takeover, ResponseMode: responseRender}
+	// Stream dispatches a route via Takeover and gives c.SSE()/c.Stream() an
+	// incremental, flushing response writer on the Wing transport. Use for
+	// Server-Sent Events and chunked streaming: app.Get("/events", h, kruda.Stream).
+	Stream = Preset{Dispatch: Takeover, ResponseMode: responseStream}
 )
 
 // RejectStats holds accept-side rejection counters populated by the Wing transport.

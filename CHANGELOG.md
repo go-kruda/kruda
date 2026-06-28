@@ -5,6 +5,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.5.0] — unreleased
 
+### Added
+
+- **Server-Sent Events and streaming on the Wing transport.** `c.SSE()` and `c.Stream()`
+  now work on Wing (the default on Linux) via the new `kruda.Stream` route preset —
+  `app.Get("/events", h, kruda.Stream)`. Previously they returned an error unless the route
+  ran on net/http. Streaming dispatches via Takeover and does not affect the inline hot
+  path; a slow/stuck client is bounded by `WriteTimeout`, and a client disconnect cancels
+  the handler context (`SSEStream.Done()` fires). A `TestClient.SSE(path)` helper decodes the
+  emitted events for unit tests. The fasthttp transport (macOS dev default) does not support
+  streaming — `c.SSE()` there now returns an actionable error pointing to `kruda.NetHTTP()`.
+
 ### Security
 
 - Raised the minimum Go to **1.25.11** (1.25 line) or **1.26.4** (1.26 line). go1.25.10

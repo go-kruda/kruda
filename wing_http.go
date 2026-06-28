@@ -1115,38 +1115,9 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		return b
 	}
 
-	// Status line — use pre-computed when available.
-	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
-		b = append(b, statusLines[r.status]...)
-	} else {
-		b = append(b, "HTTP/1.1 "...)
-		b = strconv.AppendInt(b, int64(r.status), 10)
-		b = append(b, " Unknown\r\n"...)
-	}
+	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers)
 
-	// Fixed headers: Date.
-	b = append(b, dateHdr()...)
-
-	// Headers — check for Content-Length in the same loop.
-	hasCL := false
-	for i := 0; i < r.headers.count; i++ {
-		b = append(b, r.headers.keys[i]...)
-		b = append(b, ": "...)
-		b = append(b, r.headers.vals[i]...)
-		b = append(b, "\r\n"...)
-		if !hasCL && r.headers.keys[i] == "Content-Length" {
-			hasCL = true
-		}
-	}
-	for i := 0; i < len(r.headers.extra); i++ {
-		b = append(b, r.headers.extra[i].key...)
-		b = append(b, ": "...)
-		b = append(b, r.headers.extra[i].val...)
-		b = append(b, "\r\n"...)
-		if !hasCL && r.headers.extra[i].key == "Content-Length" {
-			hasCL = true
-		}
-	}
+	// Auto-inject Content-Length when the user did not set it explicitly.
 	if !hasCL {
 		b = append(b, "Content-Length: "...)
 		b = appendContentLengthValue(b, len(r.body))
@@ -1158,6 +1129,43 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	// Detach buf from response — caller owns this memory now.
 	r.buf = nil
 	return b
+}
+
+// appendStatusAndHeaders appends the HTTP/1.1 status line, the Date header,
+// and all user-set headers in h to b. It does NOT append a Content-Length or
+// the blank line that terminates the header section; callers are responsible
+// for those (allowing both buffered responses and streaming writers to reuse
+// this helper without a Content-Length being injected). hasCL reports whether
+// a Content-Length header was already present in h, detected in the same walk
+// so buffered callers avoid a second scan.
+func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, hasCL bool) {
+	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
+		b = append(b, statusLines[status]...)
+	} else {
+		b = append(b, "HTTP/1.1 "...)
+		b = strconv.AppendInt(b, int64(status), 10)
+		b = append(b, " Unknown\r\n"...)
+	}
+	b = append(b, dateHdr()...)
+	for i := 0; i < h.count; i++ {
+		b = append(b, h.keys[i]...)
+		b = append(b, ": "...)
+		b = append(b, h.vals[i]...)
+		b = append(b, "\r\n"...)
+		if !hasCL && h.keys[i] == "Content-Length" {
+			hasCL = true
+		}
+	}
+	for i := 0; i < len(h.extra); i++ {
+		b = append(b, h.extra[i].key...)
+		b = append(b, ": "...)
+		b = append(b, h.extra[i].val...)
+		b = append(b, "\r\n"...)
+		if !hasCL && h.extra[i].key == "Content-Length" {
+			hasCL = true
+		}
+	}
+	return b, hasCL
 }
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {

@@ -9,6 +9,7 @@
 package kruda
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
@@ -33,20 +34,33 @@ type wingStreamWriter struct {
 	writeTimeout time.Duration
 }
 
-// Compile-time interface assertion.
-var _ transport.ResponseWriter = (*wingStreamWriter)(nil)
+// Compile-time interface assertions. The http.Flusher assertion matters:
+// c.SSE()/c.Stream() type-assert the writer to http.Flusher, so dropping
+// Flush() must fail the build, not silently degrade at runtime.
+var (
+	_ transport.ResponseWriter = (*wingStreamWriter)(nil)
+	_ http.Flusher             = (*wingStreamWriter)(nil)
+)
 
 func newWingStreamWriter(conn streamConn, writeTimeout time.Duration) *wingStreamWriter {
 	return &wingStreamWriter{conn: conn, status: 200, writeTimeout: writeTimeout}
 }
 
-func (w *wingStreamWriter) WriteHeader(code int)        { w.status = code }
+// WriteHeader records the status code. After the preamble has been written it
+// is a no-op, matching net/http's contract (the status line is already on the wire).
+func (w *wingStreamWriter) WriteHeader(code int) {
+	if w.headersSent {
+		return
+	}
+	w.status = code
+}
+
 func (w *wingStreamWriter) Header() transport.HeaderMap { return &w.headers }
 func (w *wingStreamWriter) Flush()                      {} // writes already hit the socket directly
 
 func (w *wingStreamWriter) Write(p []byte) (int, error) {
 	if !w.headersSent {
-		hdr := appendStatusAndHeaders(nil, w.status, &w.headers)
+		hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers)
 		hdr = append(hdr, "\r\n"...) // blank line terminates the header section
 		if w.writeTimeout > 0 {
 			_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))

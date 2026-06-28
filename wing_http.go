@@ -1115,10 +1115,9 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		return b
 	}
 
-	b = appendStatusAndHeaders(b, r.status, &r.headers)
+	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers)
 
 	// Auto-inject Content-Length when the user did not set it explicitly.
-	hasCL := r.headers.Get("Content-Length") != ""
 	if !hasCL {
 		b = append(b, "Content-Length: "...)
 		b = appendContentLengthValue(b, len(r.body))
@@ -1136,8 +1135,10 @@ func (r *wingResponse) buildZeroCopy() []byte {
 // and all user-set headers in h to b. It does NOT append a Content-Length or
 // the blank line that terminates the header section; callers are responsible
 // for those (allowing both buffered responses and streaming writers to reuse
-// this helper without a Content-Length being injected).
-func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) []byte {
+// this helper without a Content-Length being injected). hasCL reports whether
+// a Content-Length header was already present in h, detected in the same walk
+// so buffered callers avoid a second scan.
+func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, hasCL bool) {
 	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
 		b = append(b, statusLines[status]...)
 	} else {
@@ -1151,14 +1152,20 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) []byte {
 		b = append(b, ": "...)
 		b = append(b, h.vals[i]...)
 		b = append(b, "\r\n"...)
+		if !hasCL && h.keys[i] == "Content-Length" {
+			hasCL = true
+		}
 	}
 	for i := 0; i < len(h.extra); i++ {
 		b = append(b, h.extra[i].key...)
 		b = append(b, ": "...)
 		b = append(b, h.extra[i].val...)
 		b = append(b, "\r\n"...)
+		if !hasCL && h.extra[i].key == "Content-Length" {
+			hasCL = true
+		}
 	}
-	return b
+	return b, hasCL
 }
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {

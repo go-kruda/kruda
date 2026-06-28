@@ -36,6 +36,11 @@ func TestWingStreamWriter_HeadersThenChunks(t *testing.T) {
 	if !strings.Contains(out, "Content-Type: text/event-stream\r\n") {
 		t.Fatalf("missing header: %q", out)
 	}
+	// The blank line (\r\n\r\n) must terminate the header section immediately
+	// before the first body chunk.
+	if !strings.Contains(out, "\r\n\r\ndata: a") {
+		t.Fatalf("blank line missing before body: %q", out)
+	}
 	// The two chunks arrive in order, each written as it was produced.
 	if i, j := strings.Index(out, "data: a"), strings.Index(out, "data: b"); i < 0 || j < 0 || i > j {
 		t.Fatalf("chunks out of order: %q", out)
@@ -101,5 +106,22 @@ func TestWingStreamWriter_Default200(t *testing.T) {
 	out := fc.buf.String()
 	if !strings.HasPrefix(out, "HTTP/1.1 200 OK\r\n") {
 		t.Fatalf("expected default 200 OK status line, got: %q", out)
+	}
+}
+
+func TestWingStreamWriter_WriteHeaderAfterSentIsNoop(t *testing.T) {
+	fc := &fakeStreamConn{}
+	w := newWingStreamWriter(fc, 0)
+	w.WriteHeader(200)
+	_, _ = w.Write([]byte("data: a\n\n"))
+	// Too late — the 200 status line is already on the wire.
+	w.WriteHeader(500)
+	_, _ = w.Write([]byte("data: b\n\n"))
+	out := fc.buf.String()
+	if !strings.HasPrefix(out, "HTTP/1.1 200") {
+		t.Fatalf("status line must stay 200, got: %q", out)
+	}
+	if strings.Contains(out, "HTTP/1.1 500") {
+		t.Fatalf("late WriteHeader(500) must be a no-op: %q", out)
 	}
 }

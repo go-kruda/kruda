@@ -9,6 +9,7 @@
 package kruda
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -74,4 +75,28 @@ func (w *wingStreamWriter) Write(p []byte) (int, error) {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 	}
 	return w.conn.Write(p)
+}
+
+// streamReader is the minimal read surface the disconnect watcher needs.
+// *os.File (the takeover fd) satisfies it.
+type streamReader interface {
+	Read(p []byte) (int, error)
+}
+
+// watchStreamDisconnect cancels the stream context when the client closes its
+// half of the connection. A well-behaved SSE/streaming client sends nothing
+// after the request, so any Read result — EOF, error, or stray bytes — means
+// the client is gone or misbehaving; either way the handler should stop.
+//
+// It is run as a goroutine alongside the handler. The takeover fd is owned by a
+// single *os.File, and a concurrent Read here while the handler Writes through
+// the stream writer is safe (the runtime poller serializes per-direction).
+func watchStreamDisconnect(r streamReader, cancel context.CancelFunc) {
+	var b [256]byte
+	for {
+		if _, err := r.Read(b[:]); err != nil {
+			cancel()
+			return
+		}
+	}
 }

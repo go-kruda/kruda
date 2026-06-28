@@ -279,6 +279,33 @@ func (tr *TestRequest) Send() (*TestResponse, error) {
 	return &TestResponse{recorder: w}, nil
 }
 
+// SSETestResult holds the response from an in-memory SSE request.
+// Each element of Events is one raw event block — the text between \n\n
+// boundaries in the text/event-stream body (trailing empty blocks trimmed).
+type SSETestResult struct {
+	Status int
+	Events []string
+}
+
+// SSE sends a GET request to the given path and parses the text/event-stream
+// body into discrete event blocks. It tests handler logic, not incremental
+// delivery: the handler runs to completion inside httptest.ResponseRecorder
+// before the body is split on \n\n boundaries.
+func (tc *TestClient) SSE(path string) (*SSETestResult, error) {
+	resp, err := tc.do(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	body := resp.BodyString()
+	var events []string
+	for _, block := range strings.Split(body, "\n\n") {
+		if strings.TrimSpace(block) != "" {
+			events = append(events, block)
+		}
+	}
+	return &SSETestResult{Status: resp.StatusCode(), Events: events}, nil
+}
+
 // TestResponse wraps an httptest.ResponseRecorder for easy assertions.
 type TestResponse struct {
 	recorder *httptest.ResponseRecorder

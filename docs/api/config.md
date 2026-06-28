@@ -44,6 +44,14 @@ func WithMaxBodySize(size int) Option
 
 Alias for `WithBodyLimit`.
 
+### WithHeaderLimit
+
+```go
+func WithHeaderLimit(limit int) Option
+```
+
+Sets the maximum total request-header size in bytes (default 8 KB). Requests whose headers exceed this limit get HTTP 431. Raise it for clients that send large `Authorization`/`Cookie` headers (e.g. big JWTs); 0 disables the limit.
+
 ### WithDevMode
 
 ```go

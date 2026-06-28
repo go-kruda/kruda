@@ -952,7 +952,7 @@ func (c *Ctx) SSE(fn func(*SSEStream) error) error {
 	// Check flusher support before writing headers
 	flusher, ok := c.writer.(http.Flusher)
 	if !ok {
-		return InternalError("SSE requires a transport that supports flushing")
+		return InternalError("streaming requires a flushing transport: add the kruda.Stream preset to the route on Wing (Linux), or use kruda.NetHTTP() on macOS/dev — the fasthttp transport does not support streaming")
 	}
 
 	// Set SSE headers

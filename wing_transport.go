@@ -1014,7 +1014,7 @@ func (w *worker) tryParse(c *conn) {
 			w.dispatchWG.Add(1)
 			go func() {
 				defer w.dispatchWG.Done()
-				w.takeoverLoop(req, c.fd, leftover)
+				w.takeoverLoop(req, c.fd, leftover, f.ResponseMode)
 			}()
 			return
 
@@ -1351,7 +1351,7 @@ var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); retur
 // per request at c256 on /db) — identical CPU per request to this model,
 // but scheduler pressure inflated the time a pgx pool conn stayed checked
 // out, costing ~6% throughput (results/forensics-20260612T150500Z).
-func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mode responseMode) {
 	// fds arrive non-blocking from accept4/SetNonblock. os.NewFile registers
 	// a non-blocking fd with the runtime poller, so Read/Write below park
 	// the goroutine, never the thread.
@@ -1359,6 +1359,16 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte) {
 	if f == nil {
 		w.doneCh <- doneMsg{fd: fd, keepAlive: false}
 		w.wake()
+		return
+	}
+
+	// Streaming responses (SSE / chunked) consume the whole connection: the
+	// handler holds it open and writes incrementally through a flushing writer,
+	// so there is no keep-alive reuse and no next-request parse. Handle the
+	// first request as a stream and return — all other dispatch paths fall
+	// through to the byte-unchanged keep-alive loop below.
+	if mode == responseStream {
+		w.streamTakeover(first, fd, f)
 		return
 	}
 
@@ -1589,6 +1599,53 @@ done:
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
 	// and then closes through the File. Do NOT close here — the kernel
 	// could recycle the fd number while the conns map still references it.
+	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
+	w.wake()
+}
+
+// streamTakeover runs a single streaming response (Stream preset) over the
+// takeover fd f. Unlike the keep-alive takeover loop, it gives the handler a
+// flushing wingStreamWriter so c.SSE()/c.Stream() write incrementally, installs
+// a cancellable context so SSEStream.Done() fires on disconnect, and runs a
+// read-watcher that cancels that context when the client closes its half. The
+// streaming response is not keep-alive-reused; on return the fd is closed
+// exactly once via the shared takeover-done path (doneMsg.file).
+func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
+	// Make the handler's c.Context() cancellable from the conn context so the
+	// disconnect watcher can fire SSEStream.Done(). first.ctx flows into c.ctx
+	// during ServeKruda (app_serve.go: c.ctx = r.Context()).
+	ctx, cancel := context.WithCancel(first.ctx)
+	first.ctx = ctx
+
+	sw := newWingStreamWriter(f, time.Duration(w.writeTimeout))
+
+	go watchStreamDisconnect(f, cancel)
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// The preamble may already be on the wire; a 500 status line is
+				// only meaningful if nothing has been written yet. Either way,
+				// stop the stream and let the deferred cancel + close run.
+				if !sw.headersSent {
+					sw.WriteHeader(500)
+					_, _ = sw.Write([]byte("Internal Server Error\n"))
+				}
+			}
+		}()
+		w.handler.ServeKruda(sw, first)
+	}()
+
+	cancel() // stop the watcher; it parks on f.Read until the fd closes below
+
+	// Return the request to the pool, matching the other dispatch paths. Safe
+	// here: the handler has returned, the watcher is cancelled, and the close
+	// below uses only fd + the *os.File — nothing references first afterward.
+	releaseRequest(first)
+
+	// Close the fd exactly once via the shared takeover-done path. The conn is
+	// already takenOver, so handleDone removes bookkeeping and closes through
+	// the File — do NOT add a second close here.
 	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
 	w.wake()
 }

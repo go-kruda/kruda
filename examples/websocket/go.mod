@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/examples/websocket
 
-go 1.25.10
+go 1.25.11
 
 replace (
 	github.com/go-kruda/kruda => ../../

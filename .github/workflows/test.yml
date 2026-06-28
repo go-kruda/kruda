@@ -1,6 +1,6 @@
 # CI Test Pipeline — Kruda Framework
 # Runs tests, vet, lint, and coverage on every push/PR
-# Matrix: Go 1.25.10 + stable × {Linux, macOS, Windows}
+# Matrix: Go 1.25.11 + stable × {Linux, macOS, Windows}
 
 name: Tests
 
@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.25.10', 'stable']
+        go-version: ['1.25.11', 'stable']
         os: [ubuntu-latest, macos-latest, windows-2025]
 
     steps:
@@ -35,20 +35,20 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Install revive
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.10'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.11'
         run: |
           go install github.com/mgechev/revive@v1.12.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check exported API docs
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.10'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.11'
         run: scripts/check-godoc.sh
 
       - name: Go vet
         run: go vet -tags kruda_stdjson ./...
 
       - name: Lint (golangci-lint)
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.10'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.11'
         uses: golangci/golangci-lint-action@v9
         with:
           args: --build-tags kruda_stdjson

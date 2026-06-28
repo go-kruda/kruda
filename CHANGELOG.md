@@ -16,6 +16,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   emitted events for unit tests. The fasthttp transport (macOS dev default) does not support
   streaming — `c.SSE()` there now returns an actionable error pointing to `kruda.NetHTTP()`.
 
+### Security
+
+- Raised the minimum Go to **1.25.11** (1.25 line) or **1.26.4** (1.26 line). go1.25.10
+  and go1.26.0–1.26.3 carry stdlib CVEs GO-2026-5037 (crypto/x509 quadratic verify) and
+  GO-2026-5039 (net/textproto error-message injection); the new floor clears both.
+
 ### Breaking
 
 - **Removed the no-op `WithHTTP3` option and the `Config.HTTP3` field.** They advertised

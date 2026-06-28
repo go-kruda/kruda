@@ -952,7 +952,7 @@ func (c *Ctx) SSE(fn func(*SSEStream) error) error {
 	// Check flusher support before writing headers
 	flusher, ok := c.writer.(http.Flusher)
 	if !ok {
-		return InternalError("SSE requires a transport that supports flushing")
+		return InternalError("streaming requires a flushing transport: add the kruda.Stream preset to the route on Wing (Linux), or use kruda.NetHTTP() on macOS/dev — the fasthttp transport does not support streaming")
 	}
 
 	// Set SSE headers
@@ -963,6 +963,12 @@ func (c *Ctx) SSE(fn func(*SSEStream) error) error {
 	// Write headers immediately
 	c.writeHeaders()
 	c.writer.WriteHeader(200)
+	// Push the response preamble to the client on connect, before fn runs. A
+	// valid SSE handler may block (or emit nothing) before its first event; the
+	// client must still receive the status line + text/event-stream headers
+	// promptly. On net/http this commits the header; on Wing it emits the
+	// preamble through wingStreamWriter.Flush().
+	flusher.Flush()
 	c.responded = true
 
 	stream := &SSEStream{

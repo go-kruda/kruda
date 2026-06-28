@@ -25,8 +25,9 @@ type streamConn interface {
 
 // wingStreamWriter implements transport.ResponseWriter and http.Flusher for
 // streaming responses (SSE, chunked). It writes the HTTP preamble (status line
-// + headers) on the first Write call, then streams subsequent writes straight
-// to the connection without buffering.
+// + headers) on the first Flush or Write (whichever comes first), then streams
+// subsequent writes straight to the connection without buffering. SSE flushes
+// on connect so the client receives the headers before the first event.
 type wingStreamWriter struct {
 	conn         streamConn
 	headers      wingHeaders
@@ -57,19 +58,35 @@ func (w *wingStreamWriter) WriteHeader(code int) {
 }
 
 func (w *wingStreamWriter) Header() transport.HeaderMap { return &w.headers }
-func (w *wingStreamWriter) Flush()                      {} // writes already hit the socket directly
+
+// Flush emits the response preamble (status line + headers) if it has not been
+// sent yet, then returns. Body writes already hit the socket directly, so Flush
+// has no buffered data to push — but SSE flushes on connect (before the first
+// event) to deliver the text/event-stream headers promptly, which is the one
+// case where Flush must actually write the preamble.
+func (w *wingStreamWriter) Flush() { _ = w.flushHeaders() }
+
+// flushHeaders writes the status line + headers + the blank line that
+// terminates the header section, exactly once. Subsequent calls are no-ops.
+func (w *wingStreamWriter) flushHeaders() error {
+	if w.headersSent {
+		return nil
+	}
+	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers)
+	hdr = append(hdr, "\r\n"...) // blank line terminates the header section
+	if w.writeTimeout > 0 {
+		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
+	}
+	if _, err := w.conn.Write(hdr); err != nil {
+		return err
+	}
+	w.headersSent = true
+	return nil
+}
 
 func (w *wingStreamWriter) Write(p []byte) (int, error) {
-	if !w.headersSent {
-		hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers)
-		hdr = append(hdr, "\r\n"...) // blank line terminates the header section
-		if w.writeTimeout > 0 {
-			_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
-		}
-		if _, err := w.conn.Write(hdr); err != nil {
-			return 0, err
-		}
-		w.headersSent = true
+	if err := w.flushHeaders(); err != nil {
+		return 0, err
 	}
 	if w.writeTimeout > 0 {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
@@ -84,9 +101,9 @@ type streamReader interface {
 }
 
 // watchStreamDisconnect cancels the stream context when the client closes its
-// half of the connection. A well-behaved SSE/streaming client sends nothing
-// after the request, so any Read result — EOF, error, or stray bytes — means
-// the client is gone or misbehaving; either way the handler should stop.
+// half of the connection. It cancels on a Read error or EOF (the client is gone
+// or the socket failed); stray bytes from a misbehaving-but-connected client are
+// ignored and watching continues, since a well-behaved SSE client is silent.
 //
 // It is run as a goroutine alongside the handler. The takeover fd is owned by a
 // single *os.File, and a concurrent Read here while the handler Writes through

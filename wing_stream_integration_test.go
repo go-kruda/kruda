@@ -149,6 +149,59 @@ func TestWingStream_IncrementalDelivery(t *testing.T) {
 	}
 }
 
+// TestWingStream_HeadersSentBeforeFirstEvent proves the SSE response preamble
+// (status line + text/event-stream headers) reaches the client on connect, even
+// when the handler emits NO event and blocks. Before the on-connect Flush fix,
+// the preamble was only emitted on the first body Write, so a handler that
+// blocked before its first event left the client hanging with no headers.
+func TestWingStream_HeadersSentBeforeFirstEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing streaming integration test in short mode")
+	}
+
+	// The handler blocks on this channel without ever emitting an event, so the
+	// only way the client can read headers is if c.SSE() flushed them on connect.
+	hold := make(chan struct{})
+	app := New(Wing())
+	app.Get("/events", func(c *Ctx) error {
+		return c.SSE(func(s *SSEStream) error {
+			select {
+			case <-hold:
+			case <-s.Done():
+			case <-time.After(5 * time.Second):
+			}
+			return nil
+		})
+	}, Stream)
+
+	addr, stop := startWingApp(t, app)
+	defer stop()
+	defer close(hold) // release the handler so it returns at teardown
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Write([]byte("GET /events HTTP/1.1\r\nHost: h\r\n\r\n")); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+
+	// Headers must arrive promptly, BEFORE any event and before the handler
+	// returns. The read deadline above bounds "promptly": if the preamble were
+	// only emitted on the first Write (which never happens here), this blocks
+	// until the deadline and fails.
+	r := bufio.NewReader(conn)
+	hdr := readHeaders(t, r)
+	if !strings.HasPrefix(hdr, "HTTP/1.1 200") {
+		t.Fatalf("expected 200 status line before any event, got: %q", hdr)
+	}
+	if !strings.Contains(hdr, "Content-Type: text/event-stream") {
+		t.Fatalf("expected text/event-stream header before any event, got: %q", hdr)
+	}
+}
+
 // TestWingStream_DisconnectCancelsContext proves that closing the client socket
 // fires stream.Done() in the handler (via the disconnect read-watcher cancelling
 // the request context) and that the handler returns promptly with no leak or

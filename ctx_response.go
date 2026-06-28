@@ -963,6 +963,12 @@ func (c *Ctx) SSE(fn func(*SSEStream) error) error {
 	// Write headers immediately
 	c.writeHeaders()
 	c.writer.WriteHeader(200)
+	// Push the response preamble to the client on connect, before fn runs. A
+	// valid SSE handler may block (or emit nothing) before its first event; the
+	// client must still receive the status line + text/event-stream headers
+	// promptly. On net/http this commits the header; on Wing it emits the
+	// preamble through wingStreamWriter.Flush().
+	flusher.Flush()
 	c.responded = true
 
 	stream := &SSEStream{

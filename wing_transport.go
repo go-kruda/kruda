@@ -1638,6 +1638,11 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 
 	cancel() // stop the watcher; it parks on f.Read until the fd closes below
 
+	// Return the request to the pool, matching the other dispatch paths. Safe
+	// here: the handler has returned, the watcher is cancelled, and the close
+	// below uses only fd + the *os.File — nothing references first afterward.
+	releaseRequest(first)
+
 	// Close the fd exactly once via the shared takeover-done path. The conn is
 	// already takenOver, so handleDone removes bookkeeping and closes through
 	// the File — do NOT add a second close here.

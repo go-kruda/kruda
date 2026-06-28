@@ -89,15 +89,50 @@ func TestWingStreamWriter_HeadersSentOnce(t *testing.T) {
 	}
 }
 
-func TestWingStreamWriter_FlushIsNoop(t *testing.T) {
+// TestWingStreamWriter_FlushEmitsPreambleOnConnect verifies that Flush emits the
+// status line + headers before any body byte. This is the SSE-on-connect path:
+// c.SSE() flushes immediately so the client receives the text/event-stream
+// headers even if the handler blocks before its first event.
+func TestWingStreamWriter_FlushEmitsPreambleOnConnect(t *testing.T) {
 	fc := &fakeStreamConn{}
 	w := newWingStreamWriter(fc, 0)
-	// Flush before any write — must not panic.
-	w.Flush()
 	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "text/event-stream")
+	// Flush with no body yet — the preamble must be on the wire afterward.
 	w.Flush()
-	_, _ = w.Write([]byte("ok"))
+	out := fc.buf.String()
+	if !strings.HasPrefix(out, "HTTP/1.1 200") {
+		t.Fatalf("Flush must emit the status line, got: %q", out)
+	}
+	if !strings.Contains(out, "Content-Type: text/event-stream\r\n") {
+		t.Fatalf("Flush must emit headers set before it, got: %q", out)
+	}
+	if !strings.HasSuffix(out, "\r\n\r\n") {
+		t.Fatalf("Flush must terminate the header section with a blank line, got: %q", out)
+	}
+	// A second Flush must not re-emit the preamble.
 	w.Flush()
+	if strings.Count(fc.buf.String(), "HTTP/1.1") != 1 {
+		t.Fatalf("preamble emitted more than once: %q", fc.buf.String())
+	}
+	// A following Write appends the body after the already-sent preamble.
+	if _, err := w.Write([]byte("data: x\n\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(fc.buf.String(), "\r\n\r\ndata: x\n\n") {
+		t.Fatalf("body must follow the preamble: %q", fc.buf.String())
+	}
+}
+
+// TestWingStreamWriter_FlushBeforeWriteHeaderUsesDefault200 verifies a Flush
+// before any WriteHeader emits a default 200 preamble and does not panic.
+func TestWingStreamWriter_FlushBeforeWriteHeaderUsesDefault200(t *testing.T) {
+	fc := &fakeStreamConn{}
+	w := newWingStreamWriter(fc, 0)
+	w.Flush() // no WriteHeader, no Write yet
+	if !strings.HasPrefix(fc.buf.String(), "HTTP/1.1 200 OK\r\n") {
+		t.Fatalf("Flush before WriteHeader must default to 200, got: %q", fc.buf.String())
+	}
 }
 
 func TestWingStreamWriter_Default200(t *testing.T) {

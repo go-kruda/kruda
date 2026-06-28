@@ -937,7 +937,9 @@ app := kruda.New(
     kruda.WithEnvPrefix("APP"),
 )
 // Reads: APP_READ_TIMEOUT, APP_WRITE_TIMEOUT, APP_IDLE_TIMEOUT,
-//        APP_BODY_LIMIT, APP_SHUTDOWN_TIMEOUT
+//        APP_BODY_LIMIT, APP_HEADER_LIMIT, APP_SHUTDOWN_TIMEOUT,
+//        APP_TRUST_PROXY, APP_MAX_CONNS, APP_MAX_CONNS_PER_IP,
+//        APP_ACCEPT_RATE_PER_SEC, APP_ACCEPT_RATE_BURST
 ` + "```",
 
 	"error-handling": `# Error Handling

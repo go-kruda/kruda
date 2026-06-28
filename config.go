@@ -133,6 +133,13 @@ func WithMaxBodySize(size int) Option {
 	return WithBodyLimit(size)
 }
 
+// WithHeaderLimit sets the maximum total request-header size in bytes (default 8 KB).
+// Requests whose headers exceed this limit get HTTP 431. Raise it for clients that
+// send large Authorization/Cookie headers (e.g. big JWTs); 0 disables the limit.
+func WithHeaderLimit(limit int) Option {
+	return func(a *App) { a.config.HeaderLimit = limit }
+}
+
 // WithDevMode enables or disables development mode.
 // When enabled, the framework relaxes X-Frame-Options to SAMEORIGIN
 // and activates the dev error page (when implemented).
@@ -344,9 +351,41 @@ func applyEnvConfig(prefix string, cfg *Config) {
 			cfg.BodyLimit = int(n)
 		}
 	}
+	if v := os.Getenv(prefix + "_HEADER_LIMIT"); v != "" {
+		if n, err := parseSize(v); err == nil {
+			cfg.HeaderLimit = int(n)
+		}
+	}
 	if v := os.Getenv(prefix + "_SHUTDOWN_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.ShutdownTimeout = d
+		}
+	}
+	if v := os.Getenv(prefix + "_TRUST_PROXY"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.TrustProxy = b
+		}
+	}
+	// Wing accept-side DoS limits — let K8s/ConfigMap deployments tune the safety
+	// bundle without code changes.
+	if v := os.Getenv(prefix + "_MAX_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxConns = n
+		}
+	}
+	if v := os.Getenv(prefix + "_MAX_CONNS_PER_IP"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxConnsPerIP = n
+		}
+	}
+	if v := os.Getenv(prefix + "_ACCEPT_RATE_PER_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.AcceptRatePerSec = n
+		}
+	}
+	if v := os.Getenv(prefix + "_ACCEPT_RATE_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.AcceptRateBurst = n
 		}
 	}
 }

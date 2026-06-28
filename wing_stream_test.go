@@ -4,6 +4,8 @@ package kruda
 
 import (
 	"bytes"
+	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -106,6 +108,59 @@ func TestWingStreamWriter_Default200(t *testing.T) {
 	out := fc.buf.String()
 	if !strings.HasPrefix(out, "HTTP/1.1 200 OK\r\n") {
 		t.Fatalf("expected default 200 OK status line, got: %q", out)
+	}
+}
+
+// TestWatchStreamDisconnect_CancelsOnEOF verifies the read-watcher cancels its
+// context and returns when the reader hits EOF (the client closed its half).
+func TestWatchStreamDisconnect_CancelsOnEOF(t *testing.T) {
+	pr, pw := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		watchStreamDisconnect(pr, cancel)
+		close(done)
+	}()
+	// Closing the write half makes the watcher's Read return EOF.
+	_ = pw.Close()
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context not cancelled after reader EOF")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher goroutine did not exit after EOF")
+	}
+}
+
+// TestWatchStreamDisconnect_IgnoresStrayBytes verifies the watcher keeps reading
+// past stray client bytes and only cancels once the read half errors.
+func TestWatchStreamDisconnect_IgnoresStrayBytes(t *testing.T) {
+	pr, pw := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		watchStreamDisconnect(pr, cancel)
+		close(done)
+	}()
+	if _, err := pw.Write([]byte("stray")); err != nil {
+		t.Fatalf("write stray: %v", err)
+	}
+	// Still alive after stray bytes — must not have cancelled yet.
+	select {
+	case <-ctx.Done():
+		t.Fatal("watcher cancelled on stray bytes; must keep watching")
+	case <-time.After(50 * time.Millisecond):
+	}
+	_ = pw.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher goroutine did not exit after EOF")
 	}
 }
 

@@ -22,7 +22,7 @@ echo "== build =="
 echo "== start server =="
 SOAK_PORT=$PORT "$OUT/kruda-soak" >"$OUT/server.log" 2>&1 &
 SRV=$!
-trap 'kill $SRV 2>/dev/null || true' EXIT
+trap 'kill $SRV $WRK $CHURN 2>/dev/null || true' EXIT
 sleep 2
 
 sample() { # $1 = label

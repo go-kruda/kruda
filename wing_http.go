@@ -129,6 +129,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	hasCL := false
 	var extraHdrs [32]wingExtraHeader
 	extraN := 0
+	var extraOverflow []wingExtraHeader // rare: only when >32 non-fast headers
 
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -273,17 +274,20 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 				realIP = string(val)
 			}
 		default:
-			if extraN < len(extraHdrs) {
-				lk := make([]byte, len(key))
-				for i, c := range key {
-					if c >= 'A' && c <= 'Z' {
-						lk[i] = byte(c + 32)
-					} else {
-						lk[i] = byte(c)
-					}
+			lk := make([]byte, len(key))
+			for i, c := range key {
+				if c >= 'A' && c <= 'Z' {
+					lk[i] = byte(c + 32)
+				} else {
+					lk[i] = byte(c)
 				}
-				extraHdrs[extraN] = wingExtraHeader{string(lk), string(val)}
+			}
+			h := wingExtraHeader{string(lk), string(val)}
+			if extraN < len(extraHdrs) {
+				extraHdrs[extraN] = h
 				extraN++
+			} else {
+				extraOverflow = append(extraOverflow, h)
 			}
 		}
 	}
@@ -330,6 +334,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.acceptUnsafe = acceptUnsafe
 		r.extraHdrs = extraHdrs
 		r.extraN = extraN
+		r.extraOverflow = extraOverflow
 		r.keepAlive = keepAlive
 		r.pathUnsafe = unsafePath && path != "/"
 		return r, skip + consumed, true
@@ -349,6 +354,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.acceptUnsafe = acceptUnsafe
 	r.extraHdrs = extraHdrs
 	r.extraN = extraN
+	r.extraOverflow = extraOverflow
 	r.keepAlive = keepAlive
 	r.pathUnsafe = unsafePath && path != "/"
 	return r, skip + bodyStart, true
@@ -706,6 +712,7 @@ func releaseRequest(r *wingRequest) {
 	r.pathUnsafe = false
 	r.fd = 0
 	r.extraN = 0
+	r.extraOverflow = nil
 	r.ctx = nil
 	reqPool.Put(r)
 }
@@ -751,6 +758,7 @@ type wingRequest struct {
 	fd            int32 // connection fd — for RawRequest().Fd()
 	extraHdrs     [32]wingExtraHeader
 	extraN        int
+	extraOverflow []wingExtraHeader
 	ctx           context.Context
 }
 
@@ -845,6 +853,11 @@ func (r *wingRequest) Header(key string) string {
 	for i := range r.extraN {
 		if r.extraHdrs[i].k == lk {
 			return r.extraHdrs[i].v
+		}
+	}
+	for i := range r.extraOverflow {
+		if r.extraOverflow[i].k == lk {
+			return r.extraOverflow[i].v
 		}
 	}
 	return ""

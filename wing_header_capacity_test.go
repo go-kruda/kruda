@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -50,6 +51,25 @@ func TestWingHeader_ChromeWSUpgradeRetainsAllHeaders(t *testing.T) {
 	for k, v := range want {
 		if got := req.Header(k); got != v {
 			t.Errorf("Header(%q) = %q, want %q", k, got, v)
+		}
+	}
+}
+
+func TestWingHeader_SpillBeyondInlineCapacity(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: example.com\r\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "X-Custom-%02d: value-%02d\r\n", i, i)
+	}
+	b.WriteString("\r\n")
+	req, _, ok := parseHTTPRequest([]byte(b.String()), noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	for i := 0; i < 40; i++ {
+		want := fmt.Sprintf("value-%02d", i)
+		if got := req.Header(fmt.Sprintf("X-Custom-%02d", i)); got != want {
+			t.Errorf("Header(X-Custom-%02d) = %q, want %q", i, got, want)
 		}
 	}
 }

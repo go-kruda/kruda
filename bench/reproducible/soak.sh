@@ -22,6 +22,13 @@ echo "== build =="
 echo "== start server =="
 SOAK_PORT=$PORT "$OUT/kruda-soak" >"$OUT/server.log" 2>&1 &
 SRV=$!
+# WRK/CHURN aren't assigned until the load-generation section below; under
+# set -u, an EXIT trap that references them before that would itself fail
+# with "unbound variable" and abort before reaching `kill`, orphaning SRV.
+# Bind them empty now so the trap can always expand them safely (word
+# splitting drops the empty values, so `kill` never sees a bad argument).
+WRK=""
+CHURN=""
 trap 'kill $SRV $WRK $CHURN 2>/dev/null || true' EXIT
 sleep 2
 

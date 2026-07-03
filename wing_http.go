@@ -41,6 +41,10 @@ func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, 
 	return parseHTTPRequestInternal(data, limits, true)
 }
 
+// wingExtraHeader is one request header outside the knownHeader fast-path
+// set, stored lowercase-keyed for case-insensitive lookup in Header().
+type wingExtraHeader struct{ k, v string }
+
 func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
@@ -123,7 +127,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	contentLengthSeen := false
 	hasTE := false
 	hasCL := false
-	var extraHdrs [8]struct{ k, v string }
+	var extraHdrs [8]wingExtraHeader
 	extraN := 0
 
 	pos := lineEnd + 1
@@ -278,7 +282,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 						lk[i] = byte(c)
 					}
 				}
-				extraHdrs[extraN] = struct{ k, v string }{string(lk), string(val)}
+				extraHdrs[extraN] = wingExtraHeader{string(lk), string(val)}
 				extraN++
 			}
 		}
@@ -745,7 +749,7 @@ type wingRequest struct {
 	hostUnsafe    bool
 	acceptUnsafe  bool
 	fd            int32 // connection fd — for RawRequest().Fd()
-	extraHdrs     [8]struct{ k, v string }
+	extraHdrs     [8]wingExtraHeader
 	extraN        int
 	ctx           context.Context
 }

@@ -52,6 +52,10 @@ func FuzzParserDifferential(f *testing.F) {
 	// request with more than one Host header; net/http's ReadRequest
 	// enforces this ("too many Host headers"). Found by round-3 fuzzing.
 	f.Add([]byte("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n"))
+	// leading CRLF before the request-line, on what a real server would
+	// treat as a fresh/non-POST-preceded connection — not a framing
+	// divergence, see the guard below.
+	f.Add([]byte("\r\nGET / HTTP/1.1\r\nHost: a\r\n\r\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		wingReq, _, wingOK := parseHTTPRequest(data, noLimits)
@@ -60,6 +64,32 @@ func FuzzParserDifferential(f *testing.F) {
 			return // Wing being stricter is always allowed
 		}
 		if stdErr != nil {
+			// Known, accepted divergence: RFC 7230 §3.5 explicitly says a
+			// server SHOULD ignore at least one empty line (CRLF) received
+			// prior to the request-line — deliberate, tested leniency
+			// (TestParser_LeadingCRLFTolerance), not a framing/smuggling
+			// risk: Wing's `consumed` return value accounts for every
+			// skipped byte, so a front proxy and Wing never disagree on
+			// where the request ends. net/http's real server only mirrors
+			// this leniency when the previous request on the connection was
+			// a POST (server.go's numLeadingCRorLF gate) and plain
+			// ReadRequest never does; Wing applies it unconditionally,
+			// which is broader but strictly an accept/reject divergence,
+			// not a body-boundary one. Verify narrowly: only treat this as
+			// accepted when the raw input actually starts with a CR/LF byte
+			// AND net/http agrees once those leading bytes are stripped —
+			// so a genuine, unrelated "malformed HTTP request" error is
+			// never silently swallowed just because the input happens to
+			// start with '\r' or '\n'.
+			if len(data) > 0 && (data[0] == '\r' || data[0] == '\n') {
+				skip := 0
+				for skip < len(data) && (data[skip] == '\r' || data[skip] == '\n') {
+					skip++
+				}
+				if _, err2 := http.ReadRequest(bufio.NewReader(bytes.NewReader(data[skip:]))); err2 == nil {
+					return
+				}
+			}
 			// Known, accepted divergence: net/http validates percent-escapes
 			// in the request path (via url.Parse) and Wing does not — this is
 			// NOT a smuggling/body-boundary risk, since both parsers agree on

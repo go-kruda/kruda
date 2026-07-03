@@ -73,3 +73,19 @@ func TestWingHeader_SpillBeyondInlineCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestWingHeaderSpills_CounterIncrements(t *testing.T) {
+	before := WingHeaderSpills()
+	var b strings.Builder
+	b.WriteString("GET / HTTP/1.1\r\nHost: example.com\r\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "X-C-%02d: v\r\n", i)
+	}
+	b.WriteString("\r\n")
+	if _, _, ok := parseHTTPRequest([]byte(b.String()), noLimits); !ok {
+		t.Fatal("parse failed")
+	}
+	if got := WingHeaderSpills(); got < before+1 {
+		t.Errorf("WingHeaderSpills() = %d, want >= %d", got, before+1)
+	}
+}

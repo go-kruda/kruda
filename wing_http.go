@@ -287,6 +287,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 				extraHdrs[extraN] = h
 				extraN++
 			} else {
+				if extraOverflow == nil {
+					wingHeaderSpills.Add(1)
+				}
 				extraOverflow = append(extraOverflow, h)
 			}
 		}

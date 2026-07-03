@@ -1,0 +1,47 @@
+# Weekly stdlib/dependency vulnerability scan for all released modules.
+# The June 2026 Go floor bump (GO-2026-5037/5039) was a manual scramble —
+# this catches the next one automatically.
+
+name: govulncheck
+
+on:
+  schedule:
+    - cron: '0 21 * * 0' # Sunday 21:00 UTC = Monday 04:00 Asia/Bangkok
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/go.mod'
+      - '**/go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan released modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Scan every released module
+        run: |
+          set -euo pipefail
+          fail=0
+          for mod in $(git ls-files '*go.mod' | grep -vE '^(examples|bench)/'); do
+            dir=$(dirname "$mod")
+            echo "==> govulncheck $dir"
+            if ! (cd "$dir" && govulncheck ./...); then
+              fail=1
+            fi
+          done
+          exit $fail

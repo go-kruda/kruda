@@ -7,12 +7,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Wing no longer drops request headers: the parser's inline extra-header
-  capacity grows 8 → 32, and requests with more than 32 non-fast-path headers
-  spill to a heap slice instead of silently losing headers. Real browser
-  requests (e.g. a Chrome WebSocket upgrade carries ~10-12 non-fast headers)
-  previously lost every extra header past the 8th — `c.Header()` returned ""
-  for them.
+- Wing no longer drops request headers: requests carrying more than 8
+  non-fast-path headers now spill into a heap slice instead of being silently
+  dropped past the 8th. Real browser requests (e.g. a Chrome WebSocket upgrade
+  carries ~10-12 non-fast headers) previously lost every extra header past the
+  8th — `c.Header()` returned "" for them. The inline fast path (≤8 extra
+  headers) is unchanged, so the zero-extra-header hot path keeps its footprint.
 
 ### Added
 

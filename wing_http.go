@@ -127,9 +127,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	contentLengthSeen := false
 	hasTE := false
 	hasCL := false
-	var extraHdrs [32]wingExtraHeader
+	var extraHdrs [8]wingExtraHeader
 	extraN := 0
-	var extraOverflow []wingExtraHeader // rare: only when >32 non-fast headers
+	var extraOverflow []wingExtraHeader // spills only when a request carries >8 non-fast headers
 
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -335,10 +335,10 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
-		// Copy only the populated inline slots. A full [32] value-array copy
-		// would move ~1 KB per request even on the zero-extra-header hot path;
-		// slots past extraN are never read (Header scans [0:extraN]), so leaving
-		// their stale (bounded) contents is harmless.
+		// Copy only the populated inline slots; a full value-array copy would
+		// move the whole array every request even when there are no extra
+		// headers. Slots past extraN are never read (Header scans [0:extraN]),
+		// so leaving their stale (bounded) contents is harmless.
 		copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
 		r.extraN = extraN
 		r.extraOverflow = extraOverflow
@@ -765,7 +765,7 @@ type wingRequest struct {
 	hostUnsafe    bool
 	acceptUnsafe  bool
 	fd            int32 // connection fd — for RawRequest().Fd()
-	extraHdrs     [32]wingExtraHeader
+	extraHdrs     [8]wingExtraHeader
 	extraN        int
 	extraOverflow []wingExtraHeader
 	ctx           context.Context

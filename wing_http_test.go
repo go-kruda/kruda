@@ -2066,7 +2066,8 @@ func TestParseHTTPRequest_ExtraHeadersMissing(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
-	// 33 non-special headers — first 32 stored inline, 33rd+ spills into extraOverflow.
+	// 33 non-special headers — the first 8 land inline, the rest spill into
+	// extraOverflow; none are dropped regardless of count.
 	var raw string
 	raw = "GET / HTTP/1.1\r\n"
 	for i := 0; i < 33; i++ {
@@ -2077,17 +2078,14 @@ func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
 	if !ok {
 		t.Fatal("should parse even with 33 extra headers")
 	}
-	// First 32 must be present.
-	for i := 0; i < 32; i++ {
+	// All 33 must be retained (inline + overflow spill), including the ones
+	// past the inline capacity.
+	for i := 0; i < 33; i++ {
 		k := "X-H" + strconv.Itoa(i)
 		want := "v" + strconv.Itoa(i)
 		if v := req.Header(k); v != want {
-			t.Errorf("Header(%s) = %q, want %q", k, v, want)
+			t.Errorf("Header(%s) = %q, want %q (retained inline or via spill)", k, v, want)
 		}
-	}
-	// 33rd must be retained via the overflow spill, not dropped.
-	if v := req.Header("X-H32"); v != "v32" {
-		t.Errorf("Header(X-H32) = %q, want %q (overflow retained)", v, "v32")
 	}
 }
 

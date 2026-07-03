@@ -9,6 +9,7 @@ package kruda
 import (
 	"log/slog"
 	"runtime"
+	"sync/atomic"
 	"time"
 )
 
@@ -215,3 +216,14 @@ type RawRequest interface {
 	Fd() int32
 	KeepAlive() bool
 }
+
+// wingHeaderSpills counts requests whose non-fast-path header count exceeded
+// the inline extras capacity and spilled to a heap slice. Nonzero is normal
+// for header-heavy clients; a sudden jump can indicate header-stuffing
+// traffic that stays under HeaderLimit.
+var wingHeaderSpills atomic.Uint64
+
+// WingHeaderSpills reports how many requests have spilled request headers
+// past the Wing parser's inline capacity since process start. It is safe to
+// call from any goroutine and always returns 0 on platforms without Wing.
+func WingHeaderSpills() uint64 { return wingHeaderSpills.Load() }

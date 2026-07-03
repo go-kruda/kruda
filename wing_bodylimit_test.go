@@ -753,7 +753,7 @@ func TestWing_HeaderLineLengthBoundary(t *testing.T) {
 		valLen   int
 		wantCode string
 	}{
-		{"at_limit", headerLimit - baseLen, "200"},      // len(hline)==headerLimit → OK
+		{"at_limit", headerLimit - baseLen, "200"},       // len(hline)==headerLimit → OK
 		{"over_limit", headerLimit - baseLen + 1, "431"}, // len(hline)==headerLimit+1 → 431
 	} {
 		t.Run(tc.name, func(t *testing.T) {

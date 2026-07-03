@@ -41,6 +41,10 @@ func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, 
 	return parseHTTPRequestInternal(data, limits, true)
 }
 
+// wingExtraHeader is one request header outside the knownHeader fast-path
+// set, stored lowercase-keyed for case-insensitive lookup in Header().
+type wingExtraHeader struct{ k, v string }
+
 func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
@@ -123,8 +127,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	contentLengthSeen := false
 	hasTE := false
 	hasCL := false
-	var extraHdrs [8]struct{ k, v string }
+	var extraHdrs [8]wingExtraHeader
 	extraN := 0
+	var extraOverflow []wingExtraHeader // spills only when a request carries >8 non-fast headers
 
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -269,17 +274,23 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 				realIP = string(val)
 			}
 		default:
-			if extraN < len(extraHdrs) {
-				lk := make([]byte, len(key))
-				for i, c := range key {
-					if c >= 'A' && c <= 'Z' {
-						lk[i] = byte(c + 32)
-					} else {
-						lk[i] = byte(c)
-					}
+			lk := make([]byte, len(key))
+			for i, c := range key {
+				if c >= 'A' && c <= 'Z' {
+					lk[i] = byte(c + 32)
+				} else {
+					lk[i] = byte(c)
 				}
-				extraHdrs[extraN] = struct{ k, v string }{string(lk), string(val)}
+			}
+			h := wingExtraHeader{string(lk), string(val)}
+			if extraN < len(extraHdrs) {
+				extraHdrs[extraN] = h
 				extraN++
+			} else {
+				if extraOverflow == nil {
+					wingHeaderSpills.Add(1)
+				}
+				extraOverflow = append(extraOverflow, h)
 			}
 		}
 	}
@@ -324,8 +335,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
-		r.extraHdrs = extraHdrs
+		// Copy only the populated inline slots; a full value-array copy would
+		// move the whole array every request even when there are no extra
+		// headers. Slots past extraN are never read (Header scans [0:extraN]),
+		// so leaving their stale (bounded) contents is harmless.
+		copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
 		r.extraN = extraN
+		r.extraOverflow = extraOverflow
 		r.keepAlive = keepAlive
 		r.pathUnsafe = unsafePath && path != "/"
 		return r, skip + consumed, true
@@ -343,8 +359,11 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.realIP = realIP
 	r.hostUnsafe = hostUnsafe
 	r.acceptUnsafe = acceptUnsafe
-	r.extraHdrs = extraHdrs
+	// Copy only the populated inline slots (see the with-body path above for
+	// why a full value-array copy is avoided on the hot path).
+	copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
 	r.extraN = extraN
+	r.extraOverflow = extraOverflow
 	r.keepAlive = keepAlive
 	r.pathUnsafe = unsafePath && path != "/"
 	return r, skip + bodyStart, true
@@ -702,6 +721,7 @@ func releaseRequest(r *wingRequest) {
 	r.pathUnsafe = false
 	r.fd = 0
 	r.extraN = 0
+	r.extraOverflow = nil
 	r.ctx = nil
 	reqPool.Put(r)
 }
@@ -745,8 +765,9 @@ type wingRequest struct {
 	hostUnsafe    bool
 	acceptUnsafe  bool
 	fd            int32 // connection fd — for RawRequest().Fd()
-	extraHdrs     [8]struct{ k, v string }
+	extraHdrs     [8]wingExtraHeader
 	extraN        int
+	extraOverflow []wingExtraHeader
 	ctx           context.Context
 }
 
@@ -841,6 +862,11 @@ func (r *wingRequest) Header(key string) string {
 	for i := range r.extraN {
 		if r.extraHdrs[i].k == lk {
 			return r.extraHdrs[i].v
+		}
+	}
+	for i := range r.extraOverflow {
+		if r.extraOverflow[i].k == lk {
+			return r.extraOverflow[i].v
 		}
 	}
 	return ""

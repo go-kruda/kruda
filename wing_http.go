@@ -1197,7 +1197,15 @@ func init() {
 
 func wingInternMethod(b []byte) string {
 	if len(b) >= 3 {
-		if m := methodTable[b[0]^b[1]+b[2]]; m != "" && len(m) == len(b) {
+		// The XOR/add hash is not collision-free (e.g. "0.00" hashes to the
+		// same slot as "HEAD" with equal length): a length match alone is
+		// not proof of identity. Verify the actual bytes before returning
+		// the interned constant, or a hash collision silently substitutes
+		// the wrong method (a real correctness bug — routing, method-based
+		// middleware, and audit logs all trust Method()). The comparison is
+		// a handful of bytes and does not allocate, so the fast path stays
+		// zero-alloc for genuine GET/POST/PUT/DELETE/HEAD/PATCH.
+		if m := methodTable[b[0]^b[1]+b[2]]; m != "" && len(m) == len(b) && m == string(b) {
 			return m
 		}
 	}

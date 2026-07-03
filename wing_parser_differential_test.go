@@ -32,11 +32,22 @@ func FuzzParserDifferential(f *testing.F) {
 	// whitespace between the field-name and the colon (RFC 9112 §5.1
 	// forbids it; net/http rejects it outright, Wing must too).
 	f.Add([]byte("POST / HTTP/1.1\r\nHost: a\r\nContent-Length\t: 5\r\n\r\n12345"))
+	// obs-fold on a NON-FIRST header line that itself contains a colon: an
+	// earlier fix only rejected leading SP/HTAB on the first header line,
+	// missing this case — the continuation is mistaken for an ordinary new
+	// header ("x: y") instead of an illegal fold of Content-Length's value
+	// (RFC 9112 §5.2 forbids obs-fold on every line of a request, not just
+	// the first).
+	f.Add([]byte("POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n x: y\r\n\r\nhello"))
 	// invalid percent-escape in the request path — not a framing/smuggling
 	// divergence (both parsers agree on where the request ends), just a
 	// URL-validity divergence that WithPathTraversal() covers when enabled.
 	// See the guard below for why this is intentionally not a failure.
 	f.Add([]byte("GET /%zz HTTP/1.1\r\nHost: a\r\n\r\n"))
+	// method-interning hash collision: "0.00" is a valid RFC 7230 token that
+	// hashes+length-collides with "HEAD" in wingInternMethod's fast lookup;
+	// without a byte comparison it was misreported as method HEAD.
+	f.Add([]byte("0.00 * HTTP/0.0\r\n\r\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		wingReq, _, wingOK := parseHTTPRequest(data, noLimits)
@@ -88,10 +99,33 @@ func TestWingParser_RejectsMalformedHeaderLines(t *testing.T) {
 		// whitespace between field-name and colon (RFC 9112 §5.1) — must not
 		// be silently trimmed and matched as a known header.
 		"POST / HTTP/1.1\r\nHost: a\r\nContent-Length\t: 5\r\n\r\n12345",
+		// obs-fold on a NON-FIRST header line that happens to contain a
+		// colon — must be rejected on every header line, not just the
+		// first (RFC 9112 §5.2). See FuzzParserDifferential's seed comment.
+		"POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n x: y\r\n\r\nhello",
 	}
 	for _, raw := range cases {
 		if _, _, ok := parseHTTPRequest([]byte(raw), noLimits); ok {
 			t.Errorf("parser accepted a malformed header line: %q", raw)
 		}
+	}
+}
+
+// TestWingParser_MethodInterningNoCollision is the regression test for a
+// hash-collision bug in wingInternMethod's fast-path lookup: the XOR/add
+// hash used for O(1) interning of common methods is not collision-free, and
+// a length-only check after the hash lookup let a distinct method token
+// ("0.00", a valid RFC 7230 token) be silently reported as an entirely
+// different, unrelated method ("HEAD") that happens to hash+length-collide
+// with it. This corrupts Method() for any handler, middleware, or router
+// decision that branches on it.
+func TestWingParser_MethodInterningNoCollision(t *testing.T) {
+	raw := "0.00 * HTTP/0.0\r\n\r\n"
+	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if !ok {
+		t.Fatalf("parser rejected a well-formed request line: %q", raw)
+	}
+	if req.Method() != "0.00" {
+		t.Errorf("Method() = %q, want %q (must not collide with an interned method string)", req.Method(), "0.00")
 	}
 }

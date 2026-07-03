@@ -125,3 +125,25 @@ func TestWingHeader_EndToEndWSKeyRetained(t *testing.T) {
 		t.Errorf("response body does not echo Sec-WebSocket-Key; got:\n%s", resp)
 	}
 }
+
+// TestWingHeader_StaleInlineSlotsNotRead pins the invariant the partial-slot
+// copy (parseHTTPRequestInternal copies only extraHdrs[:extraN] into the pooled
+// request) relies on: Header() must never read an inline slot at or past
+// extraN. A pooled *wingRequest reused for a request with fewer extra headers
+// keeps the previous request's values in the tail slots; those must stay
+// invisible so no stale header leaks across requests.
+func TestWingHeader_StaleInlineSlotsNotRead(t *testing.T) {
+	r := &wingRequest{}
+	// Slot 0 belongs to the current request; slot 5 is stale from a prior
+	// request that populated more slots (extraHdrs keys are stored lowercased).
+	r.extraHdrs[0] = wingExtraHeader{"x-real", "current"}
+	r.extraHdrs[5] = wingExtraHeader{"x-stale", "leaked-from-prev-request"}
+	r.extraN = 1
+
+	if got := r.Header("X-Real"); got != "current" {
+		t.Errorf("Header(X-Real) = %q, want %q", got, "current")
+	}
+	if got := r.Header("X-Stale"); got != "" {
+		t.Errorf("Header(X-Stale) = %q, want \"\" — slot 5 is past extraN=1 and must not leak", got)
+	}
+}

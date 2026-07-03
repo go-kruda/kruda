@@ -335,7 +335,11 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
-		r.extraHdrs = extraHdrs
+		// Copy only the populated inline slots. A full [32] value-array copy
+		// would move ~1 KB per request even on the zero-extra-header hot path;
+		// slots past extraN are never read (Header scans [0:extraN]), so leaving
+		// their stale (bounded) contents is harmless.
+		copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
 		r.extraN = extraN
 		r.extraOverflow = extraOverflow
 		r.keepAlive = keepAlive
@@ -355,7 +359,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.realIP = realIP
 	r.hostUnsafe = hostUnsafe
 	r.acceptUnsafe = acceptUnsafe
-	r.extraHdrs = extraHdrs
+	// Copy only the populated inline slots (see the with-body path above for
+	// why a full value-array copy is avoided on the hot path).
+	copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
 	r.extraN = extraN
 	r.extraOverflow = extraOverflow
 	r.keepAlive = keepAlive

@@ -127,7 +127,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	contentLengthSeen := false
 	hasTE := false
 	hasCL := false
-	var extraHdrs [8]wingExtraHeader
+	var extraHdrs [32]wingExtraHeader
 	extraN := 0
 
 	pos := lineEnd + 1
@@ -749,7 +749,7 @@ type wingRequest struct {
 	hostUnsafe    bool
 	acceptUnsafe  bool
 	fd            int32 // connection fd — for RawRequest().Fd()
-	extraHdrs     [8]wingExtraHeader
+	extraHdrs     [32]wingExtraHeader
 	extraN        int
 	ctx           context.Context
 }

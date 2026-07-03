@@ -2066,28 +2066,28 @@ func TestParseHTTPRequest_ExtraHeadersMissing(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
-	// 9 non-special headers — only first 8 stored, 9th silently dropped.
+	// 33 non-special headers — first 32 stored, 33rd+ silently dropped.
 	var raw string
 	raw = "GET / HTTP/1.1\r\n"
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 33; i++ {
 		raw += "X-H" + strconv.Itoa(i) + ": v" + strconv.Itoa(i) + "\r\n"
 	}
 	raw += "\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
-		t.Fatal("should parse even with 9 extra headers")
+		t.Fatal("should parse even with 33 extra headers")
 	}
-	// First 8 must be present.
-	for i := 0; i < 8; i++ {
+	// First 32 must be present.
+	for i := 0; i < 32; i++ {
 		k := "X-H" + strconv.Itoa(i)
 		want := "v" + strconv.Itoa(i)
 		if v := req.Header(k); v != want {
 			t.Errorf("Header(%s) = %q, want %q", k, v, want)
 		}
 	}
-	// 9th must be dropped.
-	if v := req.Header("X-H8"); v != "" {
-		t.Errorf("Header(X-H8) = %q, want empty (overflow dropped)", v)
+	// 33rd must be dropped.
+	if v := req.Header("X-H32"); v != "" {
+		t.Errorf("Header(X-H32) = %q, want empty (overflow dropped)", v)
 	}
 }
 

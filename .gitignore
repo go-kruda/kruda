@@ -36,6 +36,9 @@ go.work.sum
 KIRO_*.md
 .github/copilot-instructions.md
 
+# Isolated worktrees for subagent-driven development
+.worktrees/
+
 # Dev notes (kept locally, not in git)
 transport/wing/dev/
 

@@ -4,8 +4,10 @@ package kruda
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 // chromeWSUpgradeRequest is a realistic Chrome WebSocket upgrade request.
@@ -87,5 +89,39 @@ func TestWingHeaderSpills_CounterIncrements(t *testing.T) {
 	}
 	if got := WingHeaderSpills(); got < before+1 {
 		t.Errorf("WingHeaderSpills() = %d, want >= %d", got, before+1)
+	}
+}
+
+func TestWingHeader_EndToEndWSKeyRetained(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	app := New(Wing())
+	app.Get("/ws", func(c *Ctx) error {
+		return c.Text(c.Header("Sec-WebSocket-Key"))
+	})
+	addr, stop := startWingApp(t, app)
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Write([]byte(chromeWSUpgradeRequest())); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var resp []byte
+	buf := make([]byte, 4096)
+	for !strings.Contains(string(resp), "dGhlIHNhbXBsZSBub25jZQ==") {
+		n, rerr := conn.Read(buf)
+		resp = append(resp, buf[:n]...)
+		if rerr != nil {
+			break
+		}
+	}
+	if !strings.Contains(string(resp), "dGhlIHNhbXBsZSBub25jZQ==") {
+		t.Errorf("response body does not echo Sec-WebSocket-Key; got:\n%s", resp)
 	}
 }

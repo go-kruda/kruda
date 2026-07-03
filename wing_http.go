@@ -145,7 +145,6 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	var extraOverflow []wingExtraHeader // spills only when a request carries >8 non-fast headers
 
 	pos := lineEnd + 1
-	firstHeaderLine := true
 	for pos < headerEnd {
 		nlIdx := bytes.IndexByte(data[pos:headerEnd], '\n')
 		var hline []byte
@@ -174,14 +173,16 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			hline = hline[:len(hline)-1]
 		}
 
-		// RFC 9112 §5.2 / net/http textproto: the FIRST header line can
-		// never be an obs-fold continuation (there is no previous line to
-		// continue), so leading SP/HTAB there is unconditionally malformed
-		// — reject rather than parse it as a normal (if odd) header line.
-		if firstHeaderLine && len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
+		// RFC 9112 §5.2: obs-fold (a continuation line starting with SP/HTAB)
+		// is unconditionally illegal in a request, on EVERY header line, not
+		// just the first — there is no such thing as a legal continuation
+		// here. A front proxy that unfolds this onto the previous line's
+		// value would see a corrupted combined value (e.g. a mangled
+		// Content-Length) and reject; parsing it here as a separate header
+		// would silently diverge from that stricter reader (anti-smuggling).
+		if len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
 			return nil, 0, false
 		}
-		firstHeaderLine = false
 
 		colon := bytes.IndexByte(hline, ':')
 		if colon < 0 {
@@ -564,7 +565,6 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 	hasCL := false
 	cl := 0
 	pos := lineEnd + 1
-	firstHeaderLine := true
 	for pos < headerEnd {
 		nl := bytes.IndexByte(data[pos:headerEnd], '\n')
 		var hline []byte
@@ -585,12 +585,11 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		if n := len(hline); n > 0 && hline[n-1] == '\r' {
 			hline = hline[:n-1]
 		}
-		// Mirror parseHTTPRequestInternal: the first header line can never
-		// be an obs-fold continuation.
-		if firstHeaderLine && len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
+		// Mirror parseHTTPRequestInternal: obs-fold is illegal on EVERY
+		// header line of a request, not just the first (RFC 9112 §5.2).
+		if len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
 			return parseMalformed, 0, false
 		}
-		firstHeaderLine = false
 		// A single over-limit header line is 431, not a silent close — mirror
 		// the parser's per-line check so the client learns why it was rejected.
 		if limits.maxHeaderSize > 0 && len(hline) > limits.maxHeaderSize {

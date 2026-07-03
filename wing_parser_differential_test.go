@@ -56,6 +56,14 @@ func FuzzParserDifferential(f *testing.F) {
 	// treat as a fresh/non-POST-preceded connection — not a framing
 	// divergence, see the guard below.
 	f.Add([]byte("\r\nGET / HTTP/1.1\r\nHost: a\r\n\r\n"))
+	// combination of both accepted divergences at once: leading CRLF PLUS
+	// an invalid percent-escape in the path. A leading CRLF always makes
+	// net/http report the generic "malformed HTTP request" error, which
+	// masks the real underlying error and defeats a guard that only
+	// re-checks the ORIGINAL error string/type after confirming the CRLF
+	// is tolerable — the guard must re-derive the error from the
+	// CRLF-stripped bytes before applying the percent-escape check.
+	f.Add([]byte("\r\n0 /% HTTP/0.0\r\n\r\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		wingReq, _, wingOK := parseHTTPRequest(data, noLimits)
@@ -64,7 +72,7 @@ func FuzzParserDifferential(f *testing.F) {
 			return // Wing being stricter is always allowed
 		}
 		if stdErr != nil {
-			// Known, accepted divergence: RFC 7230 §3.5 explicitly says a
+			// Known, accepted divergence #1: RFC 7230 §3.5 explicitly says a
 			// server SHOULD ignore at least one empty line (CRLF) received
 			// prior to the request-line — deliberate, tested leniency
 			// (TestParser_LeadingCRLFTolerance), not a framing/smuggling
@@ -73,24 +81,29 @@ func FuzzParserDifferential(f *testing.F) {
 			// where the request ends. net/http's real server only mirrors
 			// this leniency when the previous request on the connection was
 			// a POST (server.go's numLeadingCRorLF gate) and plain
-			// ReadRequest never does; Wing applies it unconditionally,
-			// which is broader but strictly an accept/reject divergence,
-			// not a body-boundary one. Verify narrowly: only treat this as
-			// accepted when the raw input actually starts with a CR/LF byte
-			// AND net/http agrees once those leading bytes are stripped —
-			// so a genuine, unrelated "malformed HTTP request" error is
-			// never silently swallowed just because the input happens to
-			// start with '\r' or '\n'.
+			// ReadRequest never does; Wing applies it unconditionally, which
+			// is broader but strictly an accept/reject divergence, not a
+			// body-boundary one.
+			//
+			// When the raw input starts with CR/LF, re-run net/http against
+			// the CRLF-stripped bytes and evaluate divergence #2 (below)
+			// against THAT error instead of the original one — otherwise a
+			// leading CRLF always masks the real underlying error behind the
+			// generic "malformed HTTP request", which would either hide a
+			// combined case (CRLF + bad percent-escape) or, if matched
+			// blindly, swallow a genuine unrelated failure.
+			effErr := stdErr
 			if len(data) > 0 && (data[0] == '\r' || data[0] == '\n') {
 				skip := 0
 				for skip < len(data) && (data[skip] == '\r' || data[skip] == '\n') {
 					skip++
 				}
-				if _, err2 := http.ReadRequest(bufio.NewReader(bytes.NewReader(data[skip:]))); err2 == nil {
+				_, effErr = http.ReadRequest(bufio.NewReader(bytes.NewReader(data[skip:])))
+				if effErr == nil {
 					return
 				}
 			}
-			// Known, accepted divergence: net/http validates percent-escapes
+			// Known, accepted divergence #2: net/http validates percent-escapes
 			// in the request path (via url.Parse) and Wing does not — this is
 			// NOT a smuggling/body-boundary risk, since both parsers agree on
 			// request framing (where the request ends); they only disagree on
@@ -105,7 +118,7 @@ func FuzzParserDifferential(f *testing.F) {
 			// real framing/header divergence that happens to involve a '%'
 			// byte is never silently swallowed.
 			var urlErr *url.Error
-			if errors.As(stdErr, &urlErr) || strings.Contains(stdErr.Error(), "invalid URL escape") {
+			if errors.As(effErr, &urlErr) || strings.Contains(effErr.Error(), "invalid URL escape") {
 				return
 			}
 			t.Errorf("SMUGGLING RISK: Wing accepted a request net/http rejects (%v):\n%q", stdErr, data)

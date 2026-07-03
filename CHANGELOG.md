@@ -3,6 +3,22 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Wing no longer drops request headers: the parser's inline extra-header
+  capacity grows 8 → 32, and requests with more than 32 non-fast-path headers
+  spill to a heap slice instead of silently losing headers. Real browser
+  requests (e.g. a Chrome WebSocket upgrade carries ~10-12 non-fast headers)
+  previously lost every extra header past the 8th — `c.Header()` returned ""
+  for them.
+
+### Added
+
+- `WingHeaderSpills()` — process-wide counter of requests whose extra headers
+  spilled past the inline capacity (observability for header-heavy traffic).
+
 ## [1.5.0] — 2026-06-29
 
 ### Added

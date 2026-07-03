@@ -133,6 +133,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	realIP := ""
 	forwardedForSeen := false // first header wins even if its value is empty (net/http Get)
 	realIPSeen := false
+	hostSeen := false
 	hostUnsafe := false
 	acceptUnsafe := false
 	keepAlive := true // HTTP/1.1 default
@@ -255,6 +256,16 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			cookie = string(val)
 			continue
 		case headerHost:
+			// RFC 7230 §5.4: a server MUST reject any request message that
+			// contains more than one Host header field — net/http's
+			// ReadRequest enforces this ("too many Host headers"). Silently
+			// keeping the last value here would let Wing accept a request a
+			// strict reader rejects (anti-smuggling: two Host-aware
+			// intermediaries could route the same bytes differently).
+			if hostSeen {
+				return nil, 0, false
+			}
+			hostSeen = true
 			host = copyOrUnsafeString(val, unsafePath)
 			hostUnsafe = unsafePath && len(val) > 0
 			continue
@@ -308,6 +319,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		case headerCookie:
 			cookie = string(val)
 		case headerHost:
+			// Mirror the fast-path check above: reject a duplicate Host
+			// header rather than silently keeping the last value (RFC 7230
+			// §5.4, anti-smuggling).
+			if hostSeen {
+				return nil, 0, false
+			}
+			hostSeen = true
 			host = copyOrUnsafeString(val, unsafePath)
 			hostUnsafe = unsafePath && len(val) > 0
 		case headerAccept:

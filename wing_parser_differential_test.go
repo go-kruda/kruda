@@ -48,6 +48,10 @@ func FuzzParserDifferential(f *testing.F) {
 	// hashes+length-collides with "HEAD" in wingInternMethod's fast lookup;
 	// without a byte comparison it was misreported as method HEAD.
 	f.Add([]byte("0.00 * HTTP/0.0\r\n\r\n"))
+	// duplicate Host header: RFC 7230 §5.4 requires servers to reject a
+	// request with more than one Host header; net/http's ReadRequest
+	// enforces this ("too many Host headers"). Found by round-3 fuzzing.
+	f.Add([]byte("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		wingReq, _, wingOK := parseHTTPRequest(data, noLimits)
@@ -127,5 +131,20 @@ func TestWingParser_MethodInterningNoCollision(t *testing.T) {
 	}
 	if req.Method() != "0.00" {
 		t.Errorf("Method() = %q, want %q (must not collide with an interned method string)", req.Method(), "0.00")
+	}
+}
+
+// TestWingParser_RejectsDuplicateHost is the regression test for a missing
+// duplicate-Host check: RFC 7230 §5.4 requires a server to reject any
+// request that contains more than one Host header field, and net/http's
+// ReadRequest enforces exactly that ("too many Host headers"). Wing had no
+// dedup tracking for Host (unlike Content-Length) and silently kept the
+// last value, which would let a request-smuggling-style divergence occur
+// between Wing and any strict Host-aware intermediary. Found by round-3
+// differential fuzzing.
+func TestWingParser_RejectsDuplicateHost(t *testing.T) {
+	raw := "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n"
+	if _, _, ok := parseHTTPRequest([]byte(raw), noLimits); ok {
+		t.Errorf("parser accepted a request with duplicate Host headers: %q", raw)
 	}
 }

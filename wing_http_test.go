@@ -1574,16 +1574,14 @@ func TestParser_BufferFullNoValidRequest(t *testing.T) {
 }
 
 // TestParser_HeaderWithoutColon tests that a header line without a colon
-// is silently skipped (line 112 in http.go: `if colon < 0 { continue }`).
+// is rejected (anti-smuggling: obs-fold continuations and garbage lines
+// have no colon, and net/http rejects them — Wing must never be looser).
 func TestParser_HeaderWithoutColon(t *testing.T) {
-	// "BadHeader" has no colon — should be skipped, request still valid.
+	// "BadHeader" has no colon — the request must be rejected.
 	raw := "GET / HTTP/1.1\r\nBadHeader\r\nHost: h\r\n\r\n"
-	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
-	if !ok {
-		t.Fatal("request with colon-less header line should still parse")
-	}
-	if req.Method() != "GET" {
-		t.Errorf("Method = %q, want GET", req.Method())
+	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
+	if ok {
+		t.Fatal("request with colon-less header line should be rejected")
 	}
 }
 

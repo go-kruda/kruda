@@ -47,3 +47,18 @@ func FuzzParserDifferential(f *testing.F) {
 		}
 	})
 }
+
+// TestWingParser_RejectsObsFoldAndColonlessLines is the regression test for
+// the anti-smuggling fix: header lines without a colon (obs-fold
+// continuations or plain garbage) must be rejected, not silently skipped.
+func TestWingParser_RejectsObsFoldAndColonlessLines(t *testing.T) {
+	cases := []string{
+		"POST /p HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\n 0\r\n\r\nhello",
+		"GET / HTTP/1.1\r\nHost: a\r\ngarbage\r\n\r\n",
+	}
+	for _, raw := range cases {
+		if _, _, ok := parseHTTPRequest([]byte(raw), noLimits); ok {
+			t.Errorf("parser accepted an obs-fold/colon-less header line: %q", raw)
+		}
+	}
+}

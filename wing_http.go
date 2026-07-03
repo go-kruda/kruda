@@ -85,14 +85,27 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		return nil, 0, false
 	}
 
-	// Validate request line format — version must start with "HTTP/".
+	// Validate request line format — version must be exactly "HTTP/X.Y"
+	// (mirrors net/http's ParseHTTPVersion: 8 bytes, single digits, dot at
+	// index 6). A bare "HTTP/" or a truncated/oversized version string is
+	// malformed and must be rejected, not accepted (anti-smuggling: a front
+	// proxy validating strictly would see a different verdict than Wing).
 	version := line[sp2+1:]
-	if len(version) < 5 || !bytes.Equal(version[:5], bHTTPVersionPrefix) {
+	if !isValidHTTPVersion(version) {
+		return nil, 0, false
+	}
+
+	// Method must be a valid RFC 7230 token (net/http's isToken rule); a
+	// method containing a delimiter/CTL byte (e.g. a quote) is rejected so
+	// Wing never accepts a request line a strict reader would reject
+	// (anti-smuggling).
+	rawMethod := line[:sp1]
+	if !isValidTokenName(rawMethod) {
 		return nil, 0, false
 	}
 
 	// Safe copies via string().
-	method := wingInternMethod(line[:sp1])
+	method := wingInternMethod(rawMethod)
 	rawPath := line[sp1+1 : sp2]
 
 	// Request-target must start with '/' or be exactly '*'.
@@ -132,11 +145,21 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	var extraOverflow []wingExtraHeader // spills only when a request carries >8 non-fast headers
 
 	pos := lineEnd + 1
+	firstHeaderLine := true
 	for pos < headerEnd {
 		nlIdx := bytes.IndexByte(data[pos:headerEnd], '\n')
 		var hline []byte
 		if nlIdx < 0 {
+			// Last header line: its own "\r\n" was already consumed as the
+			// first half of the crlfcrlf terminator, so this window must
+			// hold ONLY the line content — no '\r' at all. A '\r' here is a
+			// stray/doubled CR that net/http's line reader keeps as part of
+			// the line and rejects on; silently stripping it here would
+			// make Wing looser than a strict reader (anti-smuggling).
 			hline = data[pos:headerEnd]
+			if bytes.IndexByte(hline, '\r') >= 0 {
+				return nil, 0, false
+			}
 			pos = headerEnd
 		} else {
 			// Reject bare LF (without preceding CR) as line terminator.
@@ -151,9 +174,22 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			hline = hline[:len(hline)-1]
 		}
 
+		// RFC 9112 §5.2 / net/http textproto: the FIRST header line can
+		// never be an obs-fold continuation (there is no previous line to
+		// continue), so leading SP/HTAB there is unconditionally malformed
+		// — reject rather than parse it as a normal (if odd) header line.
+		if firstHeaderLine && len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
+			return nil, 0, false
+		}
+		firstHeaderLine = false
+
 		colon := bytes.IndexByte(hline, ':')
 		if colon < 0 {
-			continue
+			// RFC 9112 §5: every field line must contain a colon; a line
+			// without one is either obs-fold (forbidden in requests) or
+			// garbage. Rejecting keeps Wing's view identical to any
+			// front proxy's (anti-smuggling).
+			return nil, 0, false
 		}
 
 		// R1: header count limit (only when configured > 0).
@@ -170,8 +206,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		key := hline[:colon]
 		val := trimHTTPSpaces(hline[colon+1:])
 
-		// Reject bare CR or LF in header values (CRLF injection).
-		if containsCRLF(val) {
+		// Reject CTL bytes in header values (CRLF injection + anti-smuggling:
+		// net/http rejects any CTL byte other than HTAB in a header value).
+		if hasInvalidHeaderValueByte(val) {
 			return nil, 0, false
 		}
 
@@ -403,21 +440,20 @@ func finalizeRequestCommonHeaders(r *wingRequest) {
 }
 
 var (
-	crlfcrlf           = []byte("\r\n\r\n")
-	bContentLength     = []byte("content-length")
-	bContentType       = []byte("content-type")
-	bConnection        = []byte("connection")
-	bClose             = []byte("close")
-	bTransferEncoding  = []byte("transfer-encoding")
-	bExpect            = []byte("expect")
-	bCookie            = []byte("cookie")
-	bHost              = []byte("host")
-	bAccept            = []byte("accept")
-	bForwardedFor      = []byte("x-forwarded-for")
-	bRealIP            = []byte("x-real-ip")
-	bHTTPVersionPrefix = []byte("HTTP/")
-	bStar              = []byte("*")
-	wing100Continue    = []byte("HTTP/1.1 100 Continue\r\n\r\n")
+	crlfcrlf          = []byte("\r\n\r\n")
+	bContentLength    = []byte("content-length")
+	bContentType      = []byte("content-type")
+	bConnection       = []byte("connection")
+	bClose            = []byte("close")
+	bTransferEncoding = []byte("transfer-encoding")
+	bExpect           = []byte("expect")
+	bCookie           = []byte("cookie")
+	bHost             = []byte("host")
+	bAccept           = []byte("accept")
+	bForwardedFor     = []byte("x-forwarded-for")
+	bRealIP           = []byte("x-real-ip")
+	bStar             = []byte("*")
+	wing100Continue   = []byte("HTTP/1.1 100 Continue\r\n\r\n")
 )
 
 const (
@@ -516,11 +552,19 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 	hasCL := false
 	cl := 0
 	pos := lineEnd + 1
+	firstHeaderLine := true
 	for pos < headerEnd {
 		nl := bytes.IndexByte(data[pos:headerEnd], '\n')
 		var hline []byte
 		if nl < 0 {
+			// Mirror parseHTTPRequestInternal: the last header line's own
+			// "\r\n" was already consumed by the crlfcrlf terminator match,
+			// so a '\r' surviving in this window is a stray/doubled CR —
+			// reject rather than silently accept (anti-smuggling).
 			hline = data[pos:headerEnd]
+			if bytes.IndexByte(hline, '\r') >= 0 {
+				return parseMalformed, 0, false
+			}
 			pos = headerEnd
 		} else {
 			hline = data[pos : pos+nl]
@@ -529,6 +573,12 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		if n := len(hline); n > 0 && hline[n-1] == '\r' {
 			hline = hline[:n-1]
 		}
+		// Mirror parseHTTPRequestInternal: the first header line can never
+		// be an obs-fold continuation.
+		if firstHeaderLine && len(hline) > 0 && (hline[0] == ' ' || hline[0] == '\t') {
+			return parseMalformed, 0, false
+		}
+		firstHeaderLine = false
 		// A single over-limit header line is 431, not a silent close — mirror
 		// the parser's per-line check so the client learns why it was rejected.
 		if limits.maxHeaderSize > 0 && len(hline) > limits.maxHeaderSize {
@@ -536,10 +586,14 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		}
 		colon := bytes.IndexByte(hline, ':')
 		if colon <= 0 {
-			continue
+			return parseMalformed, 0, false
 		}
 		name := bytes.ToLower(bytes.TrimSpace(hline[:colon]))
 		val := bytes.TrimSpace(hline[colon+1:])
+		// Mirror parseHTTPRequestInternal's header-value byte validation.
+		if hasInvalidHeaderValueByte(val) {
+			return parseMalformed, 0, false
+		}
 		switch knownHeader(name) {
 		case headerContentLength:
 			if hasCL {
@@ -677,6 +731,24 @@ func containsCRLF(b []byte) bool {
 	return false
 }
 
+// hasInvalidHeaderValueByte reports whether b contains a byte that
+// net/http's textproto reader rejects in a header value: any CTL byte
+// (0x00-0x1F, 0x7F) other than HTAB (0x09). SP, VCHAR, and obs-text
+// (0x80-0xFF) are all permitted. Matching this exactly (rather than only
+// checking for CR/LF) closes the anti-smuggling gap where Wing accepted a
+// value byte (e.g. DEL, a raw control char) that a strict reader rejects.
+func hasInvalidHeaderValueByte(b []byte) bool {
+	for _, c := range b {
+		if c == '\t' {
+			continue
+		}
+		if c < 0x20 || c == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
 // isAllDigits returns true if b is non-empty and every byte is an ASCII digit.
 func isAllDigits(b []byte) bool {
 	if len(b) == 0 {
@@ -688,6 +760,21 @@ func isAllDigits(b []byte) bool {
 		}
 	}
 	return true
+}
+
+// isValidHTTPVersion reports whether v is exactly "HTTP/X.Y" where X and Y
+// are single ASCII digits — mirrors net/http's ParseHTTPVersion (RFC 7230
+// §2.6). A bare "HTTP/", a missing minor version, or trailing garbage after
+// the version must be rejected so Wing never accepts a request line a
+// strict front proxy would reject (anti-smuggling).
+func isValidHTTPVersion(v []byte) bool {
+	if len(v) != 8 {
+		return false
+	}
+	if v[0] != 'H' || v[1] != 'T' || v[2] != 'T' || v[3] != 'P' || v[4] != '/' || v[6] != '.' {
+		return false
+	}
+	return v[5] >= '0' && v[5] <= '9' && v[7] >= '0' && v[7] <= '9'
 }
 
 // ----------------------------- request adapter -----------------------------

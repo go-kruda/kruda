@@ -57,7 +57,7 @@ GOOS=windows go build ./...
 ok "windows build"
 
 section "fuzz suites (30s each)"
-for fuzz in FuzzRouterPattern FuzzRouterMatch FuzzBindJSON FuzzValidateString FuzzParseHTTPRequest; do
+for fuzz in FuzzRouterPattern FuzzRouterMatch FuzzBindJSON FuzzValidateString FuzzParseHTTPRequest FuzzParserDifferential; do
   if go test -tags kruda_stdjson -fuzz="$fuzz" -fuzztime=30s -run=^$ . >/tmp/fuzz-"$fuzz".log 2>&1; then
     ok "$fuzz no crashes"
   else

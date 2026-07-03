@@ -181,21 +181,19 @@ func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
 	}
 }
 
-func TestParseHTTPRequest_CommonHeaderNamesWithWhitespace(t *testing.T) {
+// TestParseHTTPRequest_RejectsWhitespaceBeforeColon is the regression test
+// for the anti-smuggling fix that replaced the old tolerant behavior: a
+// space or tab between a header field-name and its colon (RFC 9112 §5.1)
+// must be rejected, not silently trimmed and matched as a known header.
+// net/http disagrees with the old lenient parse in a way that IS a real
+// body-boundary divergence: it never recognizes "Content-Length " (trailing
+// space baked into the field name) as the real Content-Length header, so it
+// reads a zero-byte body for this exact input while the old Wing parser read
+// the full "{}" body — a request-smuggling-class mismatch.
+func TestParseHTTPRequest_RejectsWhitespaceBeforeColon(t *testing.T) {
 	raw := []byte("POST /safe HTTP/1.1\r\nHost : example.test\r\nContent-Type : application/json\r\nContent-Length : 2\r\n\r\n{}")
-	req, _, ok := parseHTTPRequest(raw, noLimits)
-	if !ok {
-		t.Fatal("parse failed")
-	}
-	if got := req.Header("Host"); got != "example.test" {
-		t.Fatalf("Header(Host) = %q, want example.test", got)
-	}
-	if got := req.Header("Content-Type"); got != "application/json" {
-		t.Fatalf("Header(Content-Type) = %q, want application/json", got)
-	}
-	body, _ := req.Body()
-	if string(body) != "{}" {
-		t.Fatalf("Body = %q, want {}", body)
+	if _, _, ok := parseHTTPRequest(raw, noLimits); ok {
+		t.Fatal("parser accepted whitespace between header field-name and colon")
 	}
 }
 

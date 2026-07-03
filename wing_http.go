@@ -206,6 +206,18 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		key := hline[:colon]
 		val := trimHTTPSpaces(hline[colon+1:])
 
+		// RFC 9112 §5.1: no whitespace is allowed between the field-name and
+		// the colon. net/http's textproto reader rejects this outright rather
+		// than tolerating it, precisely because implementations disagree on
+		// whether to strip it — accepting it here would silently normalize
+		// "Content-Length\t: 5" to a real Content-Length header while a
+		// stricter reader (or front proxy) rejects the request outright
+		// (anti-smuggling). Check the RAW key's last byte before any
+		// trimming, since trimming would erase the evidence.
+		if len(key) > 0 && (key[len(key)-1] == ' ' || key[len(key)-1] == '\t') {
+			return nil, 0, false
+		}
+
 		// Reject CTL bytes in header values (CRLF injection + anti-smuggling:
 		// net/http rejects any CTL byte other than HTAB in a header value).
 		if hasInvalidHeaderValueByte(val) {
@@ -586,6 +598,13 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		}
 		colon := bytes.IndexByte(hline, ':')
 		if colon <= 0 {
+			return parseMalformed, 0, false
+		}
+		// RFC 9112 §5.1: mirror parseHTTPRequestInternal's rejection of
+		// whitespace between the field-name and the colon (anti-smuggling —
+		// see the comment there for the full rationale). Check the raw
+		// key's last byte before trimming.
+		if raw := hline[:colon]; len(raw) > 0 && (raw[len(raw)-1] == ' ' || raw[len(raw)-1] == '\t') {
 			return parseMalformed, 0, false
 		}
 		name := bytes.ToLower(bytes.TrimSpace(hline[:colon]))

@@ -35,6 +35,14 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		return nil, fmt.Errorf("ws: reserved bits set")
 	}
 
+	// RFC 6455 §5.2: only these opcodes are defined. Reserved non-control
+	// (0x3-0x7) and reserved control (0xB-0xF) opcodes are protocol errors.
+	switch f.opcode {
+	case 0x0, 0x1, 0x2, 0x8, 0x9, 0xA:
+	default:
+		return nil, fmt.Errorf("ws: reserved opcode 0x%X", f.opcode)
+	}
+
 	// Payload length
 	length := uint64(hdr[1] & 0x7F)
 	switch {
@@ -44,6 +52,10 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 			return nil, err
 		}
 		length = uint64(binary.BigEndian.Uint16(ext[:]))
+		// RFC 6455 §5.2: the 2-byte form must not encode a value < 126.
+		if length < 126 {
+			return nil, fmt.Errorf("ws: non-minimal length encoding (%d in 16-bit form)", length)
+		}
 	case length == 127:
 		var ext [8]byte
 		if _, err := io.ReadFull(r, ext[:]); err != nil {
@@ -53,13 +65,30 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		if length>>63 != 0 {
 			return nil, fmt.Errorf("ws: payload length overflow")
 		}
+		// RFC 6455 §5.2: the 8-byte form must not encode a value <= 65535.
+		if length <= 0xFFFF {
+			return nil, fmt.Errorf("ws: non-minimal length encoding (%d in 64-bit form)", length)
+		}
 	}
 
-	// Guard against OOM: reject frames exceeding maxSize before allocating.
-	// Control frames (opcode >= 0x8) are always <= 125 bytes per RFC 6455 §5.5,
-	// so we only enforce this for data frames.
+	// Guard against OOM: reject data frames exceeding maxSize before allocating.
+	// Control frames (opcode >= 0x8) get a stricter <=125 bound plus a FIN check
+	// in the block below, also before allocation; this guard only covers data
+	// frames (opcode < 0x8).
 	if maxSize > 0 && f.opcode < 0x8 && length > uint64(maxSize) {
 		return nil, fmt.Errorf("ws: frame payload %d exceeds max size %d", length, maxSize)
+	}
+
+	// RFC 6455 §5.5: control frames (opcode >= 0x8) MUST NOT be fragmented and
+	// MUST have a payload length <= 125. Enforced BEFORE allocation below so an
+	// oversized control frame cannot force an unbounded make([]byte, length).
+	if f.opcode >= 0x8 {
+		if !f.fin {
+			return nil, fmt.Errorf("ws: fragmented control frame (opcode 0x%X)", f.opcode)
+		}
+		if length > 125 {
+			return nil, fmt.Errorf("ws: control frame payload %d exceeds 125 bytes", length)
+		}
 	}
 
 	// Masking key (4 bytes if masked)

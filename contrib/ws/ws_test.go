@@ -1066,3 +1066,131 @@ func TestUpgrade_EmptyTextMessage(t *testing.T) {
 		t.Errorf("expected empty payload, got %d bytes", len(f.payload))
 	}
 }
+
+func TestReadFrame_RejectReservedOpcodes(t *testing.T) {
+	// Reserved non-control (0x3-0x7) and reserved control (0xB-0xF) opcodes.
+	for _, op := range []byte{0x3, 0x4, 0x5, 0x6, 0x7, 0xB, 0xC, 0xD, 0xE, 0xF} {
+		var buf bytes.Buffer
+		buf.WriteByte(0x80 | op) // FIN + reserved opcode
+		buf.WriteByte(0x00)      // no mask, length 0
+		if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+			t.Errorf("opcode 0x%X: expected error, got nil", op)
+		}
+	}
+}
+
+func TestReadFrame_AcceptDefinedOpcodes(t *testing.T) {
+	// The six defined opcodes must still parse (empty payload, control frames
+	// are FIN + 0-length which is valid).
+	for _, op := range []byte{0x0, 0x1, 0x2, 0x8, 0x9, 0xA} {
+		var buf bytes.Buffer
+		buf.WriteByte(0x80 | op)
+		buf.WriteByte(0x00)
+		if _, err := readFrame(bufio.NewReader(&buf), 0); err != nil {
+			t.Errorf("opcode 0x%X: expected accept, got %v", op, err)
+		}
+	}
+}
+
+func TestReadFrame_RejectFragmentedControlFrame(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteByte(0x09) // FIN=0 + ping opcode (0x9) — fragmented control frame
+	buf.WriteByte(0x00) // no mask, length 0
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for fragmented (FIN=0) control frame")
+	}
+}
+
+func TestReadFrame_RejectOversizedControlFrame(t *testing.T) {
+	// A ping (0x9) declaring a 126-byte payload via the 2-byte extended length.
+	// Must be rejected BEFORE allocating — assert we never read the (absent) body.
+	var buf bytes.Buffer
+	buf.WriteByte(0x89) // FIN + ping
+	buf.WriteByte(0x7E) // MASK=0, length marker 126 → 2-byte extended length follows
+	buf.WriteByte(0x00) // extended length high byte
+	buf.WriteByte(0x7E) // extended length low byte = 126 (>125)
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for control frame payload > 125")
+	}
+}
+
+func TestReadFrame_AcceptMaxSizeControlFrame(t *testing.T) {
+	// A 125-byte pong is the largest valid control frame — must still parse.
+	var buf bytes.Buffer
+	payload := make([]byte, 125)
+	if err := writeFrame(&buf, true, 0xA, payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err != nil {
+		t.Errorf("125-byte control frame should be accepted, got %v", err)
+	}
+}
+
+func TestReadFrame_RejectNonMinimal16(t *testing.T) {
+	// 2-byte extended length carrying 100 (<126) — must use the 7-bit form.
+	var buf bytes.Buffer
+	buf.WriteByte(0x82) // FIN + binary
+	buf.WriteByte(0x7E) // length marker 126 → 2-byte extended
+	buf.WriteByte(0x00)
+	buf.WriteByte(0x64) // 100
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for non-minimal 2-byte length < 126")
+	}
+}
+
+func TestReadFrame_RejectNonMinimal64(t *testing.T) {
+	// 8-byte extended length carrying 1000 (<=65535) — must use the 2-byte form.
+	var buf bytes.Buffer
+	buf.WriteByte(0x82) // FIN + binary
+	buf.WriteByte(0x7F) // length marker 127 → 8-byte extended
+	var ext [8]byte
+	binary.BigEndian.PutUint64(ext[:], 1000)
+	buf.Write(ext[:])
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for non-minimal 8-byte length <= 65535")
+	}
+}
+
+func TestUpgrade_RejectUnmaskedClientFrame(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			_, _, _ = conn.ReadMessage() // expected to return an error
+		})
+	})
+	app.Compile()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	// Hand-write an UNMASKED text frame (MASK bit clear) — RFC violation.
+	payload := []byte("hello")
+	var buf bytes.Buffer
+	buf.WriteByte(0x81)               // FIN + text
+	buf.WriteByte(byte(len(payload))) // MASK=0 + length
+	buf.Write(payload)
+	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write(buf.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+
+	// readClientFrame calls Close(CloseProtocolError) synchronously before
+	// ReadMessage returns, so the server deterministically sends a 1002 close
+	// frame before dropping the connection — assert on it directly.
+	br := bufio.NewReader(conn)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	f, err := readFrame(br, 0)
+	if err != nil {
+		t.Fatalf("expected a close frame after unmasked client frame, got read error: %v", err)
+	}
+	if f.opcode != 0x8 {
+		t.Fatalf("expected close frame (0x8), got opcode 0x%X", f.opcode)
+	}
+	code, _ := parseClosePayload(f.payload)
+	if code != CloseProtocolError {
+		t.Errorf("expected close code %d (protocol error), got %d", CloseProtocolError, code)
+	}
+}

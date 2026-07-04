@@ -5,18 +5,37 @@ import (
 	"testing"
 )
 
-func TestSuggestPresetStreamingRouteDoesNotInventWingStream(t *testing.T) {
+func TestSuggestPresetStreamingRouteUsesStreamPreset(t *testing.T) {
 	preset, reason := suggestPreset(routeInfo{Method: "GET", Path: "/events"})
-	if preset != "none" {
-		t.Fatalf("preset = %q, want none", preset)
+	if preset != "kruda.Stream" {
+		t.Fatalf("preset = %q, want kruda.Stream", preset)
 	}
+	// The streaming preset is kruda.Stream (v1.5.0+), never the fabricated
+	// "WingStream" name an earlier version could have invented.
 	if strings.Contains(preset, "WingStream") || strings.Contains(reason, "WingStream") {
 		t.Fatalf("streaming suggestion mentions WingStream: preset=%q reason=%q", preset, reason)
 	}
 }
 
+func TestSuggestPresetWebSocketRouteUsesHijackPreset(t *testing.T) {
+	preset, _ := suggestPreset(routeInfo{Method: "GET", Path: "/ws"})
+	if preset != "kruda.Hijack" {
+		t.Fatalf("preset = %q, want kruda.Hijack", preset)
+	}
+}
+
+func TestMCPDocsHaveWebSocketTopic(t *testing.T) {
+	doc, ok := krudaDocs["websocket"]
+	if !ok {
+		t.Fatal("missing 'websocket' doc topic")
+	}
+	if !strings.Contains(doc, "ws.HandleFunc") {
+		t.Fatalf("websocket topic missing ws.HandleFunc usage")
+	}
+}
+
 func TestMCPDocsDoNotMentionWingStream(t *testing.T) {
-	for _, topic := range []string{"wing", "sse"} {
+	for _, topic := range []string{"wing", "sse", "websocket"} {
 		if strings.Contains(krudaDocs[topic], "WingStream") {
 			t.Fatalf("topic %q mentions nonexistent WingStream API", topic)
 		}

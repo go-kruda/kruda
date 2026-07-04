@@ -616,7 +616,8 @@ func toolSuggestWing(args map[string]any) (string, error) {
 	sb.WriteString("  kruda.JSON      — JSON serialization endpoints\n")
 	sb.WriteString("  kruda.DB        — DB/Redis read-style queries; benchmark write-heavy routes separately\n")
 	sb.WriteString("  kruda.Render    — HTML template rendering\n")
-	sb.WriteString("\nStreaming and SSE routes do not have a Wing route preset; keep them on a normal handler route and choose transport-level compatibility deliberately.\n")
+	sb.WriteString("  kruda.Stream    — SSE/streaming (c.SSE / c.Stream); flushes incrementally on Wing (v1.5.0+)\n")
+	sb.WriteString("  kruda.Hijack    — WebSocket / raw-conn takeover; ws.HandleFunc applies it automatically (v1.6.0+)\n")
 
 	return sb.String(), nil
 }
@@ -624,9 +625,14 @@ func toolSuggestWing(args map[string]any) (string, error) {
 func suggestPreset(r routeInfo) (string, string) {
 	lpath := strings.ToLower(r.Path)
 
+	// WebSocket
+	if strings.Contains(lpath, "/ws") || strings.Contains(lpath, "/websocket") {
+		return "kruda.Hijack", "WebSocket upgrade; ws.HandleFunc applies kruda.Hijack automatically"
+	}
+
 	// SSE / streaming
 	if strings.Contains(lpath, "/sse") || strings.Contains(lpath, "/stream") || strings.Contains(lpath, "/events") {
-		return "none", "streaming/SSE route; no Wing route preset"
+		return "kruda.Stream", "SSE/streaming route; kruda.Stream flushes incrementally on Wing"
 	}
 
 	// Health / ping / status
@@ -907,7 +913,9 @@ kruda.Spear.With(kruda.Dispatch(kruda.Spawn)).
 
 Presets are optional — routes work fine without them.
 Benchmark write-heavy routes with your DB pool, p99 target, and error gate before treating them as query-profile routes.
-Streaming and SSE routes do not have a Wing route preset; keep them on normal handlers and choose the transport for compatibility deliberately.`,
+Streaming, SSE, and WebSocket DO have Wing presets: kruda.Stream for c.SSE()/c.Stream() (v1.5.0+),
+and kruda.Hijack for WebSocket — applied automatically by ws.HandleFunc (v1.6.0+). See the "sse" and
+"websocket" doc topics.`,
 
 	"config": `# Configuration
 
@@ -978,19 +986,67 @@ source code context, similar to Next.js error pages.`,
 	"sse": `# Server-Sent Events (SSE)
 
 ` + "```" + `go
+// On Wing (default on Linux) add the kruda.Stream preset so the route can flush
+// incrementally. net/http streams with no preset; fasthttp does not stream.
 app.Get("/events", func(c *kruda.Ctx) error {
     return c.SSE(func(stream *kruda.SSEStream) error {
         for i := 0; i < 10; i++ {
-            stream.Event("counter", map[string]int{"value": i})
+            if err := stream.Event("counter", map[string]int{"value": i}); err != nil {
+                return err // client disconnected
+            }
             time.Sleep(time.Second)
         }
         return nil
     })
-})
+}, kruda.Stream)
 ` + "```" + `
 
-SSE automatically sets Content-Type: text/event-stream and flushes after each event.
-SSE does not have a Wing route hint. Keep it on a normal handler route and choose the transport for compatibility deliberately.`,
+SSE sets Content-Type: text/event-stream and flushes after each event.
+Transports: Wing needs the kruda.Stream preset (v1.5.0+); net/http works with no preset;
+fasthttp (default on macOS) does not support streaming — use kruda.NetHTTP() on macOS/dev.
+SSEStream methods: Event(name, data), Data(data), EventWithID(id, name, data), Comment(text),
+Retry(ms), Done() (closes when the client disconnects). c.Stream(io.Reader) streams raw bytes
+the same way (also needs kruda.Stream on Wing).`,
+
+	"websocket": `# WebSocket (contrib/ws)
+
+Needs the contrib/ws module (separate go.mod):
+` + "```" + `bash
+go get github.com/go-kruda/kruda/contrib/ws
+` + "```" + `
+
+` + "```" + `go
+import "github.com/go-kruda/kruda/contrib/ws"
+
+// One-liner registration. HandleFunc wires the kruda.Hijack preset automatically,
+// so the same code runs on Wing (Linux), fasthttp (macOS), and net/http.
+ws.HandleFunc(app, "/ws", func(conn *ws.Conn) {
+    defer conn.Close(ws.CloseNormalClosure, "bye")
+    for {
+        msgType, data, err := conn.ReadMessage()
+        if err != nil {
+            return // client disconnected
+        }
+        if err := conn.WriteMessage(msgType, data); err != nil {
+            return
+        }
+    }
+}, ws.Config{MaxMessageSize: 64 * 1024, AllowedOrigins: []string{"https://example.com"}})
+` + "```" + `
+
+Conn: ReadMessage() (msgType, data, err), WriteMessage(msgType, data), WriteText(s),
+WriteBinary(b), Close(code, reason), SetReadDeadline(t), SetWriteDeadline(t), Done().
+Message types: ws.TextMessage, ws.BinaryMessage. Close codes: ws.CloseNormalClosure, etc.
+Config: AllowedOrigins, StrictOrigin, MaxMessageSize, ReadTimeout, WriteTimeout,
+MessageTimeout, MaxPingPerSecond.
+
+Manual upgrade when you need the *kruda.Ctx first:
+` + "```" + `go
+upgrader := ws.New(ws.Config{MaxMessageSize: 64 * 1024})
+app.Get("/ws", func(c *kruda.Ctx) error {
+    return upgrader.Upgrade(c, func(conn *ws.Conn) { /* same loop as above */ })
+})
+` + "```",
 
 	"file-upload": `# File Upload
 

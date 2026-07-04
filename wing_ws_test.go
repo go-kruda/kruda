@@ -3,7 +3,9 @@
 package kruda
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net"
 	"os"
 	"syscall"
@@ -79,5 +81,70 @@ func TestWingHijackConn_Done(t *testing.T) {
 	case <-c.Done():
 	case <-time.After(time.Second):
 		t.Fatal("Done did not fire after cancel")
+	}
+}
+
+func TestWingHijackWriter_HijackSeedsLeftover(t *testing.T) {
+	af, bf := newSocketpairFiles(t)
+	defer af.Close()
+	defer bf.Close()
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	leftover := []byte("FRAME-BYTES")
+	hw := newWingHijackWriter(resp, af, int32(af.Fd()), leftover, "", context.Background())
+
+	nc, brw, err := hw.Hijack()
+	if err != nil {
+		t.Fatalf("hijack: %v", err)
+	}
+	if nc == nil || brw == nil {
+		t.Fatal("hijack returned nil conn/brw")
+	}
+	if !hw.hijacked {
+		t.Error("hijacked flag not set")
+	}
+	// The reader must serve leftover first, before any live fd read.
+	got := make([]byte, len(leftover))
+	if _, err := io.ReadFull(brw.Reader, got); err != nil {
+		t.Fatalf("read leftover: %v", err)
+	}
+	if string(got) != "FRAME-BYTES" {
+		t.Errorf("leftover = %q, want FRAME-BYTES", got)
+	}
+	// Second Hijack must error (already hijacked).
+	if _, _, err := hw.Hijack(); err == nil {
+		t.Error("second Hijack should error")
+	}
+	// Write after hijack must be rejected.
+	if _, err := hw.Write([]byte("x")); err == nil {
+		t.Error("Write after hijack should return an error")
+	}
+}
+
+func TestWingHijackWriter_BuffersWhenNotHijacked(t *testing.T) {
+	af, bf := newSocketpairFiles(t)
+	defer af.Close()
+	defer bf.Close()
+	resp := acquireResponse()
+	defer releaseResponse(resp)
+	hw := newWingHijackWriter(resp, af, int32(af.Fd()), nil, "", context.Background())
+
+	// A normal handler response buffers into the wrapped wingResponse; nothing
+	// is hijacked and nothing hits the socket until hijackTakeover serializes it.
+	hw.WriteHeader(400)
+	hw.Header().Set("Content-Type", "application/json")
+	if _, err := hw.Write([]byte(`{"error":"bad upgrade"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if hw.hijacked {
+		t.Error("must not be hijacked")
+	}
+	// buildZeroCopy on the wrapped resp yields a well-formed 400 response.
+	data := resp.buildZeroCopy()
+	if !bytes.HasPrefix(data, []byte("HTTP/1.1 400")) {
+		t.Fatalf("expected 400 status line, got %q", data[:min(24, len(data))])
+	}
+	if !bytes.Contains(data, []byte(`{"error":"bad upgrade"}`)) {
+		t.Fatalf("buffered body missing: %q", data)
 	}
 }

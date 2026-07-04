@@ -3,12 +3,18 @@
 package kruda
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 // wingAddr is a minimal net.Addr synthesized from Wing's per-connection remote
@@ -66,4 +72,63 @@ func (c *wingHijackConn) Done() <-chan struct{} {
 		return nil
 	}
 	return c.ctx.Done()
+}
+
+// wingHijackWriter is the c.ResponseWriter() for a Hijack-preset route. It
+// buffers a normal handler response through a pooled wingResponse (so a rejected
+// upgrade returns a correct 4xx via Wing's own serialization) and implements
+// http.Hijacker so contrib/ws can take over the raw connection. It deliberately
+// does NOT implement the responder fast-lane interfaces, so c.JSON/c.Text on the
+// not-hijacked path fall through to plain buffering.
+type wingHijackWriter struct {
+	resp     *wingResponse
+	f        *os.File
+	fd       int32
+	leftover []byte
+	remote   string
+	ctx      context.Context
+	hijacked bool
+}
+
+func newWingHijackWriter(resp *wingResponse, f *os.File, fd int32, leftover []byte, remote string, ctx context.Context) *wingHijackWriter {
+	return &wingHijackWriter{resp: resp, f: f, fd: fd, leftover: leftover, remote: remote, ctx: ctx}
+}
+
+// Compile-time interface assertions.
+var (
+	_ transport.ResponseWriter = (*wingHijackWriter)(nil)
+	_ http.Hijacker            = (*wingHijackWriter)(nil)
+)
+
+func (hw *wingHijackWriter) WriteHeader(code int) {
+	if hw.hijacked {
+		return
+	}
+	hw.resp.WriteHeader(code)
+}
+
+func (hw *wingHijackWriter) Header() transport.HeaderMap { return hw.resp.Header() }
+
+func (hw *wingHijackWriter) Write(p []byte) (int, error) {
+	if hw.hijacked {
+		return 0, http.ErrHijacked
+	}
+	return hw.resp.Write(p)
+}
+
+// Hijack detaches the connection: it returns the wingHijackConn adapter and a
+// *bufio.ReadWriter whose reader is seeded with any bytes the client already
+// sent past the handshake (leftover), so a pipelined first WS frame is not lost.
+func (hw *wingHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hw.hijacked {
+		return nil, nil, http.ErrHijacked
+	}
+	hw.hijacked = true
+	nc := newWingHijackConn(hw.f, hw.fd, hw.remote, hw.ctx)
+	var r io.Reader = nc
+	if len(hw.leftover) > 0 {
+		r = io.MultiReader(bytes.NewReader(hw.leftover), nc)
+	}
+	brw := bufio.NewReadWriter(bufio.NewReader(r), bufio.NewWriter(nc))
+	return nc, brw, nil
 }

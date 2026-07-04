@@ -129,6 +129,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	cookie := ""
 	host := ""
 	accept := ""
+	connection := ""
 	forwardedFor := ""
 	realIP := ""
 	forwardedForSeen := false // first header wins even if its value is empty (net/http Get)
@@ -136,6 +137,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	hostSeen := false
 	hostUnsafe := false
 	acceptUnsafe := false
+	connectionUnsafe := false
 	keepAlive := true // HTTP/1.1 default
 	headerCount := 0
 	contentLengthSeen := false
@@ -248,6 +250,15 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
 			}
+			// Retain the FIRST Connection value so Header("Connection") works
+			// (e.g. a WebSocket "Connection: Upgrade" check). First-wins matches
+			// net/http's http.Header.Get, so c.Header("Connection") is identical
+			// across transports; keep-alive detection above still scans every
+			// line. Zero-copy like host/accept.
+			if connection == "" {
+				connection = copyOrUnsafeString(val, unsafePath)
+				connectionUnsafe = unsafePath && len(val) > 0
+			}
 			continue
 		case headerTransferEncoding:
 			hasTE = true
@@ -313,6 +324,12 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		case headerConnection:
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
+			}
+			// Retain the FIRST Connection value (first-wins, matching net/http) —
+			// see the fast-path case above for the rationale.
+			if connection == "" {
+				connection = copyOrUnsafeString(val, unsafePath)
+				connectionUnsafe = unsafePath && len(val) > 0
 			}
 		case headerTransferEncoding:
 			hasTE = true
@@ -399,10 +416,12 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.cookie = cookie
 		r.host = host
 		r.accept = accept
+		r.connection = connection
 		r.forwardedFor = forwardedFor
 		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
+		r.connectionUnsafe = connectionUnsafe
 		// Copy only the populated inline slots; a full value-array copy would
 		// move the whole array every request even when there are no extra
 		// headers. Slots past extraN are never read (Header scans [0:extraN]),
@@ -423,10 +442,12 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.cookie = cookie
 	r.host = host
 	r.accept = accept
+	r.connection = connection
 	r.forwardedFor = forwardedFor
 	r.realIP = realIP
 	r.hostUnsafe = hostUnsafe
 	r.acceptUnsafe = acceptUnsafe
+	r.connectionUnsafe = connectionUnsafe
 	// Copy only the populated inline slots (see the with-body path above for
 	// why a full value-array copy is avoided on the hot path).
 	copy(r.extraHdrs[:extraN], extraHdrs[:extraN])
@@ -467,6 +488,10 @@ func finalizeRequestCommonHeaders(r *wingRequest) {
 	if r.acceptUnsafe {
 		r.accept = strings.Clone(r.accept)
 		r.acceptUnsafe = false
+	}
+	if r.connectionUnsafe {
+		r.connection = strings.Clone(r.connection)
+		r.connectionUnsafe = false
 	}
 }
 
@@ -833,10 +858,12 @@ func releaseRequest(r *wingRequest) {
 	r.cookie = ""
 	r.host = ""
 	r.accept = ""
+	r.connection = ""
 	r.forwardedFor = ""
 	r.realIP = ""
 	r.hostUnsafe = false
 	r.acceptUnsafe = false
+	r.connectionUnsafe = false
 	r.remoteAddr = ""
 	r.remoteAddrRef = nil
 	r.trustProxy = false
@@ -870,28 +897,30 @@ func parseCookieValue(cookie, name string) string {
 
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
-	method        string
-	path          string
-	query         string
-	body          []byte
-	contentType   string
-	cookie        string
-	host          string
-	accept        string
-	forwardedFor  string
-	realIP        string
-	remoteAddr    string
-	remoteAddrRef *string
-	trustProxy    bool
-	keepAlive     bool
-	pathUnsafe    bool
-	hostUnsafe    bool
-	acceptUnsafe  bool
-	fd            int32 // connection fd — for RawRequest().Fd()
-	extraHdrs     [8]wingExtraHeader
-	extraN        int
-	extraOverflow []wingExtraHeader
-	ctx           context.Context
+	method           string
+	path             string
+	query            string
+	body             []byte
+	contentType      string
+	cookie           string
+	host             string
+	accept           string
+	connection       string
+	forwardedFor     string
+	realIP           string
+	remoteAddr       string
+	remoteAddrRef    *string
+	trustProxy       bool
+	keepAlive        bool
+	pathUnsafe       bool
+	hostUnsafe       bool
+	acceptUnsafe     bool
+	connectionUnsafe bool
+	fd               int32 // connection fd — for RawRequest().Fd()
+	extraHdrs        [8]wingExtraHeader
+	extraN           int
+	extraOverflow    []wingExtraHeader
+	ctx              context.Context
 }
 
 func (r *wingRequest) Method() string        { return r.method }
@@ -974,6 +1003,13 @@ func (r *wingRequest) Header(key string) string {
 			r.acceptUnsafe = false
 		}
 		return r.accept
+	}
+	if key == "Connection" || key == "connection" {
+		if r.connectionUnsafe {
+			r.connection = strings.Clone(r.connection)
+			r.connectionUnsafe = false
+		}
+		return r.connection
 	}
 	if strings.EqualFold(key, "x-forwarded-for") {
 		return r.forwardedFor

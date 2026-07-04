@@ -43,7 +43,7 @@ See the [DI Container guide](/guide/di-container) for details.
 | HTTP/2 | No | No | Yes (via TLS) |
 | Set-Cookie | Limited (fast path skips) | Yes | Yes |
 | SSE | Yes (via `kruda.Stream`) | No | Yes |
-| WebSocket | No | No | Yes (`contrib/ws`) |
+| WebSocket | Yes (`ws.HandleFunc`) | No | Yes (`contrib/ws`) |
 | Default on | Linux | macOS | Windows |
 
 Kruda auto-selects:

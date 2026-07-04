@@ -23,9 +23,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   carries ~10-12 non-fast headers) previously lost every extra header past the
   8th — `c.Header()` returned "" for them. The inline fast path (≤8 extra
   headers) is unchanged, so the zero-extra-header hot path keeps its footprint.
+- Wing now retains the `Connection` request header value, so
+  `c.Header("Connection")` returns it. Previously Wing parsed `Connection` only
+  to derive keep-alive and dropped the raw value (always returning ""), which
+  broke the WebSocket upgrade handshake (`Connection: Upgrade`) on Wing. The fix
+  uses the same zero-copy path as `Host`/`Accept`, so the hot path stays zero-alloc.
 
 ### Added
 
+- **WebSocket on the Wing transport.** `contrib/ws` now works on Wing (the
+  default on Linux), previously net/http-only. Register with
+  `ws.HandleFunc(app, "/ws", handler)` — identical on every transport. Internally
+  Wing hands the taken-over connection to `contrib/ws` via the standard
+  `http.Hijacker` contract (a new generic `kruda.Hijack` route preset); the
+  RFC 6455 frame code is reused unchanged. Dispatches via Takeover, so the inline
+  hot path is untouched. A pipelined first frame is preserved, a rejected upgrade
+  returns a clean 4xx, and on shutdown Wing wakes I/O-blocked handlers
+  (`SHUT_RDWR`) and signals `conn.Done()` so a handler blocked in application
+  logic can exit cooperatively. The fasthttp transport still does not support
+  WebSocket.
+- `App.Serve(ln net.Listener)` — run the app on a pre-created listener instead of
+  binding an address, for graceful restart, systemd socket activation, or tests
+  that need the bound address before the server accepts (no signal handler; the
+  caller owns the lifecycle via `Shutdown`).
 - `WingHeaderSpills()` — process-wide counter of requests whose extra headers
   spilled past the inline capacity (observability for header-heavy traffic).
 

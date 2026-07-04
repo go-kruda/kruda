@@ -28,6 +28,19 @@ func New(config ...Config) *Upgrader {
 	return &Upgrader{Config: cfg}
 }
 
+// HandleFunc registers a WebSocket route: it wires the route with the
+// kruda.Hijack preset (needed by the Wing transport; a harmless no-op on
+// net/http and fasthttp, which ignore route presets) and performs the upgrade,
+// so the same call works identically on every transport. For manual control,
+// use Upgrader.Upgrade directly (on Wing that requires adding kruda.Hijack to
+// the route yourself — which is exactly what this does for you).
+func HandleFunc(app *kruda.App, path string, handler func(*Conn), cfg ...Config) *kruda.App {
+	u := New(cfg...)
+	return app.Get(path, func(c *kruda.Ctx) error {
+		return u.Upgrade(c, handler)
+	}, kruda.Hijack)
+}
+
 // Upgrade performs the WebSocket handshake and calls handler with the connection.
 // The handler runs synchronously — when it returns, the connection is closed.
 //
@@ -36,9 +49,6 @@ func New(config ...Config) *Upgrader {
 func (u *Upgrader) Upgrade(c *kruda.Ctx, handler func(*Conn)) error {
 	// R10.16-17: transport compatibility check
 	transport := c.Transport()
-	if transport == "wing" {
-		return fmt.Errorf("ws: WebSocket upgrade not supported on Wing transport — use the net/http transport (kruda.NetHTTP())")
-	}
 
 	// Validate upgrade request headers
 	if err := u.validateUpgrade(c); err != nil {
@@ -59,6 +69,8 @@ func (u *Upgrader) Upgrade(c *kruda.Ctx, handler func(*Conn)) error {
 	switch transport {
 	case "nethttp":
 		return u.upgradeNetHTTP(c, accept, handler)
+	case "wing":
+		return upgradeHijacker(c, accept, handler, u.Config)
 	case "fasthttp":
 		return u.upgradeFastHTTP(c, accept, handler)
 	default:
@@ -70,6 +82,16 @@ func (u *Upgrader) Upgrade(c *kruda.Ctx, handler func(*Conn)) error {
 func (u *Upgrader) validateUpgrade(c *kruda.Ctx) error {
 	if c.Method() != "GET" {
 		return fmt.Errorf("ws: upgrade requires GET method")
+	}
+
+	// RFC 6455: the upgrade is a bodyless GET. Reject a body here — in the
+	// transport-agnostic validator, not just at a Wing-specific boundary — so the
+	// outcome does not depend on TCP packetization (a body arriving in the same
+	// read as the headers would otherwise reach the hijack path while a split
+	// body is rejected earlier by Wing). Check the parsed body rather than the
+	// Content-Length header, which not every transport exposes via c.Header.
+	if body, _ := c.BodyBytes(); len(body) > 0 {
+		return fmt.Errorf("ws: upgrade request must not carry a body")
 	}
 
 	upgrade := c.Header("Upgrade")

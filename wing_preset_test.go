@@ -167,3 +167,16 @@ func TestStreamPreset(t *testing.T) {
 		t.Errorf("Stream.ResponseMode = %v, want responseStream", Stream.ResponseMode)
 	}
 }
+
+func TestHijackPreset(t *testing.T) {
+	if Hijack.Dispatch != Takeover {
+		t.Errorf("Hijack.Dispatch = %v, want Takeover", Hijack.Dispatch)
+	}
+	if Hijack.ResponseMode != responseHijack {
+		t.Errorf("Hijack.ResponseMode = %v, want responseHijack", Hijack.ResponseMode)
+	}
+	// Hijack must be distinct from Stream/Render so the takeover loop can branch.
+	if responseHijack == responseStream || responseHijack == responseRender {
+		t.Error("responseHijack must be a distinct responseMode value")
+	}
+}

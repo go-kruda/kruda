@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/textproto"
 	"os"
 	"os/signal"
@@ -305,6 +306,23 @@ func (app *App) Listen(addr string) error {
 	}
 
 	return app.shutdown()
+}
+
+// Serve runs the app on a pre-created net.Listener instead of binding an address
+// itself. Useful for graceful restart, systemd socket activation, or tests that
+// need the bound address before the server starts accepting (avoiding a
+// close-then-rebind race). It compiles the routes and starts the DI container,
+// then serves until the transport is shut down via Shutdown, whose result it
+// returns. Unlike Listen it installs no OS signal handler — the caller owns the
+// lifecycle and calls Shutdown to stop.
+func (app *App) Serve(ln net.Listener) error {
+	if err := app.compile(); err != nil {
+		return err
+	}
+	if err := app.startContainer(context.Background()); err != nil {
+		return err
+	}
+	return app.transport.Serve(ln, app)
 }
 
 // shutdown performs graceful shutdown: drains connections, runs OnShutdown hooks in LIFO order.

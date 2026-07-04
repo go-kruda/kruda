@@ -545,21 +545,29 @@ func TestUpgrade_FragmentedMessage(t *testing.T) {
 // dialWS performs a WebSocket handshake and returns the raw TCP connection.
 func dialWS(t *testing.T, rawURL string) net.Conn {
 	t.Helper()
-	url := strings.Replace(rawURL, "http://", "", 1)
+	addr := strings.Replace(rawURL, "http://", "", 1)
 	path := "/"
-	if idx := strings.Index(url, "/"); idx >= 0 {
-		path = url[idx:]
-		url = url[:idx]
+	if idx := strings.Index(addr, "/"); idx >= 0 {
+		path = addr[idx:]
+		addr = addr[:idx]
 	}
+	return dialWSAddr(t, addr, path)
+}
 
-	conn, err := net.DialTimeout("tcp", url, 2*time.Second)
+// dialWSAddr performs a WebSocket handshake against a raw host:port address
+// and returns the resulting connection. Shared by dialWS (net/http tests,
+// which derive addr/path from an httptest.Server URL) and the Wing
+// integration tests (which already have a raw addr from listenWingApp).
+func dialWSAddr(t *testing.T, addr, path string) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
 
 	key := base64.StdEncoding.EncodeToString([]byte("test-key-1234567"))
 	req := "GET " + path + " HTTP/1.1\r\n" +
-		"Host: " + url + "\r\n" +
+		"Host: " + addr + "\r\n" +
 		"Upgrade: websocket\r\n" +
 		"Connection: Upgrade\r\n" +
 		"Sec-WebSocket-Key: " + key + "\r\n" +
@@ -614,11 +622,12 @@ func (p *prebufConn) Read(b []byte) (int, error) {
 	return p.Conn.Read(b)
 }
 
-// sendClientFrame writes a masked frame (client-to-server per RFC 6455).
-func sendClientFrame(t *testing.T, conn net.Conn, fin bool, opcode byte, payload []byte) {
-	t.Helper()
+// appendMaskedFrame builds a masked client-to-server frame (per RFC 6455) and
+// appends it to buf. Shared by sendClientFrame (writes straight to a conn)
+// and the Wing pipelined-frame test (which needs the raw bytes to concatenate
+// with the HTTP handshake before a single conn.Write).
+func appendMaskedFrame(buf *bytes.Buffer, fin bool, opcode byte, payload []byte) {
 	length := len(payload)
-	var buf bytes.Buffer
 
 	b0 := opcode
 	if fin {
@@ -649,6 +658,13 @@ func sendClientFrame(t *testing.T, conn net.Conn, fin bool, opcode byte, payload
 	copy(masked, payload)
 	maskBytes(key, masked)
 	buf.Write(masked)
+}
+
+// sendClientFrame writes a masked frame (client-to-server per RFC 6455).
+func sendClientFrame(t *testing.T, conn net.Conn, fin bool, opcode byte, payload []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	appendMaskedFrame(&buf, fin, opcode, payload)
 
 	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	if _, err := conn.Write(buf.Bytes()); err != nil {
@@ -1192,5 +1208,39 @@ func TestUpgrade_RejectUnmaskedClientFrame(t *testing.T) {
 	code, _ := parseClosePayload(f.payload)
 	if code != CloseProtocolError {
 		t.Errorf("expected close code %d (protocol error), got %d", CloseProtocolError, code)
+	}
+}
+
+func TestConn_DoneNilOnPlainConn(t *testing.T) {
+	// A Conn over a plain net.Conn (no doner) reports a nil Done channel.
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := newConnFromRaw(server, Config{})
+	if c.Done() != nil {
+		t.Error("Done() should be nil on a transport with no shutdown signal")
+	}
+}
+
+func TestHandleFunc_NetHTTPEcho(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	HandleFunc(app, "/ws", func(conn *Conn) {
+		mt, data, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		conn.WriteMessage(mt, data)
+	})
+	app.Compile()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+	sendClientFrame(t, conn, true, 0x1, []byte("hi"))
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
+	if f.opcode != 0x1 || string(f.payload) != "hi" {
+		t.Errorf("echo = opcode 0x%X %q, want text 'hi'", f.opcode, f.payload)
 	}
 }

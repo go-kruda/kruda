@@ -222,6 +222,28 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.rwc.SetWriteDeadline(t)
 }
 
+// doner is the optional interface a transport's net.Conn implements to signal
+// server shutdown / connection teardown. Wing's hijack adapter implements it;
+// net/http's net.Conn does not.
+type doner interface{ Done() <-chan struct{} }
+
+// Done returns a channel that is closed when the server is shutting down the
+// connection, letting a handler blocked in application logic (not in Read/Write)
+// select on it and exit. On transports that do not expose a shutdown signal
+// (net/http today) it returns nil — a nil channel blocks forever in select, so
+// existing handlers are unaffected.
+//
+// Done signals server shutdown only, NOT client disconnect: a WebSocket handler
+// detects a peer close through a failed Read (ReadMessage returning an error),
+// which is the normal way to notice a gone client. Use Done for graceful
+// shutdown; use the Read error for disconnect.
+func (c *Conn) Done() <-chan struct{} {
+	if d, ok := c.rwc.(doner); ok {
+		return d.Done()
+	}
+	return nil
+}
+
 // handleControl processes control frames (ping, pong, close).
 func (c *Conn) handleControl(f *frame) error {
 	switch f.opcode {

@@ -1221,6 +1221,17 @@ func (w *worker) finishBodyAccum(c *conn) {
 // Accumulated bodies are always dispatched inline; non-inline presets
 // with large bodies are uncommon and correctness takes precedence here.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
+	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
+	// inline accumulation, where c.ResponseWriter() is not an http.Hijacker — so
+	// reject it cleanly (400) rather than letting the upgrade fail opaquely.
+	if f.ResponseMode == responseHijack {
+		c.keepAlive = false
+		c.sendBuf = append(c.sendBuf, wingStatusClose(400)...)
+		releaseRequest(req)
+		c.sendN = 0
+		w.directSend(c)
+		return
+	}
 	finalizeRequestCommonHeaders(req)
 	resp := acquireResponse()
 	resp.responseMode = f.ResponseMode
@@ -1369,6 +1380,11 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	// through to the byte-unchanged keep-alive loop below.
 	if mode == responseStream {
 		w.streamTakeover(first, fd, f)
+		return
+	}
+
+	if mode == responseHijack {
+		w.hijackTakeover(first, fd, f, leftover)
 		return
 	}
 
@@ -1733,15 +1749,21 @@ func (w *worker) cleanup() {
 		// could land on an fd the kernel has already recycled.
 		w.pool.wg.Wait()
 	}
-	// Takeover goroutines block on syscall.Read until the client sends data
-	// or the connection closes. To unblock them WITHOUT yet closing the fd
-	// (which would race with Spawn writes), half-close the read side. The
-	// pending Read returns EOF, takeoverLoop exits, dispatchWG.Done fires.
-	// SHUT_RD doesn't free the fd number, so kernel won't recycle it — Spawn's
-	// write side stays valid until we run closeFd below.
+	// Takeover goroutines can block in a syscall.Read, a syscall.Write (a
+	// WebSocket WriteMessage), or in app logic with no pending socket call at
+	// all. To unblock all three WITHOUT yet closing the fd (which would race
+	// with Spawn writes), shut down both directions and cancel the conn
+	// context. SHUT_RDWR unblocks a pending Read (EOF) or Write (EPIPE/ECONNRESET);
+	// cancelling ctx wakes a handler blocked in app logic via Conn.Done().
+	// Either way takeoverLoop exits and dispatchWG.Done fires. SHUT_* doesn't
+	// free the fd number, so kernel won't recycle it — Spawn's write side
+	// stays valid until we run closeFd below.
 	for _, c := range w.conns {
 		if c.pending > 0 {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+			if c.cancel != nil {
+				c.cancel()
+			}
 		}
 	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave

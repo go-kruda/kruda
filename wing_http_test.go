@@ -176,8 +176,30 @@ func TestParseHTTPRequest_CommonHeadersAreSafeCopies(t *testing.T) {
 	if got := req.Header("Accept"); got != "text/plain" {
 		t.Fatalf("Header(Accept) = %q, want text/plain", got)
 	}
-	if got := req.Header("Connection"); got != "" {
-		t.Fatalf("Header(Connection) = %q, want empty", got)
+	// Connection is retained as a safe copy (so c.Header("Connection") works —
+	// e.g. a WebSocket "Connection: Upgrade" check). Previously Wing parsed it
+	// only for keep-alive and dropped the raw value.
+	if got := req.Header("Connection"); got != "keep-alive" {
+		t.Fatalf("Header(Connection) = %q, want keep-alive", got)
+	}
+}
+
+// TestParseHTTPRequestFast_RetainsConnectionHeader guards the fix that lets
+// c.Header("Connection") work on Wing — required for the WebSocket upgrade
+// handshake ("Connection: Upgrade"), which Wing previously always failed
+// because it parsed Connection only for keep-alive and dropped the raw value.
+// Uses the fast path (unsafePath=true) so it exercises the clone-on-read route.
+func TestParseHTTPRequestFast_RetainsConnectionHeader(t *testing.T) {
+	raw := []byte("GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+	req, _, ok := parseHTTPRequestFast(raw, noLimits)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	if got := req.Header("Connection"); got != "Upgrade" {
+		t.Fatalf("Header(Connection) = %q, want Upgrade", got)
+	}
+	if got := req.Header("Upgrade"); got != "websocket" {
+		t.Fatalf("Header(Upgrade) = %q, want websocket", got)
 	}
 }
 

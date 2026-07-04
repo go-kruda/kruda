@@ -19,24 +19,41 @@ import (
 // later WebSocket-on-Wing tasks.
 func startWingHijackServer(t *testing.T, app *App) (string, func()) {
 	t.Helper()
-	// Serve the OPEN listener directly (no close-then-rebind port race, which is
-	// flaky on macOS): the port stays bound and a dial succeeds as soon as the
-	// transport accepts.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	addr := ln.Addr().String()
-	go func() { _ = app.transport.Serve(ln, app) }()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
-			c.Close()
-			break
+	// Grab a free port, release it, and let Wing bind it. That re-bind can
+	// transiently lose the port on a loaded CI box, so retry a fresh port when
+	// ListenAndServe returns early (bind fails BEFORE it starts serving, so a
+	// retry is safe). Crucially, only return once a dial actually SUCCEEDS —
+	// never hand back an address the server isn't accepting on yet.
+	for attempt := 0; attempt < 12; attempt++ {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
 		}
-		time.Sleep(5 * time.Millisecond)
+		addr := ln.Addr().String()
+		_ = ln.Close()
+		errc := make(chan error, 1)
+		go func() { errc <- app.transport.ListenAndServe(addr, app) }()
+
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			select {
+			case <-errc:
+				goto retry // bind failed before serving — retry a fresh port
+			default:
+			}
+			if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
+				c.Close()
+				return addr, func() { _ = app.transport.Shutdown(context.Background()) }
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("startWingHijackServer: bound but never accepting on %s", addr)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	retry:
 	}
-	return addr, func() { _ = app.transport.Shutdown(context.Background()) }
+	t.Fatal("startWingHijackServer: bind kept failing after retries")
+	return "", func() {}
 }
 
 // TestWingHijack_RejectUpgradeWithBody verifies that a Hijack-preset route

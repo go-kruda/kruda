@@ -54,6 +54,9 @@ type App struct {
 	startupMu         sync.Mutex
 	openAPIRegistered bool
 	containerStarted  bool
+
+	routesRegistered bool // set by addRoute; powers the late-Use() warning
+	lateUseWarned    bool // the late-Use() warning fires once per app
 }
 
 // New creates a new App with default config and applies the provided options.
@@ -237,6 +240,7 @@ func (app *App) All(path string, handler HandlerFunc, opts ...RouteOption) *App 
 
 // addRoute builds the pre-built handler chain and registers the route.
 func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...RouteOption) {
+	app.routesRegistered = true
 	chain := buildChain(app.middleware, nil, handler)
 	app.router.addRoute(method, path, chain)
 
@@ -263,8 +267,13 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 
 // Use appends global middleware to the App.
 // Middleware added via Use() only applies to routes registered AFTER this call.
-// Routes registered before Use() will not have this middleware in their chain.
+// Routes registered before Use() will not have this middleware in their chain;
+// doing so logs a one-time warning because it is almost always a mistake.
 func (app *App) Use(middleware ...HandlerFunc) *App {
+	if app.routesRegistered && !app.lateUseWarned {
+		app.lateUseWarned = true
+		slog.Warn("kruda: Use() called after routes were registered; the new middleware does NOT apply to already-registered routes")
+	}
 	app.middleware = append(app.middleware, middleware...)
 	return app
 }

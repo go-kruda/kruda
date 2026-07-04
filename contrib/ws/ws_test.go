@@ -1177,17 +1177,20 @@ func TestUpgrade_RejectUnmaskedClientFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Server must reject → send a close frame (opcode 0x8), then drop the conn.
+	// readClientFrame calls Close(CloseProtocolError) synchronously before
+	// ReadMessage returns, so the server deterministically sends a 1002 close
+	// frame before dropping the connection — assert on it directly.
 	br := bufio.NewReader(conn)
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	f, err := readFrame(br, 0)
 	if err != nil {
-		return // connection closed without a frame is also acceptable
+		t.Fatalf("expected a close frame after unmasked client frame, got read error: %v", err)
 	}
 	if f.opcode != 0x8 {
-		t.Errorf("expected close frame after unmasked client frame, got opcode 0x%X", f.opcode)
+		t.Fatalf("expected close frame (0x8), got opcode 0x%X", f.opcode)
 	}
-	if code, _ := parseClosePayload(f.payload); len(f.payload) >= 2 && code != CloseProtocolError {
-		t.Errorf("expected close code %d, got %d", CloseProtocolError, code)
+	code, _ := parseClosePayload(f.payload)
+	if code != CloseProtocolError {
+		t.Errorf("expected close code %d (protocol error), got %d", CloseProtocolError, code)
 	}
 }

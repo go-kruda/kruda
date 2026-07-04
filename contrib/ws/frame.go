@@ -71,9 +71,10 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		}
 	}
 
-	// Guard against OOM: reject frames exceeding maxSize before allocating.
-	// Control frames (opcode >= 0x8) are always <= 125 bytes per RFC 6455 §5.5,
-	// so we only enforce this for data frames.
+	// Guard against OOM: reject data frames exceeding maxSize before allocating.
+	// Control frames (opcode >= 0x8) get a stricter <=125 bound plus a FIN check
+	// in the block below, also before allocation; this guard only covers data
+	// frames (opcode < 0x8).
 	if maxSize > 0 && f.opcode < 0x8 && length > uint64(maxSize) {
 		return nil, fmt.Errorf("ws: frame payload %d exceeds max size %d", length, maxSize)
 	}

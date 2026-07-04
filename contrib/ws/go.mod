@@ -4,6 +4,11 @@ go 1.25.11
 
 require github.com/go-kruda/kruda v1.2.0
 
+// DEV-ONLY: contrib/ws now uses kruda.Hijack, which is in unreleased core.
+// RELEASE CHECKLIST: after core is tagged, bump the require above to that
+// version and DELETE this replace before re-tagging contrib/ws (contrib is not
+// in the root go.work, so this replace — not the workspace — is what resolves
+// the local core during development; matches the contrib/observability pattern).
 replace github.com/go-kruda/kruda => ../..
 
 require (

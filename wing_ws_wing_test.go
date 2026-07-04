@@ -137,6 +137,14 @@ func TestWSOverWing_ShutdownDrainsBlockedHandlers(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("handler never reached the blocked-read state")
 		}
+		// Guard against a vacuous pass: the client sent nothing after the
+		// handshake, so the handler must still be parked in Read when we call
+		// Shutdown — only SHUT_RDWR can wake it.
+		select {
+		case <-handlerDone:
+			t.Fatal("read handler exited before Shutdown — Read did not block, drain is unproven")
+		default:
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownDeadline)
 		defer cancel()

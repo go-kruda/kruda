@@ -38,6 +38,8 @@ kruda mcp --test      # verify it works
 | `kruda_suggest_wing` | Suggest Wing route presets for routes |
 | `kruda_docs` | Look up Kruda docs and code examples by topic |
 
+`kruda_docs` topics: `typed-handlers`, `routing`, `middleware`, `di`, `resource`, `wing`, `config`, `error-handling`, `sse`, `websocket`, `file-upload`, `validation`, `testing`, `openapi` — including real-time on the Wing transport (SSE via the `kruda.Stream` preset, WebSocket via `ws.HandleFunc`).
+
 ## How It Works
 
 The MCP server runs locally on your machine as a stdio process. Your AI assistant communicates with it via JSON-RPC:
@@ -76,4 +78,4 @@ Kruda's typed API makes AI code generation more reliable:
 - **Typed handlers** — AI generates a struct, gets compile-time validation for free
 - **Auto CRUD** — AI says "create CRUD for Product" → one line of code
 - **Struct tags** — validation rules are explicit, not hidden in handler logic
-- **22 examples** — AI reads patterns and generates consistent code
+- **23 examples** — AI reads patterns and generates consistent code

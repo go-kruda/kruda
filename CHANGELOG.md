@@ -23,6 +23,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   re-binds one `SO_REUSEPORT` socket per worker, so it cannot serve an inherited
   fd. The net/http and fasthttp transports serve the supplied fd directly; the
   doc comment and transport guide now say which transports honor fd-passing.
+- MCP server (`kruda mcp`): corrected stale AI-facing guidance that predated the
+  streaming/WebSocket presets. `kruda_docs` gains a `websocket` topic and its
+  `sse`/`wing` topics now document the `kruda.Stream` preset (v1.5.0+) instead of
+  claiming SSE/streaming has no Wing preset; `kruda_suggest_wing` now suggests
+  `kruda.Stream` for SSE/streaming routes and `kruda.Hijack` for WebSocket routes
+  instead of "none". Keeps AI-generated code aligned with real-time on Wing.
 
 ## [1.6.0] — 2026-07-04
 

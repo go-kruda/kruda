@@ -4,6 +4,8 @@ go 1.25.11
 
 require github.com/go-kruda/kruda v1.2.0
 
+replace github.com/go-kruda/kruda => ../..
+
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect

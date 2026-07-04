@@ -19,21 +19,22 @@ import (
 // later WebSocket-on-Wing tasks.
 func startWingHijackServer(t *testing.T, app *App) (string, func()) {
 	t.Helper()
+	// Serve the OPEN listener directly (no close-then-rebind port race, which is
+	// flaky on macOS): the port stays bound and a dial succeeds as soon as the
+	// transport accepts.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	addr := ln.Addr().String()
-	ln.Close() // let the transport bind so a successful dial means it is accepting
-	go func() { _ = app.transport.ListenAndServe(addr, app) }()
+	go func() { _ = app.transport.Serve(ln, app) }()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-		if derr == nil {
+		if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
 			c.Close()
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 	return addr, func() { _ = app.transport.Shutdown(context.Background()) }
 }

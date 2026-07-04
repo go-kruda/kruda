@@ -17,7 +17,9 @@ import (
 )
 
 // listenWingApp starts app on a real loopback listener via Wing and returns its
-// address + a stop func. Public API only (package ws can't touch app.transport).
+// address + a stop func. It serves the OPEN listener via app.Serve, so there is
+// no close-then-rebind port race (which is flaky on macOS): the port stays bound
+// the whole time and a dial succeeds as soon as the transport accepts.
 func listenWingApp(t *testing.T, app *kruda.App) (addr string, stop func()) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -25,16 +27,15 @@ func listenWingApp(t *testing.T, app *kruda.App) (addr string, stop func()) {
 		t.Fatal(err)
 	}
 	addr = ln.Addr().String()
-	_ = ln.Close() // free the port; app.Listen re-binds it (readiness poll closes the race)
-	go func() { _ = app.Listen(addr) }()
-	// Readiness poll.
+	go func() { _ = app.Serve(ln) }()
+	// Readiness: the listener is already bound, so this succeeds promptly.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
 			c.Close()
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 	return addr, func() { _ = app.Shutdown(context.Background()) }
 }

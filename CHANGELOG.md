@@ -42,6 +42,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`SHUT_RDWR`) and signals `conn.Done()` so a handler blocked in application
   logic can exit cooperatively. The fasthttp transport still does not support
   WebSocket.
+- `App.Serve(ln net.Listener)` — run the app on a pre-created listener instead of
+  binding an address, for graceful restart, systemd socket activation, or tests
+  that need the bound address before the server accepts (no signal handler; the
+  caller owns the lifecycle via `Shutdown`).
 - `WingHeaderSpills()` — process-wide counter of requests whose extra headers
   spilled past the inline capacity (observability for header-heavy traffic).
 

@@ -1150,3 +1150,44 @@ func TestReadFrame_RejectNonMinimal64(t *testing.T) {
 		t.Error("expected error for non-minimal 8-byte length <= 65535")
 	}
 }
+
+func TestUpgrade_RejectUnmaskedClientFrame(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			_, _, _ = conn.ReadMessage() // expected to return an error
+		})
+	})
+	app.Compile()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	// Hand-write an UNMASKED text frame (MASK bit clear) — RFC violation.
+	payload := []byte("hello")
+	var buf bytes.Buffer
+	buf.WriteByte(0x81)               // FIN + text
+	buf.WriteByte(byte(len(payload))) // MASK=0 + length
+	buf.Write(payload)
+	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write(buf.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Server must reject → send a close frame (opcode 0x8), then drop the conn.
+	br := bufio.NewReader(conn)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	f, err := readFrame(br, 0)
+	if err != nil {
+		return // connection closed without a frame is also acceptable
+	}
+	if f.opcode != 0x8 {
+		t.Errorf("expected close frame after unmasked client frame, got opcode 0x%X", f.opcode)
+	}
+	if code, _ := parseClosePayload(f.payload); len(f.payload) >= 2 && code != CloseProtocolError {
+		t.Errorf("expected close code %d, got %d", CloseProtocolError, code)
+	}
+}

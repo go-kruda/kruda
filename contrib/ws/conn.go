@@ -57,6 +57,23 @@ func newConnFromRaw(rwc net.Conn, cfg Config) *Conn {
 	}
 }
 
+// readClientFrame reads a single frame and enforces RFC 6455 §5.1: every
+// client→server frame MUST be masked. readFrame stays direction-agnostic (tests
+// and clients read unmasked server frames through it), so the masking
+// requirement is enforced here, at the server's read boundary. On an unmasked
+// frame it sends a 1002 close and returns an error.
+func (c *Conn) readClientFrame() (*frame, error) {
+	f, err := readFrame(c.br, c.maxMessageSize)
+	if err != nil {
+		return nil, err
+	}
+	if !f.masked {
+		_ = c.Close(CloseProtocolError, "unmasked client frame")
+		return nil, fmt.Errorf("ws: client frame not masked (RFC 6455 §5.1)")
+	}
+	return f, nil
+}
+
 // ReadMessage reads the next complete message from the connection.
 // It handles fragmented messages by assembling continuation frames.
 // Returns the message type (TextMessage or BinaryMessage) and the payload.
@@ -66,7 +83,7 @@ func (c *Conn) ReadMessage() (messageType int, data []byte, err error) {
 			_ = c.rwc.SetReadDeadline(time.Now().Add(c.readTimeout))
 		}
 
-		f, err := readFrame(c.br, c.maxMessageSize)
+		f, err := c.readClientFrame()
 		if err != nil {
 			// If frame exceeded size limit, send close 1009 before returning.
 			if c.maxMessageSize > 0 && strings.Contains(err.Error(), "exceeds max size") {
@@ -110,7 +127,7 @@ func (c *Conn) ReadMessage() (messageType int, data []byte, err error) {
 				_ = c.rwc.SetReadDeadline(time.Now().Add(c.readTimeout))
 			}
 
-			cont, err := readFrame(c.br, c.maxMessageSize)
+			cont, err := c.readClientFrame()
 			if err != nil {
 				return 0, nil, err
 			}

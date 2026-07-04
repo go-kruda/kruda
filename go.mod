@@ -4,7 +4,6 @@ go 1.25.11
 
 require (
 	github.com/bytedance/sonic v1.15.0
-	github.com/go-kruda/kruda/transport/wing v1.1.3
 	github.com/valyala/fasthttp v1.69.0
 )
 

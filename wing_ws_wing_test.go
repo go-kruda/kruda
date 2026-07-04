@@ -205,6 +205,15 @@ func TestWSOverWing_ShutdownDrainsBlockedHandlers(t *testing.T) {
 		// write iteration.
 		time.Sleep(100 * time.Millisecond)
 
+		// Guard against a vacuous pass: if the handler has already finished, the
+		// Write never actually blocked (nothing for Shutdown to drain), so this
+		// subtest would prove nothing about SHUT_RDWR waking a blocked writer.
+		select {
+		case <-handlerDone:
+			t.Fatal("write handler exited before Shutdown — Write never blocked, drain is unproven")
+		default:
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownDeadline)
 		defer cancel()
 		start := time.Now()

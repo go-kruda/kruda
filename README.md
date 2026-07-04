@@ -161,6 +161,8 @@ These figures were measured at the v1.3.1 runtime and **revalidated at the v1.4.
 
 Wing transport uses raw `epoll` + `eventfd` on Linux and bypasses both fasthttp and net/http. macOS defaults to fasthttp.
 
+Production HTTPS: terminate TLS at a proxy/load balancer in front of Wing, or use direct `WithTLS` which serves via net/http (these benchmark numbers then do not apply) — see the [transport guide](docs/guide/transport.md#production-tls-terminate-in-front-of-wing).
+
 ## Documentation
 
 - [API Reference (pkg.go.dev)](https://pkg.go.dev/github.com/go-kruda/kruda)

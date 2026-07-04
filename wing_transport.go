@@ -1221,6 +1221,17 @@ func (w *worker) finishBodyAccum(c *conn) {
 // Accumulated bodies are always dispatched inline; non-inline presets
 // with large bodies are uncommon and correctness takes precedence here.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
+	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
+	// inline accumulation, where c.ResponseWriter() is not an http.Hijacker — so
+	// reject it cleanly (400) rather than letting the upgrade fail opaquely.
+	if f.ResponseMode == responseHijack {
+		c.keepAlive = false
+		c.sendBuf = append(c.sendBuf, wingStatusClose(400)...)
+		releaseRequest(req)
+		c.sendN = 0
+		w.directSend(c)
+		return
+	}
 	finalizeRequestCommonHeaders(req)
 	resp := acquireResponse()
 	resp.responseMode = f.ResponseMode

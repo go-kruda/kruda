@@ -62,9 +62,16 @@ func (c *wingHijackConn) SetWriteDeadline(t time.Time) error { return c.f.SetWri
 // signals the owning takeover goroutine that the fd may be reclaimed. It does
 // NOT close the fd itself (single-close invariant): hijackTakeover, which is
 // still holding the fd open, performs the one physical close after done fires.
-// Idempotent.
+//
+// Idempotent AND synchronizing: the first caller does the raw-fd Shutdown and
+// closes done; any concurrent/later caller BLOCKS on done before returning. That
+// guarantee is load-bearing — hijackTakeover reclaims (and the kernel may
+// recycle) the fd only after a Close returns, so every caller must observe the
+// raw-fd Shutdown as complete before returning, or a losing closer could run
+// Shutdown on an already-recycled fd.
 func (c *wingHijackConn) Close() error {
 	if c.closed.Swap(true) {
+		<-c.done // a concurrent closer won; wait until its Shutdown has completed
 		return nil
 	}
 	// Use the raw fd, not c.f.Fd(): os.File.Fd() can move the fd off the runtime

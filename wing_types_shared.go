@@ -116,6 +116,7 @@ const (
 	responseJSON
 	responseRender // intent/diagnostics tag for the Render preset; does not gate the lane
 	responseStream // Stream preset: incremental streaming writer on the Takeover path
+	responseHijack // Hijack preset: hand the raw connection to the handler via http.Hijacker
 )
 
 // Preset is the per-route tuning hint passed to Wing. Construct via the
@@ -188,6 +189,11 @@ var (
 	// incremental, flushing response writer on the Wing transport. Use for
 	// Server-Sent Events and chunked streaming: app.Get("/events", h, kruda.Stream).
 	Stream = Preset{Dispatch: Takeover, ResponseMode: responseStream}
+	// Hijack dispatches a route via Takeover and gives c.ResponseWriter() an
+	// http.Hijacker, handing the raw connection to the handler. It is generic —
+	// WebSocket (contrib/ws) is one consumer; any raw-connection protocol can use
+	// it. Prefer ws.HandleFunc for WebSocket, which applies this preset for you.
+	Hijack = Preset{Dispatch: Takeover, ResponseMode: responseHijack}
 )
 
 // RejectStats holds accept-side rejection counters populated by the Wing transport.

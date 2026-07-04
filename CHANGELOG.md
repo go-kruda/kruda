@@ -5,6 +5,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- **`contrib/ws` frame-parser hardening (RFC 6455 §5).** `readFrame` now rejects
+  undefined/reserved opcodes, fragmented control frames, and control frames whose
+  declared payload exceeds 125 bytes (the last closes an unbounded-allocation DoS
+  that was reachable before the payload buffer was sized), and rejects non-minimal
+  length encodings. `Conn.ReadMessage` now rejects unmasked client frames
+  (RFC 6455 §5.1). These gaps were latent while WebSocket ran only on net/http;
+  they are fixed here as WebSocket support extends to the Wing transport.
+
 ### Fixed
 
 - Wing no longer drops request headers: requests carrying more than 8

@@ -17,27 +17,43 @@ import (
 )
 
 // listenWingApp starts app on a real loopback listener via Wing and returns its
-// address + a stop func. It serves the OPEN listener via app.Serve, so there is
-// no close-then-rebind port race (which is flaky on macOS): the port stays bound
-// the whole time and a dial succeeds as soon as the transport accepts.
+// address + a stop func. It grabs a free port, releases it, and lets Wing bind
+// it; that re-bind can transiently lose the port on a loaded CI box, so it
+// retries a fresh port when app.Listen returns early (bind fails before serving,
+// so a retry is safe), and only returns once a dial actually SUCCEEDS — never an
+// address the server isn't accepting on yet.
 func listenWingApp(t *testing.T, app *kruda.App) (addr string, stop func()) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr = ln.Addr().String()
-	go func() { _ = app.Serve(ln) }()
-	// Readiness: the listener is already bound, so this succeeds promptly.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
-			c.Close()
-			break
+	for attempt := 0; attempt < 12; attempt++ {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
 		}
-		time.Sleep(5 * time.Millisecond)
+		addr = ln.Addr().String()
+		_ = ln.Close()
+		errc := make(chan error, 1)
+		go func() { errc <- app.Listen(addr) }()
+
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			select {
+			case <-errc:
+				goto retry // bind failed before serving — retry a fresh port
+			default:
+			}
+			if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
+				c.Close()
+				return addr, func() { _ = app.Shutdown(context.Background()) }
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("listenWingApp: bound but never accepting on %s", addr)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	retry:
 	}
-	return addr, func() { _ = app.Shutdown(context.Background()) }
+	t.Fatal("listenWingApp: bind kept failing after retries")
+	return "", func() {}
 }
 
 func TestWSOverWing_Echo(t *testing.T) {

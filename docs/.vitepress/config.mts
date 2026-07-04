@@ -50,6 +50,7 @@ export default defineConfig({
             { text: 'Auto CRUD', link: '/guide/auto-crud' },
             { text: 'DI Container', link: '/guide/di-container' },
             { text: 'Transport', link: '/guide/transport' },
+            { text: 'Wing Protocol Support', link: '/guide/wing-protocol-support' },
             { text: 'Security', link: '/guide/security' },
             { text: 'Performance', link: '/guide/performance' },
           ],

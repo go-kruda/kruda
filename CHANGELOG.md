@@ -5,6 +5,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Startup warning when `Use()` is called after routes are registered (the
+  middleware would silently not apply to the already-registered routes).
+- Docs: Wing protocol support matrix (`docs/guide/wing-protocol-support.md`) and
+  production TLS deployment guidance (terminate in front of Wing).
+
+### Changed
+
+- Removed the stale `transport/wing v1.1.3` require from `go.mod` (the shim
+  directory was removed in v1.3.0; nothing imports it).
+- Docs: corrected the stale "Wing doesn't support SSE" transport limitation —
+  SSE works via the `kruda.Stream` preset since v1.5.0.
+
 ## [1.6.0] — 2026-07-04
 
 ### Security

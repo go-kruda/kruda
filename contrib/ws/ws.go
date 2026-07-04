@@ -36,9 +36,6 @@ func New(config ...Config) *Upgrader {
 func (u *Upgrader) Upgrade(c *kruda.Ctx, handler func(*Conn)) error {
 	// R10.16-17: transport compatibility check
 	transport := c.Transport()
-	if transport == "wing" {
-		return fmt.Errorf("ws: WebSocket upgrade not supported on Wing transport — use the net/http transport (kruda.NetHTTP())")
-	}
 
 	// Validate upgrade request headers
 	if err := u.validateUpgrade(c); err != nil {
@@ -59,6 +56,8 @@ func (u *Upgrader) Upgrade(c *kruda.Ctx, handler func(*Conn)) error {
 	switch transport {
 	case "nethttp":
 		return u.upgradeNetHTTP(c, accept, handler)
+	case "wing":
+		return upgradeHijacker(c, accept, handler, u.Config)
 	case "fasthttp":
 		return u.upgradeFastHTTP(c, accept, handler)
 	default:

@@ -206,7 +206,15 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 	if hw.hijacked && hw.hijackedConn != nil {
 		select {
 		case <-hw.hijackedConn.done:
+			// App closed the connection: the adapter is already marked closed and
+			// has done its raw-fd Shutdown while the fd was still valid.
 		case <-ctx.Done():
+			// Server shutdown won the race before the app closed. Retire the
+			// adapter ourselves (idempotent atomic guard) BEFORE we reclaim the
+			// fd below, so a late app Close() finds it already closed and is a
+			// no-op — it can never Shutdown the (soon-to-be-recycled) raw fd. A
+			// concurrent app Close races harmlessly: exactly one wins.
+			_ = hw.hijackedConn.Close()
 		}
 	}
 

@@ -116,13 +116,16 @@ func TestWSOverWing_AsyncHijackOutlivesHandler(t *testing.T) {
 		if err != nil {
 			return nil
 		}
-		// Hand the connection to a goroutine and return immediately — the
-		// goroutine outlives this handler, then uses and closes the conn.
+		// Hand the connection to a goroutine that writes only AFTER this handler
+		// has returned (it blocks on handlerReturned, which the defer closes), so
+		// the after-return use is deterministic, not timing-dependent.
+		handlerReturned := make(chan struct{})
 		go func() {
-			time.Sleep(150 * time.Millisecond)
+			<-handlerReturned
 			_, _ = nc.Write([]byte("late"))
 			_ = nc.Close()
 		}()
+		defer close(handlerReturned)
 		return nil
 	}, Hijack)
 	app.Compile()

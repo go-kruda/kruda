@@ -5,6 +5,7 @@ package kruda
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"testing"
@@ -69,5 +70,292 @@ func TestWingHijack_RejectUpgradeWithBody(t *testing.T) {
 	}
 	if resp.StatusCode != 400 {
 		t.Errorf("expected 400 for hijack route with body, got %d", resp.StatusCode)
+	}
+}
+
+// wsHijackDoner is the interface wingHijackConn exposes so a handler blocked in
+// app logic (no pending socket call) can select on server shutdown. Mirrors the
+// "doner" interface contrib/ws.Conn asserts against its rwc.
+type wsHijackDoner interface {
+	Done() <-chan struct{}
+}
+
+// dialRawHijack dials addr and performs the plain-HTTP handshake that the /ws
+// route expects (no real WebSocket framing needed — the handler hijacks the
+// connection before ever looking at the request beyond routing, so a minimal
+// GET is enough to reach the handler).
+func dialRawHijack(t *testing.T, addr string) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	req := "GET /ws HTTP/1.1\r\nHost: x\r\n\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatalf("write handshake: %v", err)
+	}
+	return conn
+}
+
+// TestWSOverWing_ShutdownDrainsBlockedHandlers is the Phase 4 shutdown arbiter:
+// a hijacked handler blocked in read, in write, or in app logic (no socket call
+// at all) must ALL drain within the Shutdown deadline, proving cleanup()'s
+// SHUT_RDWR + conn-context cancel (commit bc5de18) actually wake every shape of
+// blocked handler contrib/ws can produce.
+func TestWSOverWing_ShutdownDrainsBlockedHandlers(t *testing.T) {
+	const shutdownDeadline = 2 * time.Second
+
+	t.Run("blocked_in_read", func(t *testing.T) {
+		ready := make(chan struct{})
+		handlerDone := make(chan struct{})
+
+		app := New(Wing())
+		app.Get("/ws", func(c *Ctx) error {
+			w := c.ResponseWriter()
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				return c.Text("no hijack")
+			}
+			nc, _, err := hj.Hijack()
+			if err != nil {
+				return nil
+			}
+			defer close(handlerDone)
+			close(ready)
+			buf := make([]byte, 16)
+			nc.Read(buf) // client sends nothing; SHUT_RDWR must wake this with EOF/error
+			return nil
+		}, Hijack)
+		app.Compile()
+		addr, _ := startWingHijackServer(t, app) // Shutdown driven manually below
+
+		conn := dialRawHijack(t, addr)
+		defer conn.Close()
+
+		select {
+		case <-ready:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handler never reached the blocked-read state")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownDeadline)
+		defer cancel()
+		start := time.Now()
+		err := app.transport.Shutdown(ctx)
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Errorf("Shutdown returned error: %v", err)
+		}
+		if elapsed > shutdownDeadline {
+			t.Errorf("Shutdown took %v, exceeding deadline %v", elapsed, shutdownDeadline)
+		}
+
+		select {
+		case <-handlerDone:
+		case <-time.After(shutdownDeadline):
+			t.Fatal("handler blocked in Read did not return within the shutdown deadline")
+		}
+	})
+
+	t.Run("blocked_in_write", func(t *testing.T) {
+		ready := make(chan struct{})
+		handlerDone := make(chan struct{})
+
+		app := New(Wing())
+		app.Get("/ws", func(c *Ctx) error {
+			w := c.ResponseWriter()
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				return c.Text("no hijack")
+			}
+			nc, _, err := hj.Hijack()
+			if err != nil {
+				return nil
+			}
+			defer close(handlerDone)
+			close(ready)
+			big := make([]byte, 64*1024)
+			// Client never reads; once the kernel send buffer + the client's
+			// unread-but-full receive buffer back up, Write blocks. SHUT_RDWR
+			// must wake it (EPIPE/ECONNRESET) rather than let it hang forever.
+			for {
+				if _, werr := nc.Write(big); werr != nil {
+					return nil
+				}
+			}
+		}, Hijack)
+		app.Compile()
+		addr, _ := startWingHijackServer(t, app)
+
+		conn := dialRawHijack(t, addr)
+		defer conn.Close()
+		// Shrink the client's receive buffer and never read, so the server's
+		// write side backs up and blocks quickly instead of needing megabytes.
+		if tc, ok := conn.(*net.TCPConn); ok {
+			_ = tc.SetReadBuffer(1024)
+		}
+
+		select {
+		case <-ready:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handler never reached the blocked-write state")
+		}
+		// Give the handler a moment to actually fill the socket buffers and
+		// land inside a blocking Write, not just start its first (non-blocking)
+		// write iteration.
+		time.Sleep(100 * time.Millisecond)
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownDeadline)
+		defer cancel()
+		start := time.Now()
+		err := app.transport.Shutdown(ctx)
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Errorf("Shutdown returned error: %v", err)
+		}
+		if elapsed > shutdownDeadline {
+			t.Errorf("Shutdown took %v, exceeding deadline %v", elapsed, shutdownDeadline)
+		}
+
+		select {
+		case <-handlerDone:
+		case <-time.After(shutdownDeadline):
+			t.Fatal("handler blocked in Write did not return within the shutdown deadline")
+		}
+	})
+
+	t.Run("blocked_in_app_logic", func(t *testing.T) {
+		ready := make(chan struct{})
+		handlerDone := make(chan struct{})
+		doneFired := make(chan struct{})
+
+		app := New(Wing())
+		app.Get("/ws", func(c *Ctx) error {
+			w := c.ResponseWriter()
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				return c.Text("no hijack")
+			}
+			nc, _, err := hj.Hijack()
+			if err != nil {
+				return nil
+			}
+			defer close(handlerDone)
+			d, ok := nc.(wsHijackDoner)
+			if !ok {
+				close(ready)
+				return fmt.Errorf("hijacked conn does not expose Done()")
+			}
+			close(ready)
+			// No socket call at all: only the conn-context cancel (Task 6 /
+			// commit bc5de18) can wake this handler.
+			select {
+			case <-d.Done():
+				close(doneFired)
+				return nil
+			case <-time.After(time.Hour):
+				return nil // test fails below on the doneFired/handlerDone assertions
+			}
+		}, Hijack)
+		app.Compile()
+		addr, _ := startWingHijackServer(t, app)
+
+		conn := dialRawHijack(t, addr)
+		defer conn.Close()
+
+		select {
+		case <-ready:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handler never reached the blocked-app-logic state")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownDeadline)
+		defer cancel()
+		start := time.Now()
+		err := app.transport.Shutdown(ctx)
+		elapsed := time.Since(start)
+		if err != nil {
+			t.Errorf("Shutdown returned error: %v", err)
+		}
+		if elapsed > shutdownDeadline {
+			t.Errorf("Shutdown took %v, exceeding deadline %v", elapsed, shutdownDeadline)
+		}
+
+		select {
+		case <-doneFired:
+		case <-time.After(shutdownDeadline):
+			t.Fatal("conn.Done() did not fire within the shutdown deadline")
+		}
+		select {
+		case <-handlerDone:
+		case <-time.After(shutdownDeadline):
+			t.Fatal("handler blocked in app logic did not return within the shutdown deadline")
+		}
+	})
+}
+
+// TestWSOverWing_FdLifecycle churns hijack connections (open -> handshake ->
+// close) under -race and asserts the server survives cleanly, i.e. the taken-
+// over fd is closed exactly once per connection with no leak, double-close, or
+// recycle race (mirrors wing_shutdown_fd_test.go's finalizer-based technique,
+// scoped here to steady-state churn rather than shutdown).
+func TestWSOverWing_FdLifecycle(t *testing.T) {
+	const iterations = 40
+
+	handlerDone := make(chan struct{}, iterations)
+
+	app := New(Wing())
+	app.Get("/ws", func(c *Ctx) error {
+		w := c.ResponseWriter()
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return c.Text("no hijack")
+		}
+		nc, _, err := hj.Hijack()
+		if err != nil {
+			return nil
+		}
+		defer func() { handlerDone <- struct{}{} }()
+		buf := make([]byte, 16)
+		nc.Write([]byte("hello\n"))
+		nc.Read(buf) // returns once the client closes its side
+		nc.Close()
+		return nil
+	}, Hijack)
+	app.Compile()
+	addr, stop := startWingHijackServer(t, app)
+	defer stop()
+
+	for i := 0; i < iterations; i++ {
+		conn := dialRawHijack(t, addr)
+		conn.SetDeadline(time.Now().Add(2 * time.Second))
+		br := bufio.NewReader(conn)
+		line, err := br.ReadString('\n')
+		if err != nil || line != "hello\n" {
+			t.Fatalf("iter %d: unexpected handshake read: line=%q err=%v", i, line, err)
+		}
+		conn.Close() // triggers the server-side Read to return, closing the fd exactly once
+
+		select {
+		case <-handlerDone:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("iter %d: handler did not complete after client close", i)
+		}
+	}
+
+	// One more connection after the churn proves no fd leak/recycle race left
+	// the listener or worker in a bad state.
+	conn := dialRawHijack(t, addr)
+	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	br := bufio.NewReader(conn)
+	line, err := br.ReadString('\n')
+	if err != nil || line != "hello\n" {
+		t.Fatalf("post-churn: unexpected handshake read: line=%q err=%v", line, err)
+	}
+	conn.Close()
+	select {
+	case <-handlerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("post-churn: handler did not complete after client close")
 	}
 }

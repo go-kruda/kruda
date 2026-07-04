@@ -1105,10 +1105,10 @@ func TestReadFrame_RejectOversizedControlFrame(t *testing.T) {
 	// A ping (0x9) declaring a 126-byte payload via the 2-byte extended length.
 	// Must be rejected BEFORE allocating — assert we never read the (absent) body.
 	var buf bytes.Buffer
-	buf.WriteByte(0x89)       // FIN + ping
-	buf.WriteByte(0x7E)       // MASK=0, length marker 126 → 2-byte extended length follows
-	buf.WriteByte(0x00)       // extended length high byte
-	buf.WriteByte(0x7E)       // extended length low byte = 126 (>125)
+	buf.WriteByte(0x89) // FIN + ping
+	buf.WriteByte(0x7E) // MASK=0, length marker 126 → 2-byte extended length follows
+	buf.WriteByte(0x00) // extended length high byte
+	buf.WriteByte(0x7E) // extended length low byte = 126 (>125)
 	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
 		t.Error("expected error for control frame payload > 125")
 	}

@@ -1205,3 +1205,26 @@ func TestConn_DoneNilOnPlainConn(t *testing.T) {
 		t.Error("Done() should be nil on a transport with no shutdown signal")
 	}
 }
+
+func TestHandleFunc_NetHTTPEcho(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	HandleFunc(app, "/ws", func(conn *Conn) {
+		mt, data, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		conn.WriteMessage(mt, data)
+	})
+	app.Compile()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+	sendClientFrame(t, conn, true, 0x1, []byte("hi"))
+	br := bufio.NewReader(conn)
+	f := readServerFrame(t, conn, br)
+	if f.opcode != 0x1 || string(f.payload) != "hi" {
+		t.Errorf("echo = opcode 0x%X %q, want text 'hi'", f.opcode, f.payload)
+	}
+}

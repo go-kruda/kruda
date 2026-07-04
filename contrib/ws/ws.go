@@ -28,6 +28,19 @@ func New(config ...Config) *Upgrader {
 	return &Upgrader{Config: cfg}
 }
 
+// HandleFunc registers a WebSocket route: it wires the route with the
+// kruda.Hijack preset (needed by the Wing transport; a harmless no-op on
+// net/http and fasthttp, which ignore route presets) and performs the upgrade,
+// so the same call works identically on every transport. For manual control,
+// use Upgrader.Upgrade directly (on Wing that requires adding kruda.Hijack to
+// the route yourself — which is exactly what this does for you).
+func HandleFunc(app *kruda.App, path string, handler func(*Conn), cfg ...Config) *kruda.App {
+	u := New(cfg...)
+	return app.Get(path, func(c *kruda.Ctx) error {
+		return u.Upgrade(c, handler)
+	}, kruda.Hijack)
+}
+
 // Upgrade performs the WebSocket handshake and calls handler with the connection.
 // The handler runs synchronously — when it returns, the connection is closed.
 //

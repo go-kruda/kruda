@@ -1194,3 +1194,14 @@ func TestUpgrade_RejectUnmaskedClientFrame(t *testing.T) {
 		t.Errorf("expected close code %d (protocol error), got %d", CloseProtocolError, code)
 	}
 }
+
+func TestConn_DoneNilOnPlainConn(t *testing.T) {
+	// A Conn over a plain net.Conn (no doner) reports a nil Done channel.
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	c := newConnFromRaw(server, Config{})
+	if c.Done() != nil {
+		t.Error("Done() should be nil on a transport with no shutdown signal")
+	}
+}

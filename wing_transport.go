@@ -1749,15 +1749,21 @@ func (w *worker) cleanup() {
 		// could land on an fd the kernel has already recycled.
 		w.pool.wg.Wait()
 	}
-	// Takeover goroutines block on syscall.Read until the client sends data
-	// or the connection closes. To unblock them WITHOUT yet closing the fd
-	// (which would race with Spawn writes), half-close the read side. The
-	// pending Read returns EOF, takeoverLoop exits, dispatchWG.Done fires.
-	// SHUT_RD doesn't free the fd number, so kernel won't recycle it — Spawn's
-	// write side stays valid until we run closeFd below.
+	// Takeover goroutines can block in a syscall.Read, a syscall.Write (a
+	// WebSocket WriteMessage), or in app logic with no pending socket call at
+	// all. To unblock all three WITHOUT yet closing the fd (which would race
+	// with Spawn writes), shut down both directions and cancel the conn
+	// context. SHUT_RDWR unblocks a pending Read (EOF) or Write (EPIPE/ECONNRESET);
+	// cancelling ctx wakes a handler blocked in app logic via Conn.Done().
+	// Either way takeoverLoop exits and dispatchWG.Done fires. SHUT_* doesn't
+	// free the fd number, so kernel won't recycle it — Spawn's write side
+	// stays valid until we run closeFd below.
 	for _, c := range w.conns {
 		if c.pending > 0 {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+			if c.cancel != nil {
+				c.cancel()
+			}
 		}
 	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave

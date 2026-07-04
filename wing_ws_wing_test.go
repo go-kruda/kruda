@@ -97,6 +97,58 @@ func dialRawHijack(t *testing.T, addr string) net.Conn {
 	return conn
 }
 
+// TestWSOverWing_AsyncHijackOutlivesHandler proves the http.Hijacker ownership
+// fix: a handler may hijack, hand the connection to a goroutine, and RETURN,
+// with the goroutine still using the connection afterward. hijackTakeover must
+// hold the fd open until the app closes it — if it reclaimed the fd on
+// handler-return (and the kernel could recycle it), the goroutine's later write
+// would target the wrong fd. The goroutine writes AFTER the handler returns; the
+// client must receive those exact bytes.
+func TestWSOverWing_AsyncHijackOutlivesHandler(t *testing.T) {
+	app := New(Wing())
+	app.Get("/ws", func(c *Ctx) error {
+		w := c.ResponseWriter()
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return c.Text("no hijack")
+		}
+		nc, _, err := hj.Hijack()
+		if err != nil {
+			return nil
+		}
+		// Hand the connection to a goroutine and return immediately — the
+		// goroutine outlives this handler, then uses and closes the conn.
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			_, _ = nc.Write([]byte("late"))
+			_ = nc.Close()
+		}()
+		return nil
+	}, Hijack)
+	app.Compile()
+	addr, stop := startWingHijackServer(t, app)
+	defer stop()
+
+	conn := dialRawHijack(t, addr)
+	defer conn.Close()
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	got := make([]byte, 0, 8)
+	buf := make([]byte, 8)
+	for len(got) < 4 {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			got = append(got, buf[:n]...)
+		}
+		if err != nil {
+			break
+		}
+	}
+	if string(got) != "late" {
+		t.Fatalf("async write after handler-return = %q, want \"late\" — fd was reclaimed early?", got)
+	}
+}
+
 // TestWSOverWing_ShutdownDrainsBlockedHandlers is the Phase 4 shutdown arbiter:
 // a hijacked handler blocked in read, in write, or in app logic (no socket call
 // at all) must ALL drain within the Shutdown deadline, proving cleanup()'s

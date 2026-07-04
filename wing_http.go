@@ -250,20 +250,14 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
 			}
-			// Retain the raw value so Header("Connection") works (e.g. a
-			// WebSocket "Connection: Upgrade" check). Zero-copy like host/accept
-			// for the common single-line case; comma-join repeated Connection
-			// lines (a proxy may split "Upgrade" and "keep-alive" across lines)
-			// so the token scan still sees every token — matching net/http.
+			// Retain the FIRST Connection value so Header("Connection") works
+			// (e.g. a WebSocket "Connection: Upgrade" check). First-wins matches
+			// net/http's http.Header.Get, so c.Header("Connection") is identical
+			// across transports; keep-alive detection above still scans every
+			// line. Zero-copy like host/accept.
 			if connection == "" {
 				connection = copyOrUnsafeString(val, unsafePath)
 				connectionUnsafe = unsafePath && len(val) > 0
-			} else {
-				if connectionUnsafe {
-					connection = strings.Clone(connection)
-					connectionUnsafe = false
-				}
-				connection = connection + ", " + string(val)
 			}
 			continue
 		case headerTransferEncoding:
@@ -331,17 +325,11 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			if asciiEqualFold(val, bClose) {
 				keepAlive = false
 			}
-			// Retain the raw value (comma-joining repeated lines) — see the
-			// matching fast-path case above for the rationale.
+			// Retain the FIRST Connection value (first-wins, matching net/http) —
+			// see the fast-path case above for the rationale.
 			if connection == "" {
 				connection = copyOrUnsafeString(val, unsafePath)
 				connectionUnsafe = unsafePath && len(val) > 0
-			} else {
-				if connectionUnsafe {
-					connection = strings.Clone(connection)
-					connectionUnsafe = false
-				}
-				connection = connection + ", " + string(val)
 			}
 		case headerTransferEncoding:
 			hasTE = true

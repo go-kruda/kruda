@@ -84,6 +84,16 @@ func (u *Upgrader) validateUpgrade(c *kruda.Ctx) error {
 		return fmt.Errorf("ws: upgrade requires GET method")
 	}
 
+	// RFC 6455: the upgrade is a bodyless GET. Reject a body here — in the
+	// transport-agnostic validator, not just at a Wing-specific boundary — so the
+	// outcome does not depend on TCP packetization (a body arriving in the same
+	// read as the headers would otherwise reach the hijack path while a split
+	// body is rejected earlier by Wing). Check the parsed body rather than the
+	// Content-Length header, which not every transport exposes via c.Header.
+	if body, _ := c.BodyBytes(); len(body) > 0 {
+		return fmt.Errorf("ws: upgrade request must not carry a body")
+	}
+
 	upgrade := c.Header("Upgrade")
 	if !strings.EqualFold(upgrade, "websocket") {
 		return fmt.Errorf("ws: missing or invalid Upgrade header")

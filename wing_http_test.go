@@ -203,19 +203,19 @@ func TestParseHTTPRequestFast_RetainsConnectionHeader(t *testing.T) {
 	}
 }
 
-// TestParseHTTPRequest_MultiLineConnectionHeader guards against over-rejecting
-// a valid WebSocket upgrade when a proxy splits the Connection tokens across
-// separate header lines with "Upgrade" NOT last. Wing must retain every token
-// (comma-joined), matching net/http, so the "Connection: Upgrade" check passes.
+// TestParseHTTPRequest_MultiLineConnectionHeader pins first-wins retention for
+// repeated Connection lines, matching net/http's http.Header.Get (which returns
+// the first value) so c.Header("Connection") is identical across transports. A
+// proxy that sends "Connection: Upgrade" before "Connection: keep-alive" keeps
+// the Upgrade token, so the WebSocket "Connection: Upgrade" check still passes.
 func TestParseHTTPRequest_MultiLineConnectionHeader(t *testing.T) {
 	raw := []byte("GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nConnection: keep-alive\r\n\r\n")
 	req, _, ok := parseHTTPRequest(raw, noLimits)
 	if !ok {
 		t.Fatal("parse failed")
 	}
-	got := req.Header("Connection")
-	if !strings.Contains(strings.ToLower(got), "upgrade") {
-		t.Fatalf("Header(Connection) = %q, must retain the Upgrade token across multiple Connection lines", got)
+	if got := req.Header("Connection"); got != "Upgrade" {
+		t.Fatalf("Header(Connection) = %q, want first value \"Upgrade\" (first-wins, matching net/http)", got)
 	}
 }
 

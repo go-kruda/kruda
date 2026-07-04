@@ -124,6 +124,45 @@ func TestWSOverWing_CloseHandshake(t *testing.T) {
 	}
 }
 
+// TestWSOverWing_RejectUpgradeWithBodyOnePacket sends a full, valid WS upgrade
+// GET that ALSO carries a body, all in a single write (so the whole request is
+// parsed in one read and reaches the hijack path — not the split-body
+// accumulation path). validateUpgrade must reject the body, so the outcome is a
+// 4xx regardless of TCP packetization, never a 101 protocol switch.
+func TestWSOverWing_RejectUpgradeWithBodyOnePacket(t *testing.T) {
+	app := kruda.New(kruda.Wing())
+	HandleFunc(app, "/ws", func(conn *Conn) {})
+	app.Compile()
+	addr, stop := listenWingApp(t, app)
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	key := base64.StdEncoding.EncodeToString([]byte("test-key-1234567"))
+	req := "GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\nContent-Length: 5\r\n\r\nhello"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatal(err)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 101 {
+		t.Fatal("bodied upgrade must not switch protocols, got 101")
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400 for bodied upgrade, got %d", resp.StatusCode)
+	}
+}
+
 func TestWSOverWing_PipelinedFirstFrame(t *testing.T) {
 	app := kruda.New(kruda.Wing())
 	HandleFunc(app, "/ws", func(conn *Conn) {

@@ -38,8 +38,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `http.Hijacker` contract (a new generic `kruda.Hijack` route preset); the
   RFC 6455 frame code is reused unchanged. Dispatches via Takeover, so the inline
   hot path is untouched. A pipelined first frame is preserved, a rejected upgrade
-  returns a clean 4xx, and server shutdown drains blocked handlers (`conn.Done()`
-  + `SHUT_RDWR`). The fasthttp transport still does not support WebSocket.
+  returns a clean 4xx, and on shutdown Wing wakes I/O-blocked handlers
+  (`SHUT_RDWR`) and signals `conn.Done()` so a handler blocked in application
+  logic can exit cooperatively. The fasthttp transport still does not support
+  WebSocket.
 - `WingHeaderSpills()` — process-wide counter of requests whose extra headers
   spilled past the inline capacity (observability for header-heavy traffic).
 

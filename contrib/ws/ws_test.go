@@ -1091,3 +1091,37 @@ func TestReadFrame_AcceptDefinedOpcodes(t *testing.T) {
 		}
 	}
 }
+
+func TestReadFrame_RejectFragmentedControlFrame(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteByte(0x09) // FIN=0 + ping opcode (0x9) — fragmented control frame
+	buf.WriteByte(0x00) // no mask, length 0
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for fragmented (FIN=0) control frame")
+	}
+}
+
+func TestReadFrame_RejectOversizedControlFrame(t *testing.T) {
+	// A ping (0x9) declaring a 126-byte payload via the 2-byte extended length.
+	// Must be rejected BEFORE allocating — assert we never read the (absent) body.
+	var buf bytes.Buffer
+	buf.WriteByte(0x89)       // FIN + ping
+	buf.WriteByte(0x7E)       // MASK=0, length marker 126 → 2-byte extended length follows
+	buf.WriteByte(0x00)       // extended length high byte
+	buf.WriteByte(0x7E)       // extended length low byte = 126 (>125)
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for control frame payload > 125")
+	}
+}
+
+func TestReadFrame_AcceptMaxSizeControlFrame(t *testing.T) {
+	// A 125-byte pong is the largest valid control frame — must still parse.
+	var buf bytes.Buffer
+	payload := make([]byte, 125)
+	if err := writeFrame(&buf, true, 0xA, payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err != nil {
+		t.Errorf("125-byte control frame should be accepted, got %v", err)
+	}
+}

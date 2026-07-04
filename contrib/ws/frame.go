@@ -70,6 +70,18 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		return nil, fmt.Errorf("ws: frame payload %d exceeds max size %d", length, maxSize)
 	}
 
+	// RFC 6455 §5.5: control frames (opcode >= 0x8) MUST NOT be fragmented and
+	// MUST have a payload length <= 125. Enforced BEFORE allocation below so an
+	// oversized control frame cannot force an unbounded make([]byte, length).
+	if f.opcode >= 0x8 {
+		if !f.fin {
+			return nil, fmt.Errorf("ws: fragmented control frame (opcode 0x%X)", f.opcode)
+		}
+		if length > 125 {
+			return nil, fmt.Errorf("ws: control frame payload %d exceeds 125 bytes", length)
+		}
+	}
+
 	// Masking key (4 bytes if masked)
 	var maskKey [4]byte
 	if f.masked {

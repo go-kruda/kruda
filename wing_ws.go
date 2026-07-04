@@ -132,3 +132,55 @@ func (hw *wingHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	brw := bufio.NewReadWriter(bufio.NewReader(r), bufio.NewWriter(nc))
 	return nc, brw, nil
 }
+
+// hijackTakeover runs a Hijack-preset route over the takeover fd f. It gives the
+// handler a wingHijackWriter (an http.Hijacker); the handler (e.g. contrib/ws
+// Upgrade) either hijacks the raw connection and runs its own read/write loop, or
+// returns a normal buffered response (a rejected upgrade) which we serialize
+// here. Unlike streamTakeover it seeds leftover (a pipelined first frame) into
+// the hijacked reader and runs NO read-watcher — the handler owns reads on f. The
+// fd is closed exactly once via the shared takeover-done path (doneMsg.file).
+func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftover []byte) {
+	// Cancellable conn context so shutdown (Task 6) can fire Conn.Done().
+	ctx, cancel := context.WithCancel(first.ctx)
+	first.ctx = ctx
+
+	remote := ""
+	if first.remoteAddrRef != nil {
+		remote = *first.remoteAddrRef
+	}
+
+	resp := acquireResponse()
+	hw := newWingHijackWriter(resp, f, fd, leftover, remote, ctx)
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil && !hw.hijacked {
+				// Only meaningful if the connection was not hijacked; a panic
+				// inside a hijacked WS loop cannot produce an HTTP response.
+				resp.WriteHeader(500)
+				resp.Write([]byte("Internal Server Error\n"))
+			}
+		}()
+		w.handler.ServeKruda(hw, first)
+	}()
+
+	// Phase 3 state machine: not hijacked → serialize the buffered response;
+	// hijacked → the handler already wrote everything to the raw connection.
+	if !hw.hijacked {
+		data := resp.buildZeroCopy()
+		if w.writeTimeout > 0 {
+			_ = f.SetWriteDeadline(time.Now().Add(time.Duration(w.writeTimeout)))
+		}
+		_, _ = f.Write(data)
+	}
+	releaseResponse(resp)
+
+	cancel()
+	releaseRequest(first)
+
+	// Close the fd exactly once via the shared takeover-done path (handleDone
+	// removes bookkeeping then closes through the File). Do NOT close here.
+	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
+	w.wake()
+}

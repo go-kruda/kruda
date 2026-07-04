@@ -1372,6 +1372,11 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		return
 	}
 
+	if mode == responseHijack {
+		w.hijackTakeover(first, fd, f, leftover)
+		return
+	}
+
 	bp := takeoverBufPool.Get().(*[]byte)
 	buf := *bp
 	// The pool's default buffer is 8 KB; grow it to the configured ReadBufSize so

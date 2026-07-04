@@ -318,12 +318,19 @@ func (app *App) Listen(addr string) error {
 }
 
 // Serve runs the app on a pre-created net.Listener instead of binding an address
-// itself. Useful for graceful restart, systemd socket activation, or tests that
-// need the bound address before the server starts accepting (avoiding a
-// close-then-rebind race). It compiles the routes and starts the DI container,
-// then serves until the transport is shut down via Shutdown, whose result it
-// returns. Unlike Listen it installs no OS signal handler — the caller owns the
-// lifecycle and calls Shutdown to stop.
+// itself. It compiles the routes and starts the DI container, then serves until
+// the transport is shut down via Shutdown, whose result it returns. Unlike Listen
+// it installs no OS signal handler — the caller owns the lifecycle and calls
+// Shutdown to stop.
+//
+// Transport caveat: the net/http and fasthttp transports serve the supplied
+// listener's file descriptor directly, so Serve honors an inherited or
+// externally-owned fd there — suitable for graceful restart and systemd socket
+// activation. Wing (the default on Linux) does not: it adopts only the listener's
+// address, closes the supplied fd, and re-binds one SO_REUSEPORT socket per worker.
+// On Wing, Serve is fine for "bind this address" uses (and for tests needing the
+// address before accept), but it cannot serve a passed-in fd — use kruda.NetHTTP()
+// for true fd-passing.
 func (app *App) Serve(ln net.Listener) error {
 	if err := app.compile(); err != nil {
 		return err

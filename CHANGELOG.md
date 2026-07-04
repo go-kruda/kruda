@@ -18,6 +18,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory was removed in v1.3.0; nothing imports it).
 - Docs: corrected the stale "Wing doesn't support SSE" transport limitation —
   SSE works via the `kruda.Stream` preset since v1.5.0.
+- Docs: corrected `App.Serve` — it claimed systemd socket activation
+  unconditionally, but Wing (default on Linux) closes the passed listener and
+  re-binds one `SO_REUSEPORT` socket per worker, so it cannot serve an inherited
+  fd. The net/http and fasthttp transports serve the supplied fd directly; the
+  doc comment and transport guide now say which transports honor fd-passing.
 
 ## [1.6.0] — 2026-07-04
 

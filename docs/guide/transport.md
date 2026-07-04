@@ -74,5 +74,6 @@ Wing is optimized for raw throughput. It intentionally skips some HTTP features:
 - **Incremental responses need a preset** — plain handlers write fixed `Content-Length` responses. SSE and chunked streaming (`c.SSE()` / `c.Stream()`) work on Wing via the `kruda.Stream` route preset, and WebSocket via `ws.HandleFunc` (the `kruda.Hijack` preset) — but a default route does not stream.
 - **No HTTP/2** — Wing speaks HTTP/1.1 only. Use `kruda.NetHTTP()` with TLS for HTTP/2.
 - **No chunked transfer encoding** — Wing pre-computes Content-Length.
+- **`App.Serve(listener)` re-binds on Wing** — Wing serves one `SO_REUSEPORT` socket per worker, so it adopts the listener's *address* and closes the passed file descriptor rather than serving it. For systemd socket activation or graceful-restart fd-passing, use `kruda.NetHTTP()` (or fasthttp on macOS), which serve the supplied fd directly.
 
 For apps that mix high-throughput API routes with session/SSE routes, run two instances or use net/http for the full app.

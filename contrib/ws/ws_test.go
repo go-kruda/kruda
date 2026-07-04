@@ -1066,3 +1066,28 @@ func TestUpgrade_EmptyTextMessage(t *testing.T) {
 		t.Errorf("expected empty payload, got %d bytes", len(f.payload))
 	}
 }
+
+func TestReadFrame_RejectReservedOpcodes(t *testing.T) {
+	// Reserved non-control (0x3-0x7) and reserved control (0xB-0xF) opcodes.
+	for _, op := range []byte{0x3, 0x4, 0x5, 0x6, 0x7, 0xB, 0xC, 0xD, 0xE, 0xF} {
+		var buf bytes.Buffer
+		buf.WriteByte(0x80 | op) // FIN + reserved opcode
+		buf.WriteByte(0x00)      // no mask, length 0
+		if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+			t.Errorf("opcode 0x%X: expected error, got nil", op)
+		}
+	}
+}
+
+func TestReadFrame_AcceptDefinedOpcodes(t *testing.T) {
+	// The six defined opcodes must still parse (empty payload, control frames
+	// are FIN + 0-length which is valid).
+	for _, op := range []byte{0x0, 0x1, 0x2, 0x8, 0x9, 0xA} {
+		var buf bytes.Buffer
+		buf.WriteByte(0x80 | op)
+		buf.WriteByte(0x00)
+		if _, err := readFrame(bufio.NewReader(&buf), 0); err != nil {
+			t.Errorf("opcode 0x%X: expected accept, got %v", op, err)
+		}
+	}
+}

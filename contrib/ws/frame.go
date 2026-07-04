@@ -35,6 +35,14 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		return nil, fmt.Errorf("ws: reserved bits set")
 	}
 
+	// RFC 6455 §5.2: only these opcodes are defined. Reserved non-control
+	// (0x3-0x7) and reserved control (0xB-0xF) opcodes are protocol errors.
+	switch f.opcode {
+	case 0x0, 0x1, 0x2, 0x8, 0x9, 0xA:
+	default:
+		return nil, fmt.Errorf("ws: reserved opcode 0x%X", f.opcode)
+	}
+
 	// Payload length
 	length := uint64(hdr[1] & 0x7F)
 	switch {

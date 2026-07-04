@@ -1125,3 +1125,28 @@ func TestReadFrame_AcceptMaxSizeControlFrame(t *testing.T) {
 		t.Errorf("125-byte control frame should be accepted, got %v", err)
 	}
 }
+
+func TestReadFrame_RejectNonMinimal16(t *testing.T) {
+	// 2-byte extended length carrying 100 (<126) — must use the 7-bit form.
+	var buf bytes.Buffer
+	buf.WriteByte(0x82) // FIN + binary
+	buf.WriteByte(0x7E) // length marker 126 → 2-byte extended
+	buf.WriteByte(0x00)
+	buf.WriteByte(0x64) // 100
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for non-minimal 2-byte length < 126")
+	}
+}
+
+func TestReadFrame_RejectNonMinimal64(t *testing.T) {
+	// 8-byte extended length carrying 1000 (<=65535) — must use the 2-byte form.
+	var buf bytes.Buffer
+	buf.WriteByte(0x82) // FIN + binary
+	buf.WriteByte(0x7F) // length marker 127 → 8-byte extended
+	var ext [8]byte
+	binary.BigEndian.PutUint64(ext[:], 1000)
+	buf.Write(ext[:])
+	if _, err := readFrame(bufio.NewReader(&buf), 0); err == nil {
+		t.Error("expected error for non-minimal 8-byte length <= 65535")
+	}
+}

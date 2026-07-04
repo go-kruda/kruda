@@ -52,6 +52,10 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 			return nil, err
 		}
 		length = uint64(binary.BigEndian.Uint16(ext[:]))
+		// RFC 6455 §5.2: the 2-byte form must not encode a value < 126.
+		if length < 126 {
+			return nil, fmt.Errorf("ws: non-minimal length encoding (%d in 16-bit form)", length)
+		}
 	case length == 127:
 		var ext [8]byte
 		if _, err := io.ReadFull(r, ext[:]); err != nil {
@@ -60,6 +64,10 @@ func readFrame(r io.Reader, maxSize int64) (*frame, error) {
 		length = binary.BigEndian.Uint64(ext[:])
 		if length>>63 != 0 {
 			return nil, fmt.Errorf("ws: payload length overflow")
+		}
+		// RFC 6455 §5.2: the 8-byte form must not encode a value <= 65535.
+		if length <= 0xFFFF {
+			return nil, fmt.Errorf("ws: non-minimal length encoding (%d in 64-bit form)", length)
 		}
 	}
 

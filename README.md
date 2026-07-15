@@ -165,11 +165,12 @@ Production HTTPS: terminate TLS at a proxy/load balancer in front of Wing, or us
 
 ## Documentation
 
+- [Full Documentation (kruda.dev)](https://kruda.dev/) — guides, API reference, migration docs
 - [API Reference (pkg.go.dev)](https://pkg.go.dev/github.com/go-kruda/kruda)
 - [Examples](examples/) — 23 runnable examples
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
-- [Benchmark Charts](https://go-kruda.github.io/kruda/benchmarks/)
+- [Benchmark Charts](https://kruda.dev/benchmarks/)
 
 ## AI Integration
 

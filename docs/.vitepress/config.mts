@@ -15,6 +15,8 @@ export default defineConfig({
     ['meta', { name: 'og:title', content: 'Kruda — Go Web Framework' }],
     ['meta', { name: 'og:description', content: 'Fast by default, type-safe by design. High-performance Go web framework with typed handlers, auto CRUD, and custom async I/O transport.' }],
     ['meta', { name: 'og:image', content: 'https://kruda.dev/kruda-og.jpg' }],
+    // Cloudflare Web Analytics (cookieless) — manual beacon: kruda.dev is DNS-only, not proxied, so it is not auto-injected.
+    ['script', { type: 'module', src: 'https://static.cloudflareinsights.com/beacon.min.js', 'data-cf-beacon': '{"token": "9d5d2aee2c6c41c8a4bcc3f355f8af96"}' }],
   ],
 
   themeConfig: {

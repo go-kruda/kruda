@@ -15,6 +15,10 @@ type namedHealthService struct {
 
 func (s *namedHealthService) Check(_ context.Context) error { return nil }
 
+type nonComparableHealthService []string
+
+func (nonComparableHealthService) Check(_ context.Context) error { return nil }
+
 func TestDiscoverHealthCheckers_WithLazySingleton(t *testing.T) {
 	c := NewContainer()
 	_ = c.GiveLazy(func() (*healthyDB, error) {
@@ -101,5 +105,40 @@ func TestDiscoverHealthCheckers_NonHealthChecker(t *testing.T) {
 	checkers := discoverHealthCheckers(c)
 	if len(checkers) != 0 {
 		t.Errorf("expected 0 checkers for non-HealthChecker, got %d", len(checkers))
+	}
+}
+
+func TestDiscoverHealthCheckers_NonComparableServices(t *testing.T) {
+	c := NewContainer()
+	if err := c.Give(nonComparableHealthService{"worker", "scheduler"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.GiveNamed("metadata", map[string]string{"region": "local"}); err != nil {
+		t.Fatal(err)
+	}
+
+	checkers := discoverHealthCheckers(c)
+	if len(checkers) != 1 {
+		t.Fatalf("expected the non-comparable health service only, got %d checkers", len(checkers))
+	}
+	if _, ok := checkers[0].checker.(nonComparableHealthService); !ok {
+		t.Fatalf("checker type = %T, want nonComparableHealthService", checkers[0].checker)
+	}
+}
+
+func TestDiscoverHealthCheckers_NonComparableLazyInterfaceService(t *testing.T) {
+	c := NewContainer()
+	if err := c.GiveLazy(func() (HealthChecker, error) {
+		return nonComparableHealthService{"queue"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Use[HealthChecker](c); err != nil {
+		t.Fatal(err)
+	}
+
+	checkers := discoverHealthCheckers(c)
+	if len(checkers) != 1 {
+		t.Fatalf("expected the resolved lazy health service, got %d checkers", len(checkers))
 	}
 }

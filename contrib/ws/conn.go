@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // Conn represents a WebSocket connection.
@@ -103,12 +104,21 @@ func (c *Conn) ReadMessage() (messageType int, data []byte, err error) {
 			continue
 		}
 
+		if f.opcode == 0x0 {
+			_ = c.Close(CloseProtocolError, "unexpected continuation frame")
+			return 0, nil, fmt.Errorf("ws: continuation frame without an active fragmented message")
+		}
+
 		// First frame of a message
 		messageType = int(f.opcode)
 		data = f.payload
 
 		if f.fin {
 			// Single-frame message — size already checked in readFrame
+			if messageType == TextMessage && !utf8.Valid(data) {
+				_ = c.Close(CloseInvalidPayload, "invalid UTF-8 text message")
+				return 0, nil, fmt.Errorf("ws: text message is not valid UTF-8")
+			}
 			return messageType, data, nil
 		}
 
@@ -157,6 +167,10 @@ func (c *Conn) ReadMessage() (messageType int, data []byte, err error) {
 			data = append(data, cont.payload...)
 
 			if cont.fin {
+				if messageType == TextMessage && !utf8.Valid(data) {
+					_ = c.Close(CloseInvalidPayload, "invalid UTF-8 text message")
+					return 0, nil, fmt.Errorf("ws: text message is not valid UTF-8")
+				}
 				return messageType, data, nil
 			}
 		}
@@ -285,6 +299,16 @@ func (c *Conn) handleControl(f *frame) error {
 		return nil
 
 	case 0x8: // Close
+		failureCode, err := validateClosePayload(f.payload)
+		if err != nil {
+			reason := "invalid close payload"
+			if failureCode == CloseInvalidPayload {
+				reason = "invalid UTF-8 close reason"
+			}
+			_ = c.Close(failureCode, reason)
+			return err
+		}
+
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if !c.closed.Load() {

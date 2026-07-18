@@ -1,5 +1,3 @@
-//go:build kruda_stdjson || !cgo
-
 package json
 
 import (

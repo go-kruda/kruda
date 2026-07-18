@@ -227,6 +227,75 @@ func TestTransportTakeoverKeepAlive_Wing(t *testing.T) {
 	}
 }
 
+// TestTransportHTTP10Persistence_Wing verifies the connection lifecycle only.
+// Wing still serializes HTTP/1.1 response lines; response-version negotiation is
+// intentionally outside this test and this persistence fix.
+func TestTransportHTTP10Persistence_Wing(t *testing.T) {
+	app := New(Wing())
+	app.Get("/event", func(c *Ctx) error { return c.Text("event") })
+	app.Get("/take", func(c *Ctx) error { return c.Text("take") }, DB)
+	app.Compile()
+
+	if app.transportType != "wing" {
+		t.Skipf("wing transport not selected on this platform (got %q)", app.transportType)
+	}
+
+	addr, shutdown := startSmokeApp(t, app, "/event")
+	defer shutdown()
+
+	for _, tt := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{name: "event loop", path: "/event", body: "event"},
+		{name: "takeover", path: "/take", body: "take"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			conn, err := net.DialTimeout("tcp", addr, time.Second)
+			if err != nil {
+				t.Fatalf("dial: %v", err)
+			}
+			defer conn.Close()
+			conn.SetDeadline(time.Now().Add(5 * time.Second))
+			br := bufio.NewReader(conn)
+
+			readOK := func(step string) {
+				t.Helper()
+				resp, err := http.ReadResponse(br, nil)
+				if err != nil {
+					t.Fatalf("%s: read response: %v", step, err)
+				}
+				body, readErr := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				if readErr != nil {
+					t.Fatalf("%s: read body: %v", step, readErr)
+				}
+				if resp.StatusCode != http.StatusOK || string(body) != tt.body {
+					t.Fatalf("%s: got status %d body %q, want 200 %q", step, resp.StatusCode, body, tt.body)
+				}
+			}
+
+			keepAliveReq := fmt.Sprintf("GET %s HTTP/1.0\r\nConnection: keep-alive\r\n\r\n", tt.path)
+			if _, err := conn.Write([]byte(keepAliveReq)); err != nil {
+				t.Fatalf("write keep-alive request: %v", err)
+			}
+			readOK("keep-alive request")
+
+			defaultCloseReq := fmt.Sprintf("GET %s HTTP/1.0\r\n\r\n", tt.path)
+			if _, err := conn.Write([]byte(defaultCloseReq)); err != nil {
+				t.Fatalf("write default-close request: %v", err)
+			}
+			readOK("default-close request")
+
+			_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			if _, err := br.ReadByte(); err != io.EOF {
+				t.Fatalf("after HTTP/1.0 default-close response, want EOF from server, got %v", err)
+			}
+		})
+	}
+}
+
 // startSmokeApp binds the App's transport to a random TCP port, starts
 // Serve in a goroutine, and waits until the app serves an HTTP request.
 // Returns the bound addr and a shutdown closure that the caller must defer.

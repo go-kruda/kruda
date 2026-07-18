@@ -42,7 +42,9 @@ ok "no replace directives in released go.mod"
 
 section "tests (host platform)"
 go test -race -tags kruda_stdjson ./...
-ok "tests passed"
+ok "stdlib JSON tests passed"
+go test -race ./...
+ok "default JSON engine tests passed"
 
 section "standalone module tests"
 scripts/test-standalone-modules.sh

@@ -60,38 +60,43 @@ func discoverHealthCheckers(c *Container) []namedChecker {
 	defer c.mu.RUnlock()
 	var checkers []namedChecker
 	seen := make(map[any]bool)
-	addChecker := func(t reflect.Type, inst any) {
-		if seen[inst] {
+	addChecker := func(t reflect.Type, name string, inst any) {
+		hc, ok := inst.(HealthChecker)
+		if !ok {
 			return
 		}
-		seen[inst] = true
-		if hc, ok := inst.(HealthChecker); ok {
-			name := t.String()
+		// Interface values whose dynamic type is a slice, map, function, or a
+		// struct containing one cannot be map keys. Most services are pointers
+		// and remain deduplicated; non-comparable checker values are still valid
+		// and must not make the health endpoint panic.
+		instType := reflect.TypeOf(inst)
+		if instType != nil && instType.Comparable() {
+			if seen[inst] {
+				return
+			}
+			seen[inst] = true
+		}
+		if name == "" {
+			name = t.String()
 			if t.Kind() == reflect.Pointer {
 				name = t.Elem().Name()
 			}
 			if name == "" {
 				name = t.String()
 			}
-			checkers = append(checkers, namedChecker{name: name, checker: hc})
 		}
+		checkers = append(checkers, namedChecker{name: name, checker: hc})
 	}
 	for t, inst := range c.singletons {
-		addChecker(t, inst)
+		addChecker(t, "", inst)
 	}
 	for t, entry := range c.lazies {
 		if entry.done.Load() {
-			addChecker(t, entry.instance)
+			addChecker(t, "", entry.instance)
 		}
 	}
 	for name, inst := range c.named {
-		if seen[inst] {
-			continue
-		}
-		seen[inst] = true
-		if hc, ok := inst.(HealthChecker); ok {
-			checkers = append(checkers, namedChecker{name: name, checker: hc})
-		}
+		addChecker(reflect.TypeOf(inst), name, inst)
 	}
 	return checkers
 }

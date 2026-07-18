@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/go-kruda/kruda v1.2.0
+	github.com/go-kruda/kruda v1.6.0
 	github.com/go-kruda/kruda/contrib/ws v0.0.0
 )
 

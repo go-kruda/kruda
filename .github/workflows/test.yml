@@ -63,6 +63,11 @@ jobs:
           fi
           go test -v -race -tags kruda_stdjson $COVER_FLAG ./...
 
+      - name: Run default JSON engine tests
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.11'
+        shell: bash
+        run: CGO_ENABLED=1 go test -race ./...
+
       - name: Test contrib packages
         shell: bash
         # Dynamically discovers contrib modules so new modules cannot be missed

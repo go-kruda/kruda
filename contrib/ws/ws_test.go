@@ -540,7 +540,135 @@ func TestUpgrade_FragmentedMessage(t *testing.T) {
 	}
 }
 
+func TestUpgrade_FragmentedTextValidatesUTF8AfterAssembly(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			msgType, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			_ = conn.WriteMessage(msgType, data)
+		})
+	})
+	app.Compile()
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	// Split the three-byte UTF-8 encoding of € across frame boundaries.
+	sendClientFrame(t, conn, false, 0x1, []byte{0xE2})
+	sendClientFrame(t, conn, false, 0x0, []byte{0x82})
+	sendClientFrame(t, conn, true, 0x0, []byte{0xAC})
+
+	f := readServerFrame(t, conn, bufio.NewReader(conn))
+	if f.opcode != 0x1 || string(f.payload) != "€" {
+		t.Fatalf("echo = opcode 0x%X %q, want text €", f.opcode, f.payload)
+	}
+}
+
+func TestUpgrade_RejectUnexpectedContinuation(t *testing.T) {
+	srv := newReadOnceWSServer(t)
+	defer srv.Close()
+
+	conn := dialWS(t, srv.URL+"/ws")
+	defer conn.Close()
+
+	sendClientFrame(t, conn, true, 0x0, []byte("orphan"))
+	assertServerCloseCode(t, conn, CloseProtocolError)
+}
+
+func TestUpgrade_RejectInvalidTextUTF8(t *testing.T) {
+	tests := []struct {
+		name string
+		send func(*testing.T, net.Conn)
+	}{
+		{
+			name: "single frame",
+			send: func(t *testing.T, conn net.Conn) {
+				sendClientFrame(t, conn, true, 0x1, []byte{0xFF})
+			},
+		},
+		{
+			name: "fragmented message",
+			send: func(t *testing.T, conn net.Conn) {
+				sendClientFrame(t, conn, false, 0x1, []byte{0xF0, 0x9F})
+				sendClientFrame(t, conn, true, 0x0, []byte{0x92})
+			},
+		},
+	}
+
+	srv := newReadOnceWSServer(t)
+	defer srv.Close()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := dialWS(t, srv.URL+"/ws")
+			defer conn.Close()
+
+			tt.send(t, conn)
+			assertServerCloseCode(t, conn, CloseInvalidPayload)
+		})
+	}
+}
+
+func TestUpgrade_RejectInvalidClosePayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+		want    int
+	}{
+		{name: "one byte", payload: []byte{0x03}, want: CloseProtocolError},
+		{name: "reserved code", payload: []byte{0x03, 0xED}, want: CloseProtocolError},   // 1005
+		{name: "unassigned code", payload: []byte{0x07, 0xD0}, want: CloseProtocolError}, // 2000
+		{name: "invalid reason UTF-8", payload: []byte{0x03, 0xE8, 0xFF}, want: CloseInvalidPayload},
+	}
+
+	srv := newReadOnceWSServer(t)
+	defer srv.Close()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := dialWS(t, srv.URL+"/ws")
+			defer conn.Close()
+
+			sendClientFrame(t, conn, true, 0x8, tt.payload)
+			assertServerCloseCode(t, conn, tt.want)
+		})
+	}
+}
+
 // --- Test helpers ---
+
+func newReadOnceWSServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	app := kruda.New(kruda.NetHTTP())
+	upgrader := New(Config{})
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		return upgrader.Upgrade(c, func(conn *Conn) {
+			_, _, _ = conn.ReadMessage()
+		})
+	})
+	app.Compile()
+	return httptest.NewServer(app)
+}
+
+func assertServerCloseCode(t *testing.T, conn net.Conn, want int) {
+	t.Helper()
+	f := readServerFrame(t, conn, bufio.NewReader(conn))
+	if f.opcode != 0x8 {
+		t.Fatalf("expected close frame, got opcode 0x%X", f.opcode)
+	}
+	code, _ := parseClosePayload(f.payload)
+	if code != want {
+		t.Fatalf("close code = %d, want %d", code, want)
+	}
+}
 
 // dialWS performs a WebSocket handshake and returns the raw TCP connection.
 func dialWS(t *testing.T, rawURL string) net.Conn {

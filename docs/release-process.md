@@ -26,7 +26,7 @@ fix, or feature that is worth asking them to upgrade for.
 Before opening the release PR, run `./scripts/pre-release.sh` for local release validation. The script covers local checks; CI provides the required cross-platform and benchmark evidence:
 
 - [ ] Working tree clean (`git status` shows nothing to commit)
-- [ ] All tests pass on the host platform: `go test -race -tags kruda_stdjson ./...`
+- [ ] All tests pass with both JSON engines: `go test -race -tags kruda_stdjson ./...` and `go test -race ./...`
 - [ ] Cross-platform builds: `GOOS=linux go build ./...`, `GOOS=windows go build ./...`, `GOOS=darwin go build ./...`
 - [ ] Wing tests pass: covered by the same `go test ./...` since v1.2.0 (flattened into core)
 - [ ] Native fuzz tests don't crash within 30s each: `go test -fuzz=FuzzRouterPattern -fuzztime=30s -run=^$ .` (and FuzzRouterMatch, FuzzBindJSON, FuzzValidateString)

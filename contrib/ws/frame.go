@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"unicode/utf8"
 )
 
 // frame represents a single WebSocket frame per RFC 6455 §5.2.
@@ -183,4 +184,43 @@ func parseClosePayload(payload []byte) (code int, reason string) {
 		}
 	}
 	return
+}
+
+// validateClosePayload checks the message-level requirements for a received
+// Close frame. Frame-level FIN and size constraints are enforced by readFrame.
+func validateClosePayload(payload []byte) (failureCode int, err error) {
+	if len(payload) == 0 {
+		return 0, nil
+	}
+	if len(payload) == 1 {
+		return CloseProtocolError, fmt.Errorf("ws: close frame payload must be empty or at least 2 bytes")
+	}
+
+	code := int(binary.BigEndian.Uint16(payload[:2]))
+	if !validReceivedCloseCode(code) {
+		return CloseProtocolError, fmt.Errorf("ws: invalid close status code %d", code)
+	}
+	if !utf8.Valid(payload[2:]) {
+		return CloseInvalidPayload, fmt.Errorf("ws: close reason is not valid UTF-8")
+	}
+	return 0, nil
+}
+
+// validReceivedCloseCode accepts protocol-defined codes, the additional
+// codes registered in the 1000 range, and application/private-use ranges.
+// Codes reserved only as local sentinels and unassigned 1016-2999 codes are
+// not valid on the wire.
+func validReceivedCloseCode(code int) bool {
+	if code >= 3000 && code <= 4999 {
+		return true
+	}
+	if code < 1000 || code > 1014 {
+		return false
+	}
+	switch code {
+	case 1004, CloseNoStatusReceived, CloseAbnormalClosure:
+		return false
+	default:
+		return true
+	}
 }

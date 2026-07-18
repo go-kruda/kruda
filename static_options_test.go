@@ -1,7 +1,10 @@
 package kruda
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -55,7 +58,7 @@ func TestStatic_WithBrowse(t *testing.T) {
 	}
 }
 
-// --- Static.Static (os.DirFS) ---
+// --- Static.Static (OS directory) ---
 
 func TestStatic_OsDirFS(t *testing.T) {
 	dir := t.TempDir()
@@ -68,6 +71,11 @@ func TestStatic_OsDirFS(t *testing.T) {
 
 	app := New()
 	app.Static("/files", dir)
+	t.Cleanup(func() {
+		if err := app.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown static app: %v", err)
+		}
+	})
 	app.Compile()
 
 	tc := NewTestClient(app)
@@ -78,6 +86,102 @@ func TestStatic_OsDirFS(t *testing.T) {
 	if !strings.Contains(resp.BodyString(), "hello world") {
 		t.Errorf("body = %q", resp.BodyString())
 	}
+}
+
+func TestStatic_SymlinkContainment(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "public")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const publicBody = "public content"
+	if err := os.WriteFile(filepath.Join(root, "public.txt"), []byte(publicBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const linkedBody = "linked public content"
+	if err := os.WriteFile(filepath.Join(root, "linked-target.txt"), []byte(linkedBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	const secretBody = "outside root secret"
+	secretPath := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte(secretBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustSymlink := func(target, link string) {
+		t.Helper()
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlink creation unavailable: %v", err)
+		}
+	}
+	mustSymlink("linked-target.txt", filepath.Join(root, "linked.txt"))
+	mustSymlink(secretPath, filepath.Join(root, "escape.txt"))
+	mustSymlink(outside, filepath.Join(root, "external-dir"))
+	mustSymlink(secretPath, filepath.Join(root, "sub", "index.html"))
+	mustSymlink(secretPath, filepath.Join(root, "index.html"))
+
+	app := New()
+	app.Static("/files", root)
+	app.Static("/spa", root, WithSPA())
+	t.Cleanup(func() {
+		if err := app.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown static app: %v", err)
+		}
+	})
+	app.Compile()
+
+	tc := NewTestClient(app)
+	tests := []struct {
+		name       string
+		path       string
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "regular in-root file", path: "/files/public.txt", wantStatus: 200, wantBody: publicBody},
+		{name: "in-root symlink", path: "/files/linked.txt", wantStatus: 200, wantBody: linkedBody},
+		{name: "outside-root file symlink", path: "/files/escape.txt", wantStatus: 404},
+		{name: "outside-root directory symlink", path: "/files/external-dir/secret.txt", wantStatus: 404},
+		{name: "outside-root directory index symlink", path: "/files/sub", wantStatus: 404},
+		{name: "outside-root SPA index symlink", path: "/spa/missing", wantStatus: 404},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := tc.Get(tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode() != tt.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode(), tt.wantStatus)
+			}
+			if tt.wantBody != "" && resp.BodyString() != tt.wantBody {
+				t.Errorf("body = %q, want %q", resp.BodyString(), tt.wantBody)
+			}
+			if strings.Contains(resp.BodyString(), secretBody) {
+				t.Errorf("response exposed outside-root content: %q", resp.BodyString())
+			}
+		})
+	}
+}
+
+func TestStatic_InvalidRootPanics(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing")
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("Static did not panic for an invalid root")
+		}
+		if message := fmt.Sprint(recovered); !strings.Contains(message, root) {
+			t.Errorf("panic = %q, want configured root %q", message, root)
+		}
+	}()
+
+	New().Static("/files", root)
 }
 
 // --- Static: directory + index handling ---

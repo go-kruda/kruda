@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -17,42 +19,73 @@ import (
 )
 
 // listenWingApp starts app on a real loopback listener via Wing and returns its
-// address + a stop func. It grabs a free port, releases it, and lets Wing bind
-// it; that re-bind can transiently lose the port on a loaded CI box, so it
-// retries a fresh port when app.Listen returns early (bind fails before serving,
-// so a retry is safe), and only returns once a dial actually SUCCEEDS — never an
-// address the server isn't accepting on yet.
+// address + a stop func. Readiness requires an application-level HTTP response;
+// a bare TCP connect can succeed before Wing has installed its request loop.
 func listenWingApp(t *testing.T, app *kruda.App) (addr string, stop func()) {
 	t.Helper()
+	rt := &http.Transport{DisableKeepAlives: true}
+	client := &http.Client{Timeout: 250 * time.Millisecond, Transport: rt}
+	defer rt.CloseIdleConnections()
+	var lastErr error
+
+attempts:
 	for attempt := 0; attempt < 12; attempt++ {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 		addr = ln.Addr().String()
-		_ = ln.Close()
 		errc := make(chan error, 1)
-		go func() { errc <- app.Listen(addr) }()
+		go func() { errc <- app.Serve(ln) }()
 
-		deadline := time.Now().Add(3 * time.Second)
-		for {
+		shutdown := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = app.Shutdown(ctx)
 			select {
 			case <-errc:
-				goto retry // bind failed before serving — retry a fresh port
+			case <-ctx.Done():
+				t.Errorf("listenWingApp: shutdown timed out: %v", ctx.Err())
+			}
+		}
+
+		readyURL := "http://" + addr + "/ws"
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			select {
+			case serveErr := <-errc:
+				lastErr = fmt.Errorf("server stopped before readiness: %v", serveErr)
+				_ = ln.Close()
+				continue attempts
 			default:
 			}
-			if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
-				c.Close()
-				return addr, func() { _ = app.Shutdown(context.Background()) }
+
+			resp, getErr := client.Get(readyURL)
+			if getErr == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusBadRequest {
+					select {
+					case serveErr := <-errc:
+						lastErr = fmt.Errorf("server stopped after readiness probe: %v", serveErr)
+						_ = ln.Close()
+						continue attempts
+					default:
+						return addr, shutdown
+					}
+				}
+				lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			} else {
+				lastErr = getErr
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("listenWingApp: bound but never accepting on %s", addr)
-			}
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
-	retry:
+
+		shutdown()
+		t.Fatalf("listenWingApp: server did not become ready at %s: %v", readyURL, lastErr)
 	}
-	t.Fatal("listenWingApp: bind kept failing after retries")
+
+	t.Fatalf("listenWingApp: bind kept failing after retries: %v", lastErr)
 	return "", func() {}
 }
 

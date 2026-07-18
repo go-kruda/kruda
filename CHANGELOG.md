@@ -5,6 +5,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-07-19
+
+### Security
+
+- `App.Static` now resolves files through a rooted filesystem, preventing
+  symlinked files, directories, directory indexes, and SPA fallback indexes from
+  serving content outside the configured root. Regular files and relative
+  in-root symlinks continue to work.
+
+### Changed
+
+- `App.Static` now opens its configured root when called, keeps it open until
+  `App.Shutdown`, and panics with the root path when the directory cannot be
+  opened.
+- Docs: updated `contrib/ws` examples and package documentation to register
+  WebSocket routes with `ws.HandleFunc`, which applies `kruda.Hijack` for Wing;
+  Wing and net/http are supported, while fasthttp remains unsupported.
+- Docs: corrected typed-handler validation, build-time JSON engine selection,
+  independent nested-module versioning, and unscoped performance claims.
+
 ## [1.6.1] — 2026-07-18
 
 ### Added

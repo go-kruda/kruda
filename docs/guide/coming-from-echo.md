@@ -128,7 +128,7 @@ No separate bind + validate steps. No global validator registration. Validation 
 Echo uses net/http exclusively. Kruda offers both:
 
 ```go
-// Wing (default on Linux) — epoll+eventfd, 846K req/s
+// Wing (default on Linux) — epoll+eventfd
 app := kruda.New()
 
 // fasthttp — broad compatibility
@@ -199,7 +199,7 @@ app.Group("/api/v1").
 
 ## What You Gain
 
-- **846K req/s** — Wing transport (epoll+eventfd) by default on Linux
+- **Benchmark evidence** — versioned results and reproduction commands are documented in the [performance guide](/guide/performance)
 - **Type-safe handlers** — no more bind + validate dance
 - **Concrete context** — no interface overhead, better inlining
 - **Pluggable transport** — Wing, fasthttp, or net/http, auto-selected

@@ -5,29 +5,28 @@
 //
 // # Usage
 //
-//	import "github.com/go-kruda/kruda/contrib/ws"
+//	import (
+//	    "github.com/go-kruda/kruda"
+//	    "github.com/go-kruda/kruda/contrib/ws"
+//	)
 //
 //	app := kruda.New()
-//	upgrader := ws.New()
-//	app.Get("/echo", func(c *kruda.Ctx) error {
-//	    return upgrader.Upgrade(c, func(conn *ws.Conn) {
-//	        defer conn.Close()
-//	        for {
-//	            mt, msg, err := conn.ReadMessage()
-//	            if err != nil { return }
-//	            _ = conn.WriteMessage(mt, msg)
-//	        }
-//	    })
+//	ws.HandleFunc(app, "/echo", func(conn *ws.Conn) {
+//	    defer conn.Close()
+//	    for {
+//	        mt, msg, err := conn.ReadMessage()
+//	        if err != nil { return }
+//	        _ = conn.WriteMessage(mt, msg)
+//	    }
 //	})
 //
 // # Transport compatibility
 //
 //   - net/http: supported (via http.Hijacker)
+//   - Wing:     supported via [HandleFunc], which applies the kruda.Hijack
+//     route preset before upgrading the connection.
 //   - fasthttp: not supported in v1 — the upgrade returns an error directing
 //     callers to net/http (avoids pulling fasthttp into the hijack path).
-//   - Wing:     not supported in v1 — Wing manages the fd directly via
-//     epoll/kqueue and does not expose a hijack API. Routes that
-//     need WebSocket should run under net/http.
 //
 // # What it does
 //

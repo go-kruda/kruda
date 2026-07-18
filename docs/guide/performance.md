@@ -59,10 +59,10 @@ Route registration order doesn't affect lookup performance.
 
 | Engine | CGO Required | Performance |
 |--------|-------------|-------------|
-| Sonic | Yes | ~2-3x faster than encoding/json (SIMD) |
-| encoding/json | No | Standard Go performance |
+| Sonic | Yes in Kruda's default build | SIMD-accelerated; benchmark with your payloads |
+| encoding/json | No | Portable standard-library baseline |
 
-Sonic is used automatically via build tags. Falls back to `encoding/json` transparently.
+The engine is selected at build time: CGO-enabled builds use Sonic by default, while `CGO_ENABLED=0` or the `kruda_stdjson` tag selects `encoding/json`.
 
 ## Zero-Allocation Hot Path
 

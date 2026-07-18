@@ -10,13 +10,13 @@ Fast by default, type-safe by design.
 
 ## Why Kruda?
 
-- Typed handlers `C[T]` — body + param + query parsed into one struct, validated at compile time
+- Typed handlers `C[T]` — compiler-checked handler types with request input bound and validated before execution
 - Auto CRUD — implement `ResourceService[T]`, get 5 REST endpoints
 - Built-in DI — optional, no codegen, type-safe generics
 - Pluggable transport — Wing in core (Linux, epoll+eventfd), fasthttp, or net/http
-- Single-tag releases — one `vX.Y.Z` covers core and contrib (no more sub-module coordination)
+- Independent module versions — core uses `vX.Y.Z`; changed nested modules use prefixed tags
 - Minimal deps — Sonic JSON (opt-out via `kruda_stdjson`), pluggable transport
-- AI-friendly — typed API + 23 examples = AI generates correct code on first try
+- AI-friendly — built-in MCP documentation plus 23 runnable examples
 
 ## Quick Start
 

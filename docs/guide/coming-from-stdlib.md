@@ -199,7 +199,7 @@ app.Group("/api/v1").
 stdlib is locked to `net/http`. Kruda auto-selects the fastest transport for your platform:
 
 ```go
-// Wing (default on Linux) — epoll+eventfd, 846K req/s
+// Wing (default on Linux) — epoll+eventfd
 app := kruda.New()
 
 // net/http — same engine as stdlib, with Kruda's ergonomics
@@ -213,7 +213,7 @@ You can use `kruda.NetHTTP()` to keep the exact same transport as stdlib while g
 
 ## What You Gain
 
-- **846K req/s** — Wing transport (epoll+eventfd) by default on Linux
+- **Benchmark evidence** — versioned results and reproduction commands are documented in the [performance guide](/guide/performance)
 - **Error-returning handlers** — no more silent failures or forgotten `return`
 - **Type-safe handlers** — `C[T]` with auto-bind, auto-validate, auto-OpenAPI
 - **Built-in middleware** — Logger, CORS, Recovery, RequestID, RateLimit

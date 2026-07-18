@@ -7,10 +7,10 @@ Kruda ships with three transports. The default is **Wing** on Linux, **fasthttp*
 | Feature needed | Transport | Why |
 |---------------|-----------|-----|
 | Maximum throughput (plaintext, JSON, DB) | **Wing** (default on Linux) | epoll+eventfd, zero-copy, no goroutine-per-conn |
-| SSE (Server-Sent Events) | **net/http** | SSE requires `http.Flusher` streaming |
+| SSE (Server-Sent Events) | **Wing** or **net/http** | Wing requires the `kruda.Stream` route preset |
 | Session cookies / Set-Cookie headers | **Wing** or **net/http** | Wing keeps headers by falling back from its zero-copy fast path when needed |
 | HTTP/2, TLS termination | **net/http** | Wing is HTTP/1.1 only |
-| WebSocket | **net/http** | WebSocket upgrade needs full HTTP semantics |
+| WebSocket | **Wing** or **net/http** | Use `ws.HandleFunc`; fasthttp does not support the upgrade |
 | Battle-tested HTTP/1.1 (chunked, expect-100) | **fasthttp** | Mature, widely deployed |
 
 ## Usage
@@ -19,7 +19,7 @@ Kruda ships with three transports. The default is **Wing** on Linux, **fasthttp*
 // Default: Wing on Linux, fasthttp on macOS, net/http on Windows
 app := kruda.New()
 
-// Explicit net/http (for SSE, sessions, HTTP/2, TLS)
+// Explicit net/http (for direct TLS, HTTP/2, or stdlib compatibility)
 app := kruda.New(kruda.NetHTTP())
 
 // Explicit fasthttp
@@ -76,4 +76,4 @@ Wing is optimized for raw throughput. It intentionally skips some HTTP features:
 - **No chunked transfer encoding** — Wing pre-computes Content-Length.
 - **`App.Serve(listener)` re-binds on Wing** — Wing serves one `SO_REUSEPORT` socket per worker, so it adopts the listener's *address* and closes the passed file descriptor rather than serving it. For systemd socket activation or graceful-restart fd-passing, use `kruda.NetHTTP()` (or fasthttp on macOS), which serve the supplied fd directly.
 
-For apps that mix high-throughput API routes with session/SSE routes, run two instances or use net/http for the full app.
+Wing apps can mix normal handlers with streaming and WebSocket routes by applying `kruda.Stream` or registering WebSockets with `ws.HandleFunc`. Choose net/http when you need direct TLS, HTTP/2, chunked request bodies, or exact stdlib transport semantics.

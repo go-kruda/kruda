@@ -11,19 +11,22 @@ go get github.com/go-kruda/kruda/contrib/ws
 ## Usage
 
 ```go
-import "github.com/go-kruda/kruda/contrib/ws"
+import (
+    "github.com/go-kruda/kruda"
+    "github.com/go-kruda/kruda/contrib/ws"
+)
 
-upgrader := ws.New(ws.Config{})
+app := kruda.New()
 
-app.Get("/ws", func(c *kruda.Ctx) error {
-    return upgrader.Upgrade(c, func(conn *ws.Conn) {
-        msg, err := conn.ReadMessage()
-        if err == nil {
-            _ = conn.WriteMessage(ws.TextMessage, msg)
-        }
-    })
-})
+ws.HandleFunc(app, "/ws", func(conn *ws.Conn) {
+    msg, err := conn.ReadMessage()
+    if err == nil {
+        _ = conn.WriteMessage(ws.TextMessage, msg)
+    }
+}, ws.Config{})
 ```
+
+`ws.HandleFunc` works with Wing and net/http. It applies the `kruda.Hijack` route preset required by Wing; fasthttp does not support WebSocket upgrades.
 
 ## Config
 

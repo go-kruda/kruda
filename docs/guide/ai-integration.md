@@ -75,7 +75,7 @@ No data leaves your machine. No remote server required.
 
 Kruda's typed API makes AI code generation more reliable:
 
-- **Typed handlers** — AI generates a struct, gets compile-time validation for free
-- **Auto CRUD** — AI says "create CRUD for Product" → one line of code
+- **Typed handlers** — the compiler checks generated handler types, while Kruda validates struct tags at request time
+- **Auto CRUD** — a resource service registers the standard CRUD routes in one call
 - **Struct tags** — validation rules are explicit, not hidden in handler logic
 - **23 examples** — AI reads patterns and generates consistent code

@@ -18,6 +18,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - CI and pre-release validation now exercise both the default Sonic JSON engine
   and the `kruda_stdjson` fallback, preventing engine-specific regressions.
+- Benchmark runs now cover changelog-only release preparation commits, ensuring
+  the exact tagged `main` commit satisfies the green-release preflight.
 - Removed the stale `transport/wing v1.1.3` require from `go.mod` (the shim
   directory was removed in v1.3.0; nothing imports it).
 - Docs: corrected the stale "Wing doesn't support SSE" transport limitation —

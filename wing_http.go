@@ -94,7 +94,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	if !isValidHTTPVersion(version) {
 		return nil, 0, false
 	}
-	requireHost := requiresHostHeader(version)
+	http11OrLater := requiresHostHeader(version)
+	http10 := version[5] == '1' && version[7] == '0'
 
 	// Method must be a valid RFC 7230 token (net/http's isToken rule); a
 	// method containing a delimiter/CTL byte (e.g. a quote) is rejected so
@@ -139,7 +140,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	hostUnsafe := false
 	acceptUnsafe := false
 	connectionUnsafe := false
-	keepAlive := true // HTTP/1.1 default
+	connectionSeen := false
+	connectionClose := false
+	connectionKeepAlive := false
 	headerCount := 0
 	contentLengthSeen := false
 	hasTE := false
@@ -248,15 +251,16 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			contentType = string(val)
 			continue
 		case headerConnection:
-			if asciiEqualFold(val, bClose) {
-				keepAlive = false
-			}
+			hasClose, hasKeepAlive := scanConnectionTokens(val)
+			connectionClose = connectionClose || hasClose
+			connectionKeepAlive = connectionKeepAlive || hasKeepAlive
 			// Retain the FIRST Connection value so Header("Connection") works
 			// (e.g. a WebSocket "Connection: Upgrade" check). First-wins matches
 			// net/http's http.Header.Get, so c.Header("Connection") is identical
-			// across transports; keep-alive detection above still scans every
+			// across transports; persistence detection above still scans every
 			// line. Zero-copy like host/accept.
-			if connection == "" {
+			if !connectionSeen {
+				connectionSeen = true
 				connection = copyOrUnsafeString(val, unsafePath)
 				connectionUnsafe = unsafePath && len(val) > 0
 			}
@@ -326,12 +330,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		case headerContentType:
 			contentType = string(val)
 		case headerConnection:
-			if asciiEqualFold(val, bClose) {
-				keepAlive = false
-			}
+			hasClose, hasKeepAlive := scanConnectionTokens(val)
+			connectionClose = connectionClose || hasClose
+			connectionKeepAlive = connectionKeepAlive || hasKeepAlive
 			// Retain the FIRST Connection value (first-wins, matching net/http) —
 			// see the fast-path case above for the rationale.
-			if connection == "" {
+			if !connectionSeen {
+				connectionSeen = true
 				connection = copyOrUnsafeString(val, unsafePath)
 				connectionUnsafe = unsafePath && len(val) > 0
 			}
@@ -386,9 +391,14 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			}
 		}
 	}
-	if requireHost && !hostSeen {
+	if http11OrLater && !hostSeen {
 		return nil, 0, false
 	}
+
+	// HTTP/1.0 closes by default and requires an explicit keep-alive token.
+	// HTTP/1.1 and later persist by default. A close token always wins,
+	// including when it appears on another Connection field line.
+	keepAlive := !connectionClose && (http11OrLater || http10 && connectionKeepAlive)
 
 	// Reject requests with both Transfer-Encoding and Content-Length (RFC 7230 §3.3.3).
 	if hasTE && hasCL {
@@ -511,6 +521,7 @@ var (
 	bContentType      = []byte("content-type")
 	bConnection       = []byte("connection")
 	bClose            = []byte("close")
+	bKeepAlive        = []byte("keep-alive")
 	bTransferEncoding = []byte("transfer-encoding")
 	bExpect           = []byte("expect")
 	bCookie           = []byte("cookie")
@@ -776,6 +787,29 @@ func asciiEqualFold(a []byte, b []byte) bool {
 		}
 	}
 	return true
+}
+
+// scanConnectionTokens reports persistence directives in a comma-separated
+// Connection field value. It compares byte slices in place so the request
+// parser's fast path remains allocation-free.
+func scanConnectionTokens(value []byte) (hasClose, hasKeepAlive bool) {
+	for {
+		comma := bytes.IndexByte(value, ',')
+		token := value
+		if comma >= 0 {
+			token = value[:comma]
+		}
+		token = trimHTTPSpaces(token)
+		if len(token) == len(bClose) {
+			hasClose = hasClose || asciiEqualFold(token, bClose)
+		} else if len(token) == len(bKeepAlive) {
+			hasKeepAlive = hasKeepAlive || asciiEqualFold(token, bKeepAlive)
+		}
+		if hasClose && hasKeepAlive || comma < 0 {
+			return hasClose, hasKeepAlive
+		}
+		value = value[comma+1:]
+	}
 }
 
 const maxContentLength = 10 << 20 // 10 MB — reject absurd values

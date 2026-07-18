@@ -68,25 +68,95 @@ func TestParseHTTPRequest_WithBody(t *testing.T) {
 	}
 }
 
-func TestParseHTTPRequest_ConnectionClose(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
-	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
-	if !ok {
-		t.Fatal("parse failed")
+func TestParseHTTPRequest_ConnectionPersistence(t *testing.T) {
+	tests := []struct {
+		name           string
+		raw            string
+		wantKeepAlive  bool
+		wantConnection string
+	}{
+		{
+			name:          "http11 defaults persistent",
+			raw:           "GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+			wantKeepAlive: true,
+		},
+		{
+			name:           "http11 close case insensitive",
+			raw:            "GET / HTTP/1.1\r\nHost: h\r\nCONNECTION: CLOSE\r\n\r\n",
+			wantConnection: "CLOSE",
+		},
+		{
+			name:           "http11 comma close",
+			raw:            "GET / HTTP/1.1\r\nHost: h\r\nConnection: upgrade, close\r\n\r\n",
+			wantConnection: "upgrade, close",
+		},
+		{
+			name:           "http11 repeated close wins",
+			raw:            "GET / HTTP/1.1\r\nHost: h\r\nConnection: keep-alive\r\nConnection: close\r\n\r\n",
+			wantConnection: "keep-alive",
+		},
+		{
+			name: "http10 defaults close",
+			raw:  "GET / HTTP/1.0\r\n\r\n",
+		},
+		{
+			name:           "http00 ignores keep-alive extension",
+			raw:            "GET / HTTP/0.0\r\nConnection: keep-alive\r\n\r\n",
+			wantConnection: "keep-alive",
+		},
+		{
+			name:           "http10 keep-alive token",
+			raw:            "GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n",
+			wantKeepAlive:  true,
+			wantConnection: "keep-alive",
+		},
+		{
+			name:           "http10 comma keep-alive case insensitive",
+			raw:            "GET / HTTP/1.0\r\nConnection: upgrade, Keep-Alive\r\n\r\n",
+			wantKeepAlive:  true,
+			wantConnection: "upgrade, Keep-Alive",
+		},
+		{
+			name:           "http10 close wins in one field",
+			raw:            "GET / HTTP/1.0\r\nConnection: keep-alive, close\r\n\r\n",
+			wantConnection: "keep-alive, close",
+		},
+		{
+			name:           "http10 close wins across repeated fields",
+			raw:            "GET / HTTP/1.0\r\nConnection: keep-alive\r\nConnection: close\r\n\r\n",
+			wantConnection: "keep-alive",
+		},
+		{
+			name:          "first empty value retained while later token applies",
+			raw:           "GET / HTTP/1.0\r\nConnection:\r\nConnection: keep-alive\r\n\r\n",
+			wantKeepAlive: true,
+		},
 	}
-	if req.keepAlive {
-		t.Error("keepAlive should be false when Connection: close")
-	}
-}
 
-func TestParseHTTPRequest_ConnectionCloseCaseInsensitive(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nHost: h\r\nCONNECTION: CLOSE\r\n\r\n"
-	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
-	if !ok {
-		t.Fatal("parse failed")
+	parsers := []struct {
+		name  string
+		parse func([]byte, parserLimits) (*wingRequest, int, bool)
+	}{
+		{name: "safe", parse: parseHTTPRequest},
+		{name: "fast", parse: parseHTTPRequestFast},
 	}
-	if req.keepAlive {
-		t.Error("keepAlive should be false when CONNECTION: CLOSE")
+
+	for _, parser := range parsers {
+		for _, tt := range tests {
+			t.Run(parser.name+"/"+tt.name, func(t *testing.T) {
+				req, _, ok := parser.parse([]byte(tt.raw), noLimits)
+				if !ok {
+					t.Fatal("parse failed")
+				}
+				defer releaseRequest(req)
+				if req.keepAlive != tt.wantKeepAlive {
+					t.Fatalf("keepAlive = %v, want %v", req.keepAlive, tt.wantKeepAlive)
+				}
+				if got := req.Header("Connection"); got != tt.wantConnection {
+					t.Fatalf("Header(Connection) = %q, want %q", got, tt.wantConnection)
+				}
+			})
+		}
 	}
 }
 
@@ -1500,11 +1570,10 @@ func TestPipelining_PUTandPATCHWithBody(t *testing.T) {
 	}
 }
 
-// TestPipelining_HTTP10KeepAliveDefault verifies that HTTP/1.0 requests
-// default to keepAlive=true in our parser (same as HTTP/1.1). The parser
-// is version-agnostic; connection management is the caller's responsibility.
-// This test documents the current behavior for pipelining correctness.
-func TestPipelining_HTTP10KeepAliveDefault(t *testing.T) {
+// TestPipelining_HTTP10DefaultClose verifies that an HTTP/1.0 request consumes
+// only its own bytes but tells the transport not to process a pipelined request
+// unless persistence was explicitly requested.
+func TestPipelining_HTTP10DefaultClose(t *testing.T) {
 	req1 := "GET /a HTTP/1.0\r\n\r\n"
 	req2 := "GET /b HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1 + req2)
@@ -1513,10 +1582,10 @@ func TestPipelining_HTTP10KeepAliveDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("HTTP/1.0 request should parse")
 	}
-	// Document current behavior: parser treats keepAlive as true regardless
-	// of HTTP version (HTTP/1.1 default). The transport layer is responsible
-	// for enforcing HTTP/1.0 connection semantics.
-	_ = r1.keepAlive // just ensure it doesn't panic
+	defer releaseRequest(r1)
+	if r1.keepAlive {
+		t.Fatal("HTTP/1.0 request without Connection: keep-alive must close")
+	}
 
 	// Second request (HTTP/1.1) must still be parseable.
 	buf = buf[c1:]
@@ -1524,6 +1593,7 @@ func TestPipelining_HTTP10KeepAliveDefault(t *testing.T) {
 	if !ok {
 		t.Fatal("HTTP/1.1 after HTTP/1.0 should parse")
 	}
+	defer releaseRequest(r2)
 	if r2.Path() != "/b" {
 		t.Errorf("Path = %q, want /b", r2.Path())
 	}

@@ -58,6 +58,10 @@ func FuzzParserDifferential(f *testing.F) {
 	f.Add([]byte("GET / HTTP/1.1\r\nHost: bad host\r\n\r\n"))
 	f.Add([]byte("GET / HTTP/1.1\r\nHost:\r\n\r\n"))
 	f.Add([]byte("GET / HTTP/1.0\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/0.0\r\nConnection: keep-alive\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.0\r\nConnection: keep-alive, close\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.1\r\nHost: a\r\nConnection: upgrade, close\r\n\r\n"))
 	f.Add([]byte("GET / HTTP/2.0\r\n\r\n"))
 	// leading CRLF before the request-line, on what a real server would
 	// treat as a fresh/non-POST-preceded connection — not a framing
@@ -133,6 +137,9 @@ func FuzzParserDifferential(f *testing.F) {
 		}
 		if wingReq.Method() != stdReq.Method {
 			t.Errorf("method disagrees: wing=%q std=%q for %q", wingReq.Method(), stdReq.Method, data)
+		}
+		if wantKeepAlive := !stdReq.Close; wingReq.keepAlive != wantKeepAlive {
+			t.Errorf("connection persistence disagrees: wing keepAlive=%v std keepAlive=%v for %q", wingReq.keepAlive, wantKeepAlive, data)
 		}
 		stdBody, _ := io.ReadAll(stdReq.Body)
 		wingBody, _ := wingReq.Body()

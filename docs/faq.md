@@ -4,13 +4,13 @@
 
 Kruda fills the gap between raw performance frameworks (Fiber, Fasthttp) and type-safe but verbose frameworks (standard net/http). It gives you:
 
-- Type-safe handlers with `C[T]` — body, params, and query in one struct, validated at compile time
+- Type-safe handlers with `C[T]` — compiler-checked handler types with body, params, and query bound and validated before execution
 - Auto-everything — validation, error mapping, OpenAPI generation, CRUD endpoints
 - Pluggable transport — Wing (epoll+eventfd) on Linux, fasthttp, or net/http
 - Built-in DI — no codegen, no reflection, just `Give` and `Use`
-- 60-70% less boilerplate than Gin or Fiber
+- Less repetitive binding, validation, and CRUD wiring than manual handler code
 
-Think of it as the Go equivalent of tRPC — maximum DX without sacrificing performance.
+Think of it as a tRPC-style typed workflow adapted to Go.
 
 ## How does the DI container work?
 
@@ -39,9 +39,9 @@ See the [DI Container guide](/guide/di-container) for details.
 | | Wing | fasthttp | net/http |
 |---|------|---------|----------|
 | Platform | Linux & macOS | All platforms | All platforms |
-| Performance | Highest (846K req/s) | High | Good |
+| Performance | Highest-throughput Kruda option for benchmarked plaintext HTTP/1.1 workloads | High | Standard library |
 | HTTP/2 | No | No | Yes (via TLS) |
-| Set-Cookie | Limited (fast path skips) | Yes | Yes |
+| Set-Cookie | Yes (normal handlers) | Yes | Yes |
 | SSE | Yes (via `kruda.Stream`) | No | Yes |
 | Direct TLS | Auto-falls back to net/http | Yes | Yes |
 | WebSocket | Yes (`ws.HandleFunc`) | No | Yes (`contrib/ws`) |
@@ -79,7 +79,7 @@ See the [Test Client API](/api/test-client) for the full builder API.
 
 ## Do I need CGO for Sonic JSON?
 
-Sonic uses SIMD instructions and requires CGO on some platforms. If CGO is not available, Kruda automatically falls back to `encoding/json`.
+Kruda selects Sonic when CGO is enabled and selects `encoding/json` when CGO is disabled. The engine is chosen at build time.
 
 To force stdlib JSON (no CGO required):
 
@@ -94,7 +94,7 @@ Go 1.25.11+ or Go 1.26.4+ is required for generic type aliases used by `C[T]` ty
 
 ## Is Kruda production-ready?
 
-Kruda has completed Phases 1-6 (Foundation through Security Hardening). The core framework, type system, performance optimization, ecosystem (DI, CRUD), security hardening, and Wing transport are all implemented and tested. Phase 7 (Launch) is the v1.0.0 release milestone.
+Kruda is released and actively maintained on the v1.x line. Releases pass cross-platform tests, benchmark gates, security scans, and downstream module verification. Review the [changelog](https://github.com/go-kruda/kruda/blob/main/CHANGELOG.md), [transport guide](/guide/transport), and [Wing protocol matrix](/guide/wing-protocol-support) for the exact guarantees that apply to your deployment.
 
 ## How do I contribute?
 

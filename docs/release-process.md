@@ -38,7 +38,7 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] Any `ns/op` movement is reviewed against `B/op`, `allocs/op`, same-runner `main`, and whether the changed code is on the default hot path
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `cmd/kruda/go.mod` or any `contrib/*/go.mod`
-- [ ] Every released submodule's `go.mod` requires the intended core version
+- [ ] Every released submodule's `go.mod` requires a compatible published core version; bump it only when the submodule needs newer core APIs or behavior
 - [ ] Every changed nested module has an independently incremented prefixed tag
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0001-break-api-in-v1-minor.md for the v1.3.0 exception)
@@ -50,37 +50,57 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 git fetch origin main --tags
 git switch main
 git pull --ff-only origin main
-git tag v1.6.1 -m "Release v1.6.1"
 
-# only when contrib/ws changed; nested modules keep independent versions
-git tag contrib/ws/v1.3.1 -m "contrib/ws v1.3.1"
+export CORE_VERSION=vX.Y.Z
+# export WS_VERSION=vA.B.C # only when contrib/ws changed
 
-git push origin v1.6.1 contrib/ws/v1.3.1
+git tag "$CORE_VERSION" -m "Release $CORE_VERSION"
+TAGS=("$CORE_VERSION")
+
+if [[ -n "${WS_VERSION:-}" ]]; then
+  WS_TAG="contrib/ws/$WS_VERSION"
+  git tag "$WS_TAG" -m "contrib/ws $WS_VERSION"
+  TAGS+=("$WS_TAG")
+fi
+
+git push origin "${TAGS[@]}"
 ```
 
 The release workflow and GitHub release are triggered by the core `v*` tag.
 Prefixed nested-module tags make those module versions available to the Go
-proxy without creating extra GitHub releases.
+proxy without creating extra GitHub releases. GitHub generates the release
+notes by comparing the new core release with the previous core release, so
+nested-module tags do not change that comparison range.
 
 ## Verification
 
 After pushing the tag, wait ~30s for the proxy, then verify the new version is fetchable in a fresh module:
 
 ```bash
-mkdir /tmp/kruda-verify && cd /tmp/kruda-verify
+VERIFY_DIR="$(mktemp -d)"
+cd "$VERIFY_DIR"
+export GOWORK=off
+
 go mod init verify
-go get github.com/go-kruda/kruda@v1.6.1
-go get github.com/go-kruda/kruda/contrib/ws@v1.3.1 # when released
-go build ./...
+go get "github.com/go-kruda/kruda@$CORE_VERSION"
+printf 'package main\n\nimport _ "github.com/go-kruda/kruda"\n\nfunc main() {}\n' > main.go
+go build .
+
+if [[ -n "${WS_VERSION:-}" ]]; then
+  go get "github.com/go-kruda/kruda/contrib/ws@$WS_VERSION"
+  go test github.com/go-kruda/kruda/contrib/ws
+fi
 ```
 
-If that succeeds, the GitHub release created by the release workflow is ready to publish.
+After GitHub Actions completes, confirm the Release workflow is green, the
+generated notes compare the expected core releases, and `LICENSE` plus
+`README.md` are attached to the published release.
 
 ## Hotfix flow
 
-For a v1.2.x patch:
+For a patch release:
 
-1. `git switch -c hotfix/v1.2.1 origin/main`
+1. `git switch -c hotfix/vX.Y.Z origin/main`
 2. Apply the fix + tests
 3. Update CHANGELOG.md
 4. Run `./scripts/pre-release.sh`

@@ -89,14 +89,14 @@ Option 2 — Use stdlib JSON (no CGO):
 go build -tags kruda_stdjson ./...
 ```
 
-### Sonic fallback to encoding/json
+### Selecting the encoding/json fallback
 
-If Sonic can't initialize (missing CPU features, CGO disabled), Kruda silently falls back to `encoding/json`. This is safe — the API is identical, only performance differs.
+Kruda selects the JSON engine at build time. Disabling CGO selects `encoding/json` automatically; the `kruda_stdjson` tag selects it explicitly. Kruda does not switch engines at runtime after the binary has been built.
 
-To force stdlib JSON explicitly:
+Either of these builds uses stdlib JSON:
 
 ```bash
-export CGO_ENABLED=0
+CGO_ENABLED=0 go build ./...
 go build -tags kruda_stdjson ./...
 ```
 

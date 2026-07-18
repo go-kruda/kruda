@@ -89,47 +89,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: stable
-          
+
       - name: Extract version
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$(echo $VERSION | grep -qE '(alpha|beta|rc)' && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          
-      - name: Generate changelog
-        id: changelog
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          
-          # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
-          # Generate changelog
-          if [ -n "$PREV_TAG" ]; then
-            echo "## Changes since $PREV_TAG" > CHANGELOG_CURRENT.md
-            git log --oneline --no-merges ${PREV_TAG}..HEAD >> CHANGELOG_CURRENT.md
-          else
-            echo "## Initial Release" > CHANGELOG_CURRENT.md
-            git log --oneline --no-merges >> CHANGELOG_CURRENT.md
-          fi
-          
-          # Add benchmark info if available
-          echo "" >> CHANGELOG_CURRENT.md
-          echo "## Performance" >> CHANGELOG_CURRENT.md
-          echo "Run benchmarks: \`go test -bench=. -benchmem -count=5 -tags kruda_stdjson ./bench/...\`" >> CHANGELOG_CURRENT.md
-          
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          body_path: CHANGELOG_CURRENT.md
           generate_release_notes: true
           prerelease: ${{ steps.version.outputs.is_prerelease == 'true' }}
           files: |

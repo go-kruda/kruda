@@ -19,19 +19,19 @@ hero:
 features:
   - icon: 🔒
     title: Typed Handlers C[T]
-    details: Body, params, and query parsed into one struct. Validated at compile time. No manual binding.
+    details: Compiler-checked handler types. Body, params, and query are bound and validated before execution.
   - icon: ⚡
     title: Auto CRUD
     details: Implement ResourceService[T] and get 5 REST endpoints. One line of code.
   - icon: 🚀
     title: Wing Transport
-    details: Custom epoll+eventfd on Linux, kqueue on macOS. 846K req/s plaintext — beats Fiber by 26%.
+    details: Custom epoll+eventfd on Linux and kqueue on macOS, backed by versioned reproducible benchmarks.
   - icon: 📦
     title: Built-in DI
     details: Optional dependency injection with Go generics. No codegen, no reflection.
   - icon: 🤖
     title: AI-Friendly
-    details: Built-in MCP server for AI coding assistants. Typed API means AI generates correct code on first try.
+    details: Built-in MCP documentation and runnable examples for coding assistants.
   - icon: 🛡
     title: Minimal Dependencies
     details: Sonic JSON (opt-out via build tag). 11 contrib modules. Pluggable transport.

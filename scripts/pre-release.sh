@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pre-release validation for Kruda v1.2.0+ single-tag flow.
+# Pre-release validation for Kruda core and independently versioned modules.
 # Run this from the repo root before tagging. Exits non-zero on any failure.
 set -euo pipefail
 

@@ -1,6 +1,7 @@
 package kruda
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,6 +71,11 @@ func TestStatic_OsDirFS(t *testing.T) {
 
 	app := New()
 	app.Static("/files", dir)
+	t.Cleanup(func() {
+		if err := app.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown static app: %v", err)
+		}
+	})
 	app.Compile()
 
 	tc := NewTestClient(app)
@@ -122,6 +128,11 @@ func TestStatic_SymlinkContainment(t *testing.T) {
 	app := New()
 	app.Static("/files", root)
 	app.Static("/spa", root, WithSPA())
+	t.Cleanup(func() {
+		if err := app.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown static app: %v", err)
+		}
+	})
 	app.Compile()
 
 	tc := NewTestClient(app)

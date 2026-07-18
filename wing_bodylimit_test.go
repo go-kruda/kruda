@@ -36,6 +36,46 @@ func sendRaw(t *testing.T, addr, raw string) (status string, closed bool) {
 	return strings.TrimSpace(line), false
 }
 
+// readRawUntilClose collects a terminal response. Budget rejection closes the
+// connection, so a timeout indicates that the rejection path did not finish.
+func readRawUntilClose(t *testing.T, conn net.Conn, reader *bufio.Reader) string {
+	t.Helper()
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var response bytes.Buffer
+	buf := make([]byte, 4096)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			response.Write(buf[:n])
+		}
+		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				t.Fatalf("timed out waiting for terminal response close: %q", response.String())
+			}
+			return response.String()
+		}
+	}
+}
+
+func requireBudgetRejectWithoutContinue(t *testing.T, conn net.Conn, reader *bufio.Reader, path string, bodyLen int) {
+	t.Helper()
+	headers := fmt.Sprintf("POST %s HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\nContent-Length: %d\r\n\r\n", path, bodyLen)
+	if _, err := conn.Write([]byte(headers)); err != nil {
+		t.Fatalf("write Expect headers: %v", err)
+	}
+
+	response := readRawUntilClose(t, conn, reader)
+	if !strings.HasPrefix(response, "HTTP/1.1 503 Service Unavailable\r\n") {
+		t.Fatalf("first response must be 503 Service Unavailable, got %q", response)
+	}
+	if strings.Contains(response, "HTTP/1.1 100 Continue") {
+		t.Fatalf("budget rejection must never emit 100 Continue, got %q", response)
+	}
+	if got := strings.Count(response, "HTTP/1.1 "); got != 1 {
+		t.Fatalf("budget rejection emitted %d HTTP status lines, want exactly 1: %q", got, response)
+	}
+}
+
 func TestWingConfig_DerivesReadBufFromHeaderLimit(t *testing.T) {
 	c := WingConfig{HeaderLimit: 16384}
 	c.defaults()
@@ -107,6 +147,50 @@ func TestWing_Expect100_OversizedGets413BeforeBody(t *testing.T) {
 	if !strings.Contains(st, "413") {
 		t.Fatalf("expect+oversized: want 413, got %q", st)
 	}
+}
+
+func TestWing_EventLoop_Expect100_BudgetRejectedBeforeContinue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const bodyLen = 16 * 1024
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          8192,
+		BodyLimit:            64 * 1024,
+		MaxInflightBodyBytes: bodyLen - 1,
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, echoLenHandler())
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	requireBudgetRejectWithoutContinue(t, conn, bufio.NewReader(conn), "/event-loop-budget", bodyLen)
+}
+
+func TestWing_Takeover_Expect100_BudgetRejectedBeforeContinue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const bodyLen = 16 * 1024
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          8192,
+		BodyLimit:            64 * 1024,
+		MaxInflightBodyBytes: bodyLen - 1,
+		DefaultPreset:        DB,
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, echoLenHandler())
+	defer stop()
+
+	conn, reader := takeoverEstablish(t, addr)
+	defer conn.Close()
+
+	requireBudgetRejectWithoutContinue(t, conn, reader, "/takeover-budget", bodyLen)
 }
 
 // startBodyLimitWingServer starts a Wing server with the given body limit.

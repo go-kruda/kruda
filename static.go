@@ -1,10 +1,12 @@
 package kruda
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"mime"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,7 +14,7 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-// Static serves files from a directory.
+// Static serves files from a directory. It panics if root cannot be opened.
 //
 //	app.Static("/assets", "./public")
 //	app.Static("/", "./dist")  // SPA fallback
@@ -21,7 +23,13 @@ func (app *App) Static(prefix, root string, opts ...StaticOption) *App {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return app.staticHandler(prefix, os.DirFS(root), cfg)
+
+	rootDir, err := os.OpenRoot(root)
+	if err != nil {
+		panic(fmt.Errorf("kruda: open static root %q: %w", root, err))
+	}
+	app.OnShutdown(func() { _ = rootDir.Close() })
+	return app.staticHandler(prefix, rootDir.FS(), cfg)
 }
 
 // StaticFS serves files from an fs.FS (embed support).
@@ -109,7 +117,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		}
 		if stat.IsDir() {
 			_ = f.Close()
-			f, err = fsys.Open(filepath.Join(path, cfg.index))
+			f, err = fsys.Open(pathpkg.Join(path, cfg.index))
 			if err != nil {
 				if cfg.browse {
 					return c.Status(200).Text("Directory listing not implemented")

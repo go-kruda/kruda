@@ -73,6 +73,4 @@ require (
 
 replace github.com/go-kruda/kruda => ../../../
 
-replace github.com/go-kruda/kruda/transport/wing => ../../../transport/wing
-
 replace github.com/go-kruda/kruda/contrib/observability => ../../../contrib/observability

@@ -806,14 +806,7 @@ func (w *worker) tryParse(c *conn) {
 					w.writeAndClose(c, wingStatusClose(413))
 					return
 				case parseNeedBody:
-					if expectContinue {
-						c.sendBuf = append(c.sendBuf, wing100Continue...)
-						// Flush it immediately so the client sends the body.
-						if c.sendN < len(c.sendBuf) {
-							w.directSend(c) // non-blocking; rest of buf stays queued if partial
-						}
-					}
-					if !w.beginBodyAccum(c, need) {
+					if !w.beginBodyAccum(c, need, expectContinue) {
 						w.writeAndClose(c, wingStatusClose(503))
 						return
 					}
@@ -836,14 +829,7 @@ func (w *worker) tryParse(c *conn) {
 					w.writeAndClose(c, wingStatusClose(413))
 					return
 				case parseNeedBody:
-					if expectContinue {
-						c.sendBuf = append(c.sendBuf, wing100Continue...)
-						// Flush it immediately so the client sends the body.
-						if c.sendN < len(c.sendBuf) {
-							w.directSend(c) // non-blocking; rest of buf stays queued if partial
-						}
-					}
-					if !w.beginBodyAccum(c, need) {
+					if !w.beginBodyAccum(c, need, expectContinue) {
 						w.writeAndClose(c, wingStatusClose(503))
 						return
 					}
@@ -1090,9 +1076,9 @@ func accumBody(bodyBuf, src []byte, need int) (out, surplus []byte) {
 	return out, src[take:]
 }
 
-// beginBodyAccum starts body accumulation for a connection.
+// beginBodyAccum reserves and starts body accumulation for a connection.
 // Returns false if the per-worker in-flight budget would be exceeded.
-func (w *worker) beginBodyAccum(c *conn, need int) bool {
+func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
 	if w.maxInflightBody > 0 {
 		newTotal := atomic.AddInt64(&w.inflightBody, int64(need))
 		if newTotal > int64(w.maxInflightBody) {
@@ -1127,6 +1113,17 @@ func (w *worker) beginBodyAccum(c *conn, need int) bool {
 		c.readN = copy(c.readBuf, surplus)
 	} else {
 		c.readN = 0
+	}
+	if expectContinue && len(c.bodyBuf) < c.bodyNeed {
+		c.sendBuf = append(c.sendBuf, wing100Continue...)
+		// Flush only after this request owns its body budget, but before draining
+		// can complete it and recursively parse a later pipelined request.
+		if c.sendN < len(c.sendBuf) {
+			w.directSend(c) // non-blocking; rest of buf stays queued if partial
+			if c.bodyNeed == 0 {
+				return true // directSend closed the connection on a hard write error
+			}
+		}
 	}
 	w.drainBodyAccum(c)
 	return true
@@ -1326,6 +1323,10 @@ func (w *worker) directSend(c *conn) {
 		syscall.Close(int(c.sendFileFd))
 		c.sendFileFd = 0
 	}
+	if c.bodyNeed > 0 {
+		// Body accumulation owns receive arming; do not apply final-response handling.
+		return
+	}
 	if !c.keepAlive {
 		w.closeConn(c.fd)
 		return
@@ -1486,9 +1487,6 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					keepAlive = false
 					goto done
 				case parseNeedBody:
-					if expectContinue {
-						f.Write(wing100Continue)
-					}
 					// Locate end of header block.
 					headerEnd := bytes.Index(buf[:readN], crlfcrlf)
 					if headerEnd < 0 {
@@ -1505,6 +1503,15 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 						if atomic.AddInt64(&w.inflightBody, int64(need)) > int64(w.maxInflightBody) {
 							atomic.AddInt64(&w.inflightBody, -int64(need))
 							f.Write(wingStatusClose(503))
+							keepAlive = false
+							goto done
+						}
+					}
+					if expectContinue {
+						if _, werr := f.Write(wing100Continue); werr != nil {
+							if w.maxInflightBody > 0 {
+								atomic.AddInt64(&w.inflightBody, -int64(need))
+							}
 							keepAlive = false
 							goto done
 						}

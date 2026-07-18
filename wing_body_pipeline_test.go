@@ -24,6 +24,151 @@ func echoLenHandler() transport.Handler {
 	})
 }
 
+// exerciseExpectContinue sends request headers and body in separate writes. The
+// second parsed response must be the final response, which also guards against
+// Wing emitting the interim response more than once.
+func exerciseExpectContinue(t *testing.T, conn net.Conn, reader *bufio.Reader, path, body string) {
+	t.Helper()
+
+	headers := fmt.Sprintf("POST %s HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\nContent-Length: %d\r\n\r\n", path, len(body))
+	if _, err := conn.Write([]byte(headers)); err != nil {
+		t.Fatalf("write Expect headers: %v", err)
+	}
+
+	status, interimBody, err := readHTTPResponse(reader)
+	if err != nil {
+		t.Fatalf("read interim response: %v", err)
+	}
+	if status != "HTTP/1.1 100 Continue" || interimBody != "" {
+		t.Fatalf("interim response = (%q, %q), want exactly one 100 Continue with no body", status, interimBody)
+	}
+
+	if _, err := conn.Write([]byte(body)); err != nil {
+		t.Fatalf("write body after 100 Continue: %v", err)
+	}
+
+	status, responseBody, err := readHTTPResponse(reader)
+	if err != nil {
+		t.Fatalf("read final response: %v", err)
+	}
+	wantBody := fmt.Sprintf("POST %s len=%d", path, len(body))
+	if status != "HTTP/1.1 200 OK" || responseBody != wantBody {
+		t.Fatalf("final response = (%q, %q), want (HTTP/1.1 200 OK, %q)", status, responseBody, wantBody)
+	}
+}
+
+func TestWing_EventLoop_Expect100Continue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	body := strings.Repeat("e", 16*1024)
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          8192,
+		BodyLimit:            64 * 1024,
+		MaxInflightBodyBytes: len(body),
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, echoLenHandler())
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	exerciseExpectContinue(t, conn, bufio.NewReader(conn), "/event-loop", body)
+}
+
+func TestWing_Takeover_Expect100Continue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	body := strings.Repeat("t", 16*1024)
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          8192,
+		BodyLimit:            64 * 1024,
+		MaxInflightBodyBytes: len(body),
+		DefaultPreset:        DB,
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, echoLenHandler())
+	defer stop()
+
+	conn, reader := takeoverEstablish(t, addr)
+	defer conn.Close()
+
+	exerciseExpectContinue(t, conn, reader, "/takeover", body)
+}
+
+// TestWing_EventLoop_Expect100_EagerBodyDoesNotLeakContinue verifies that an
+// Expect request completed synchronously inside beginBodyAccum does not reuse
+// its stale Expect decision after reentrant parsing starts the next request's
+// non-Expect body accumulation. The 512-byte read buffer forces request 1 into
+// parseNeedBody; the same client write queues its remaining body plus request 2
+// headers and a partial body for the synchronous drain/reentrant parse.
+func TestWing_EventLoop_Expect100_EagerBodyDoesNotLeakContinue(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Wing integration test in short mode")
+	}
+	const (
+		bodyLen       = 1024
+		secondBodyNow = 64
+	)
+	cfg := WingConfig{
+		Workers:              1,
+		ReadBufSize:          512,
+		BodyLimit:            4 * 1024,
+		MaxInflightBodyBytes: 4 * 1024,
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, echoLenHandler())
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	firstBody := strings.Repeat("a", bodyLen)
+	secondBody := strings.Repeat("b", bodyLen)
+	queued := fmt.Sprintf("POST /first HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\nContent-Length: %d\r\n\r\n", len(firstBody)) + firstBody +
+		fmt.Sprintf("POST /second HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: %d\r\n\r\n", len(secondBody)) + secondBody[:secondBodyNow]
+	if _, err := conn.Write([]byte(queued)); err != nil {
+		t.Fatalf("write eager Expect body and pipelined partial body: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	status, responseBody, err := readHTTPResponse(reader)
+	if err != nil {
+		t.Fatalf("read first interim response: %v", err)
+	}
+	if status != "HTTP/1.1 100 Continue" || responseBody != "" {
+		t.Fatalf("first interim response = (%q, %q), want exactly one 100 Continue", status, responseBody)
+	}
+
+	status, responseBody, err = readHTTPResponse(reader)
+	if err != nil {
+		t.Fatalf("read first final response: %v", err)
+	}
+	if status != "HTTP/1.1 200 OK" || responseBody != "POST /first len=1024" {
+		t.Fatalf("first final response = (%q, %q), want 200 for /first after its single 100", status, responseBody)
+	}
+
+	if _, err := conn.Write([]byte(secondBody[secondBodyNow:])); err != nil {
+		t.Fatalf("finish pipelined non-Expect body: %v", err)
+	}
+	status, responseBody, err = readHTTPResponse(reader)
+	if err != nil {
+		t.Fatalf("read second final response: %v", err)
+	}
+	if status != "HTTP/1.1 200 OK" || responseBody != "POST /second len=1024" {
+		t.Fatalf("second response = (%q, %q), want final 200 for /second with no leaked 100", status, responseBody)
+	}
+}
+
 // TestWing_EventLoop_PipelinedAfterAccumulatedBody verifies that a request
 // pipelined immediately after a body that required multi-read accumulation is
 // not dropped. The body (16KB) exceeds the 8KB read buffer, forcing the

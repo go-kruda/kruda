@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Run govulncheck against the root module and every nested contrib go.mod.
+# Run govulncheck against every released module: root, cmd/kruda, and contrib.
 # The root `govulncheck ./...` does not descend into nested modules, so each
-# standalone module (e.g. contrib/observability, which pins the OTel SDK) must
-# be scanned in its own module context to catch a regression to a vulnerable dep.
+# standalone module must be scanned in its own module context to catch a
+# regression to a vulnerable dependency.
 set -euo pipefail
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 
 go install golang.org/x/vuln/cmd/govulncheck@latest
 GOVULN=$(go env GOPATH)/bin/govulncheck
+export GOWORK=off
 
 echo "== govulncheck (root) =="
 "$GOVULN" ./...
 
-# Nested contrib modules are excluded from the root go.work, so each scan runs
-# with GOWORK=off to resolve against the module's own go.mod (and its
-# `replace github.com/go-kruda/kruda => ../..`).
+# Every released module resolves against its own go.mod rather than a local
+# go.work, including the root scan above.
 while IFS= read -r modfile; do
   dir=$(dirname "$modfile")
   echo "== govulncheck ($dir) =="
-  ( cd "$dir" && GOWORK=off "$GOVULN" ./... )
-done < <(find contrib -mindepth 2 -maxdepth 2 -name go.mod -print | sort)
+  ( cd "$dir" && "$GOVULN" ./... )
+done < <(git ls-files 'cmd/kruda/go.mod' 'contrib/*/go.mod')

@@ -33,7 +33,7 @@ jobs:
           TAG_SHA="$(git rev-parse "${TAG_NAME}^{commit}")"
           echo "Tag ${TAG_NAME} points to ${TAG_SHA}"
 
-          git fetch origin main --depth=1
+          git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
             echo "::error::Release tags must point to a commit that is already on origin/main."
             exit 1

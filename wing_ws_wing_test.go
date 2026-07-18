@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -14,45 +15,73 @@ import (
 
 // startWingHijackServer compiles app and serves it over a real Wing transport
 // on a loopback port, returning the dial address and a stop func. app MUST be
-// built with New(Wing()) so app.transport is the Wing transport. Mirrors the
-// bring-up idiom in startWingApp (wing_stream_integration_test.go); reused by
-// later WebSocket-on-Wing tasks.
+// built with New(Wing()) so app.transport is the Wing transport. Readiness
+// requires an application-level HTTP response, not only a TCP handshake.
 func startWingHijackServer(t *testing.T, app *App) (string, func()) {
 	t.Helper()
-	// Grab a free port, release it, and let Wing bind it. That re-bind can
-	// transiently lose the port on a loaded CI box, so retry a fresh port when
-	// ListenAndServe returns early (bind fails BEFORE it starts serving, so a
-	// retry is safe). Crucially, only return once a dial actually SUCCEEDS —
-	// never hand back an address the server isn't accepting on yet.
+	rt := &http.Transport{DisableKeepAlives: true}
+	client := &http.Client{Timeout: 250 * time.Millisecond, Transport: rt}
+	defer rt.CloseIdleConnections()
+	var lastErr error
+
+attempts:
 	for attempt := 0; attempt < 12; attempt++ {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
 		addr := ln.Addr().String()
-		_ = ln.Close()
 		errc := make(chan error, 1)
-		go func() { errc <- app.transport.ListenAndServe(addr, app) }()
+		go func() { errc <- app.Serve(ln) }()
 
-		deadline := time.Now().Add(3 * time.Second)
-		for {
+		shutdown := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = app.Shutdown(ctx)
 			select {
 			case <-errc:
-				goto retry // bind failed before serving — retry a fresh port
+			case <-ctx.Done():
+				t.Errorf("startWingHijackServer: shutdown timed out: %v", ctx.Err())
+			}
+		}
+
+		readyURL := "http://" + addr + "/__kruda_ready__"
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			select {
+			case serveErr := <-errc:
+				lastErr = fmt.Errorf("server stopped before readiness: %v", serveErr)
+				_ = ln.Close()
+				continue attempts
 			default:
 			}
-			if c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond); derr == nil {
-				c.Close()
-				return addr, func() { _ = app.transport.Shutdown(context.Background()) }
+
+			resp, getErr := client.Get(readyURL)
+			if getErr == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusNotFound {
+					select {
+					case serveErr := <-errc:
+						lastErr = fmt.Errorf("server stopped after readiness probe: %v", serveErr)
+						_ = ln.Close()
+						continue attempts
+					default:
+						return addr, shutdown
+					}
+				}
+				lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			} else {
+				lastErr = getErr
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("startWingHijackServer: bound but never accepting on %s", addr)
-			}
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
-	retry:
+
+		shutdown()
+		t.Fatalf("startWingHijackServer: server did not become ready at %s: %v", readyURL, lastErr)
 	}
-	t.Fatal("startWingHijackServer: bind kept failing after retries")
+
+	t.Fatalf("startWingHijackServer: bind kept failing after retries: %v", lastErr)
 	return "", func() {}
 }
 

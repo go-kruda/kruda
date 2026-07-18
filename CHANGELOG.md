@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-07-18
+
 ### Added
 
 - Startup warning when `Use()` is called after routes are registered (the
@@ -14,6 +16,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- CI and pre-release validation now exercise both the default Sonic JSON engine
+  and the `kruda_stdjson` fallback, preventing engine-specific regressions.
+- Benchmark runs now cover changelog-only release preparation commits, ensuring
+  the exact tagged `main` commit satisfies the green-release preflight.
 - Removed the stale `transport/wing v1.1.3` require from `go.mod` (the shim
   directory was removed in v1.3.0; nothing imports it).
 - Docs: corrected the stale "Wing doesn't support SSE" transport limitation —
@@ -29,6 +35,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   claiming SSE/streaming has no Wing preset; `kruda_suggest_wing` now suggests
   `kruda.Stream` for SSE/streaming routes and `kruda.Hijack` for WebSocket routes
   instead of "none". Keeps AI-generated code aligned with real-time on Wing.
+
+### Fixed
+
+- Health-checker discovery no longer panics when the dependency container holds
+  services whose dynamic values are not comparable (for example, structs with
+  slice or map fields).
+- `contrib/ws` now closes orphan continuation frames with protocol error 1002,
+  rejects malformed close payloads before echoing them, and validates complete
+  text messages and close reasons as UTF-8 (closing with 1007 when invalid).
+- The standalone WebSocket example now resolves against the published v1.6.0
+  core module instead of an older pre-Wing-WebSocket version.
 
 ## [1.6.0] — 2026-07-04
 

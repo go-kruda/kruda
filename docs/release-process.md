@@ -1,6 +1,9 @@
 # Releasing Kruda
 
-Kruda follows a **single-tag release model** since v1.2.0. One tag, one release.
+Kruda creates one GitHub release for each core tag. Nested Go modules under
+`contrib/*` use their own prefixed semantic-version tags when their contents
+change (for example, `contrib/ws/v1.3.1`). Unchanged nested modules are not
+retagged.
 
 > Internal release-runner notes live in the gitignored `docs/RELEASING.md`. This file is the public, contributor-facing version.
 
@@ -14,6 +17,7 @@ Every release must go through the same guardrail:
 4. Merge the PR.
 5. Wait for `main` to finish green `Tests` and `Benchmark` runs for the merge commit.
 6. Tag that green `main` commit only when the change justifies a new version.
+   Push the core tag plus a prefixed tag for each changed nested module.
 
 The release workflow refuses to publish if the tag is not on `origin/main` or if no successful `Tests` and `Benchmark` workflow runs exist for the tagged commit.
 
@@ -35,6 +39,8 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] CHANGELOG.md has a section for the new version with date
 - [ ] No `replace` directives left in `cmd/kruda/go.mod` or any `contrib/*/go.mod`
 - [ ] Every released submodule's `go.mod` requires the intended core version
+- [ ] Every changed nested module has an independently incremented prefixed tag
+      planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0001-break-api-in-v1-minor.md for the v1.3.0 exception)
 
 ## Tagging
@@ -44,9 +50,17 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 git fetch origin main --tags
 git switch main
 git pull --ff-only origin main
-git tag v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+git tag v1.6.1 -m "Release v1.6.1"
+
+# only when contrib/ws changed; nested modules keep independent versions
+git tag contrib/ws/v1.3.1 -m "contrib/ws v1.3.1"
+
+git push origin v1.6.1 contrib/ws/v1.3.1
 ```
+
+The release workflow and GitHub release are triggered by the core `v*` tag.
+Prefixed nested-module tags make those module versions available to the Go
+proxy without creating extra GitHub releases.
 
 ## Verification
 
@@ -55,7 +69,8 @@ After pushing the tag, wait ~30s for the proxy, then verify the new version is f
 ```bash
 mkdir /tmp/kruda-verify && cd /tmp/kruda-verify
 go mod init verify
-go get github.com/go-kruda/kruda@v1.2.0
+go get github.com/go-kruda/kruda@v1.6.1
+go get github.com/go-kruda/kruda/contrib/ws@v1.3.1 # when released
 go build ./...
 ```
 
@@ -72,11 +87,14 @@ For a v1.2.x patch:
 5. Open a PR and wait for test + benchmark checks
 6. Merge the PR
 7. Wait for `main` checks to pass on the merge commit
-8. Tag the green `main` commit and push as above
+8. Tag the green `main` commit and push the core tag plus tags for changed
+   nested modules as above
 
 ## NEVER do this
 
 - Don't force-push tags. The Go module proxy caches sums permanently — a re-tag with different content = permanent breakage. Use a `retract` directive in `go.mod` and ship a new patch version instead.
 - Don't release with a `replace` directive in any committed `go.mod`. The proxy honors local replaces only during `go mod tidy` in the user's project, not when downloading the module — but a stray `replace` in your own `go.mod` is a bug magnet.
 - Don't tag from a branch that hasn't been merged to `main`. Tag SHAs that aren't on `main` are confusing for `go get @latest`.
+- Don't assume a core tag publishes changed nested modules. A module with its
+  own `go.mod` needs a prefixed tag such as `contrib/ws/v1.3.1`.
 - Don't rerun a failed release workflow if it could publish artifacts before the failed cause is understood.

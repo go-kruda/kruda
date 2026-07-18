@@ -52,6 +52,13 @@ func FuzzParserDifferential(f *testing.F) {
 	// request with more than one Host header; net/http's ReadRequest
 	// enforces this ("too many Host headers"). Found by round-3 fuzzing.
 	f.Add([]byte("GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\n\r\n"))
+	// Host validation: HTTP/1.1 requires exactly one syntactically valid Host
+	// field; an explicitly empty field is valid, and HTTP/1.0 may omit it.
+	f.Add([]byte("GET / HTTP/1.1\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.1\r\nHost: bad host\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.1\r\nHost:\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/1.0\r\n\r\n"))
+	f.Add([]byte("GET / HTTP/2.0\r\n\r\n"))
 	// leading CRLF before the request-line, on what a real server would
 	// treat as a fresh/non-POST-preceded connection — not a framing
 	// divergence, see the guard below.

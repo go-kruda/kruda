@@ -796,6 +796,9 @@ func (w *worker) tryParse(c *conn) {
 				switch st {
 				case parseNeedHeaderMore:
 					// Not enough data yet; wait for more recvs.
+				case parseBadRequest:
+					w.writeAndClose(c, wingStatusClose(400))
+					return
 				case parseChunked:
 					w.writeAndClose(c, wingStatusClose(501))
 					return
@@ -806,8 +809,7 @@ func (w *worker) tryParse(c *conn) {
 					if expectContinue {
 						c.sendBuf = append(c.sendBuf, wing100Continue...)
 						// Flush it immediately so the client sends the body.
-						if len(c.sendBuf) > 0 {
-							c.sendN = 0
+						if c.sendN < len(c.sendBuf) {
 							w.directSend(c) // non-blocking; rest of buf stays queued if partial
 						}
 					}
@@ -827,6 +829,9 @@ func (w *worker) tryParse(c *conn) {
 				// Buffer full — classify; if body needed start accum, else error.
 				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
 				switch st {
+				case parseBadRequest:
+					w.writeAndClose(c, wingStatusClose(400))
+					return
 				case parseBodyTooLarge:
 					w.writeAndClose(c, wingStatusClose(413))
 					return
@@ -834,8 +839,7 @@ func (w *worker) tryParse(c *conn) {
 					if expectContinue {
 						c.sendBuf = append(c.sendBuf, wing100Continue...)
 						// Flush it immediately so the client sends the body.
-						if len(c.sendBuf) > 0 {
-							c.sendN = 0
+						if c.sendN < len(c.sendBuf) {
 							w.directSend(c) // non-blocking; rest of buf stays queued if partial
 						}
 					}
@@ -951,8 +955,7 @@ func (w *worker) tryParse(c *conn) {
 				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: req.keepAlive}
 			}
 			// Send any buffered inline responses, then wait for pool completion.
-			if len(c.sendBuf) > 0 {
-				c.sendN = 0
+			if c.sendN < len(c.sendBuf) {
 				w.eng.SubmitSend(c.fd, nil)
 			}
 			return
@@ -1054,8 +1057,7 @@ func (w *worker) tryParse(c *conn) {
 			break
 		}
 	}
-	if len(c.sendBuf) > 0 {
-		c.sendN = 0
+	if c.sendN < len(c.sendBuf) {
 		// Direct write — skip epoll EPOLLOUT round-trip for inline responses.
 		w.directSend(c)
 	} else {
@@ -1067,8 +1069,9 @@ func (w *worker) tryParse(c *conn) {
 func (w *worker) writeAndClose(c *conn, resp []byte) {
 	c.keepAlive = false
 	c.sendBuf = append(c.sendBuf, resp...)
-	if len(c.sendBuf) > 0 {
-		c.sendN = 0
+	if c.sendN < len(c.sendBuf) {
+		// Preserve sendN: sendBuf may already contain a partially written
+		// response that must complete before this terminal response.
 		w.directSend(c)
 	}
 }
@@ -1228,7 +1231,6 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 		c.keepAlive = false
 		c.sendBuf = append(c.sendBuf, wingStatusClose(400)...)
 		releaseRequest(req)
-		c.sendN = 0
 		w.directSend(c)
 		return
 	}
@@ -1245,8 +1247,7 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	c.sendBuf = append(c.sendBuf, data...)
 	releaseResponse(resp)
 	releaseRequest(req)
-	if len(c.sendBuf) > 0 {
-		c.sendN = 0
+	if c.sendN < len(c.sendBuf) {
 		w.directSend(c)
 	} else {
 		submitIdleRecv(w.eng, c.fd, nil, 0)
@@ -1285,7 +1286,6 @@ func (w *worker) handleDone(msg doneMsg) {
 	}
 	// Partial write fallback — pool couldn't write everything.
 	c.sendBuf = append(c.sendBuf, msg.data...)
-	c.sendN = 0
 	w.eng.SubmitSend(c.fd, nil)
 }
 
@@ -1473,6 +1473,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 						keepAlive = false
 						goto done
 					}
+				case parseBadRequest:
+					f.Write(wingStatusClose(400))
+					keepAlive = false
+					goto done
 				case parseChunked:
 					f.Write(wingStatusClose(501))
 					keepAlive = false

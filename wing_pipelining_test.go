@@ -503,8 +503,8 @@ func TestParser_LeadingCRLFTolerance(t *testing.T) {
 
 	// Also test the pipelining scenario: POST body + extra \r\n + next request.
 	body := "hello"
-	postReq := "POST /a HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
-	nextReq := "\r\nGET /b HTTP/1.1\r\n\r\n" // leading \r\n
+	postReq := "POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
+	nextReq := "\r\nGET /b HTTP/1.1\r\nHost: h\r\n\r\n" // leading \r\n
 	buf := []byte(postReq + nextReq)
 
 	_, consumed, ok := parseHTTPRequest(buf, noLimits)

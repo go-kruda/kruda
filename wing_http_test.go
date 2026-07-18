@@ -28,7 +28,7 @@ func TestParseHTTPRequest_Simple(t *testing.T) {
 }
 
 func TestParseHTTPRequest_WithQuery(t *testing.T) {
-	raw := "GET /search?q=kruda&page=2 HTTP/1.1\r\n\r\n"
+	raw := "GET /search?q=kruda&page=2 HTTP/1.1\r\nHost: h\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -48,7 +48,7 @@ func TestParseHTTPRequest_WithQuery(t *testing.T) {
 }
 
 func TestParseHTTPRequest_WithBody(t *testing.T) {
-	raw := "POST /api/users HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: 13\r\n\r\n{\"name\":\"ok\"}"
+	raw := "POST /api/users HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 13\r\n\r\n{\"name\":\"ok\"}"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -69,7 +69,7 @@ func TestParseHTTPRequest_WithBody(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ConnectionClose(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nConnection: close\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -80,7 +80,7 @@ func TestParseHTTPRequest_ConnectionClose(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ConnectionCloseCaseInsensitive(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nCONNECTION: CLOSE\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nCONNECTION: CLOSE\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -97,7 +97,7 @@ func TestParseHTTPRequest_Incomplete(t *testing.T) {
 	}{
 		{"no_crlf", "GET / HTTP/1.1\r\n"},
 		{"partial_headers", "GET / HTTP/1.1\r\nHost: x\r\n"},
-		{"incomplete_body", "POST / HTTP/1.1\r\nContent-Length: 100\r\n\r\nshort"},
+		{"incomplete_body", "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 100\r\n\r\nshort"},
 		{"empty", ""},
 		{"just_method", "GET"},
 		{"no_path_space", "GET/HTTP/1.1\r\n\r\n"},
@@ -113,7 +113,7 @@ func TestParseHTTPRequest_Incomplete(t *testing.T) {
 
 func TestParseHTTPRequest_OversizedContentLength(t *testing.T) {
 	// Content-Length > maxContentLength (10MB) should be rejected.
-	raw := "POST / HTTP/1.1\r\nContent-Length: 99999999999\r\n\r\n"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 99999999999\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject oversized Content-Length")
@@ -121,7 +121,7 @@ func TestParseHTTPRequest_OversizedContentLength(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ZeroContentLength(t *testing.T) {
-	raw := "POST / HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 0\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed for Content-Length: 0")
@@ -133,7 +133,7 @@ func TestParseHTTPRequest_ZeroContentLength(t *testing.T) {
 }
 
 func TestParseHTTPRequest_BodyIsSafeCopy(t *testing.T) {
-	raw := []byte("POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello")
+	raw := []byte("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhello")
 	req, _, ok := parseHTTPRequest(raw, noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -148,7 +148,7 @@ func TestParseHTTPRequest_BodyIsSafeCopy(t *testing.T) {
 }
 
 func TestParseHTTPRequest_PathIsSafeCopy(t *testing.T) {
-	raw := []byte("GET /safe HTTP/1.1\r\n\r\n")
+	raw := []byte("GET /safe HTTP/1.1\r\nHost: h\r\n\r\n")
 	req, _, ok := parseHTTPRequest(raw, noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -463,7 +463,7 @@ func TestIOHeadersOverflow(t *testing.T) {
 
 // TestQueryParamEdgeCases tests query string parsing edge cases.
 func TestQueryParamEdgeCases(t *testing.T) {
-	raw := "GET /path?a=1&b=&c=3&d HTTP/1.1\r\n\r\n"
+	raw := "GET /path?a=1&b=&c=3&d HTTP/1.1\r\nHost: h\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("parse failed")
@@ -488,7 +488,7 @@ func TestQueryParamEdgeCases(t *testing.T) {
 
 func TestParseHTTPRequest_HeaderCountLimit(t *testing.T) {
 	// 3 headers with limit of 2 → reject.
-	raw := "GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nA: 1\r\nB: 2\r\n\r\n"
 	limits := parserLimits{maxHeaderCount: 2}
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if ok {
@@ -497,9 +497,9 @@ func TestParseHTTPRequest_HeaderCountLimit(t *testing.T) {
 }
 
 func TestParseHTTPRequest_HeaderCountAtLimit(t *testing.T) {
-	// Exactly 2 headers with limit of 2 → accept.
-	raw := "GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\n\r\n"
-	limits := parserLimits{maxHeaderCount: 2}
+	// Exactly 3 headers with limit of 3 → accept.
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nA: 1\r\nB: 2\r\n\r\n"
+	limits := parserLimits{maxHeaderCount: 3}
 	req, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if !ok {
 		t.Fatal("should accept when header count equals limit")
@@ -510,8 +510,8 @@ func TestParseHTTPRequest_HeaderCountAtLimit(t *testing.T) {
 }
 
 func TestParseHTTPRequest_HeaderCountUnlimited(t *testing.T) {
-	// 5 headers with limit of 0 (unlimited) → accept.
-	raw := "GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\nC: 3\r\nD: 4\r\nE: 5\r\n\r\n"
+	// Required Host plus 5 headers with limit of 0 (unlimited) → accept.
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nA: 1\r\nB: 2\r\nC: 3\r\nD: 4\r\nE: 5\r\n\r\n"
 	limits := parserLimits{maxHeaderCount: 0}
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if !ok {
@@ -521,7 +521,7 @@ func TestParseHTTPRequest_HeaderCountUnlimited(t *testing.T) {
 
 func TestParseHTTPRequest_HeaderSizeLimit(t *testing.T) {
 	// Header "X-Big: value" is 12 bytes. Limit to 10 → reject.
-	raw := "GET / HTTP/1.1\r\nX-Big: value\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nX-Big: value\r\n\r\n"
 	limits := parserLimits{maxHeaderSize: 10}
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if ok {
@@ -530,9 +530,9 @@ func TestParseHTTPRequest_HeaderSizeLimit(t *testing.T) {
 }
 
 func TestParseHTTPRequest_HeaderSizeAtLimit(t *testing.T) {
-	// Header "A: ok" after CRLF strip is 5 bytes. Limit to 5 → accept.
-	raw := "GET / HTTP/1.1\r\nA: ok\r\n\r\n"
-	limits := parserLimits{maxHeaderSize: 5}
+	// Header "Host: h" after CRLF strip is 7 bytes. Limit to 7 → accept.
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nA: ok\r\n\r\n"
+	limits := parserLimits{maxHeaderSize: 7}
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if !ok {
 		t.Fatal("should accept when header size equals limit")
@@ -541,7 +541,7 @@ func TestParseHTTPRequest_HeaderSizeAtLimit(t *testing.T) {
 
 func TestParseHTTPRequest_HeaderSizeUnlimited(t *testing.T) {
 	// Large header with limit of 0 (unlimited) → accept.
-	raw := "GET / HTTP/1.1\r\nX-Large: " + strings.Repeat("x", 10000) + "\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nX-Large: " + strings.Repeat("x", 10000) + "\r\n\r\n"
 	limits := parserLimits{maxHeaderSize: 0}
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if !ok {
@@ -561,7 +561,7 @@ func TestParseHTTPRequest_CustomLimits(t *testing.T) {
 	}
 
 	// Header value exceeding 8192 bytes → reject.
-	bigRaw := "GET / HTTP/1.1\r\nX-Big: " + strings.Repeat("a", 8200) + "\r\n\r\n"
+	bigRaw := "GET / HTTP/1.1\r\nHost: h\r\nX-Big: " + strings.Repeat("a", 8200) + "\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(bigRaw), limits)
 	if ok {
 		t.Error("should reject header exceeding 8192 byte limit")
@@ -570,7 +570,7 @@ func TestParseHTTPRequest_CustomLimits(t *testing.T) {
 
 func TestParseHTTPRequest_MaxContentLengthStillWorks(t *testing.T) {
 	// Verify maxContentLength (10MB) rejection still works after refactor.
-	raw := "POST / HTTP/1.1\r\nContent-Length: 99999999999\r\n\r\n"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 99999999999\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should still reject oversized Content-Length with noLimits")
@@ -584,7 +584,7 @@ func TestParseHTTPRequest_MaxContentLengthStillWorks(t *testing.T) {
 	}
 
 	// Valid Content-Length with body → accept.
-	raw2 := "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"
+	raw2 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhello"
 	req, _, ok := parseHTTPRequest([]byte(raw2), limits)
 	if !ok {
 		t.Fatal("valid POST with body should pass")
@@ -598,18 +598,18 @@ func TestParseHTTPRequest_MaxContentLengthStillWorks(t *testing.T) {
 func TestParseHTTPRequest_BothLimitsEnforced(t *testing.T) {
 	// Both count and size limits active — count triggers first.
 	limits := parserLimits{maxHeaderCount: 1, maxHeaderSize: 8192}
-	raw := "GET / HTTP/1.1\r\nA: 1\r\nB: 2\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nA: 1\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), limits)
 	if ok {
 		t.Error("should reject: 2 headers exceeds maxHeaderCount=1")
 	}
 
 	// Both limits active — size triggers first.
-	limits2 := parserLimits{maxHeaderCount: 100, maxHeaderSize: 5}
-	raw2 := "GET / HTTP/1.1\r\nX-Long: abcdef\r\n\r\n"
+	limits2 := parserLimits{maxHeaderCount: 100, maxHeaderSize: 7}
+	raw2 := "GET / HTTP/1.1\r\nHost: h\r\nX-Long: abcdef\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw2), limits2)
 	if ok {
-		t.Error("should reject: header size exceeds maxHeaderSize=5")
+		t.Error("should reject: header size exceeds maxHeaderSize=7")
 	}
 }
 
@@ -617,21 +617,21 @@ func TestParseHTTPRequest_BothLimitsEnforced(t *testing.T) {
 
 func TestParseHTTPRequest_CRLFInjectionInHeaderValue(t *testing.T) {
 	// R2.1: Bare \r in header value → reject.
-	raw := "GET / HTTP/1.1\r\nX-Evil: foo\rbar\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nX-Evil: foo\rbar\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject header value containing bare CR")
 	}
 
 	// R2.1: Bare \n in header value → reject.
-	raw2 := "GET / HTTP/1.1\r\nX-Evil: foo\nbar\r\n\r\n"
+	raw2 := "GET / HTTP/1.1\r\nHost: h\r\nX-Evil: foo\nbar\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw2), noLimits)
 	if ok {
 		t.Error("should reject header value containing bare LF")
 	}
 
 	// R2.1: CRLF injection attempt (header splitting) → reject.
-	raw3 := "GET / HTTP/1.1\r\nX-Evil: foo\r\nInjected: bar\r\n\r\n"
+	raw3 := "GET / HTTP/1.1\r\nHost: h\r\nX-Evil: foo\r\nInjected: bar\r\n\r\n"
 	// This is actually two separate headers — "X-Evil: foo" and "Injected: bar".
 	// Both are valid individually. The CRLF is the line terminator, not inside the value.
 	// This should parse fine (the CRLF is stripped by the line parser).
@@ -643,21 +643,21 @@ func TestParseHTTPRequest_CRLFInjectionInHeaderValue(t *testing.T) {
 
 func TestParseHTTPRequest_DuplicateContentLength(t *testing.T) {
 	// R2.2: Duplicate Content-Length headers → reject.
-	raw := "POST / HTTP/1.1\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject duplicate Content-Length headers")
 	}
 
 	// R2.2: Duplicate with different values → also reject.
-	raw2 := "POST / HTTP/1.1\r\nContent-Length: 5\r\nContent-Length: 10\r\n\r\nhello"
+	raw2 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\nContent-Length: 10\r\n\r\nhello"
 	_, _, ok = parseHTTPRequest([]byte(raw2), noLimits)
 	if ok {
 		t.Error("should reject duplicate Content-Length with different values")
 	}
 
 	// Single Content-Length → accept.
-	raw3 := "POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"
+	raw3 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhello"
 	_, _, ok = parseHTTPRequest([]byte(raw3), noLimits)
 	if !ok {
 		t.Error("single Content-Length should be accepted")
@@ -666,21 +666,21 @@ func TestParseHTTPRequest_DuplicateContentLength(t *testing.T) {
 
 func TestParseHTTPRequest_TEAndCLConflict(t *testing.T) {
 	// R2.3: Both Transfer-Encoding and Content-Length → reject (RFC 7230 §3.3.3).
-	raw := "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\nhello"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\nhello"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject request with both Transfer-Encoding and Content-Length")
 	}
 
 	// R2.3: Case-insensitive match.
-	raw2 := "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n\r\nhello"
+	raw2 := "POST / HTTP/1.1\r\nHost: h\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n\r\nhello"
 	_, _, ok = parseHTTPRequest([]byte(raw2), noLimits)
 	if ok {
 		t.Error("should reject TE+CL conflict (case-insensitive)")
 	}
 
 	// Transfer-Encoding alone → reject (Wing does not dechunk; classifyIncomplete returns 501).
-	raw3 := "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+	raw3 := "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw3), noLimits)
 	if ok {
 		t.Error("Transfer-Encoding alone must be rejected so classifyIncomplete can return 501")
@@ -689,35 +689,35 @@ func TestParseHTTPRequest_TEAndCLConflict(t *testing.T) {
 
 func TestParseHTTPRequest_NonNumericContentLength(t *testing.T) {
 	// R2.4: Non-numeric Content-Length → reject.
-	raw := "POST / HTTP/1.1\r\nContent-Length: abc\r\n\r\n"
+	raw := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: abc\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject non-numeric Content-Length")
 	}
 
 	// R2.4: Mixed numeric/alpha → reject.
-	raw2 := "POST / HTTP/1.1\r\nContent-Length: 5abc\r\n\r\nhello"
+	raw2 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5abc\r\n\r\nhello"
 	_, _, ok = parseHTTPRequest([]byte(raw2), noLimits)
 	if ok {
 		t.Error("should reject Content-Length with trailing non-digits")
 	}
 
 	// R2.4: Empty Content-Length value → reject.
-	raw3 := "POST / HTTP/1.1\r\nContent-Length: \r\n\r\n"
+	raw3 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: \r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw3), noLimits)
 	if ok {
 		t.Error("should reject empty Content-Length value")
 	}
 
 	// R2.4: Negative Content-Length → reject.
-	raw4 := "POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n"
+	raw4 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: -1\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw4), noLimits)
 	if ok {
 		t.Error("should reject negative Content-Length")
 	}
 
 	// Valid numeric Content-Length → accept.
-	raw5 := "POST / HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
+	raw5 := "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 0\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw5), noLimits)
 	if !ok {
 		t.Error("Content-Length: 0 should be accepted")
@@ -726,28 +726,28 @@ func TestParseHTTPRequest_NonNumericContentLength(t *testing.T) {
 
 func TestParseHTTPRequest_InvalidHeaderName(t *testing.T) {
 	// R2.5: Header name with space → reject.
-	raw := "GET / HTTP/1.1\r\nBad Header: value\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nBad Header: value\r\n\r\n"
 	_, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if ok {
 		t.Error("should reject header name containing space")
 	}
 
 	// R2.5: Header name with colon-like chars → reject (parenthesis is a delimiter).
-	raw2 := "GET / HTTP/1.1\r\nBad(Header): value\r\n\r\n"
+	raw2 := "GET / HTTP/1.1\r\nHost: h\r\nBad(Header): value\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw2), noLimits)
 	if ok {
 		t.Error("should reject header name containing '('")
 	}
 
 	// R2.5: Header name with high-byte (>127) → reject.
-	raw3 := "GET / HTTP/1.1\r\nBad\x80Header: value\r\n\r\n"
+	raw3 := "GET / HTTP/1.1\r\nHost: h\r\nBad\x80Header: value\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw3), noLimits)
 	if ok {
 		t.Error("should reject header name with byte > 127")
 	}
 
 	// R2.5: Valid token characters → accept.
-	raw4 := "GET / HTTP/1.1\r\nX-Custom-Header_v2: value\r\n\r\n"
+	raw4 := "GET / HTTP/1.1\r\nHost: h\r\nX-Custom-Header_v2: value\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw4), noLimits)
 	if !ok {
 		t.Error("valid token header name should be accepted")
@@ -777,7 +777,7 @@ func TestParseHTTPRequest_MalformedRequestLine(t *testing.T) {
 	}
 
 	// R2.6: Valid HTTP/1.1 → accept.
-	raw4 := "GET / HTTP/1.1\r\n\r\n"
+	raw4 := "GET / HTTP/1.1\r\nHost: h\r\n\r\n"
 	_, _, ok = parseHTTPRequest([]byte(raw4), noLimits)
 	if !ok {
 		t.Error("valid HTTP/1.1 request line should be accepted")
@@ -880,8 +880,8 @@ func TestParseHTTPRequest_PipeliningConsumedBytes(t *testing.T) {
 // that have Content-Length bodies.
 func TestParseHTTPRequest_PipeliningWithBody(t *testing.T) {
 	body1 := `{"id":1}`
-	req1Raw := "POST /api HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body1)) + "\r\n\r\n" + body1
-	req2Raw := "GET /health HTTP/1.1\r\n\r\n"
+	req1Raw := "POST /api HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body1)) + "\r\n\r\n" + body1
+	req2Raw := "GET /health HTTP/1.1\r\nHost: h\r\n\r\n"
 	pipelined := []byte(req1Raw + req2Raw)
 
 	req1, consumed1, ok := parseHTTPRequest(pipelined, noLimits)
@@ -950,8 +950,8 @@ func TestPipelining_ThreeGETs(t *testing.T) {
 func TestPipelining_POSTthenPOST(t *testing.T) {
 	body1 := `{"name":"alice"}`
 	body2 := `{"name":"bob","age":30}`
-	req1Raw := "POST /users HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body1)) + "\r\nContent-Type: application/json\r\n\r\n" + body1
-	req2Raw := "POST /users HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body2)) + "\r\nContent-Type: application/json\r\n\r\n" + body2
+	req1Raw := "POST /users HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body1)) + "\r\nContent-Type: application/json\r\n\r\n" + body1
+	req2Raw := "POST /users HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body2)) + "\r\nContent-Type: application/json\r\n\r\n" + body2
 	buf := []byte(req1Raw + req2Raw)
 
 	// First POST.
@@ -1011,9 +1011,9 @@ func TestPipelining_PartialSecondRequest(t *testing.T) {
 // TestPipelining_PartialBody ensures that a POST with incomplete body
 // returns false (waiting for more data), while the preceding request parses.
 func TestPipelining_PartialBody(t *testing.T) {
-	req1 := "GET /first HTTP/1.1\r\n\r\n"
+	req1 := "GET /first HTTP/1.1\r\nHost: h\r\n\r\n"
 	// POST claims 100 bytes but only 10 are present.
-	req2 := "POST /data HTTP/1.1\r\nContent-Length: 100\r\n\r\n0123456789"
+	req2 := "POST /data HTTP/1.1\r\nHost: h\r\nContent-Length: 100\r\n\r\n0123456789"
 	buf := []byte(req1 + req2)
 
 	_, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1030,8 +1030,8 @@ func TestPipelining_PartialBody(t *testing.T) {
 
 // TestPipelining_EmptyBodyPOST tests pipelining where a POST has Content-Length: 0.
 func TestPipelining_EmptyBodyPOST(t *testing.T) {
-	req1 := "POST /empty HTTP/1.1\r\nContent-Length: 0\r\n\r\n"
-	req2 := "GET /next HTTP/1.1\r\n\r\n"
+	req1 := "POST /empty HTTP/1.1\r\nHost: h\r\nContent-Length: 0\r\n\r\n"
+	req2 := "GET /next HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1 + req2)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1063,8 +1063,8 @@ func TestPipelining_EmptyBodyPOST(t *testing.T) {
 // request doesn't affect parsing of pipelined bytes (parser doesn't care;
 // connection management is the caller's responsibility).
 func TestPipelining_ConnectionClose(t *testing.T) {
-	req1 := "GET /close HTTP/1.1\r\nConnection: close\r\n\r\n"
-	req2 := "GET /more HTTP/1.1\r\n\r\n"
+	req1 := "GET /close HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+	req2 := "GET /more HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1 + req2)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1092,7 +1092,7 @@ func TestPipelining_ConnectionClose(t *testing.T) {
 func TestPipelining_LargeBodyBoundary(t *testing.T) {
 	bodySize := 4096
 	body := strings.Repeat("X", bodySize)
-	raw := "POST /upload HTTP/1.1\r\nContent-Length: " + strconv.Itoa(bodySize) + "\r\n\r\n" + body
+	raw := "POST /upload HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(bodySize) + "\r\n\r\n" + body
 	buf := []byte(raw)
 
 	r, consumed, ok := parseHTTPRequest(buf, noLimits)
@@ -1200,7 +1200,7 @@ func TestPipelining_BufferShiftWithPartial(t *testing.T) {
 func TestPipelining_FiveRequestsIterative(t *testing.T) {
 	var rawParts []string
 	for i := 0; i < 5; i++ {
-		rawParts = append(rawParts, "GET /r"+strconv.Itoa(i)+" HTTP/1.1\r\n\r\n")
+		rawParts = append(rawParts, "GET /r"+strconv.Itoa(i)+" HTTP/1.1\r\nHost: h\r\n\r\n")
 	}
 	buf := []byte(strings.Join(rawParts, ""))
 
@@ -1238,10 +1238,10 @@ func TestPipelining_MixedMethodsAndBodies(t *testing.T) {
 
 	raws := []string{
 		"GET /api/status HTTP/1.1\r\nHost: h\r\n\r\n",
-		"POST /api/data HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(small)) + "\r\n\r\n" + small,
-		"GET /api/list HTTP/1.1\r\n\r\n",
-		"POST /api/bulk HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(large)) + "\r\n\r\n" + large,
-		"DELETE /api/item/99 HTTP/1.1\r\n\r\n",
+		"POST /api/data HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(small)) + "\r\n\r\n" + small,
+		"GET /api/list HTTP/1.1\r\nHost: h\r\n\r\n",
+		"POST /api/bulk HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(large)) + "\r\n\r\n" + large,
+		"DELETE /api/item/99 HTTP/1.1\r\nHost: h\r\n\r\n",
 	}
 	expects := []expect{
 		{"GET", "/api/status", ""},
@@ -1284,10 +1284,10 @@ func TestPipelining_ConsumedEqualsInputForSingleRequest(t *testing.T) {
 		name string
 		raw  string
 	}{
-		{"GET minimal", "GET / HTTP/1.1\r\n\r\n"},
+		{"GET minimal", "GET / HTTP/1.1\r\nHost: h\r\n\r\n"},
 		{"GET with host", "GET /path HTTP/1.1\r\nHost: h\r\n\r\n"},
-		{"POST with body", "POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc"},
-		{"DELETE", "DELETE /x HTTP/1.1\r\n\r\n"},
+		{"POST with body", "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc"},
+		{"DELETE", "DELETE /x HTTP/1.1\r\nHost: h\r\n\r\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1306,13 +1306,13 @@ func TestPipelining_ConsumedEqualsInputForSingleRequest(t *testing.T) {
 // for any parseable request followed by arbitrary trailing bytes,
 // consumed + len(tail) == len(input).
 func TestPipelining_ConsumedPlusTailEqualsTotal(t *testing.T) {
-	req := "GET /x HTTP/1.1\r\n\r\n"
+	req := "GET /x HTTP/1.1\r\nHost: h\r\n\r\n"
 	tails := []string{
-		"",                        // no tail
-		"G",                       // 1 byte
-		"GET / HT",                // partial next request
-		"garbage\x00\xff",         // random bytes
-		"GET /y HTTP/1.1\r\n\r\n", // complete next request
+		"",                                   // no tail
+		"G",                                  // 1 byte
+		"GET / HT",                           // partial next request
+		"garbage\x00\xff",                    // random bytes
+		"GET /y HTTP/1.1\r\nHost: h\r\n\r\n", // complete next request
 	}
 	for _, tail := range tails {
 		input := []byte(req + tail)
@@ -1332,7 +1332,7 @@ func TestPipelining_ConsumedPlusTailEqualsTotal(t *testing.T) {
 // after parsing must NOT affect the parsed body.
 func TestPipelining_BodySafeCopyIndependence(t *testing.T) {
 	body := "ORIGINAL"
-	raw := "POST /x HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
+	raw := "POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
 	buf := []byte(raw)
 
 	req, consumed, ok := parseHTTPRequest(buf, noLimits)
@@ -1355,8 +1355,8 @@ func TestPipelining_BodySafeCopyIndependence(t *testing.T) {
 // TestPipelining_QueryParamsPreserved verifies query strings are correct
 // across pipelined requests with different query parameters.
 func TestPipelining_QueryParamsPreserved(t *testing.T) {
-	req1 := "GET /search?q=hello&page=1 HTTP/1.1\r\n\r\n"
-	req2 := "GET /search?q=world&page=2 HTTP/1.1\r\n\r\n"
+	req1 := "GET /search?q=hello&page=1 HTTP/1.1\r\nHost: h\r\n\r\n"
+	req2 := "GET /search?q=world&page=2 HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1 + req2)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1383,8 +1383,8 @@ func TestPipelining_QueryParamsPreserved(t *testing.T) {
 func TestPipelining_BodyContainsCRLFCRLF(t *testing.T) {
 	// Body deliberately contains \r\n\r\n which looks like a header terminator.
 	body := "line1\r\n\r\nline2"
-	req1Raw := "POST /upload HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
-	req2Raw := "GET /next HTTP/1.1\r\n\r\n"
+	req1Raw := "POST /upload HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
+	req2Raw := "GET /next HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1Raw + req2Raw)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1417,9 +1417,9 @@ func TestPipelining_BodyContainsCRLFCRLF(t *testing.T) {
 // request do not leak into the next. Each parsed request must only see
 // its own Content-Type.
 func TestPipelining_HeaderIsolation(t *testing.T) {
-	req1Raw := "POST /a HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
-	req2Raw := "POST /b HTTP/1.1\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nhi"
-	req3Raw := "GET /c HTTP/1.1\r\n\r\n" // no Content-Type at all
+	req1Raw := "POST /a HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+	req2Raw := "POST /b HTTP/1.1\r\nHost: h\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nhi"
+	req3Raw := "GET /c HTTP/1.1\r\nHost: h\r\n\r\n" // no Content-Type at all
 	buf := []byte(req1Raw + req2Raw + req3Raw)
 
 	// Request 1: application/json
@@ -1457,9 +1457,9 @@ func TestPipelining_HeaderIsolation(t *testing.T) {
 func TestPipelining_PUTandPATCHWithBody(t *testing.T) {
 	putBody := `{"name":"updated"}`
 	patchBody := `{"age":30}`
-	req1Raw := "PUT /users/1 HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(putBody)) + "\r\n\r\n" + putBody
-	req2Raw := "PATCH /users/1 HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(patchBody)) + "\r\n\r\n" + patchBody
-	req3Raw := "GET /users/1 HTTP/1.1\r\n\r\n"
+	req1Raw := "PUT /users/1 HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(putBody)) + "\r\n\r\n" + putBody
+	req2Raw := "PATCH /users/1 HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(patchBody)) + "\r\n\r\n" + patchBody
+	req3Raw := "GET /users/1 HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1Raw + req2Raw + req3Raw)
 
 	// PUT
@@ -1506,7 +1506,7 @@ func TestPipelining_PUTandPATCHWithBody(t *testing.T) {
 // This test documents the current behavior for pipelining correctness.
 func TestPipelining_HTTP10KeepAliveDefault(t *testing.T) {
 	req1 := "GET /a HTTP/1.0\r\n\r\n"
-	req2 := "GET /b HTTP/1.1\r\n\r\n"
+	req2 := "GET /b HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1 + req2)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1559,7 +1559,7 @@ func TestParser_BareLFAsHeaderLineTerminator(t *testing.T) {
 // in a pipeline context.
 func TestParser_StarRequestTarget(t *testing.T) {
 	req1Raw := "OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n"
-	req2Raw := "GET /next HTTP/1.1\r\n\r\n"
+	req2Raw := "GET /next HTTP/1.1\r\nHost: h\r\n\r\n"
 	buf := []byte(req1Raw + req2Raw)
 
 	r1, c1, ok := parseHTTPRequest(buf, noLimits)
@@ -1694,9 +1694,9 @@ func TestTransportSim_ThreeRequestsOneRecv(t *testing.T) {
 	sim := newTransportSim(4096)
 
 	// Kernel delivers 3 requests at once.
-	reqs := "GET /a HTTP/1.1\r\n\r\n" +
-		"GET /b HTTP/1.1\r\n\r\n" +
-		"GET /c HTTP/1.1\r\n\r\n"
+	reqs := "GET /a HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET /b HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET /c HTTP/1.1\r\nHost: h\r\n\r\n"
 	sim.simulateRecv([]byte(reqs))
 
 	// --- handleRecv: parse first request ---
@@ -1746,8 +1746,8 @@ func TestTransportSim_ThreeRequestsOneRecv(t *testing.T) {
 func TestTransportSim_PartialThenComplete(t *testing.T) {
 	sim := newTransportSim(4096)
 
-	req1 := "GET /done HTTP/1.1\r\n\r\n"
-	req2 := "POST /data HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"
+	req1 := "GET /done HTTP/1.1\r\nHost: h\r\n\r\n"
+	req2 := "POST /data HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhello"
 
 	// First recv: full req1 + first 15 bytes of req2.
 	firstChunk := req1 + req2[:15]
@@ -1805,7 +1805,7 @@ func TestTransportSim_FiveRequestChain(t *testing.T) {
 		path := "/r" + strconv.Itoa(i)
 		wantPaths[i] = path
 		body := strings.Repeat("x", (i+1)*10) // varying body sizes
-		all += "POST " + path + " HTTP/1.1\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
+		all += "POST " + path + " HTTP/1.1\r\nHost: h\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
 	}
 	sim.simulateRecv([]byte(all))
 
@@ -1864,8 +1864,8 @@ func TestTransportSim_MixedRecvSizes(t *testing.T) {
 	sim := newTransportSim(4096)
 
 	fullData := "GET /a HTTP/1.1\r\nHost: h\r\n\r\n" +
-		"POST /b HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc" +
-		"GET /c HTTP/1.1\r\n\r\n"
+		"POST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc" +
+		"GET /c HTTP/1.1\r\nHost: h\r\n\r\n"
 
 	// Deliver in 3 uneven chunks.
 	chunks := []string{
@@ -1919,8 +1919,8 @@ func TestTransportSim_MixedRecvSizes(t *testing.T) {
 func TestTransportSim_ShortWrite(t *testing.T) {
 	sim := newTransportSim(4096)
 
-	reqs := "GET /first HTTP/1.1\r\n\r\n" +
-		"GET /second HTTP/1.1\r\n\r\n"
+	reqs := "GET /first HTTP/1.1\r\nHost: h\r\n\r\n" +
+		"GET /second HTTP/1.1\r\nHost: h\r\n\r\n"
 	sim.simulateRecv([]byte(reqs))
 
 	// handleRecv: parse first.
@@ -1968,8 +1968,8 @@ func TestTransportSim_ShortWrite(t *testing.T) {
 func TestTransportSim_ConnectionCloseStopsPipelining(t *testing.T) {
 	sim := newTransportSim(4096)
 
-	reqs := "GET /close HTTP/1.1\r\nConnection: close\r\n\r\n" +
-		"GET /ignored HTTP/1.1\r\n\r\n"
+	reqs := "GET /close HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n" +
+		"GET /ignored HTTP/1.1\r\nHost: h\r\n\r\n"
 	sim.simulateRecv([]byte(reqs))
 
 	r1, _, parsed, _ := sim.handleRecv()
@@ -2030,7 +2030,7 @@ func TestParseCookieValue_Empty(t *testing.T) {
 }
 
 func TestParseHTTPRequest_CookieHeader(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nCookie: session=xyz; user=bob\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nCookie: session=xyz; user=bob\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")
@@ -2047,7 +2047,7 @@ func TestParseHTTPRequest_CookieHeader(t *testing.T) {
 }
 
 func TestParseHTTPRequest_NoCookie(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")
@@ -2060,7 +2060,7 @@ func TestParseHTTPRequest_NoCookie(t *testing.T) {
 // ----------------------------- Extra Header Tests -----------------------------
 
 func TestParseHTTPRequest_ExtraHeaders(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nAuthorization: Bearer token123\r\nX-Request-ID: req-456\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer token123\r\nX-Request-ID: req-456\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")
@@ -2074,7 +2074,7 @@ func TestParseHTTPRequest_ExtraHeaders(t *testing.T) {
 }
 
 func TestParseHTTPRequest_HeaderCaseInsensitive(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\nAuthorization: Bearer tok\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer tok\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")
@@ -2089,7 +2089,7 @@ func TestParseHTTPRequest_HeaderCaseInsensitive(t *testing.T) {
 }
 
 func TestParseHTTPRequest_ExtraHeadersMissing(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")
@@ -2103,7 +2103,7 @@ func TestParseHTTPRequest_ExtraHeadersOverflow(t *testing.T) {
 	// 33 non-special headers — the first 8 land inline, the rest spill into
 	// extraOverflow; none are dropped regardless of count.
 	var raw string
-	raw = "GET / HTTP/1.1\r\n"
+	raw = "GET / HTTP/1.1\r\nHost: h\r\n"
 	for i := 0; i < 33; i++ {
 		raw += "X-H" + strconv.Itoa(i) + ": v" + strconv.Itoa(i) + "\r\n"
 	}
@@ -2208,7 +2208,7 @@ func TestWingRequest_RemoteAddrLazyFromFD(t *testing.T) {
 }
 
 func TestWingRequest_RemoteAddrEmptyByDefault(t *testing.T) {
-	raw := "GET / HTTP/1.1\r\n\r\n"
+	raw := "GET / HTTP/1.1\r\nHost: h\r\n\r\n"
 	req, _, ok := parseHTTPRequest([]byte(raw), noLimits)
 	if !ok {
 		t.Fatal("should parse")

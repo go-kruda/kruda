@@ -5,7 +5,6 @@ go 1.25.11
 replace (
 	github.com/go-kruda/kruda => ../../
 	github.com/go-kruda/kruda/contrib/ratelimit => ../../contrib/ratelimit
-	github.com/go-kruda/kruda/transport/wing => ../../transport/wing
 )
 
 require (

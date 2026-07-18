@@ -26,8 +26,7 @@ kruda/
 ├── *.go              # Core framework (minimal external deps)
 ├── wing_*.go          # Wing transport (epoll on Linux / kqueue on macOS) — flattened into core since v1.2.0
 ├── middleware/        # Built-in middleware (Logger, Recovery, CORS, etc.)
-├── transport/         # Transport adapter interfaces (nethttp, fasthttp)
-│   └── wing/          # Compatibility shim for the old Wing import path
+├── transport/         # Transport interfaces and net/http/fasthttp adapters
 ├── contrib/           # Optional modules (JWT, WebSocket, RateLimit, …)
 ├── json/              # JSON engine abstraction
 ├── examples/          # Example applications
@@ -69,16 +68,17 @@ cd contrib/ws && go test ./...
 cd contrib/ratelimit && go test ./...
 ```
 
-**Cross-module dev tip:** contrib `go.mod` files require the latest tagged
-core (e.g. `kruda v1.2.0`). When you change core and want a contrib package
-or the legacy Wing compatibility shim to see those changes locally — before
-the next core tag exists on the proxy — set up a Go workspace:
+**Cross-module dev tip:** contrib `go.mod` files require a tagged core release.
+When you change core and want a contrib package to see those changes locally —
+before the next core tag exists on the proxy — set up a Go workspace:
 
 ```bash
-go work init . transport/wing contrib/cache contrib/compress contrib/etag \
-              contrib/jwt contrib/otel contrib/prometheus contrib/ratelimit \
-              contrib/session contrib/swagger contrib/ws
+go work init . contrib/cache contrib/compress contrib/etag contrib/jwt \
+              contrib/observability contrib/otel contrib/prometheus \
+              contrib/ratelimit contrib/session contrib/swagger contrib/ws
 ```
+
+Wing is part of the core module and does not need a separate workspace entry.
 
 `go.work` is gitignored on purpose — it's a local-dev convenience and should
 not be committed. CI uses an ephemeral `go mod edit -replace=...` per

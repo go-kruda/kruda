@@ -40,9 +40,11 @@ jobs:
           go install github.com/mgechev/revive@v1.12.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Check exported API docs
+      - name: Check documentation
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.11'
-        run: scripts/check-godoc.sh
+        run: |
+          scripts/check-docs.sh
+          scripts/check-godoc.sh
 
       - name: Go vet
         run: go vet -tags kruda_stdjson ./...

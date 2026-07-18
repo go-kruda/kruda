@@ -10,12 +10,14 @@ go get github.com/go-kruda/kruda/contrib/session
 
 ## Usage
 
-**Important:** Requires `kruda.NetHTTP()` transport (Wing skips Set-Cookie headers in fast path).
+Session cookies work with Kruda's default transport. When `Set-Cookie` is
+present, Wing automatically leaves its header-minimal fast path, so no
+`NetHTTP` override is required.
 
 ```go
 import "github.com/go-kruda/kruda/contrib/session"
 
-app := kruda.New(kruda.NetHTTP())
+app := kruda.New()
 app.Use(session.New())
 
 app.Get("/login", func(c *kruda.Ctx) error {

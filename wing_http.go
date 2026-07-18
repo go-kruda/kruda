@@ -94,6 +94,7 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	if !isValidHTTPVersion(version) {
 		return nil, 0, false
 	}
+	requireHost := requiresHostHeader(version)
 
 	// Method must be a valid RFC 7230 token (net/http's isToken rule); a
 	// method containing a delimiter/CTL byte (e.g. a quote) is rejected so
@@ -276,6 +277,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			if hostSeen {
 				return nil, 0, false
 			}
+			if !isValidHostHeader(val) {
+				return nil, 0, false
+			}
 			hostSeen = true
 			host = copyOrUnsafeString(val, unsafePath)
 			hostUnsafe = unsafePath && len(val) > 0
@@ -342,6 +346,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			if hostSeen {
 				return nil, 0, false
 			}
+			if !isValidHostHeader(val) {
+				return nil, 0, false
+			}
 			hostSeen = true
 			host = copyOrUnsafeString(val, unsafePath)
 			hostUnsafe = unsafePath && len(val) > 0
@@ -378,6 +385,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 				extraOverflow = append(extraOverflow, h)
 			}
 		}
+	}
+	if requireHost && !hostSeen {
+		return nil, 0, false
 	}
 
 	// Reject requests with both Transfer-Encoding and Content-Length (RFC 7230 §3.3.3).
@@ -575,6 +585,7 @@ const (
 	parseNeedHeaderMore parseStatus = iota // headers not complete, buffer not full
 	parseHeaderTooLarge                    // headers exceed limit / buffer
 	parseMalformed                         // protocol error
+	parseBadRequest                        // invalid, duplicate, or missing required Host
 	parseChunked                           // Transfer-Encoding: chunked body (unsupported)
 	parseBodyTooLarge                      // Content-Length > bodyLimit
 	parseNeedBody                          // valid headers, body incomplete; need N body bytes total
@@ -600,12 +611,36 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		return parseNeedHeaderMore, 0, false
 	}
 	// Request line must be well-formed.
-	lineEnd := bytes.IndexByte(data[:headerEnd], '\n')
+	// Include the first CRLF of the header terminator so a request with no
+	// fields still exposes its complete request line for Host classification.
+	lineEnd := bytes.IndexByte(data[:headerEnd+2], '\n')
 	if lineEnd <= 0 {
 		return parseMalformed, 0, false
 	}
+	line := data[:lineEnd]
+	if line[len(line)-1] == '\r' {
+		line = line[:len(line)-1]
+	}
+	sp1 := bytes.IndexByte(line, ' ')
+	if sp1 <= 0 {
+		return parseMalformed, 0, false
+	}
+	sp2 := bytes.IndexByte(line[sp1+1:], ' ')
+	if sp2 < 0 {
+		return parseMalformed, 0, false
+	}
+	sp2 += sp1 + 1
+	if sp2 <= sp1+1 {
+		return parseMalformed, 0, false
+	}
+	version := line[sp2+1:]
+	if !isValidHTTPVersion(version) {
+		return parseMalformed, 0, false
+	}
+	requireHost := requiresHostHeader(version)
 	hasTE := false
 	hasCL := false
+	hostSeen := false
 	cl := 0
 	pos := lineEnd + 1
 	for pos < headerEnd {
@@ -649,8 +684,8 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 		if raw := hline[:colon]; len(raw) > 0 && (raw[len(raw)-1] == ' ' || raw[len(raw)-1] == '\t') {
 			return parseMalformed, 0, false
 		}
-		name := bytes.ToLower(bytes.TrimSpace(hline[:colon]))
-		val := bytes.TrimSpace(hline[colon+1:])
+		name := trimHTTPSpaces(hline[:colon])
+		val := trimHTTPSpaces(hline[colon+1:])
 		// Mirror parseHTTPRequestInternal's header-value byte validation.
 		if hasInvalidHeaderValueByte(val) {
 			return parseMalformed, 0, false
@@ -668,6 +703,11 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 			cl = n
 		case headerTransferEncoding:
 			hasTE = true
+		case headerHost:
+			if hostSeen || !isValidHostHeader(val) {
+				return parseBadRequest, 0, false
+			}
+			hostSeen = true
 		default:
 			if asciiEqualFold(name, bExpect) {
 				if asciiEqualFold(val, []byte("100-continue")) {
@@ -675,6 +715,9 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 				}
 			}
 		}
+	}
+	if requireHost && !hostSeen {
+		return parseBadRequest, 0, false
 	}
 	if hasTE && hasCL {
 		return parseMalformed, 0, false
@@ -836,6 +879,30 @@ func isValidHTTPVersion(v []byte) bool {
 		return false
 	}
 	return v[5] >= '0' && v[5] <= '9' && v[7] >= '0' && v[7] <= '9'
+}
+
+// requiresHostHeader reports whether a request version is HTTP/1.1 or later.
+// HTTP/1.0 and earlier permit the Host field to be absent.
+func requiresHostHeader(version []byte) bool {
+	return len(version) == 8 && (version[5] > '1' || version[5] == '1' && version[7] >= '1')
+}
+
+// isValidHostHeader matches httpguts.ValidHostHeader's deliberately lenient
+// byte set without converting host to a string or allocating. An explicitly
+// empty Host field is valid; callers enforce whether the field itself is
+// required for the request version.
+func isValidHostHeader(host []byte) bool {
+	for _, c := range host {
+		if c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' {
+			continue
+		}
+		switch c {
+		case '!', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', ':', ';', '=', '[', ']', '_', '~':
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // ----------------------------- request adapter -----------------------------

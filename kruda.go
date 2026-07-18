@@ -353,13 +353,13 @@ func (app *App) shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	err := app.transport.Shutdown(ctx)
 	if app.container != nil {
 		if err := app.container.Shutdown(ctx); err != nil {
 			app.config.Logger.Error("container shutdown error", "error", err)
 		}
 	}
 
-	err := app.transport.Shutdown(ctx)
 	app.runShutdownHooks()
 	app.config.Logger.Info("shutdown complete")
 	return err
@@ -368,13 +368,13 @@ func (app *App) shutdown() error {
 // Shutdown initiates graceful shutdown programmatically (useful for tests).
 // Also runs OnShutdown hooks in LIFO order.
 func (app *App) Shutdown(ctx context.Context) error {
+	err := app.transport.Shutdown(ctx)
 	if app.container != nil {
 		if err := app.container.Shutdown(ctx); err != nil {
 			app.config.Logger.Error("container shutdown error", "error", err)
 		}
 	}
 
-	err := app.transport.Shutdown(ctx)
 	app.runShutdownHooks()
 	return err
 }

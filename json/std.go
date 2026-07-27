@@ -1,8 +1,10 @@
-//go:build kruda_stdjson || !cgo
+//go:build kruda_stdjson
 
 // Package json provides a pluggable JSON engine for Kruda.
 // This file uses encoding/json from the Go standard library.
-// It is compiled when the kruda_stdjson build tag is set or when CGO is disabled.
+// It is compiled only when the kruda_stdjson build tag is set. Prefer this
+// engine for workloads that spawn a process per request or scale to zero:
+// Sonic's JIT warm-up dominates cold-start time there.
 package json
 
 import (

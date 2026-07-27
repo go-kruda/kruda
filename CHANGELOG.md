@@ -5,6 +5,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
+  `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
+  static binaries and `scratch`/`distroless` container images — silently fell
+  back to `encoding/json` while still reporting a default build. Sonic is pure
+  Go plus assembly and has no cgo dependency; on platforms it does not
+  accelerate, Sonic's own build constraints already route its API to
+  `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
+
+  This changes behavior for existing `CGO_ENABLED=0` builds, which now get
+  Sonic: JSON decoding is roughly 4–5× faster, at the cost of Sonic's JIT
+  warm-up at process start (measured on a 4-core Linux container, 25 typed POST
+  routes: cold start 6.5 ms → 13.5 ms, startup RSS 12.1 MB → 17.6 MB). Long-lived
+  servers recoup that within the first few thousand requests. Builds that spawn
+  a process per request or scale to zero should set the `kruda_stdjson` tag to
+  keep the faster cold start.
+
+### Fixed
+
+- `json.MarshalToBuffer` on the Sonic engine now uses Sonic's streaming encoder,
+  as its documentation already claimed. It previously called `sonic.Marshal` and
+  copied the result into the buffer, so it allocated the intermediate `[]byte`
+  it was meant to avoid — on the response path used for every JSON response.
+  Encoding a 100-item payload drops from 6967 B/op to 178 B/op and is ~19%
+  faster; small payloads are ~13 ns slower for 115 B/op → 84 B/op. Output bytes
+  are unchanged: the streaming encoder uses `sonic.ConfigDefault`, the same
+  configuration package-level `sonic.Marshal` uses.
+
 ## [1.6.2] — 2026-07-19
 
 ### Security

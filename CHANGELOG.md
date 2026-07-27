@@ -7,6 +7,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The Sonic JSON engine now sorts map keys, so marshalling the same map twice
+  always produces the same bytes. Response bytes change for handlers that return
+  a multi-key map: keys are now emitted in sorted order, matching the
+  `kruda_stdjson` engine and `encoding/json`. Struct responses — including all
+  typed handlers and `Resource` CRUD — are unaffected, since struct field order
+  is fixed at compile time, and measure unchanged at ~165 ns/op. Map marshalling
+  costs roughly 13% more for a 4-key map and 65% for a 50-key map.
+- The `listening` startup log line now reports the active JSON engine as
+  `json=sonic` or `json=encoding/json`. The engine is selected by build tag, so
+  this is the only way to confirm from a running binary which one a build got.
 - The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
   `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
   static binaries and `scratch`/`distroless` container images — silently fell
@@ -25,14 +35,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- ETag generation no longer breaks for handlers that return a multi-key map. The
+  Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map
+  iteration order and the same logical response serialized to different bytes on
+  every request. Anything deriving a value from response bytes saw a new value
+  each time: `contrib/etag` hashes the body, so `If-None-Match` never matched and
+  304 was never returned — conditional-request caching silently did nothing.
+  Measured with a 4-key `map[string]any`, ETag generation produced 4 distinct
+  ETags across 200 requests before this change and 1 after. Response caching keyed
+  on body bytes and response snapshot tests were affected the same way. Struct
+  responses were never affected, and the `kruda_stdjson` engine was never
+  affected because `encoding/json` always sorts map keys.
+- `contrib/etag`: the `New` doc example generated the ETag from one marshal of the
+  payload and then responded with `c.JSON(data)`, encoding the value a second time.
+  Besides the wasted encode, the ETag was not guaranteed to describe the bytes
+  actually sent. The example now responds with the same bytes it hashed, via
+  `c.SendBytesWithType`.
 - `json.MarshalToBuffer` on the Sonic engine now uses Sonic's streaming encoder,
   as its documentation already claimed. It previously called `sonic.Marshal` and
   copied the result into the buffer, so it allocated the intermediate `[]byte`
   it was meant to avoid — on the response path used for every JSON response.
   Encoding a 100-item payload drops from 6967 B/op to 178 B/op and is ~19%
-  faster; small payloads are ~13 ns slower for 115 B/op → 84 B/op. Output bytes
-  are unchanged: the streaming encoder uses `sonic.ConfigDefault`, the same
-  configuration package-level `sonic.Marshal` uses.
+  faster; small payloads are ~13 ns slower for 115 B/op → 84 B/op. It encodes
+  through the same configuration as `json.Marshal`, so both produce identical
+  bytes.
 
 ## [1.6.2] — 2026-07-19
 

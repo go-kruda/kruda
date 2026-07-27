@@ -36,16 +36,23 @@ func (c *Config) defaults() {
 //   - GenerateAndSetETag(c, body) — generates ETag from body, sets it, and checks for 304
 //   - GenerateETag(body, weak) — generates an ETag string without setting it
 //
+// Send the same bytes the ETag was generated from. Marshalling again to
+// respond, with c.JSON(data), encodes the value a second time for no benefit and
+// lets the ETag describe bytes other than the ones sent.
+//
 // Example:
 //
 //	app.Use(etag.New())
 //	app.Get("/data", func(c *kruda.Ctx) error {
 //	    data := fetchData()
-//	    body, _ := json.Marshal(data)
+//	    body, err := json.Marshal(data)
+//	    if err != nil {
+//	        return err
+//	    }
 //	    if etag.GenerateAndSetETag(c, body) {
 //	        return nil // 304 sent
 //	    }
-//	    return c.JSON(data)
+//	    return c.SendBytesWithType("application/json; charset=utf-8", body)
 //	})
 func New(config ...Config) kruda.HandlerFunc {
 	var cfg Config

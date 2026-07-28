@@ -35,6 +35,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The Wing blocking advisor no longer warns about routes that do not block. It
+  judged a route by an absolute count of long inline requests, but inline time is
+  wall time and so includes any delay the OS scheduler adds. On a CPU-saturated
+  machine — a load test, a noisy neighbour, a pod at its CPU limit — even a
+  handler that only writes a constant string is occasionally descheduled past the
+  100µs threshold, and at a few hundred thousand requests a second the count of
+  ten was reached within seconds. A `c.Text` handler serving 190k req/s was told
+  to add `kruda.DB`. The advisor now warns only when at least 20% of a route's
+  requests run long, over at least 200 requests, which separates a genuinely
+  blocking handler (blocks on essentially every request) from scheduler noise
+  (well under 1%) by orders of magnitude. The warning now also reports
+  `share_percent`. Verified end to end: a handler sleeping 2ms warns at
+  `share_percent=100`, while a plaintext route at 181k req/s on the same server
+  stays silent.
+
 - ETag generation no longer breaks for handlers that return a multi-key map. The
   Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map
   iteration order and the same logical response serialized to different bytes on

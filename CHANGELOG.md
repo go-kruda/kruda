@@ -35,6 +35,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- JSON responses are now always valid UTF-8. The Sonic engine copied invalid
+  UTF-8 in a string straight through, so a string holding a truncated multi-byte
+  sequence, text read from a legacy encoding, or arbitrary binary produced a
+  response body that was not valid UTF-8 — which RFC 8259 section 8.1 requires
+  for JSON exchanged between systems, and which a strict client or proxy may
+  reject. The engine now enables `ValidateString`, substituting U+FFFD as
+  `encoding/json` already did, making the two engines byte-identical for these
+  inputs. It costs about 8% on responses containing a string.
+
+  `EscapeHTML` remains off, and is now the only byte-level difference between the
+  two engines: `encoding/json` escapes `<`, `>` and `&` so its output is safe to
+  paste directly inside an HTML `<script>` tag, and the Sonic engine emits those
+  characters. Enabling it costs about 41% on every response containing a string,
+  a poor trade for a default when responses are served as `application/json`,
+  which no browser executes, and the `html/template` renderer escapes JSON it
+  embeds. Applications that hand-embed a response body into HTML can opt in with
+  `kruda.WithJSONEncoder`.
+
 - The Wing blocking advisor no longer warns about routes that do not block. It
   judged a route by an absolute count of long inline requests, but inline time is
   wall time and so includes any delay the OS scheduler adds. On a CPU-saturated

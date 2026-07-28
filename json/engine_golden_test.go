@@ -38,6 +38,7 @@ var goldenCases = []struct {
 	{"slice", []int{1, 2, 3}, `[1,2,3]`},
 	{"unicode", "สวัสดี 🦅", `"สวัสดี 🦅"`},
 	{"escapes", "tab\there\nnewline\"quote\\slash", `"tab\there\nnewline\"quote\\slash"`},
+	{"invalidUTF8", string([]byte{0xff, 0xfe}), `"\ufffd\ufffd"`},
 	{"singleKeyMap", map[string]int{"a": 1}, `{"a":1}`},
 	{"multiKeyMapSorted", map[string]int{"zebra": 1, "apple": 2, "mango": 3},
 		`{"apple":2,"mango":3,"zebra":1}`},
@@ -110,19 +111,20 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestKnownCrossEngineDivergences pins the two byte-level differences that
-// remain between engines, so neither drifts unnoticed and closing either is a
+// TestKnownCrossEngineDivergences pins the one byte-level difference that
+// remains between engines, so it cannot drift unnoticed and closing it is a
 // deliberate, reviewed change rather than an accident.
 //
-// Both stem from sonic.Config options Kruda leaves off because enabling them
-// costs roughly 48% on every response containing a string:
+// encoding/json escapes <, > and & so its output is safe to paste directly
+// inside an HTML <script> tag. The sonic engine leaves EscapeHTML off because it
+// costs about 41% on every response containing a string, which is a poor default
+// when responses go out as application/json — no browser executes those — and
+// the html/template renderer escapes JSON it embeds. An application that
+// hand-embeds a response body into HTML can opt in with kruda.WithJSONEncoder.
 //
-//   - EscapeHTML: encoding/json escapes <, > and & so JSON is safe to embed
-//     directly inside an HTML <script> tag. Sonic emits them raw. Responses
-//     served as application/json are unaffected; hand-embedding a response into
-//     HTML is what differs.
-//   - ValidateString: encoding/json replaces invalid UTF-8 with U+FFFD, which
-//     keeps output valid JSON per RFC 8259. Sonic passes the bytes through.
+// Invalid UTF-8 used to differ here too. The sonic engine now enables
+// ValidateString, so both engines substitute U+FFFD and that case has moved to
+// goldenCases.
 func TestKnownCrossEngineDivergences(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -136,8 +138,6 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 			`"a&b"`, `"a\u0026b"`},
 		{"htmlInMap", map[string]string{"k": "<b>"},
 			`{"k":"<b>"}`, `{"k":"\u003cb\u003e"}`},
-		{"invalidUTF8", string([]byte{0xff, 0xfe}),
-			"\"\xff\xfe\"", `"\ufffd\ufffd"`},
 	}
 
 	for _, tc := range cases {

@@ -33,12 +33,25 @@ const EncoderName = "sonic"
 // and Kruda's typed handlers and Resource CRUD return structs. Only map-valued
 // responses pay for it.
 //
-// Two byte-level differences from the kruda_stdjson engine remain by design,
-// both because closing them would cost roughly 48% on every response containing
-// a string: this engine does not escape HTML characters (encoding/json emits
-// < for '<'), and it passes invalid UTF-8 through rather than substituting
-// U+FFFD. TestKnownCrossEngineDivergences pins both so a change is deliberate.
-var api = sonic.Config{SortMapKeys: true}.Froze()
+// ValidateString is enabled so invalid UTF-8 in a string is replaced with U+FFFD
+// rather than copied through. RFC 8259 section 8.1 requires JSON exchanged
+// between systems to be UTF-8, and Sonic's default emitted the raw bytes, so a
+// string holding invalid UTF-8 — anything read from a legacy encoding, a
+// truncated multi-byte sequence, arbitrary binary put in a string field —
+// produced a response that was not valid UTF-8 and could be rejected by a strict
+// client or proxy. It costs about 8%, and makes this engine byte-identical to
+// encoding/json for those inputs.
+//
+// EscapeHTML stays off, which is the one byte-level difference from the
+// kruda_stdjson engine that remains: encoding/json emits < for '<' so its
+// output is safe to paste directly inside an HTML <script> tag, and this engine
+// emits the character. It costs about 41% on every response containing a string,
+// which is a poor trade for the framework default — responses go out as
+// application/json, which no browser executes, and the html/template renderer
+// escapes JSON it embeds. An application that hand-embeds a response body into
+// HTML can opt in with kruda.WithJSONEncoder.
+// TestKnownCrossEngineDivergences pins the difference so a change is deliberate.
+var api = sonic.Config{SortMapKeys: true, ValidateString: true}.Froze()
 
 // Marshal encodes v as JSON using Sonic (SIMD-accelerated).
 func Marshal(v any) ([]byte, error) {

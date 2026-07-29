@@ -6,6 +6,7 @@
 package kruda
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -85,22 +86,22 @@ func TestObserveAdvisorDoesNotRetainRequestPath(t *testing.T) {
 	w := &worker{}
 	w.observeAdvisor(Preset{}, "GET", bytesconv.UnsafeString(pathBuf), fastNanos)
 
-	slot := w.advisor.last
-	if slot == nil || slot.path != "/original" {
-		t.Fatalf("cached path = %q, want %q", slot.path, "/original")
+	e := w.advisor.last
+	if e == nil || e.path != "/original" {
+		t.Fatalf("cached path = %q, want %q", e.path, "/original")
 	}
 
 	// Simulate the buffer being reused for the next request.
 	copy(pathBuf, []byte("/OVERWRIT"))
 
-	if slot.path != "/original" {
-		t.Fatalf("cached path aliased the request buffer: became %q after the buffer was reused", slot.path)
+	if e.path != "/original" {
+		t.Fatalf("cached path aliased the request buffer: became %q after the buffer was reused", e.path)
 	}
-	if slot.key != "GET /original" {
-		t.Fatalf("cached key aliased the request buffer: became %q", slot.key)
+	if e.key != "GET /original" {
+		t.Fatalf("cached key aliased the request buffer: became %q", e.key)
 	}
 	// The map key must own its strings too, or the lookup would go stale.
-	if _, ok := w.advisor.slots[advisorRouteKey{"GET", "/original"}]; !ok {
+	if _, ok := w.advisor.routes[advisorRouteKey{"GET", "/original"}]; !ok {
 		t.Fatal("slot map key aliased the request buffer")
 	}
 }
@@ -133,3 +134,111 @@ func TestObserveAdvisorZeroAllocInterleavedRoutes(t *testing.T) {
 		t.Fatalf("observing inline requests across %d routes must be zero-alloc, got %.2f allocs/op", len(paths), allocs)
 	}
 }
+
+// TestObserveAdvisorNoWarnFromEarlyScatteredBlocks guards the batching rule.
+// Long requests must reach the shared entry alongside the totals they came
+// from. An earlier version folded each long request in on its own while the
+// totals stayed in per-worker tallies, so a handful of workers a few requests
+// into their first batch could publish enough blocked samples against an almost
+// empty shared total to cross the share threshold — a false positive worst at
+// process start, which is exactly when scheduler noise peaks and the advisor is
+// supposed to stay quiet.
+func TestObserveAdvisorNoWarnFromEarlyScatteredBlocks(t *testing.T) {
+	advisorResetForTest()
+	buf := captureWarnings(t)
+
+	// 64 workers, each a few requests into a route it will serve heavily, each
+	// having caught a single descheduled request early on.
+	workers := make([]*worker, 64)
+	for i := range workers {
+		workers[i] = &worker{}
+		workers[i].observeAdvisor(Preset{}, "GET", "/plaintext", slowNanos)
+		for j := 0; j < 4; j++ {
+			workers[i].observeAdvisor(Preset{}, "GET", "/plaintext", fastNanos)
+		}
+	}
+	if out := buf.String(); out != "" {
+		t.Fatalf("warned on 64 scattered early samples (true share 20%% of 320 requests, well under advisorMinSamples): %s", out)
+	}
+
+	// Let them run: 1% descheduled, the rate the advisor must tolerate.
+	for _, w := range workers {
+		for i := 0; i < 2000; i++ {
+			elapsed := int64(fastNanos)
+			if i%100 == 0 {
+				elapsed = slowNanos
+			}
+			w.observeAdvisor(Preset{}, "GET", "/plaintext", elapsed)
+		}
+		w.advisor.flush()
+	}
+	if out := buf.String(); out != "" {
+		t.Fatalf("warned at a ~1%% block rate across 64 workers: %s", out)
+	}
+
+	e, _ := advisorRoutes.Load("GET /plaintext")
+	total := e.(*advisorEntry).total.Load()
+	blocked := e.(*advisorEntry).blocked.Load()
+	if want := int64(64 * 2005); total != want {
+		t.Errorf("shared total = %d, want %d — every observed request must be folded in", total, want)
+	}
+	if share := blocked * 100 / total; share >= advisorBlockPercent {
+		t.Errorf("shared share = %d%%, want well under %d%%", share, advisorBlockPercent)
+	}
+}
+
+// TestObserveAdvisorRouteFloodStaysBounded guards the param-route flood cap.
+// The cap is process-wide, so a worker must never track a route the shared map
+// already refused — an earlier version capped each worker's map independently
+// and stored an entry-less slot when the shared lookup returned nothing, giving
+// every worker its own 1024 routes and a fresh key allocation for every flooded
+// path. One worker cannot show this: its own map fills at the same moment the
+// process-wide one does, so the second worker is the one that matters.
+func TestObserveAdvisorRouteFloodStaysBounded(t *testing.T) {
+	advisorResetForTest()
+	_ = captureWarnings(t)
+
+	first := &worker{}
+	for i := 0; i < advisorMaxRoutes*2; i++ {
+		first.observeAdvisor(Preset{}, "GET", "/users/"+strconv.Itoa(i), fastNanos)
+	}
+	if n := advisorSize.Load(); n != advisorMaxRoutes {
+		t.Fatalf("process tracked %d routes, want the cap %d", n, advisorMaxRoutes)
+	}
+
+	// A second worker meeting the flood with an empty map of its own.
+	second := &worker{}
+	for i := advisorMaxRoutes * 10; i < advisorMaxRoutes*10+500; i++ {
+		second.observeAdvisor(Preset{}, "GET", "/users/"+strconv.Itoa(i), fastNanos)
+	}
+	if n := len(second.advisor.routes); n != 0 {
+		t.Errorf("second worker tracked %d routes the process-wide cap had already refused, want 0", n)
+	}
+	for _, w := range []*worker{first, second} {
+		if n := len(w.advisor.routes); n > advisorMaxRoutes {
+			t.Errorf("worker tracked %d routes, want at most %d", n, advisorMaxRoutes)
+		}
+		for k := range w.advisor.routes {
+			if _, ok := advisorRoutes.Load(k.method + " " + k.path); !ok {
+				t.Fatalf("worker tracks %q %q, which the process-wide cap refused", k.method, k.path)
+			}
+		}
+	}
+
+	// Past the cap a flooded path must not allocate: a map miss, an atomic load,
+	// and a return. The test's own strconv.Itoa and concatenation set the floor.
+	i := advisorMaxRoutes * 20
+	allocs := testing.AllocsPerRun(200, func() {
+		second.observeAdvisor(Preset{}, "GET", "/users/"+strconv.Itoa(i), fastNanos)
+		i++
+	})
+	base := testing.AllocsPerRun(200, func() {
+		sink = "/users/" + strconv.Itoa(i)
+		i++
+	})
+	if allocs > base {
+		t.Errorf("observing a flooded path allocated %.2f/op over a %.2f/op baseline", allocs, base)
+	}
+}
+
+var sink string

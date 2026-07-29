@@ -20,19 +20,19 @@ func captureWarnings(t *testing.T) *bytes.Buffer {
 // advisorObserve folds one request straight into a shared entry, bypassing the
 // per-worker tally, so the threshold logic in advisorFlush can be driven a
 // sample at a time.
-func advisorObserve(e *advisorEntry, key string, elapsedNanos int64, explicitPreset bool) {
+func advisorObserve(e *advisorEntry, elapsedNanos int64) {
 	if elapsedNanos < advisorBlockNanos {
-		advisorFlush(e, key, 1, 0, 0, explicitPreset)
+		advisorFlush(e, 1, 0, 0)
 		return
 	}
-	advisorFlush(e, key, 1, 1, elapsedNanos, explicitPreset)
+	advisorFlush(e, 1, 1, elapsedNanos)
 }
 
 // observe feeds n requests for one route, each taking elapsed nanoseconds.
-func observe(key string, n int, elapsed int64, explicit bool) {
-	e := advisorLookup(key)
+func observe(method, path string, n int, elapsed int64, explicit bool) {
+	e := advisorLookup(method, path, explicit)
 	for i := 0; i < n; i++ {
-		advisorObserve(e, key, elapsed, explicit)
+		advisorObserve(e, elapsed)
 	}
 }
 
@@ -47,18 +47,18 @@ func TestAdvisorWarnsOnceWhenMostRequestsBlock(t *testing.T) {
 
 	// Below the sample floor there is no meaningful share yet, however many
 	// requests blocked.
-	observe("GET /db", advisorMinSamples-1, slowNanos, false)
+	observe("GET", "/db", advisorMinSamples-1, slowNanos, false)
 	if buf.Len() != 0 {
 		t.Fatalf("warned before the sample floor: %s", buf.String())
 	}
 
-	observe("GET /db", 1, slowNanos, false)
+	observe("GET", "/db", 1, slowNanos, false)
 	out := buf.String()
 	if !strings.Contains(out, "GET /db") || !strings.Contains(out, "kruda.DB") {
 		t.Fatalf("missing route/suggestion in warning: %s", out)
 	}
 
-	observe("GET /db", 1000, slowNanos, false)
+	observe("GET", "/db", 1000, slowNanos, false)
 	if n := strings.Count(buf.String(), "blocked the event loop"); n != 1 {
 		t.Fatalf("expected exactly 1 warning, got %d: %s", n, buf.String())
 	}
@@ -75,7 +75,7 @@ func TestAdvisorIgnoresRareSlowRequests(t *testing.T) {
 	advisorResetForTest()
 	buf := captureWarnings(t)
 
-	e := advisorLookup("GET /plaintext")
+	e := advisorLookup("GET", "/plaintext", false)
 	// 1 in 1000 requests runs long: far more slow samples than the old
 	// absolute threshold of 10, but nowhere near a blocking handler's share.
 	for i := 0; i < 200_000; i++ {
@@ -83,7 +83,7 @@ func TestAdvisorIgnoresRareSlowRequests(t *testing.T) {
 		if i%1000 == 0 {
 			elapsed = slowNanos
 		}
-		advisorObserve(e, "GET /plaintext", elapsed, false)
+		advisorObserve(e, elapsed)
 	}
 
 	if buf.Len() != 0 {
@@ -106,13 +106,13 @@ func TestAdvisorShareThreshold(t *testing.T) {
 	buf := captureWarnings(t)
 
 	// 10% of requests slow, evenly spaced: below the threshold, no warning.
-	e := advisorLookup("GET /under")
+	e := advisorLookup("GET", "/under", false)
 	for i := 0; i < 2000; i++ {
 		elapsed := int64(fastNanos)
 		if i%10 == 0 {
 			elapsed = slowNanos
 		}
-		advisorObserve(e, "GET /under", elapsed, false)
+		advisorObserve(e, elapsed)
 	}
 	if buf.Len() != 0 {
 		t.Fatalf("warned at a 10%% share, below the %d%% threshold: %s",
@@ -120,13 +120,13 @@ func TestAdvisorShareThreshold(t *testing.T) {
 	}
 
 	// 25% of requests slow, evenly spaced: above the threshold, warns.
-	e2 := advisorLookup("GET /over")
+	e2 := advisorLookup("GET", "/over", false)
 	for i := 0; i < 2000; i++ {
 		elapsed := int64(fastNanos)
 		if i%4 == 0 {
 			elapsed = slowNanos
 		}
-		advisorObserve(e2, "GET /over", elapsed, false)
+		advisorObserve(e2, elapsed)
 	}
 	if !strings.Contains(buf.String(), "GET /over") {
 		t.Fatalf("expected a warning at a 25%% share, got: %s", buf.String())
@@ -136,7 +136,7 @@ func TestAdvisorShareThreshold(t *testing.T) {
 func TestAdvisorReportsShareInWarning(t *testing.T) {
 	advisorResetForTest()
 	buf := captureWarnings(t)
-	observe("GET /db", 500, slowNanos, false)
+	observe("GET", "/db", 500, slowNanos, false)
 	if out := buf.String(); !strings.Contains(out, "share_percent=100") {
 		t.Fatalf("expected share_percent in warning, got: %s", out)
 	}
@@ -145,7 +145,7 @@ func TestAdvisorReportsShareInWarning(t *testing.T) {
 func TestAdvisorExplicitPresetVariant(t *testing.T) {
 	advisorResetForTest()
 	buf := captureWarnings(t)
-	observe("GET /annotated", advisorMinSamples, slowNanos, true)
+	observe("GET", "/annotated", advisorMinSamples, slowNanos, true)
 	if !strings.Contains(buf.String(), "annotated for inline dispatch") {
 		t.Fatalf("expected explicit-preset variant, got: %s", buf.String())
 	}
@@ -154,16 +154,16 @@ func TestAdvisorExplicitPresetVariant(t *testing.T) {
 func TestAdvisorRouteCap(t *testing.T) {
 	advisorResetForTest()
 	for i := 0; i < advisorMaxRoutes; i++ {
-		if e := advisorLookup("GET /r" + strconv.Itoa(i)); e == nil {
+		if e := advisorLookup("GET", "/r"+strconv.Itoa(i), false); e == nil {
 			t.Fatalf("route %d rejected before the cap", i)
 		}
 	}
 	// Past the cap: new routes are dropped — no panic, no warning explosion.
 	buf := captureWarnings(t)
-	if e := advisorLookup("GET /overflow"); e != nil {
+	if e := advisorLookup("GET", "/overflow", false); e != nil {
 		t.Fatal("route past the cap should not be tracked")
 	}
-	observe("GET /overflow", advisorMinSamples*2, slowNanos, false)
+	observe("GET", "/overflow", advisorMinSamples*2, slowNanos, false)
 	if strings.Contains(buf.String(), "/overflow") {
 		t.Fatalf("route past cap should not warn: %s", buf.String())
 	}
@@ -174,7 +174,7 @@ func TestAdvisorRouteCap(t *testing.T) {
 func TestAdvisorObserveNilEntryIsSafe(t *testing.T) {
 	advisorResetForTest()
 	buf := captureWarnings(t)
-	advisorObserve(nil, "GET /nil", slowNanos, false)
+	advisorObserve(nil, slowNanos)
 	if buf.Len() != 0 {
 		t.Fatalf("nil entry produced output: %s", buf.String())
 	}

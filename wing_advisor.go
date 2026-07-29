@@ -30,8 +30,13 @@ import (
 // ones. That count must therefore cost nothing on the hot path: workers tally
 // their own requests in advisorCache, which is owned by one event-loop
 // goroutine and uses neither atomics nor allocation, and fold those tallies
-// into the shared per-route entry only on a long request or once every
-// advisorFlushEvery requests.
+// into the shared per-route entry in batches.
+//
+// A batch always carries long requests together with the totals they came from.
+// Folding a long request in on its own would publish it against a total that is
+// still sitting in other workers' unflushed tallies, which makes the share look
+// far larger than it is — worst at process start, when every worker is a few
+// requests into its first batch and scheduler noise is at its highest.
 const (
 	advisorBlockNanos   = 100_000 // inline wall time that counts as a block (100µs)
 	advisorWarnAfter    = 10      // minimum long requests on a route before warning
@@ -41,10 +46,18 @@ const (
 	advisorFlushEvery   = 256     // requests a worker tallies locally before folding them in
 )
 
+// advisorEntry is the process-wide record for one route. key, method and path
+// are owned copies made once, when the route is first seen, and shared by every
+// worker: the request path they are built from aliases a connection read buffer
+// and goes stale.
 type advisorEntry struct {
-	total   atomic.Int64
-	blocked atomic.Int64
-	warned  atomic.Bool
+	key      string
+	method   string
+	path     string
+	explicit bool
+	total    atomic.Int64
+	blocked  atomic.Int64
+	warned   atomic.Bool
 }
 
 var (
@@ -60,14 +73,21 @@ func advisorResetForTest() {
 // advisorLookup returns the entry for a route, allocating one on first sight and
 // respecting the route cap. It returns nil once the cap is reached and the route
 // is not already tracked.
-func advisorLookup(key string) *advisorEntry {
+func advisorLookup(method, path string, explicitPreset bool) *advisorEntry {
+	key := method + " " + path
 	if v, ok := advisorRoutes.Load(key); ok {
 		return v.(*advisorEntry)
 	}
 	if advisorSize.Load() >= advisorMaxRoutes {
 		return nil
 	}
-	v, loaded := advisorRoutes.LoadOrStore(key, &advisorEntry{})
+	e := &advisorEntry{
+		key:      key,
+		method:   key[:len(method)],
+		path:     key[len(method)+1:],
+		explicit: explicitPreset,
+	}
+	v, loaded := advisorRoutes.LoadOrStore(key, e)
 	if !loaded {
 		advisorSize.Add(1)
 	}
@@ -78,7 +98,7 @@ func advisorLookup(key string) *advisorEntry {
 // warns if the route now looks like it blocks the loop. lastBlockedNanos is the
 // wall time of the most recent long request and is only read when blockedDelta
 // is non-zero.
-func advisorFlush(e *advisorEntry, key string, totalDelta, blockedDelta, lastBlockedNanos int64, explicitPreset bool) {
+func advisorFlush(e *advisorEntry, totalDelta, blockedDelta, lastBlockedNanos int64) {
 	if e == nil || (totalDelta == 0 && blockedDelta == 0) {
 		return
 	}
@@ -102,44 +122,38 @@ func advisorFlush(e *advisorEntry, key string, totalDelta, blockedDelta, lastBlo
 
 	share := blocked * 100 / total
 	blockedFor := time.Duration(lastBlockedNanos).Round(10 * time.Microsecond)
-	if explicitPreset {
+	if e.explicit {
 		slog.Warn("kruda: route is annotated for inline dispatch but blocked the event loop — verify the preset, or use kruda.DB (short DB/Redis I/O) or kruda.Spear (blocking I/O)",
-			"route", key, "blocked", blockedFor.String(), "count", blocked, "share_percent", share)
+			"route", e.key, "blocked", blockedFor.String(), "count", blocked, "share_percent", share)
 		return
 	}
 	slog.Warn("kruda: route blocked the event loop — add kruda.DB (short DB/Redis I/O) or kruda.Spear (blocking I/O)",
-		"route", key, "blocked", blockedFor.String(), "count", blocked, "share_percent", share)
+		"route", e.key, "blocked", blockedFor.String(), "count", blocked, "share_percent", share)
 }
 
 type advisorRouteKey struct{ method, path string }
-
-// advisorSlot is a resolved route: its shared entry plus the strings needed to
-// report it. key, method and path are owned copies, because the request path
-// handed to observe aliases the connection read buffer and goes stale.
-type advisorSlot struct {
-	key      string
-	method   string
-	path     string
-	entry    *advisorEntry // nil once the process-wide route cap is reached
-	explicit bool
-}
 
 // advisorCache holds one worker's advisor tallies. It is owned by that worker's
 // event-loop goroutine: no atomics, no locking, and no allocation after a route
 // has been seen once.
 //
-// The tallies live here rather than in advisorSlot so that observing a request
-// touches only fields inline in the worker, with no pointer to chase. They
-// belong to last, and are folded into its shared entry whenever the route
-// changes, a request runs long, or advisorFlushEvery requests accumulate.
+// The tallies live inline here rather than behind the entry pointer so that
+// observing a request touches only fields inside the worker. They belong to
+// last, and are folded into its shared entry when a batch fills, when enough
+// long requests accumulate to possibly warn, when the route changes, or when
+// the worker stops.
+//
+// routes only ever holds entries that exist in advisorRoutes, so the
+// process-wide advisorMaxRoutes guard bounds these per-worker maps too, and the
+// strings inside them are the shared entry's, not per-worker copies.
 type advisorCache struct {
 	lastMethod  string
 	lastPath    string
 	total       int64
 	blocked     int64
 	lastBlocked int64
-	last        *advisorSlot
-	slots       map[advisorRouteKey]*advisorSlot
+	last        *advisorEntry
+	routes      map[advisorRouteKey]*advisorEntry
 }
 
 // observe records one inline request and its wall time. Consecutive requests to
@@ -156,10 +170,11 @@ func (a *advisorCache) observe(method, path string, elapsedNanos int64, explicit
 	if elapsedNanos >= advisorBlockNanos {
 		a.blocked++
 		a.lastBlocked = elapsedNanos
-		a.flush()
-		return
 	}
-	if a.total >= advisorFlushEvery {
+	// Fold in on a full batch, or as soon as this worker holds enough long
+	// requests to matter — never on a single one, so the long requests always
+	// reach the shared entry alongside the totals they were drawn from.
+	if a.total >= advisorFlushEvery || a.blocked >= advisorWarnAfter {
 		a.flush()
 	}
 }
@@ -168,7 +183,7 @@ func (a *advisorCache) observe(method, path string, elapsedNanos int64, explicit
 // the incoming one, so a worker alternating between routes loses no counts.
 func (a *advisorCache) switchRoute(method, path string, explicitPreset bool) {
 	a.flush()
-	a.last = a.slotFor(method, path, explicitPreset)
+	a.last = a.routeFor(method, path, explicitPreset)
 	if a.last == nil {
 		// No owned copy of path to cache, and retaining the caller's would alias
 		// the read buffer. Leave the cache empty; past the route cap every
@@ -179,28 +194,25 @@ func (a *advisorCache) switchRoute(method, path string, explicitPreset bool) {
 	a.lastMethod, a.lastPath = a.last.method, a.last.path
 }
 
-func (a *advisorCache) slotFor(method, path string, explicitPreset bool) *advisorSlot {
-	if s, ok := a.slots[advisorRouteKey{method, path}]; ok {
-		return s
+func (a *advisorCache) routeFor(method, path string, explicitPreset bool) *advisorEntry {
+	if e, ok := a.routes[advisorRouteKey{method, path}]; ok {
+		return e
 	}
-	if len(a.slots) >= advisorMaxRoutes {
+	// Test the cap before building a key. Past it every request under a path
+	// flood is a fresh path, so allocating one to look it up and fail would put
+	// the flood straight back on the hot path.
+	if advisorSize.Load() >= advisorMaxRoutes {
 		return nil
 	}
-	// One allocation per route per worker, never per request. method and path
-	// are re-sliced out of key so the slot owns every string it stores.
-	key := method + " " + path
-	s := &advisorSlot{
-		key:      key,
-		method:   key[:len(method)],
-		path:     key[len(method)+1:],
-		entry:    advisorLookup(key),
-		explicit: explicitPreset,
+	e := advisorLookup(method, path, explicitPreset)
+	if e == nil {
+		return nil
 	}
-	if a.slots == nil {
-		a.slots = make(map[advisorRouteKey]*advisorSlot)
+	if a.routes == nil {
+		a.routes = make(map[advisorRouteKey]*advisorEntry)
 	}
-	a.slots[advisorRouteKey{s.method, s.path}] = s
-	return s
+	a.routes[advisorRouteKey{e.method, e.path}] = e
+	return e
 }
 
 // flush folds the pending tallies into the current route's shared entry. Every
@@ -213,6 +225,6 @@ func (a *advisorCache) flush() {
 	if a.last == nil || (a.total == 0 && a.blocked == 0) {
 		return
 	}
-	advisorFlush(a.last.entry, a.last.key, a.total, a.blocked, a.lastBlocked, a.last.explicit)
+	advisorFlush(a.last, a.total, a.blocked, a.lastBlocked)
 	a.total, a.blocked = 0, 0
 }

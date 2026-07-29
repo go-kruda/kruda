@@ -72,8 +72,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ones, so the counting itself is kept off the hot path: each Wing worker tallies
   its own routes in memory it alone owns — no atomic, no lock, and no allocation
   once a route has been seen — and folds those tallies into the shared per-route
-  totals only when a request runs long, when the route changes, or once every 256
-  requests. Observing a request costs two string comparisons and an increment.
+  totals in batches, when a batch fills, when enough long requests accumulate to
+  possibly warn, when the route changes, or when the worker stops. Observing a
+  request costs two string comparisons and an increment.
+
+  A batch always carries long requests together with the totals they were drawn
+  from, which is what keeps the share honest across workers: publishing a long
+  request on its own, against totals still sitting unflushed in every other
+  worker, would make a route look far more blocking than it is — worst at process
+  start, when each worker is a few requests in and scheduler noise peaks.
 
 - ETag generation no longer breaks for handlers that return a multi-key map. The
   Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map

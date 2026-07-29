@@ -5,6 +5,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- `contrib/observability` now requires `google.golang.org/grpc` v1.82.1, clearing
+  GO-2026-6061. The vulnerable v1.81.1 arrived indirectly through the OTLP gRPC
+  exporters, and govulncheck reported it as reachable from
+  `observability.buildSDK`. The weekly scan on 2026-07-26 was clean, so the
+  advisory landed after it; the finding came from the on-PR scan.
+
 ### Fixed
 
 - `kruda new` now produces a project that builds. All three templates wrote

@@ -60,8 +60,14 @@ type advisorEntry struct {
 	warned   atomic.Bool
 }
 
+// advisorRoutes nests a map per method rather than keying one map on
+// "METHOD path". Joining them would mean building that string to look a route
+// up, and the lookup runs whenever a worker meets a route it has not cached —
+// which, under a flood of distinct paths, is every request. Nested, both levels
+// are looked up with strings the caller already holds, and nothing is allocated
+// until a route is actually recorded.
 var (
-	advisorRoutes sync.Map // "METHOD path" → *advisorEntry
+	advisorRoutes sync.Map // method → *sync.Map (path → *advisorEntry)
 	advisorSize   atomic.Int64
 )
 
@@ -70,24 +76,45 @@ func advisorResetForTest() {
 	advisorSize.Store(0)
 }
 
-// advisorLookup returns the entry for a route, allocating one on first sight and
-// respecting the route cap. It returns nil once the cap is reached and the route
-// is not already tracked.
+// advisorFind returns the entry for a route if the process is already tracking
+// it, allocating nothing. A miss says nothing about the route cap.
+func advisorFind(method, path string) *advisorEntry {
+	byPath, ok := advisorRoutes.Load(method)
+	if !ok {
+		return nil
+	}
+	v, ok := byPath.(*sync.Map).Load(path)
+	if !ok {
+		return nil
+	}
+	return v.(*advisorEntry)
+}
+
+// advisorLookup returns the entry for a route, recording it on first sight and
+// respecting the route cap. It returns nil only when the cap is reached and the
+// route is not already tracked.
+//
+// The cap is tested after the lookup, never before: a route the process is
+// already tracking must keep resolving on every worker, including workers that
+// meet it for the first time long after a path flood has filled the cap.
 func advisorLookup(method, path string, explicitPreset bool) *advisorEntry {
-	key := method + " " + path
-	if v, ok := advisorRoutes.Load(key); ok {
-		return v.(*advisorEntry)
+	if e := advisorFind(method, path); e != nil {
+		return e
 	}
 	if advisorSize.Load() >= advisorMaxRoutes {
 		return nil
 	}
+	// The caller's path aliases a connection read buffer, so build the one copy
+	// this route will ever need and slice both map keys out of it.
+	key := method + " " + path
 	e := &advisorEntry{
 		key:      key,
 		method:   key[:len(method)],
 		path:     key[len(method)+1:],
 		explicit: explicitPreset,
 	}
-	v, loaded := advisorRoutes.LoadOrStore(key, e)
+	byPath, _ := advisorRoutes.LoadOrStore(e.method, &sync.Map{})
+	v, loaded := byPath.(*sync.Map).LoadOrStore(e.path, e)
 	if !loaded {
 		advisorSize.Add(1)
 	}
@@ -198,12 +225,10 @@ func (a *advisorCache) routeFor(method, path string, explicitPreset bool) *advis
 	if e, ok := a.routes[advisorRouteKey{method, path}]; ok {
 		return e
 	}
-	// Test the cap before building a key. Past it every request under a path
-	// flood is a fresh path, so allocating one to look it up and fail would put
-	// the flood straight back on the hot path.
-	if advisorSize.Load() >= advisorMaxRoutes {
-		return nil
-	}
+	// A miss here means only that this worker has not met the route yet, so it
+	// still has to consult the shared map — the route may well be tracked. That
+	// consultation allocates nothing, so a flood of paths past the cap costs two
+	// map misses and returns.
 	e := advisorLookup(method, path, explicitPreset)
 	if e == nil {
 		return nil

@@ -60,15 +60,15 @@ func TestObserveAdvisorSwitchesBetweenRoutes(t *testing.T) {
 	// advisorFlushEvery, so the shared totals only settle after a flush.
 	w.advisor.flush()
 
-	slow, _ := advisorRoutes.Load("GET /slow")
-	fast, _ := advisorRoutes.Load("GET /fast")
+	slow := advisorFind("GET", "/slow")
+	fast := advisorFind("GET", "/fast")
 	if slow == nil || fast == nil {
 		t.Fatal("expected both routes tracked separately")
 	}
-	if n := fast.(*advisorEntry).blocked.Load(); n != 0 {
+	if n := fast.blocked.Load(); n != 0 {
 		t.Errorf("fast route recorded %d blocked requests, want 0", n)
 	}
-	if n := fast.(*advisorEntry).total.Load(); n != int64(advisorMinSamples*2) {
+	if n := fast.total.Load(); n != int64(advisorMinSamples*2) {
 		t.Errorf("fast route recorded %d requests, want %d", n, advisorMinSamples*2)
 	}
 }
@@ -176,9 +176,9 @@ func TestObserveAdvisorNoWarnFromEarlyScatteredBlocks(t *testing.T) {
 		t.Fatalf("warned at a ~1%% block rate across 64 workers: %s", out)
 	}
 
-	e, _ := advisorRoutes.Load("GET /plaintext")
-	total := e.(*advisorEntry).total.Load()
-	blocked := e.(*advisorEntry).blocked.Load()
+	e := advisorFind("GET", "/plaintext")
+	total := e.total.Load()
+	blocked := e.blocked.Load()
 	if want := int64(64 * 2005); total != want {
 		t.Errorf("shared total = %d, want %d — every observed request must be folded in", total, want)
 	}
@@ -219,7 +219,7 @@ func TestObserveAdvisorRouteFloodStaysBounded(t *testing.T) {
 			t.Errorf("worker tracked %d routes, want at most %d", n, advisorMaxRoutes)
 		}
 		for k := range w.advisor.routes {
-			if _, ok := advisorRoutes.Load(k.method + " " + k.path); !ok {
+			if advisorFind(k.method, k.path) == nil {
 				t.Fatalf("worker tracks %q %q, which the process-wide cap refused", k.method, k.path)
 			}
 		}
@@ -242,3 +242,39 @@ func TestObserveAdvisorRouteFloodStaysBounded(t *testing.T) {
 }
 
 var sink string
+
+// TestObserveAdvisorTracksKnownRouteAfterFlood guards the route cap against
+// blinding the advisor. The cap stops new routes being recorded; it must not
+// stop an already-recorded route resolving on a worker meeting it for the first
+// time. An earlier version tested the cap before consulting the shared map, so
+// once a path flood filled it, every worker that had not already cached a real
+// route silently stopped observing it — a false negative that lasts for the
+// life of the process.
+func TestObserveAdvisorTracksKnownRouteAfterFlood(t *testing.T) {
+	advisorResetForTest()
+	buf := captureWarnings(t)
+
+	// A real route, recorded before the flood by the worker that first served it.
+	first := &worker{}
+	first.observeAdvisor(Preset{}, "GET", "/api/orders", fastNanos)
+
+	flood := &worker{}
+	for i := 0; i < advisorMaxRoutes*2; i++ {
+		flood.observeAdvisor(Preset{}, "GET", "/u/"+strconv.Itoa(i), fastNanos)
+	}
+	if advisorFind("GET", "/api/orders") == nil {
+		t.Fatal("precondition: /api/orders must still be tracked process-wide")
+	}
+
+	// A worker meeting the route for the first time after the cap filled.
+	fresh := &worker{}
+	for i := 0; i < advisorMinSamples; i++ {
+		fresh.observeAdvisor(Preset{}, "GET", "/api/orders", slowNanos)
+	}
+	if fresh.advisor.last == nil {
+		t.Fatal("fresh worker could not resolve /api/orders, which is tracked process-wide")
+	}
+	if !strings.Contains(buf.String(), "GET /api/orders") {
+		t.Fatalf("a blocking route went unreported on a worker that met it after the flood: %q", buf.String())
+	}
+}

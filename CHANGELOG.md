@@ -82,6 +82,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   worker, would make a route look far more blocking than it is — worst at process
   start, when each worker is a few requests in and scheduler noise peaks.
 
+  The 1024-route cap that guards against a flood of distinct paths remains
+  process-wide, and continues to apply only to routes the process has not seen
+  before: a route already being tracked keeps resolving on every worker, however
+  full the cap, so a flood cannot silence the advisor for an application's real
+  routes.
+
 - ETag generation no longer breaks for handlers that return a multi-key map. The
   Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map
   iteration order and the same logical response serialized to different bytes on

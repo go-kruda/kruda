@@ -58,10 +58,18 @@ type User struct {
     Email string `json:"email"`
 }
 
+app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
+
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
     return &User{ID: "1", Name: c.In.Name, Email: c.In.Email}, nil
 })
 ```
+
+**Validation is opt-in.** Without `WithValidator`, `validate:` tags are inert —
+the request is parsed but not checked, and the handler receives whatever the
+client sent. Kruda logs a warning at startup if it finds `validate:` tags with
+no validator configured. When enabled, a failing request gets a 422 listing
+every field that failed and why.
 
 ## Auto CRUD
 

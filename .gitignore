@@ -126,3 +126,6 @@ bench/chart.html
 /sse
 /static-files
 /di-comparison
+
+# coldstart harness writes its run output next to itself
+bench/reproducible/coldstart/results.txt

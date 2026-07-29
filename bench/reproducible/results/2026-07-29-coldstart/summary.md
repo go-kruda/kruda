@@ -69,6 +69,11 @@ absolute milliseconds are lower here on faster bare metal, but the ratio holds
 (claimed 2.08×, measured 1.92×) and the RSS figures land within about 2 MB of
 the originals.
 
+These numbers were confirmed a second time from a **fresh clone on the same
+host**, with no local edits — sonic at 25 routes landed on 6.25 ms both times,
+`encoding/json` on 3.25 and 3.13 ms. The harness carries a relative replace to
+the core module, so it builds from any checkout.
+
 **The "25 typed POST routes" framing was incidental.** Going from 1 route to 25
 moves cold start by ~0.25 ms in both engines. Sonic's warm-up is a fixed cost
 paid at process start, not something typed-handler registration scales. The

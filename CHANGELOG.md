@@ -103,15 +103,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   copied the result into the buffer, so it allocated the intermediate `[]byte`
   it was meant to avoid — on the response path used for every JSON response.
   Against the implementation it replaces, encoding a 100-item payload drops from
-  9798 B/op to 113 B/op and is about 34% faster (3754 → 2485 ns/op); a
-  single-item payload costs ~25 ns more (104 → 130 ns/op) for 127 B/op → 112
-  B/op. It encodes through the same configuration as `json.Marshal`, so both
-  produce identical bytes. Medians of 12 runs on linux/amd64 via
-  `BenchmarkMarshalToBuffer*` in `json/engine_bench_test.go`, where
-  `Legacy` is the old code path — `sonic.Marshal` on the package default config,
-  which is what it really called — rather than today's configured encoder. On
-  darwin/arm64 Sonic's encoder is slower than `encoding/json`, so these are amd64
-  figures.
+  ~9800 B/op to 113 B/op and is about 35% faster; a single-item payload costs
+  about 26 ns more for 127 B/op → 112 B/op. It encodes through the same
+  configuration as `json.Marshal`, so both produce identical bytes.
+
+  Figures are medians of 12 runs on linux/amd64, and two independent samples put
+  the large-payload gain at 33.8% and 36.2% and the single-item cost at 25.4 ns
+  and 27.9 ns — hence the rounded values rather than a spuriously precise one.
+  The baseline is `BenchmarkMarshalToBufferLegacy` in
+  `json/engine_bench_legacy_test.go`, which is the old body verbatim —
+  `sonic.Marshal` on the package default config, which is what it really called —
+  rather than today's configured encoder; the rest live in
+  `json/engine_bench_test.go`. On darwin/arm64 Sonic's encoder is slower than
+  `encoding/json`, so these are amd64 figures.
 
 ### Added
 
@@ -176,7 +180,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
 
   This changes behavior for existing `CGO_ENABLED=0` builds, which now get
-  Sonic: JSON decoding is about 6× faster (78.3 → 12.7 µs for a 100-item
+  Sonic: JSON decoding is about 6× faster (78.1 → 13.0 µs for a 100-item
   payload), at the cost of Sonic's JIT warm-up at process start — cold start
   3.25 ms → 6.25 ms and startup RSS 12.5 MB → 19.4 MB, median of 15 spawns on an
   8-core linux/amd64 host. The warm-up is a fixed cost paid once per process, not

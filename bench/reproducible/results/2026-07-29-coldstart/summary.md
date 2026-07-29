@@ -20,51 +20,59 @@ checkable.
 before it streamed — marshal into a fresh `[]byte`, then copy — because that,
 not `Marshal` alone, is what the claim compares against.
 
-Medians of 12 runs at 20,000 iterations each, linux/amd64.
+Medians of 12 runs at 20,000 iterations each, linux/amd64. Raw output for both
+engines is in `json-bench-sonic.txt` and `json-bench-stdjson.txt`; every figure
+quoted below appears there.
 
-Which baseline you pick changes the answer, so both are measured. `Legacy` is the
+Which baseline you pick changes the answer, so both are measured.
+`BenchmarkMarshalToBufferLegacy` (in `json/engine_bench_legacy_test.go`) is the
 code that actually shipped — `sonic.Marshal` on the package **default** config,
-then copy — while `ViaMarshal` routes through this package's `Marshal`, which
-today means the frozen config with `SortMapKeys` and `ValidateString` on. The
-old code never paid for those options, so only `Legacy` answers "what did
-upgrading change for a caller".
+then copy. `ViaMarshal` (in `json/engine_bench_test.go`) routes through this
+package's `Marshal`, which today means the frozen config with `SortMapKeys` and
+`ValidateString` on. The old code never paid for those options, so only `Legacy`
+answers "what did upgrading change for a caller".
 
-| 100-item payload | ns/op | B/op |
+Two independent 12-run samples were taken, because the first pass published a
+figure that moved when re-measured. Both are shown rather than the flattering
+one. Only sample B's raw output is kept here — sample A's was overwritten before
+it was archived, so its numbers are reported as observed but are not
+independently checkable from this directory. Sample B is.
+
+| 100-item payload | sample A | sample B |
 |---|---|---|
-| Legacy — what shipped before | 3,754 | 9,798 |
-| ViaMarshal — config held equal | 3,840 | 9,818 |
-| **streaming — today** | **2,485** | **113** |
+| Legacy — what shipped before | 3,754 ns | 3,879 ns |
+| ViaMarshal — config held equal | 3,840 ns | 3,530 ns |
+| **streaming — today** | **2,485 ns** | **2,475 ns** |
+| gain against Legacy | 33.8% | 36.2% |
 
-Against `Legacy`: **34% faster, 87× fewer bytes.** Against `ViaMarshal`, isolating
-streaming alone: 35%. The two baselines land within 2% of each other here, because
-`ValidateString` is cheap on a struct of short ASCII strings — but that is a
-property of this payload, not a general one, and the published figure uses
-`Legacy`.
+Bytes are stable across samples: 9,798 / 9,816 B/op against **113 B/op**, so
+about 87× fewer. The published figure is "about 35% faster", which is the honest
+resolution of a 33.8–36.2% spread.
 
-| single item | ns/op | B/op |
+| single item | sample A | sample B |
 |---|---|---|
-| Legacy | 104.4 | 127 |
-| ViaMarshal | 115.8 | 127 |
-| streaming — today | 129.8 | 112 |
+| Legacy | 104.4 ns | 103.4 ns |
+| streaming — today | 129.8 ns | 131.3 ns |
+| cost against Legacy | +25.4 ns | +27.9 ns |
 
-Against `Legacy`, a single-item payload costs **25 ns more** for 15 fewer bytes.
-An earlier pass published 14 ns by measuring against `ViaMarshal`; that
-understated what a caller upgrading actually sees, and the CHANGELOG now carries
-the 25 ns figure.
+Published as "about 26 ns more" for 127 → 112 B/op. An earlier pass published
+14 ns by measuring against `ViaMarshal`; that understated what a caller
+upgrading actually sees, because the baseline carried config costs the old code
+never had.
 
 The CHANGELOG originally said "~19% faster" and "6967 → 178 B/op". The speed
-claim was understated. The byte figures differ from the originals only because
-the payload shape differs — neither the old harness's struct nor its field
-widths were recorded, so the handoff's "~13 ns slower" for small payloads is not
-comparable to the 25 ns measured here.
+claim was understated on either baseline. The byte figures differ from the
+originals only because the payload shape differs — neither the old harness's
+struct nor its field widths were recorded, so its "~13 ns slower" for small
+payloads is not comparable to the ~26 ns measured here.
 
 ## Decode, Sonic vs encoding/json, linux/amd64
 
 | | ns/op |
 |---|---|
-| encoding/json | 78,265 |
-| sonic | **12,686** |
-| | **6.2× faster** |
+| encoding/json | 78,133 |
+| sonic | **13,015** |
+| | **6.0× faster** |
 
 The CHANGELOG said "roughly 4–5×". Also understated.
 

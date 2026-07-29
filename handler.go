@@ -3,7 +3,9 @@ package kruda
 import "reflect"
 
 // C is the generic typed context that embeds *Ctx with a parsed input field.
-// c.In contains the parsed + validated input from all sources (param, query, body).
+// c.In holds the input parsed from every source (param, query, body). It is
+// validated against the validate tags only when the App has a Validator; see
+// WithValidator. Without one the tags are inert and c.In is unchecked.
 type C[T any] struct {
 	*Ctx
 	In T // parsed input from request

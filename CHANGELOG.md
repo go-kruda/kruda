@@ -40,11 +40,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Docs: the README's typed-handler example now builds the app with
-  `kruda.WithValidator(kruda.NewValidator())` and states that validation is
-  opt-in — it previously showed `validate:` tags on a plain `kruda.New()`, which
-  is exactly the configuration in which they do nothing. `CLAUDE.md` no longer
-  describes `C[T].In` as validated input.
+- Docs: every place that described validation as automatic now states that it is
+  opt-in. This was wrong in the README, the `C[T]` package doc, `docs/api/handler.md`,
+  `docs/guide/handlers.md`, the four `coming-from-*` guides, the typed-handler
+  example's comments, `CLAUDE.md`, and — most consequentially — the `kruda mcp`
+  documentation topics, which told AI assistants "Kruda validates struct tags
+  automatically in typed handlers" and never mentioned `WithValidator` anywhere.
+  Since `kruda new` ships `.mcp.json`, that was the default guidance for
+  AI-assisted users. Samples that show `validate:` tags now build the app with
+  `kruda.WithValidator(kruda.NewValidator())`, and the docs note that the
+  generated OpenAPI schema advertises the constraints whether or not they are
+  enforced. `TestMCPDocsDoNotTeachAutomaticValidation` keeps the AI-facing
+  guidance honest; it caught the file-upload topic, whose `max_size`/`mime` tags
+  were presented as if they applied on their own.
 
 ## [1.6.2] — 2026-07-19
 

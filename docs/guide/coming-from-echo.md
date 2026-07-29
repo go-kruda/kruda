@@ -121,7 +121,7 @@ app.Post("/users", func(c *kruda.Ctx) error {
 // kruda.Post[CreateUser, User](app, "/users", handler)
 ```
 
-No separate bind + validate steps. No global validator registration. Validation is built into the type system.
+No separate bind + validate steps — binding and validation are one declaration on the input type. Validation itself is opt-in: build the app with `kruda.New(kruda.WithValidator(kruda.NewValidator()))` and the `validate` tags are enforced; without it they are inert.
 
 ### 3. Pluggable Transport
 

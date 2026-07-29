@@ -74,3 +74,38 @@ func TestMCPWingDocsKeepQueryAndWriteGuidanceSeparate(t *testing.T) {
 		t.Fatalf("wing docs missing write-heavy benchmark guidance")
 	}
 }
+
+// TestMCPDocsDoNotTeachAutomaticValidation guards the guidance AI assistants
+// read. Validation is opt-in, but krudaDocs used to state the opposite —
+// "Kruda validates struct tags automatically in typed handlers" — and never
+// mentioned WithValidator anywhere, so every assistant following it generated
+// apps whose validate tags did nothing. The scaffold ships .mcp.json, so this
+// is the default path for AI-assisted users.
+func TestMCPDocsDoNotTeachAutomaticValidation(t *testing.T) {
+	falseClaims := []string{
+		"validates struct tags automatically",
+		"validation runs automatically",
+		"automatically validated",
+		"auto-validation",
+		"auto-validate",
+		"already parsed and validated",
+	}
+	for topic, body := range krudaDocs {
+		for _, claim := range falseClaims {
+			if strings.Contains(strings.ToLower(body), claim) {
+				t.Errorf("krudaDocs[%q] tells assistants validation is automatic (%q); it is opt-in via WithValidator", topic, claim)
+			}
+		}
+	}
+
+	// Any topic that shows a validate tag has to say how to turn validation on,
+	// or it is teaching the trap.
+	for topic, body := range krudaDocs {
+		if !strings.Contains(body, `validate:"`) {
+			continue
+		}
+		if !strings.Contains(body, "WithValidator") {
+			t.Errorf("krudaDocs[%q] shows validate: tags without mentioning WithValidator", topic)
+		}
+	}
+}

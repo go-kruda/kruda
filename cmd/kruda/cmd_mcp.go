@@ -717,9 +717,13 @@ type User struct {
     Email string ` + "`" + `json:"email"` + "`" + `
 }
 
+// validate tags are enforced only with a Validator — without this the input
+// reaches the handler unchecked.
+app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
+
 // Register typed POST handler
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
-    // c.In is already parsed and validated
+    // c.In is parsed, and validated because the app above has a Validator
     return &User{ID: "1", Name: c.In.Name, Email: c.In.Email}, nil
 })
 
@@ -737,6 +741,7 @@ kruda.Get[ListParams, []User](app, "/users", func(c *kruda.C[ListParams]) (*[]Us
 ` + "```" + `
 
 Input parsing pipeline: defaults → body → query → params → validate
+The validate step runs only when the app was built with kruda.WithValidator.
 Validation uses struct tags and returns structured ValidationError with []FieldError.`,
 
 	"routing": `# Routing
@@ -969,7 +974,7 @@ func handler(c *kruda.Ctx) error {
 // Custom error with details
 return kruda.NewError(403, "forbidden").WithDetail("insufficient permissions")
 
-// Structured validation errors (auto from typed handlers)
+// Structured validation errors (from typed handlers, when a Validator is set)
 // Response:
 // {
 //   "error": "validation failed",
@@ -1050,7 +1055,13 @@ app.Get("/ws", func(c *kruda.Ctx) error {
 
 	"file-upload": `# File Upload
 
+The validate/max_size/mime tags below are enforced only when the app has a
+Validator: kruda.New(kruda.WithValidator(kruda.NewValidator())). Without it an
+upload of any size or type reaches the handler.
+
 ` + "```" + `go
+app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
+
 type UploadRequest struct {
     File   *kruda.Upload ` + "`" + `form:"file" validate:"required" max_size:"5mb" mime:"image/*"` + "`" + `
     Title  string        ` + "`" + `form:"title" validate:"required"` + "`" + `
@@ -1067,7 +1078,14 @@ Validation tags: max_size (e.g. "5mb", "500kb"), mime (e.g. "image/*", "applicat
 
 	"validation": `# Validation
 
-Kruda validates struct tags automatically in typed handlers.
+Validation is OPT-IN. Build the app with a Validator or the validate tags do nothing:
+
+    app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
+
+Without it the request is parsed, nothing is checked, and the handler receives
+whatever the client sent — no error and no log line at request time (Kruda does
+warn once at startup). Always include WithValidator when generating code that
+uses validate tags.
 
 ` + "```" + `go
 type CreateUser struct {

@@ -40,11 +40,11 @@ type C[T any] struct {
 }
 ```
 
-`C[T]` extends `Ctx` with a typed `In` field. The request body, route parameters, and query parameters are automatically parsed and validated into `T` before the handler runs.
+`C[T]` extends `Ctx` with a typed `In` field. The request body, route parameters, and query parameters are parsed into `T` before the handler runs. They are validated too when a validator is configured — see [Validation](#validation).
 
 ## Typed Handler Registration
 
-Package-level generic functions register typed handlers with pre-compiled binding and validation:
+Package-level generic functions register typed handlers with binding, and validators, compiled at registration time:
 
 ```go
 func Get[In any, Out any](app *App, path string, handler func(*C[In]) (*Out, error), opts ...RouteOption)
@@ -166,7 +166,7 @@ Binding order:
 
 ## Validation
 
-After binding, validation runs automatically using `validate` struct tags:
+After binding, `validate` struct tags are checked:
 
 ```go
 type Input struct {
@@ -176,3 +176,5 @@ type Input struct {
 ```
 
 Validation failures return HTTP 422 with structured error details.
+
+**Validation is opt-in.** It runs only when the app is built with `kruda.New(kruda.WithValidator(kruda.NewValidator()))`. Without it the `validate` tags are inert: the request is parsed, nothing is checked, and the handler receives whatever the client sent. Kruda logs a warning at startup if it finds `validate` tags with no validator configured. Note that the generated OpenAPI schema advertises the constraints either way — only enforcement is gated.

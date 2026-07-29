@@ -29,6 +29,84 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   that hardcodes its `Listen` address — it only passes `PORT` to the child
   process. It now says exactly that.
 
+- JSON responses are now always valid UTF-8. The Sonic engine copied invalid
+  UTF-8 in a string straight through, so a string holding a truncated multi-byte
+  sequence, text read from a legacy encoding, or arbitrary binary produced a
+  response body that was not valid UTF-8 — which RFC 8259 section 8.1 requires
+  for JSON exchanged between systems, and which a strict client or proxy may
+  reject. The engine now enables `ValidateString`, substituting U+FFFD as
+  `encoding/json` already did, making the two engines byte-identical for these
+  inputs. It costs about 8% on responses containing a string.
+
+  `EscapeHTML` remains off, and is now the only byte-level difference between the
+  two engines: `encoding/json` escapes `<`, `>` and `&` so its output is safe to
+  paste directly inside an HTML `<script>` tag, and the Sonic engine emits those
+  characters. Enabling it costs about 41% on every response containing a string,
+  a poor trade for a default when responses are served as `application/json`,
+  which no browser executes, and the `html/template` renderer escapes JSON it
+  embeds. Applications that hand-embed a response body into HTML can opt in with
+  `kruda.WithJSONEncoder`.
+
+- The Wing blocking advisor no longer warns about routes that do not block. It
+  judged a route by an absolute count of long inline requests, but inline time is
+  wall time and so includes any delay the OS scheduler adds. On a CPU-saturated
+  machine — a load test, a noisy neighbour, a pod at its CPU limit — even a
+  handler that only writes a constant string is occasionally descheduled past the
+  100µs threshold, and at a few hundred thousand requests a second the count of
+  ten was reached within seconds. A `c.Text` handler serving 190k req/s was told
+  to add `kruda.DB`. The advisor now warns only when at least 20% of a route's
+  requests run long, over at least 200 requests, which separates a genuinely
+  blocking handler (blocks on essentially every request) from scheduler noise
+  (well under 1%) by orders of magnitude. The warning now also reports
+  `share_percent`. Verified end to end: a handler sleeping 2ms warns at
+  `share_percent=100`, while a plaintext route at 181k req/s on the same server
+  stays silent.
+
+  Measuring a share means counting every inline request rather than only the long
+  ones, so the counting itself is kept off the hot path: each Wing worker tallies
+  its own routes in memory it alone owns — no atomic, no lock, and no allocation
+  once a route has been seen — and folds those tallies into the shared per-route
+  totals in batches, when a batch fills, when enough long requests accumulate to
+  possibly warn, when the route changes, or when the worker stops. Observing a
+  request costs two string comparisons and an increment.
+
+  A batch always carries long requests together with the totals they were drawn
+  from, which is what keeps the share honest across workers: publishing a long
+  request on its own, against totals still sitting unflushed in every other
+  worker, would make a route look far more blocking than it is — worst at process
+  start, when each worker is a few requests in and scheduler noise peaks.
+
+  The 1024-route cap that guards against a flood of distinct paths remains
+  process-wide, and continues to apply only to routes the process has not seen
+  before: a route already being tracked keeps resolving on every worker, however
+  full the cap, so a flood cannot silence the advisor for an application's real
+  routes.
+
+- ETag generation no longer breaks for handlers that return a multi-key map. The
+  Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map
+  iteration order and the same logical response serialized to different bytes on
+  every request. Anything deriving a value from response bytes saw a new value
+  each time: `contrib/etag` hashes the body, so `If-None-Match` never matched and
+  304 was never returned — conditional-request caching silently did nothing.
+  Measured with a 4-key `map[string]any`, ETag generation produced 4 distinct
+  ETags across 200 requests before this change and 1 after. Response caching keyed
+  on body bytes and response snapshot tests were affected the same way. Struct
+  responses were never affected, and the `kruda_stdjson` engine was never
+  affected because `encoding/json` always sorts map keys.
+- `contrib/etag`: the `New` doc example generated the ETag from one marshal of the
+  payload and then responded with `c.JSON(data)`, encoding the value a second time.
+  Besides the wasted encode, the ETag was not guaranteed to describe the bytes
+  actually sent. The example now responds with the same bytes it hashed, via
+  `c.SendBytesWithType`.
+- `json.MarshalToBuffer` on the Sonic engine now uses Sonic's streaming encoder,
+  as its documentation already claimed. It previously called `sonic.Marshal` and
+  copied the result into the buffer, so it allocated the intermediate `[]byte`
+  it was meant to avoid — on the response path used for every JSON response.
+  Encoding a 100-item payload drops from 6967 B/op to 178 B/op and is ~19%
+  faster; small payloads are ~13 ns slower for 115 B/op → 84 B/op. It encodes
+  through the same configuration as `json.Marshal`, so both produce identical
+  bytes.
+
 ### Added
 
 - Startup warning when a typed route's input carries `validate:` tags but no
@@ -72,6 +150,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `WithBodyLimit` alongside the rule and state the ordering.
   `TestDocumentedMaxSizeIsReachable` fails on any documented `max_size` above the
   default `BodyLimit` that does not raise it.
+
+- The Sonic JSON engine now sorts map keys, so marshalling the same map twice
+  always produces the same bytes. Response bytes change for handlers that return
+  a multi-key map: keys are now emitted in sorted order, matching the
+  `kruda_stdjson` engine and `encoding/json`. Struct responses — including all
+  typed handlers and `Resource` CRUD — are unaffected, since struct field order
+  is fixed at compile time, and measure unchanged at ~165 ns/op. Map marshalling
+  costs roughly 13% more for a 4-key map and 65% for a 50-key map.
+- The `listening` startup log line now reports the active JSON engine as
+  `json=sonic` or `json=encoding/json`. The engine is selected by build tag, so
+  this is the only way to confirm from a running binary which one a build got.
+- The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
+  `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
+  static binaries and `scratch`/`distroless` container images — silently fell
+  back to `encoding/json` while still reporting a default build. Sonic is pure
+  Go plus assembly and has no cgo dependency; on platforms it does not
+  accelerate, Sonic's own build constraints already route its API to
+  `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
+
+  This changes behavior for existing `CGO_ENABLED=0` builds, which now get
+  Sonic: JSON decoding is roughly 4–5× faster, at the cost of Sonic's JIT
+  warm-up at process start (measured on a 4-core Linux container, 25 typed POST
+  routes: cold start 6.5 ms → 13.5 ms, startup RSS 12.1 MB → 17.6 MB). Long-lived
+  servers recoup that within the first few thousand requests. Builds that spawn
+  a process per request or scale to zero should set the `kruda_stdjson` tag to
+  keep the faster cold start.
 
 ## [1.6.2] — 2026-07-19
 

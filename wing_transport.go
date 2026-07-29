@@ -309,12 +309,16 @@ type worker struct {
 	presets       PresetTable
 	// Exact-route MRU cache. Paths stored here must come from Preset.path,
 	// never directly from the read buffer's unsafe request path.
-	lastPreset0     Preset
-	lastPreset1     Preset
-	lastMethod0     string
-	lastMethod1     string
-	lastPath0       string
-	lastPath1       string
+	lastPreset0 Preset
+	lastPreset1 Preset
+	lastMethod0 string
+	lastMethod1 string
+	lastPath0   string
+	lastPath1   string
+	// Blocking-advisor tallies for this worker's routes. Owned by the event-loop
+	// goroutine and flushed into shared state only occasionally, so observing
+	// every inline request stays free of atomics and allocation.
+	advisor         advisorCache
 	shutdown        *atomic.Bool
 	hasTimeout      bool
 	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
@@ -465,6 +469,16 @@ func (w *worker) lookupPreset(method, path string) Preset {
 		w.lastPath0 = f.path
 	}
 	return f
+}
+
+// observeAdvisor records one inline request against the blocking advisor.
+//
+// Keying on the request path rather than Preset.path matters: routes registered
+// without an explicit preset get the table default, whose path is empty, so
+// keying on that would silently exclude most routes. path aliases the read
+// buffer, which advisorCache compares but never retains.
+func (w *worker) observeAdvisor(f Preset, method, path string, elapsedNanos int64) {
+	w.advisor.observe(method, path, elapsedNanos, f.explicit)
 }
 
 func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP, rejectRate *int64) (*worker, error) {
@@ -880,9 +894,7 @@ func (w *worker) tryParse(c *conn) {
 				resp.responseMode = f.ResponseMode
 				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
-				if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
-					advisorObserve(req.method, req.path, elapsed, f.explicit)
-				}
+				w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
 				if resp.fileFd > 0 {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()
@@ -1236,9 +1248,7 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	resp.responseMode = f.ResponseMode
 	start := time.Now().UnixNano()
 	w.serveRoute(resp, req, f)
-	if elapsed := time.Now().UnixNano() - start; elapsed >= advisorBlockNanos {
-		advisorObserve(req.method, req.path, elapsed, f.explicit)
-	}
+	w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
 	data := resp.buildZeroCopy()
 	c.keepAlive = req.keepAlive
 	c.sendBuf = append(c.sendBuf, data...)
@@ -1753,6 +1763,7 @@ func (w *worker) closeConn(fd int32) {
 func (w *worker) wake() { w.eng.PostWake() }
 
 func (w *worker) cleanup() {
+	w.advisor.flush()
 	if w.pool != nil {
 		close(w.pool.jobs)
 		// Wait for pool goroutines to finish any in-flight job's RawSyscall

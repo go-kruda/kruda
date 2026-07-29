@@ -20,23 +20,35 @@ checkable.
 before it streamed — marshal into a fresh `[]byte`, then copy — because that,
 not `Marshal` alone, is what the claim compares against.
 
-| | ns/op | B/op |
+Medians of 12 runs at 20,000 iterations each. An early 6-run sample put the
+speed gain at 27%; the larger sample settles it at 30%, which is why the
+published figure comes from the larger one.
+
+| 100-item payload | ns/op | B/op |
 |---|---|---|
-| old: Marshal + copy | 3,506 | 9,774 |
-| new: streaming | **2,556** | **163** |
-| | **27% faster** | **60× less** |
+| old: Marshal + copy | 3,593 | 9,792 |
+| new: streaming | **2,506** | **113** |
+| | **30% faster** | **87× less** |
+
+| single item | ns/op | B/op |
+|---|---|---|
+| old: Marshal + copy | 115.5 | 127 |
+| new: streaming | 129.8 | 112 |
+| | **14 ns slower** | 15 B less |
 
 The CHANGELOG said "~19% faster" and "6967 → 178 B/op". The speed claim was
 understated; the byte figures differ only because the payload shape differs —
-neither the old harness's struct nor its field widths were recorded.
+neither the old harness's struct nor its field widths were recorded. The
+small-payload trade the handoff described as "~13 ns slower" measures at 14.3 ns
+here, which is close corroboration from an independent harness.
 
 ## Decode, Sonic vs encoding/json, linux/amd64
 
 | | ns/op |
 |---|---|
-| encoding/json | 78,216 |
-| sonic | **12,751** |
-| | **6.1× faster** |
+| encoding/json | 78,265 |
+| sonic | **12,686** |
+| | **6.2× faster** |
 
 The CHANGELOG said "roughly 4–5×". Also understated.
 

@@ -102,12 +102,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   as its documentation already claimed. It previously called `sonic.Marshal` and
   copied the result into the buffer, so it allocated the intermediate `[]byte`
   it was meant to avoid — on the response path used for every JSON response.
-  Encoding a 100-item payload drops from 9774 B/op to 163 B/op and is 27%
-  faster (3506 → 2556 ns/op); small payloads are a few ns slower for slightly
-  fewer bytes. It encodes through the same configuration as `json.Marshal`, so
-  both produce identical bytes. Measured on linux/amd64 with `BenchmarkMarshalToBuffer*`
-  in `json/engine_bench_test.go`; on darwin/arm64 Sonic's encoder is slower than
-  `encoding/json`, so these are amd64 figures.
+  Encoding a 100-item payload drops from 9792 B/op to 113 B/op and is about 30%
+  faster (3593 → 2506 ns/op); a single-item payload is ~14 ns slower (116 → 130
+  ns/op) for 127 B/op → 112 B/op. It encodes through the same configuration as
+  `json.Marshal`, so both produce identical bytes. Medians of 12 runs on
+  linux/amd64 via `BenchmarkMarshalToBuffer*` in `json/engine_bench_test.go`; on
+  darwin/arm64 Sonic's encoder is slower than `encoding/json`, so these are
+  amd64 figures.
 
 ### Added
 
@@ -172,7 +173,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
 
   This changes behavior for existing `CGO_ENABLED=0` builds, which now get
-  Sonic: JSON decoding is about 6× faster (78.2 → 12.8 µs for a 100-item
+  Sonic: JSON decoding is about 6× faster (78.3 → 12.7 µs for a 100-item
   payload), at the cost of Sonic's JIT warm-up at process start — cold start
   3.25 ms → 6.25 ms and startup RSS 12.5 MB → 19.4 MB, median of 15 spawns on an
   8-core linux/amd64 host. The warm-up is a fixed cost paid once per process, not

@@ -1,0 +1,60 @@
+BenchmarkMarshalToBufferLarge-8             	   20000	      2581 ns/op	     146 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2518 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2639 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2484 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2512 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2500 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2773 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2500 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2475 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2484 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2472 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2616 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3756 ns/op	    9771 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3949 ns/op	    9829 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3625 ns/op	    9847 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3551 ns/op	    9789 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3465 ns/op	    9750 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3561 ns/op	    9816 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3449 ns/op	    9744 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3699 ns/op	    9763 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3627 ns/op	    9805 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3552 ns/op	    9802 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3846 ns/op	    9780 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3468 ns/op	    9794 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       120.2 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       114.8 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       116.4 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       118.2 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.3 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.4 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.3 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.5 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       116.0 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       118.6 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       113.6 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       114.5 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.2 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       131.1 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       127.7 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.2 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       220.0 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.1 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       237.4 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       130.4 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.9 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.6 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       133.1 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       128.7 ns/op	     112 B/op	       4 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12672 ns/op	 647.40 MB/s	   25929 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12450 ns/op	 658.98 MB/s	   25896 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12414 ns/op	 660.88 MB/s	   25928 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12601 ns/op	 651.06 MB/s	   25902 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12763 ns/op	 642.78 MB/s	   25886 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12896 ns/op	 636.19 MB/s	   25960 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12819 ns/op	 640.00 MB/s	   25880 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12418 ns/op	 660.67 MB/s	   25880 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12699 ns/op	 646.04 MB/s	   25950 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12509 ns/op	 655.87 MB/s	   25918 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12823 ns/op	 639.79 MB/s	   25939 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13105 ns/op	 626.03 MB/s	   26014 B/op	      10 allocs/op

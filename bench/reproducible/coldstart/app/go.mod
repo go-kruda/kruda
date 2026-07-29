@@ -2,7 +2,7 @@ module coldstart-app
 
 go 1.25.11
 
-replace github.com/go-kruda/kruda => /Users/emetworks/Project/HOBBY/framework/kruda
+replace github.com/go-kruda/kruda => ../../../..
 
 require github.com/go-kruda/kruda v0.0.0-00010101000000-000000000000
 

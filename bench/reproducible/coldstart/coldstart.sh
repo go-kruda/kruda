@@ -15,7 +15,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CORE_DIR="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 SPAWNS="${SPAWNS:-15}"
 ROUTE_COUNTS="${ROUTE_COUNTS:-1 25}"
 OUT="${OUT:-$SCRIPT_DIR/results.txt}"
@@ -23,8 +22,8 @@ OUT="${OUT:-$SCRIPT_DIR/results.txt}"
 export GOWORK=off
 
 cd "$SCRIPT_DIR/app"
-go mod edit -replace github.com/go-kruda/kruda="$CORE_DIR"
-go mod tidy >/dev/null 2>&1
+# go.mod carries a relative replace to the core module, so this builds from any
+# checkout and running the harness leaves the tree clean.
 go build -o /tmp/coldstart-sonic .
 go build -tags kruda_stdjson -o /tmp/coldstart-stdjson .
 

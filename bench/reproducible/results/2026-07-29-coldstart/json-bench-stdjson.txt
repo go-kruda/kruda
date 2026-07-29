@@ -1,0 +1,12 @@
+BenchmarkUnmarshalLarge-8   	   20000	     78383 ns/op	 104.67 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     79294 ns/op	 103.46 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78062 ns/op	 105.10 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78243 ns/op	 104.85 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78461 ns/op	 104.56 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78255 ns/op	 104.84 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78157 ns/op	 104.97 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     77859 ns/op	 105.37 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78608 ns/op	 104.37 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78169 ns/op	 104.95 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78274 ns/op	 104.81 MB/s	   19664 B/op	     214 allocs/op
+BenchmarkUnmarshalLarge-8   	   20000	     78591 ns/op	 104.39 MB/s	   19664 B/op	     214 allocs/op

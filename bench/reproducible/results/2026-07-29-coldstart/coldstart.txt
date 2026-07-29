@@ -1,0 +1,11 @@
+# cold start and startup RSS, 2026-07-29T13:22:13Z
+# go version go1.25.11 linux/amd64
+# 8 cores
+# binary sizes: sonic 23693896 B, stdjson 18682033 B
+
+encoding/json          routes=1   spawns=15  ready_ms=3.02 (min 2.84 max 3.38)  rss_at_ready_mb=12.81  rss_settled_mb=13.02
+sonic                  routes=1   spawns=15  ready_ms=5.98 (min 5.61 max 6.89)  rss_at_ready_mb=18.88  rss_settled_mb=18.97
+
+encoding/json          routes=25  spawns=15  ready_ms=3.25 (min 2.88 max 5.73)  rss_at_ready_mb=12.54  rss_settled_mb=12.81
+sonic                  routes=25  spawns=15  ready_ms=6.25 (min 5.76 max 7.58)  rss_at_ready_mb=19.41  rss_settled_mb=19.46
+

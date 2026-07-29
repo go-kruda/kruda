@@ -1,0 +1,87 @@
+# sonic engine, linux/amd64, medians over 12 runs x 20000 iterations
+go version go1.25.11 linux/amd64
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3800 ns/op	    9860 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      4099 ns/op	    9761 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3804 ns/op	    9790 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3830 ns/op	    9822 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3745 ns/op	    9767 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3726 ns/op	    9850 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3679 ns/op	    9816 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      3928 ns/op	    9816 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      4070 ns/op	    9859 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      4265 ns/op	    9790 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      4150 ns/op	    9798 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacy-8            	   20000	      4067 ns/op	    9830 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       128.5 ns/op	     134 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.3 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.0 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.4 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       104.9 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.8 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       171.9 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       104.3 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.3 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       102.8 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       103.4 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLegacySmall-8       	   20000	       102.9 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2469 ns/op	     106 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2469 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2492 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2475 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2478 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2468 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2469 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2468 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2617 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2475 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2513 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferLarge-8             	   20000	      2481 ns/op	     113 B/op	       4 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      4345 ns/op	    9893 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3806 ns/op	    9740 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3559 ns/op	    9713 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3726 ns/op	    9798 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3795 ns/op	    9799 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3500 ns/op	    9779 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3381 ns/op	    9756 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3410 ns/op	    9758 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3379 ns/op	    9719 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3491 ns/op	    9722 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3429 ns/op	    9744 B/op	       3 allocs/op
+BenchmarkMarshalToBufferViaMarshal-8        	   20000	      3802 ns/op	    9793 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       210.2 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       118.2 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       147.7 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       119.2 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       117.3 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       114.6 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.8 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       112.9 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       114.0 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       113.7 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       116.6 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmallViaMarshal-8   	   20000	       115.8 ns/op	     127 B/op	       3 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       131.5 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       130.1 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.1 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       131.8 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.4 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       241.8 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       132.3 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       172.9 ns/op	     105 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       133.7 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       131.2 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       129.9 ns/op	     112 B/op	       4 allocs/op
+BenchmarkMarshalToBufferSmall-8             	   20000	       128.5 ns/op	     112 B/op	       4 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12568 ns/op	 652.74 MB/s	   25988 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12798 ns/op	 641.06 MB/s	   25886 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13163 ns/op	 623.26 MB/s	   25982 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13851 ns/op	 592.29 MB/s	   25918 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12616 ns/op	 650.26 MB/s	   25859 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12420 ns/op	 660.56 MB/s	   25955 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     14179 ns/op	 578.60 MB/s	   25971 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13480 ns/op	 608.59 MB/s	   25939 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12920 ns/op	 634.99 MB/s	   25993 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13294 ns/op	 617.10 MB/s	   25897 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     13110 ns/op	 625.78 MB/s	   25928 B/op	      10 allocs/op
+BenchmarkUnmarshalLarge-8                   	   20000	     12214 ns/op	 671.69 MB/s	   25891 B/op	      10 allocs/op
+ok  	github.com/go-kruda/kruda/json	5.672s

@@ -45,10 +45,12 @@ Transport Layer (pluggable: Wing on Linux / fasthttp on macOS / net/http fallbac
 ```go
 type C[T any] struct {
     *Ctx
-    In T  // parsed, validated input
+    In T  // parsed input; validated only when a Validator is configured
 }
 
-// Usage: body + param + query parsed into one struct
+// Usage: body + param + query parsed into one struct.
+// validate: tags run ONLY with kruda.New(kruda.WithValidator(kruda.NewValidator())) —
+// without it they are silently inert (Kruda warns once at startup).
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
     return &User{ID: "1", Name: c.In.Name, Email: c.In.Email}, nil
 })

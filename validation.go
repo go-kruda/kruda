@@ -2,14 +2,48 @@ package kruda
 
 import (
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	krudajson "github.com/go-kruda/kruda/json"
 )
+
+// warnedValidateTagsIgnored keeps the warning below to one per process: an app
+// with fifty typed routes has one mistake, not fifty.
+var warnedValidateTagsIgnored atomic.Bool
+
+func resetValidateTagWarningForTest() { warnedValidateTagsIgnored.Store(false) }
+
+// warnIfValidateTagsIgnored warns once when a typed route's input carries
+// validate: tags and no Validator is configured.
+//
+// Validation is opt-in, so without a Validator those tags do nothing at all —
+// no error, no log line, and the handler receives whatever the client sent. The
+// tag looks like it is working, which makes this the one default worth being
+// loud about: the README's own typed-handler example shows validate: tags, and
+// a reader who copies it gets unvalidated input reaching their handler.
+//
+// It scans only top-level fields, matching what buildValidators compiles.
+func warnIfValidateTagsIgnored(t reflect.Type, method, path string) {
+	if t.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < t.NumField(); i++ {
+		if t.Field(i).Tag.Get("validate") == "" {
+			continue
+		}
+		if warnedValidateTagsIgnored.CompareAndSwap(false, true) {
+			slog.Warn("kruda: validate: tags found but no Validator is configured — input is NOT being validated. Pass kruda.WithValidator(kruda.NewValidator()) to kruda.New",
+				"route", method+" "+path, "field", t.Field(i).Name)
+		}
+		return
+	}
+}
 
 // ValidatorFunc is the signature for validation rule functions.
 // value is the field value to validate, param is the rule parameter

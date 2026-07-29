@@ -24,7 +24,10 @@ Validates:
   • Project structure is correct
 
 Exit code 0 on success, 1 on failure (CI-friendly).`,
-	RunE: runValidate,
+	// A failing check is a result, not a usage mistake — printing the usage
+	// block would bury the message that says what to fix.
+	SilenceUsage: true,
+	RunE:         runValidate,
 }
 
 // validationResult tracks a single check.

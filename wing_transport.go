@@ -315,14 +315,10 @@ type worker struct {
 	lastMethod1 string
 	lastPath0   string
 	lastPath1   string
-	// Blocking-advisor entry for the most recent route, so the common case of
-	// consecutive requests to one route avoids a sync.Map lookup per request.
-	// Keyed on Preset.path and the interned method, never the unsafe request
-	// path, matching the lastPath0/lastMethod0 cache above.
-	advisorKey      string
-	advisorMethod   string
-	advisorPath     string
-	advisorEntry    *advisorEntry
+	// Blocking-advisor tallies for this worker's routes. Owned by the event-loop
+	// goroutine and flushed into shared state only occasionally, so observing
+	// every inline request stays free of atomics and allocation.
+	advisor         advisorCache
 	shutdown        *atomic.Bool
 	hasTimeout      bool
 	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
@@ -475,29 +471,14 @@ func (w *worker) lookupPreset(method, path string) Preset {
 	return f
 }
 
-// observeAdvisor records one inline request against the blocking advisor. It
-// resolves the route's entry through a one-slot cache, so consecutive requests
-// to the same route cost two string comparisons instead of a sync.Map lookup.
+// observeAdvisor records one inline request against the blocking advisor.
 //
-// path comes from the read buffer and must not be retained. Comparing against
-// the cached path only reads bytes, which is safe; on a miss the key
-// concatenation allocates a fresh copy, and advisorPath is re-sliced out of that
-// copy so nothing points back into the buffer. Keying on the request path rather
-// than Preset.path matters because routes registered without an explicit preset
-// get the table default, whose path is empty — keying on that would silently
-// exclude every such route, which is most of them.
-//
-// advisorKey doubles as the cache-valid flag so a nil entry — a route past
-// advisorMaxRoutes — is cached too, rather than re-looked-up every request.
+// Keying on the request path rather than Preset.path matters: routes registered
+// without an explicit preset get the table default, whose path is empty, so
+// keying on that would silently exclude most routes. path aliases the read
+// buffer, which advisorCache compares but never retains.
 func (w *worker) observeAdvisor(f Preset, method, path string, elapsedNanos int64) {
-	if w.advisorKey == "" || w.advisorMethod != method || w.advisorPath != path {
-		key := method + " " + path
-		w.advisorKey = key
-		w.advisorMethod = method
-		w.advisorPath = key[len(method)+1:]
-		w.advisorEntry = advisorLookup(key)
-	}
-	advisorObserve(w.advisorEntry, w.advisorKey, elapsedNanos, f.explicit)
+	w.advisor.observe(method, path, elapsedNanos, f.explicit)
 }
 
 func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, connCount, rejectTotal, rejectIP, rejectRate *int64) (*worker, error) {
@@ -1782,6 +1763,7 @@ func (w *worker) closeConn(fd int32) {
 func (w *worker) wake() { w.eng.PostWake() }
 
 func (w *worker) cleanup() {
+	w.advisor.flush()
 	if w.pool != nil {
 		close(w.pool.jobs)
 		// Wait for pool goroutines to finish any in-flight job's RawSyscall

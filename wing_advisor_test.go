@@ -19,6 +19,17 @@ func captureWarnings(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
+// advisorObserve folds one request straight into a shared entry, bypassing the
+// per-worker tally, so the threshold logic in advisorFlush can be driven a
+// sample at a time.
+func advisorObserve(e *advisorEntry, key string, elapsedNanos int64, explicitPreset bool) {
+	if elapsedNanos < advisorBlockNanos {
+		advisorFlush(e, key, 1, 0, 0, explicitPreset)
+		return
+	}
+	advisorFlush(e, key, 1, 1, elapsedNanos, explicitPreset)
+}
+
 // observe feeds n requests for one route, each taking elapsed nanoseconds.
 func observe(key string, n int, elapsed int64, explicit bool) {
 	e := advisorLookup(key)
@@ -211,6 +222,10 @@ func TestObserveAdvisorSwitchesBetweenRoutes(t *testing.T) {
 		t.Fatalf("fast route warned: %q", out)
 	}
 
+	// Fast requests are tallied worker-locally and folded in every
+	// advisorFlushEvery, so the shared totals only settle after a flush.
+	w.advisor.flush()
+
 	slow, _ := advisorRoutes.Load("GET /slow")
 	fast, _ := advisorRoutes.Load("GET /fast")
 	if slow == nil || fast == nil {
@@ -237,17 +252,51 @@ func TestObserveAdvisorDoesNotRetainRequestPath(t *testing.T) {
 	w := &worker{}
 	w.observeAdvisor(Preset{}, "GET", bytesconv.UnsafeString(pathBuf), fastNanos)
 
-	if w.advisorPath != "/original" {
-		t.Fatalf("cached path = %q, want %q", w.advisorPath, "/original")
+	slot := w.advisor.last
+	if slot == nil || slot.path != "/original" {
+		t.Fatalf("cached path = %q, want %q", slot.path, "/original")
 	}
 
 	// Simulate the buffer being reused for the next request.
 	copy(pathBuf, []byte("/OVERWRIT"))
 
-	if w.advisorPath != "/original" {
-		t.Fatalf("cached path aliased the request buffer: became %q after the buffer was reused", w.advisorPath)
+	if slot.path != "/original" {
+		t.Fatalf("cached path aliased the request buffer: became %q after the buffer was reused", slot.path)
 	}
-	if w.advisorKey != "GET /original" {
-		t.Fatalf("cached key aliased the request buffer: became %q", w.advisorKey)
+	if slot.key != "GET /original" {
+		t.Fatalf("cached key aliased the request buffer: became %q", slot.key)
+	}
+	// The map key must own its strings too, or the lookup would go stale.
+	if _, ok := w.advisor.slots[advisorRouteKey{"GET", "/original"}]; !ok {
+		t.Fatal("slot map key aliased the request buffer")
+	}
+}
+
+// TestObserveAdvisorZeroAllocInterleavedRoutes guards the inline hot path.
+// Wing observes every inline request to measure the share that run long, so the
+// observation itself must be free: an earlier version resolved the route through
+// a one-slot cache backed by a sync.Map, which allocated a fresh key string on
+// every request as soon as traffic alternated between routes — 12 B and ~35 ns
+// per request on any app serving more than one path.
+//
+// TestStringLaneZeroAlloc covers the response builder, not dispatch, so it does
+// not catch this.
+func TestObserveAdvisorZeroAllocInterleavedRoutes(t *testing.T) {
+	advisorResetForTest()
+	w := &worker{}
+	paths := []string{"/plaintext", "/json", "/db", "/fortunes"}
+
+	// Prime: the first sight of a route allocates its slot, once per worker.
+	for _, p := range paths {
+		w.observeAdvisor(Preset{}, "GET", p, fastNanos)
+	}
+
+	i := 0
+	allocs := testing.AllocsPerRun(1000, func() {
+		w.observeAdvisor(Preset{}, "GET", paths[i&3], fastNanos)
+		i++
+	})
+	if allocs != 0 {
+		t.Fatalf("observing inline requests across %d routes must be zero-alloc, got %.2f allocs/op", len(paths), allocs)
 	}
 }

@@ -68,6 +68,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `share_percent=100`, while a plaintext route at 181k req/s on the same server
   stays silent.
 
+  Measuring a share means counting every inline request rather than only the long
+  ones, so the counting itself is kept off the hot path: each Wing worker tallies
+  its own routes in memory it alone owns — no atomic, no lock, and no allocation
+  once a route has been seen — and folds those tallies into the shared per-route
+  totals only when a request runs long, when the route changes, or once every 256
+  requests. Observing a request costs two string comparisons and an increment.
+
 - ETag generation no longer breaks for handlers that return a multi-key map. The
   Sonic engine left `SortMapKeys` off, so map output followed Go's randomized map
   iteration order and the same logical response serialized to different bytes on

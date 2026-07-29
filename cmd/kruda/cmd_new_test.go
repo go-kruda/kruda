@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,5 +110,71 @@ func TestIsNonEmptyDirEmpty(t *testing.T) {
 func TestIsNonEmptyDirNonExistent(t *testing.T) {
 	if isNonEmptyDir("/nonexistent/path/that/does/not/exist") {
 		t.Error("expected isNonEmptyDir to return false for non-existent path")
+	}
+}
+
+// templateNames are the templates `kruda new -t` accepts.
+var templateNames = []string{"minimal", "api", "fullstack"}
+
+// TestTemplatesDoNotPinCoreVersion guards the scaffolder's central promise: the
+// project it writes has to build.
+//
+// The templates used to carry `require github.com/go-kruda/kruda v0.0.0`, a
+// placeholder that no proxy can resolve, so `go mod tidy` — step two of the
+// instructions the CLI itself prints — failed for every template, and `go get
+// ...@latest` failed too because Go resolves the bad requirement first. It
+// shipped that way for five months because the tests below only checked that
+// files existed.
+//
+// Leaving the requirement out entirely is what keeps this fixed: `go mod tidy`
+// resolves the current release on its own, so there is no pinned version here
+// to go stale at the next tag.
+func TestTemplatesDoNotPinCoreVersion(t *testing.T) {
+	for _, name := range templateNames {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			data := templateData{ProjectName: "probe", ModuleName: "probe"}
+			if err := scaffoldFromFS(templateFS, "templates/"+name, dir, data); err != nil {
+				t.Fatalf("scaffoldFromFS: %v", err)
+			}
+			b, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+			if err != nil {
+				t.Fatalf("read go.mod: %v", err)
+			}
+			if strings.Contains(string(b), "github.com/go-kruda/kruda") {
+				t.Errorf("template pins the core module; let `go mod tidy` resolve it instead:\n%s", b)
+			}
+		})
+	}
+}
+
+// TestScaffoldedProjectBuilds runs what a new user runs. It needs the module
+// proxy, so it is skipped under -short.
+func TestScaffoldedProjectBuilds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs the module proxy")
+	}
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain on PATH")
+	}
+	for _, name := range templateNames {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			data := templateData{ProjectName: "probe", ModuleName: "probe"}
+			if err := scaffoldFromFS(templateFS, "templates/"+name, dir, data); err != nil {
+				t.Fatalf("scaffoldFromFS: %v", err)
+			}
+			for _, args := range [][]string{{"mod", "tidy"}, {"build", "./..."}} {
+				cmd := exec.Command("go", args...)
+				cmd.Dir = dir
+				// A go.work above the temp dir would pull in this repo and mask
+				// what a user outside it actually gets.
+				cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("go %v in a fresh %s project failed: %v\n%s", args, name, err, out)
+				}
+			}
+		})
 	}
 }

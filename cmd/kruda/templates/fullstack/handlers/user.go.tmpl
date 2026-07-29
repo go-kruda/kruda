@@ -105,5 +105,5 @@ func (h *UserHandler) Delete(c *kruda.Ctx) error {
 	}
 
 	delete(h.users, id)
-	return c.Status(204).Send(nil)
+	return c.NoContent()
 }

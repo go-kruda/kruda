@@ -25,7 +25,7 @@ jobs:
   probe:
     name: probe (${{ matrix.arm }})
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +59,14 @@ jobs:
           # runs; go test ./... builds and runs packages in parallel, which is
           # far more GC and goroutine pressure, and that is the shape both
           # observed crashes appeared under.
-          runs=12
+          # GOGC=1 collects almost continuously and gccheckmark validates the
+          # mark phase, so a GC that mishandles a stack has far more chances to
+          # be caught. Two faithful-command rounds at default GC pacing found
+          # nothing in 12 runs each; this is the last escalation before giving
+          # up on reproducing on demand.
+          export GOGC=1
+          export GODEBUG=gccheckmark=1
+          runs=8
           fails=0
           for i in $(seq 1 $runs); do
             if ! go test -v -race -tags kruda_stdjson -count=1 ./... > "run-$i.log" 2>&1; then

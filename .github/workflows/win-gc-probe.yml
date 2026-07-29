@@ -1,0 +1,81 @@
+# Temporary diagnostic. Not part of the normal CI matrix — delete once the
+# question below is answered.
+#
+# Question: the core test binary crashes intermittently inside the GC on
+# windows-2025 with Go 1.26.x (two occurrences, two unrelated tests, stacks
+# entirely in runtime: "marked free object in span", and ACCESS_VIOLATION in
+# (*unwinder).next during shrinkstack). Go 1.25.11 on the same runner has never
+# crashed. golang/go#77975 and #77955 describe the same signatures and blame the
+# Green Tea GC that Go 1.26 turned on by default; the fix is on tip for Go 1.27
+# and was deliberately not backported to 1.26.
+#
+# This runs the same package many times under Go 1.26.x in two arms — the
+# default GC and GOEXPERIMENT=nogreenteagc — and counts crashes. If the failures
+# sit only in the default arm, the cause is the runtime's GC, not Kruda.
+name: win-gc-probe
+
+on:
+  push:
+    branches: [probe/win-gc]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe (${{ matrix.arm }})
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: default-gc
+            goexperiment: ''
+          - arm: nogreenteagc
+            goexperiment: 'nogreenteagc'
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+
+      - name: Record environment
+        shell: bash
+        env:
+          GOEXPERIMENT: ${{ matrix.goexperiment }}
+        run: |
+          go version
+          echo "GOEXPERIMENT resolved to: $(go env GOEXPERIMENT)"
+
+      - name: Repeat the core package and count crashes
+        shell: bash
+        env:
+          GOEXPERIMENT: ${{ matrix.goexperiment }}
+        run: |
+          runs=20
+          fails=0
+          # Build once so the loop measures runtime behaviour, not compilation.
+          go test -race -tags kruda_stdjson -c -o kruda.test.exe . 
+          for i in $(seq 1 $runs); do
+            if ! ./kruda.test.exe -test.skip TestPlaintextPerformanceGuard > "run-$i.log" 2>&1; then
+              fails=$((fails + 1))
+              echo "::warning::run $i FAILED"
+              grep -iE 'marked free|fatal error|unexpected signal|--- FAIL' "run-$i.log" | head -5 || true
+            fi
+          done
+          echo "=========================================="
+          echo "arm=${{ matrix.arm }} failures=$fails / $runs"
+          echo "=========================================="
+          echo "arm=${{ matrix.arm }} failures=$fails/$runs" >> "$GITHUB_STEP_SUMMARY"
+          # The probe reports; it does not gate.
+          exit 0
+
+      - name: Upload failing logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-logs-${{ matrix.arm }}
+          path: run-*.log
+          if-no-files-found: ignore

@@ -1057,11 +1057,19 @@ app.Get("/ws", func(c *kruda.Ctx) error {
 
 max_size and mime are validation RULES, so they go inside the validate tag as
 max_size=5mb and mime=image/*. Written as separate struct tags they are never
-read and the upload is unlimited. They are also enforced only when the app has a
-Validator — without one, an upload of any size or type reaches the handler.
+read and the upload is unlimited. They also need a Validator on the app —
+without one, an upload of any size or type reaches the handler.
+
+BodyLimit (default 4MB) is enforced by the transport BEFORE the handler runs, so
+a larger request gets a 413 and never reaches validation. A max_size above
+BodyLimit can never fire. Keep max_size under BodyLimit, or raise BodyLimit past
+it as below. max_size failures are 422; BodyLimit is 413.
 
 ` + "```" + `go
-app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
+app := kruda.New(
+    kruda.WithValidator(kruda.NewValidator()), // max_size/mime need a Validator
+    kruda.WithBodyLimit(8<<20),                // else 5mb below is unreachable
+)
 
 type UploadRequest struct {
     File   *kruda.FileUpload ` + "`" + `form:"file" validate:"required,max_size=5mb,mime=image/*"` + "`" + `
@@ -1075,7 +1083,8 @@ kruda.Post[UploadRequest, Response](app, "/upload", func(c *kruda.C[UploadReques
 })
 ` + "```" + `
 
-Validation tags: max_size (e.g. "5mb", "500kb"), mime (e.g. "image/*", "application/pdf")`,
+Validation tags: max_size (e.g. "5mb", "500kb"), mime (e.g. "image/*", "application/pdf")
+max_size only fires below BodyLimit (default 4MB) — above it the transport returns 413 first.`,
 
 	"validation": `# Validation
 

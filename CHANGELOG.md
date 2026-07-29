@@ -62,6 +62,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   accepted even with a validator configured and the limits visible in the
   source. Rules belong inside the `validate` tag. Guarded by
   `TestMCPDocsUseValidationRulesAsRules` and `TestMCPDocsReferenceRealCoreTypes`.
+- Docs: every upload sample documented `max_size=5mb` against the 4MB default
+  `BodyLimit`, so the rule could never fire. `BodyLimit` is enforced by the
+  transport before the handler runs, so anything larger is answered 413 and
+  never reaches validation — measured end to end, a 4.5MB upload returns 413,
+  not the 422 the docs describe, and the 5MB cap a reader thought they had set
+  was really a 4MB one with a different status code. The samples in `upload.go`,
+  `docs/guide/security.md` and the `kruda mcp` file-upload topic now raise
+  `WithBodyLimit` alongside the rule and state the ordering.
+  `TestDocumentedMaxSizeIsReachable` fails on any documented `max_size` above the
+  default `BodyLimit` that does not raise it.
 
 ## [1.6.2] — 2026-07-19
 

@@ -53,6 +53,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   enforced. `TestMCPDocsDoNotTeachAutomaticValidation` keeps the AI-facing
   guidance honest; it caught the file-upload topic, whose `max_size`/`mime` tags
   were presented as if they applied on their own.
+- Docs: the `kruda mcp` file-upload sample was broken in two further ways. It
+  named `*kruda.Upload`, a type the core does not export (it is
+  `kruda.FileUpload`), so the sample could not compile; and it wrote
+  `validate:"required" max_size:"5mb" mime:"image/*"`, putting two validation
+  rules into struct tags of their own. Only `required` compiles from that form —
+  `max_size` and `mime` are never read, so an upload of any size or type was
+  accepted even with a validator configured and the limits visible in the
+  source. Rules belong inside the `validate` tag. Guarded by
+  `TestMCPDocsUseValidationRulesAsRules` and `TestMCPDocsReferenceRealCoreTypes`.
 
 ## [1.6.2] — 2026-07-19
 

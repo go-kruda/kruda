@@ -109,3 +109,39 @@ func TestMCPDocsDoNotTeachAutomaticValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestMCPDocsUseValidationRulesAsRules guards a silent failure the file-upload
+// topic shipped: it wrote `validate:"required" max_size:"5mb" mime:"image/*"`,
+// putting two validation rules in struct tags of their own. Only `required`
+// compiles from that; max_size and mime are never read, so an upload of any
+// size or type is accepted — with a Validator configured and the tags sitting
+// right there in the source. Rules belong inside the validate tag, as
+// `validate:"required,max_size=5mb,mime=image/*"`.
+func TestMCPDocsUseValidationRulesAsRules(t *testing.T) {
+	// Rule names that read like plausible standalone struct tags. A rule used as
+	// its own tag is silently dropped, which is worse than a compile error.
+	rules := []string{"max_size", "mime", "min", "max", "email", "required", "oneof", "uuid"}
+	for topic, body := range krudaDocs {
+		for _, r := range rules {
+			if strings.Contains(body, r+`:"`) {
+				t.Errorf("krudaDocs[%q] uses the validation rule %q as its own struct tag; it must go inside validate:\"...\" or it is silently ignored", topic, r)
+			}
+		}
+	}
+}
+
+// TestMCPDocsReferenceRealCoreTypes catches samples naming types the core does
+// not export — the file-upload topic said *kruda.Upload, which does not exist
+// (it is kruda.FileUpload), so the sample never compiled for anyone who copied
+// it. The list is the set this test knows to be wrong; MCP samples are not
+// compiled anywhere, so this is a floor, not a guarantee.
+func TestMCPDocsReferenceRealCoreTypes(t *testing.T) {
+	nonexistent := []string{"kruda.Upload{", "*kruda.Upload ", "*kruda.Upload`"}
+	for topic, body := range krudaDocs {
+		for _, bad := range nonexistent {
+			if strings.Contains(body, bad) {
+				t.Errorf("krudaDocs[%q] references %q, which the core does not export (did you mean kruda.FileUpload?)", topic, bad)
+			}
+		}
+	}
+}

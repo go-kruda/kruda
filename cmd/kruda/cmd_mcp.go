@@ -1055,16 +1055,17 @@ app.Get("/ws", func(c *kruda.Ctx) error {
 
 	"file-upload": `# File Upload
 
-The validate/max_size/mime tags below are enforced only when the app has a
-Validator: kruda.New(kruda.WithValidator(kruda.NewValidator())). Without it an
-upload of any size or type reaches the handler.
+max_size and mime are validation RULES, so they go inside the validate tag as
+max_size=5mb and mime=image/*. Written as separate struct tags they are never
+read and the upload is unlimited. They are also enforced only when the app has a
+Validator — without one, an upload of any size or type reaches the handler.
 
 ` + "```" + `go
 app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
 
 type UploadRequest struct {
-    File   *kruda.Upload ` + "`" + `form:"file" validate:"required" max_size:"5mb" mime:"image/*"` + "`" + `
-    Title  string        ` + "`" + `form:"title" validate:"required"` + "`" + `
+    File   *kruda.FileUpload ` + "`" + `form:"file" validate:"required,max_size=5mb,mime=image/*"` + "`" + `
+    Title  string            ` + "`" + `form:"title" validate:"required"` + "`" + `
 }
 
 kruda.Post[UploadRequest, Response](app, "/upload", func(c *kruda.C[UploadRequest]) (*Response, error) {

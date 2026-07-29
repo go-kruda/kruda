@@ -101,7 +101,7 @@ Supported tag types:
 
 ## Validation
 
-Validation runs automatically after binding. Use `validate` struct tags:
+After binding, `validate` struct tags are checked. Use them like this:
 
 ```go
 type Input struct {
@@ -110,6 +110,11 @@ type Input struct {
     Age   int    `json:"age"   validate:"min=0,max=150"`
 }
 ```
+
+
+::: warning Validation is opt-in
+Validation runs only when the app is built with `kruda.New(kruda.WithValidator(kruda.NewValidator()))`. Without it the `validate` tags do nothing — the request is parsed, nothing is checked, and the handler receives whatever the client sent. Kruda warns at startup when it finds `validate` tags and no validator. The generated OpenAPI schema advertises the constraints either way; only enforcement is gated.
+:::
 
 When validation fails, Kruda returns a structured error response:
 

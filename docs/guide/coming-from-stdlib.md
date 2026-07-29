@@ -215,7 +215,7 @@ You can use `kruda.NetHTTP()` to keep the exact same transport as stdlib while g
 
 - **Benchmark evidence** — versioned results and reproduction commands are documented in the [performance guide](/guide/performance)
 - **Error-returning handlers** — no more silent failures or forgotten `return`
-- **Type-safe handlers** — `C[T]` with auto-bind, auto-validate, auto-OpenAPI
+- **Type-safe handlers** — `C[T]` with auto-bind, auto-OpenAPI, and tag-driven validation (opt in with `kruda.WithValidator`)
 - **Built-in middleware** — Logger, CORS, Recovery, RequestID, RateLimit
 - **Route groups** — with scoped middleware via `Guard()`
 - **Auto CRUD** — `kruda.Resource[Product, string](app, "/products", service)` generates full REST

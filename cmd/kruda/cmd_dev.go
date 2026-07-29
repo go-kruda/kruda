@@ -49,7 +49,9 @@ func runDev(cmd *cobra.Command, args []string) error {
 	binPath := filepath.Join(dir, ".kruda-tmp")
 
 	fmt.Printf("%s[kruda dev]%s Watching %s for .go file changes\n", colorGreen, colorReset, dir)
-	fmt.Printf("%s[kruda dev]%s Port: %d\n", colorGreen, colorReset, port)
+	// PORT is what we hand the child; an app that hardcodes its Listen address
+	// ignores it, so do not claim to know where it ended up listening.
+	fmt.Printf("%s[kruda dev]%s PORT=%d passed to the app\n", colorGreen, colorReset, port)
 
 	// Initial build and start.
 	var proc *os.Process
@@ -60,7 +62,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			fmt.Printf("%s[error]%s Failed to start: %s\n", colorRed, colorReset, err)
 		} else {
-			fmt.Printf("%s[kruda dev]%s Listening on :%d\n", colorGreen, colorReset, port)
+			fmt.Printf("%s[kruda dev]%s Started (PORT=%d)\n", colorGreen, colorReset, port)
 		}
 	}
 
@@ -125,7 +127,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 				fmt.Printf("%s[error]%s Failed to start: %s\n", colorRed, colorReset, err)
 				continue
 			}
-			fmt.Printf("%s[kruda dev]%s Listening on :%d\n", colorGreen, colorReset, port)
+			fmt.Printf("%s[kruda dev]%s Started (PORT=%d)\n", colorGreen, colorReset, port)
 		}
 	}
 }

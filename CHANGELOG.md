@@ -5,6 +5,74 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `kruda new` now produces a project that builds. All three templates wrote
+  `require github.com/go-kruda/kruda v0.0.0`, a placeholder no proxy can
+  resolve, so `go mod tidy` — the second step the CLI itself prints — failed,
+  and so did `go build` and `go run`. `go get github.com/go-kruda/kruda@latest`
+  failed too, because Go resolves the existing requirement before fetching
+  anything, leaving no recovery short of editing `go.mod` by hand. `kruda mcp`
+  prints the same steps and the scaffold ships `.mcp.json`, so AI-assisted users
+  hit the same wall. The templates no longer pin the core module at all: `go mod
+  tidy` resolves the current release, so nothing here goes stale at the next tag.
+  Broken since 2026-03-01, across v1.4.0 through v1.6.2.
+- The `api` and `fullstack` templates called `c.Status(204).Send(nil)`; `Send` is
+  unexported. They now use `c.NoContent()`.
+- `kruda --version` reported `dev` for anyone who installed the published
+  binary, since the version is only injected by `-ldflags` in a release build.
+  It now falls back to the module version recorded in the binary.
+- `kruda validate` printed the full usage block when a check failed, pushing the
+  message that says what to fix off the top of the output. Every CLI error was
+  also printed twice, once by cobra and once by the entry point.
+- `kruda dev` announced `Port: N / Listening on :N`, which was wrong for any app
+  that hardcodes its `Listen` address — it only passes `PORT` to the child
+  process. It now says exactly that.
+
+### Added
+
+- Startup warning when a typed route's input carries `validate:` tags but no
+  `Validator` is configured. Validation is opt-in, so those tags were silently
+  inert: the request was parsed, nothing was checked, and the handler received
+  whatever the client sent. The warning fires once per process at route
+  registration, naming a route and field, and says which option enables
+  validation. Nothing is added to the request path.
+
+### Changed
+
+- Docs: every place that described validation as automatic now states that it is
+  opt-in. This was wrong in the README, the `C[T]` package doc, `docs/api/handler.md`,
+  `docs/guide/handlers.md`, the four `coming-from-*` guides, the typed-handler
+  example's comments, `CLAUDE.md`, and — most consequentially — the `kruda mcp`
+  documentation topics, which told AI assistants "Kruda validates struct tags
+  automatically in typed handlers" and never mentioned `WithValidator` anywhere.
+  Since `kruda new` ships `.mcp.json`, that was the default guidance for
+  AI-assisted users. Samples that show `validate:` tags now build the app with
+  `kruda.WithValidator(kruda.NewValidator())`, and the docs note that the
+  generated OpenAPI schema advertises the constraints whether or not they are
+  enforced. `TestMCPDocsDoNotTeachAutomaticValidation` keeps the AI-facing
+  guidance honest; it caught the file-upload topic, whose `max_size`/`mime` tags
+  were presented as if they applied on their own.
+- Docs: the `kruda mcp` file-upload sample was broken in two further ways. It
+  named `*kruda.Upload`, a type the core does not export (it is
+  `kruda.FileUpload`), so the sample could not compile; and it wrote
+  `validate:"required" max_size:"5mb" mime:"image/*"`, putting two validation
+  rules into struct tags of their own. Only `required` compiles from that form —
+  `max_size` and `mime` are never read, so an upload of any size or type was
+  accepted even with a validator configured and the limits visible in the
+  source. Rules belong inside the `validate` tag. Guarded by
+  `TestMCPDocsUseValidationRulesAsRules` and `TestMCPDocsReferenceRealCoreTypes`.
+- Docs: every upload sample documented `max_size=5mb` against the 4MB default
+  `BodyLimit`, so the rule could never fire. `BodyLimit` is enforced by the
+  transport before the handler runs, so anything larger is answered 413 and
+  never reaches validation — measured end to end, a 4.5MB upload returns 413,
+  not the 422 the docs describe, and the 5MB cap a reader thought they had set
+  was really a 4MB one with a different status code. The samples in `upload.go`,
+  `docs/guide/security.md` and the `kruda mcp` file-upload topic now raise
+  `WithBodyLimit` alongside the rule and state the ordering.
+  `TestDocumentedMaxSizeIsReachable` fails on any documented `max_size` above the
+  default `BodyLimit` that does not raise it.
+
 ## [1.6.2] — 2026-07-19
 
 ### Security

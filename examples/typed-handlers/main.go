@@ -3,14 +3,19 @@
 // This example demonstrates Kruda's typed handler system using C[T] — the
 // generic typed context. Typed handlers auto-parse request inputs from
 // multiple sources (path params, query strings, JSON body) into a single
-// struct, then auto-validate using struct tags.
+// struct, and validate it against struct tags.
+//
+// Validation is opt-in: it runs because main() below builds the app with
+// kruda.WithValidator(kruda.NewValidator()). Without that option the validate
+// tags are inert and c.In reaches the handler unchecked.
 //
 // Key concepts:
 //   - C[T] typed context with auto-parsed c.In field
 //   - `param` tag — binds from URL path parameters (:id, :slug)
 //   - `query` tag — binds from query string (?page=1&limit=10)
 //   - `json`  tag — binds from JSON request body
-//   - `validate` tag — auto-validation (required, min, max, email, etc.)
+//   - `validate` tag — validation rules (required, min, max, email, etc.),
+//     enforced only when a Validator is configured
 //   - Multiple input sources combined in one struct
 //
 // Endpoints:

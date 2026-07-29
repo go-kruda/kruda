@@ -391,7 +391,16 @@ ws.New(ws.Config{
 
 Uploaded filenames are automatically sanitized with `filepath.Base()` to strip directory components. Validate extensions in your handler:
 
+::: warning `max_size` above `BodyLimit` never fires
+`BodyLimit` (default **4MB**) is enforced by the transport before the handler runs, so a larger request is rejected with **413** and never reaches validation. A `max_size` above it is dead configuration. Keep `max_size` under `BodyLimit`, or raise `BodyLimit` past it as below. `max_size` failures surface as **422**, `BodyLimit` as **413**.
+:::
+
 ```go
+app := kruda.New(
+    kruda.WithValidator(kruda.NewValidator()), // max_size/mime need a Validator
+    kruda.WithBodyLimit(8<<20),                // BodyLimit defaults to 4MB
+)
+
 type UploadReq struct {
     Avatar *kruda.FileUpload `form:"avatar" validate:"required,max_size=5mb,mime=image/*"`
 }

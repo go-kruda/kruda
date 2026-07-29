@@ -10,7 +10,7 @@ conservatively.
 | Linux | 8-core 13th Gen Intel i5-13500, Go 1.25.11, linux/amd64 |
 | macOS | M-series, Go 1.26.1, darwin/arm64 (contrast only — see the caveat) |
 
-Benchmarks live in `json/engine_bench_test.go`; the cold-start harness in
+Benchmarks live in `json/engine_bench_test.go` and `json/engine_bench_legacy_test.go`; the cold-start harness in
 `bench/reproducible/coldstart/`. Both are in-repo now, so these numbers stay
 checkable.
 

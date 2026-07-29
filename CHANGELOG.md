@@ -5,6 +5,47 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `kruda new` now produces a project that builds. All three templates wrote
+  `require github.com/go-kruda/kruda v0.0.0`, a placeholder no proxy can
+  resolve, so `go mod tidy` — the second step the CLI itself prints — failed,
+  and so did `go build` and `go run`. `go get github.com/go-kruda/kruda@latest`
+  failed too, because Go resolves the existing requirement before fetching
+  anything, leaving no recovery short of editing `go.mod` by hand. `kruda mcp`
+  prints the same steps and the scaffold ships `.mcp.json`, so AI-assisted users
+  hit the same wall. The templates no longer pin the core module at all: `go mod
+  tidy` resolves the current release, so nothing here goes stale at the next tag.
+  Broken since 2026-03-01, across v1.4.0 through v1.6.2.
+- The `api` and `fullstack` templates called `c.Status(204).Send(nil)`; `Send` is
+  unexported. They now use `c.NoContent()`.
+- `kruda --version` reported `dev` for anyone who installed the published
+  binary, since the version is only injected by `-ldflags` in a release build.
+  It now falls back to the module version recorded in the binary.
+- `kruda validate` printed the full usage block when a check failed, pushing the
+  message that says what to fix off the top of the output. Every CLI error was
+  also printed twice, once by cobra and once by the entry point.
+- `kruda dev` announced `Port: N / Listening on :N`, which was wrong for any app
+  that hardcodes its `Listen` address — it only passes `PORT` to the child
+  process. It now says exactly that.
+
+### Added
+
+- Startup warning when a typed route's input carries `validate:` tags but no
+  `Validator` is configured. Validation is opt-in, so those tags were silently
+  inert: the request was parsed, nothing was checked, and the handler received
+  whatever the client sent. The warning fires once per process at route
+  registration, naming a route and field, and says which option enables
+  validation. Nothing is added to the request path.
+
+### Changed
+
+- Docs: the README's typed-handler example now builds the app with
+  `kruda.WithValidator(kruda.NewValidator())` and states that validation is
+  opt-in — it previously showed `validate:` tags on a plain `kruda.New()`, which
+  is exactly the configuration in which they do nothing. `CLAUDE.md` no longer
+  describes `C[T].In` as validated input.
+
 ## [1.6.2] — 2026-07-19
 
 ### Security

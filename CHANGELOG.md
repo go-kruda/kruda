@@ -102,13 +102,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   as its documentation already claimed. It previously called `sonic.Marshal` and
   copied the result into the buffer, so it allocated the intermediate `[]byte`
   it was meant to avoid — on the response path used for every JSON response.
-  Encoding a 100-item payload drops from 9792 B/op to 113 B/op and is about 30%
-  faster (3593 → 2506 ns/op); a single-item payload is ~14 ns slower (116 → 130
-  ns/op) for 127 B/op → 112 B/op. It encodes through the same configuration as
-  `json.Marshal`, so both produce identical bytes. Medians of 12 runs on
-  linux/amd64 via `BenchmarkMarshalToBuffer*` in `json/engine_bench_test.go`; on
-  darwin/arm64 Sonic's encoder is slower than `encoding/json`, so these are
-  amd64 figures.
+  Against the implementation it replaces, encoding a 100-item payload drops from
+  9798 B/op to 113 B/op and is about 34% faster (3754 → 2485 ns/op); a
+  single-item payload costs ~25 ns more (104 → 130 ns/op) for 127 B/op → 112
+  B/op. It encodes through the same configuration as `json.Marshal`, so both
+  produce identical bytes. Medians of 12 runs on linux/amd64 via
+  `BenchmarkMarshalToBuffer*` in `json/engine_bench_test.go`, where
+  `Legacy` is the old code path — `sonic.Marshal` on the package default config,
+  which is what it really called — rather than today's configured encoder. On
+  darwin/arm64 Sonic's encoder is slower than `encoding/json`, so these are amd64
+  figures.
 
 ### Added
 

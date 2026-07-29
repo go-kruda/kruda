@@ -20,27 +20,43 @@ checkable.
 before it streamed — marshal into a fresh `[]byte`, then copy — because that,
 not `Marshal` alone, is what the claim compares against.
 
-Medians of 12 runs at 20,000 iterations each. An early 6-run sample put the
-speed gain at 27%; the larger sample settles it at 30%, which is why the
-published figure comes from the larger one.
+Medians of 12 runs at 20,000 iterations each, linux/amd64.
+
+Which baseline you pick changes the answer, so both are measured. `Legacy` is the
+code that actually shipped — `sonic.Marshal` on the package **default** config,
+then copy — while `ViaMarshal` routes through this package's `Marshal`, which
+today means the frozen config with `SortMapKeys` and `ValidateString` on. The
+old code never paid for those options, so only `Legacy` answers "what did
+upgrading change for a caller".
 
 | 100-item payload | ns/op | B/op |
 |---|---|---|
-| old: Marshal + copy | 3,593 | 9,792 |
-| new: streaming | **2,506** | **113** |
-| | **30% faster** | **87× less** |
+| Legacy — what shipped before | 3,754 | 9,798 |
+| ViaMarshal — config held equal | 3,840 | 9,818 |
+| **streaming — today** | **2,485** | **113** |
+
+Against `Legacy`: **34% faster, 87× fewer bytes.** Against `ViaMarshal`, isolating
+streaming alone: 35%. The two baselines land within 2% of each other here, because
+`ValidateString` is cheap on a struct of short ASCII strings — but that is a
+property of this payload, not a general one, and the published figure uses
+`Legacy`.
 
 | single item | ns/op | B/op |
 |---|---|---|
-| old: Marshal + copy | 115.5 | 127 |
-| new: streaming | 129.8 | 112 |
-| | **14 ns slower** | 15 B less |
+| Legacy | 104.4 | 127 |
+| ViaMarshal | 115.8 | 127 |
+| streaming — today | 129.8 | 112 |
 
-The CHANGELOG said "~19% faster" and "6967 → 178 B/op". The speed claim was
-understated; the byte figures differ only because the payload shape differs —
-neither the old harness's struct nor its field widths were recorded. The
-small-payload trade the handoff described as "~13 ns slower" measures at 14.3 ns
-here, which is close corroboration from an independent harness.
+Against `Legacy`, a single-item payload costs **25 ns more** for 15 fewer bytes.
+An earlier pass published 14 ns by measuring against `ViaMarshal`; that
+understated what a caller upgrading actually sees, and the CHANGELOG now carries
+the 25 ns figure.
+
+The CHANGELOG originally said "~19% faster" and "6967 → 178 B/op". The speed
+claim was understated. The byte figures differ from the originals only because
+the payload shape differs — neither the old harness's struct nor its field
+widths were recorded, so the handoff's "~13 ns slower" for small payloads is not
+comparable to the 25 ns measured here.
 
 ## Decode, Sonic vs encoding/json, linux/amd64
 

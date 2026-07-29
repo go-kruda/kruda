@@ -49,20 +49,23 @@ jobs:
           go version
           echo "GOEXPERIMENT resolved to: $(go env GOEXPERIMENT)"
 
-      - name: Repeat the core package and count crashes
+      - name: Repeat the real CI command and count crashes
         shell: bash
         env:
           GOEXPERIMENT: ${{ matrix.goexperiment }}
         run: |
-          runs=20
+          # Deliberately the exact command test.yml runs. A first attempt used a
+          # single prebuilt package binary run serially and saw 0 failures in 20
+          # runs; go test ./... builds and runs packages in parallel, which is
+          # far more GC and goroutine pressure, and that is the shape both
+          # observed crashes appeared under.
+          runs=12
           fails=0
-          # Build once so the loop measures runtime behaviour, not compilation.
-          go test -race -tags kruda_stdjson -c -o kruda.test.exe . 
           for i in $(seq 1 $runs); do
-            if ! ./kruda.test.exe -test.skip TestPlaintextPerformanceGuard > "run-$i.log" 2>&1; then
+            if ! go test -v -race -tags kruda_stdjson -count=1 ./... > "run-$i.log" 2>&1; then
               fails=$((fails + 1))
               echo "::warning::run $i FAILED"
-              grep -iE 'marked free|fatal error|unexpected signal|--- FAIL' "run-$i.log" | head -5 || true
+              grep -iE 'marked free|fatal error|unexpected signal|^--- FAIL' "run-$i.log" | head -5 || true
             fi
           done
           echo "=========================================="

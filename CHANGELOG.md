@@ -102,10 +102,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   as its documentation already claimed. It previously called `sonic.Marshal` and
   copied the result into the buffer, so it allocated the intermediate `[]byte`
   it was meant to avoid — on the response path used for every JSON response.
-  Encoding a 100-item payload drops from 6967 B/op to 178 B/op and is ~19%
-  faster; small payloads are ~13 ns slower for 115 B/op → 84 B/op. It encodes
-  through the same configuration as `json.Marshal`, so both produce identical
-  bytes.
+  Encoding a 100-item payload drops from 9774 B/op to 163 B/op and is 27%
+  faster (3506 → 2556 ns/op); small payloads are a few ns slower for slightly
+  fewer bytes. It encodes through the same configuration as `json.Marshal`, so
+  both produce identical bytes. Measured on linux/amd64 with `BenchmarkMarshalToBuffer*`
+  in `json/engine_bench_test.go`; on darwin/arm64 Sonic's encoder is slower than
+  `encoding/json`, so these are amd64 figures.
 
 ### Added
 
@@ -170,12 +172,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
 
   This changes behavior for existing `CGO_ENABLED=0` builds, which now get
-  Sonic: JSON decoding is roughly 4–5× faster, at the cost of Sonic's JIT
-  warm-up at process start (measured on a 4-core Linux container, 25 typed POST
-  routes: cold start 6.5 ms → 13.5 ms, startup RSS 12.1 MB → 17.6 MB). Long-lived
-  servers recoup that within the first few thousand requests. Builds that spawn
-  a process per request or scale to zero should set the `kruda_stdjson` tag to
-  keep the faster cold start.
+  Sonic: JSON decoding is about 6× faster (78.2 → 12.8 µs for a 100-item
+  payload), at the cost of Sonic's JIT warm-up at process start — cold start
+  3.25 ms → 6.25 ms and startup RSS 12.5 MB → 19.4 MB, median of 15 spawns on an
+  8-core linux/amd64 host. The warm-up is a fixed cost paid once per process, not
+  one that scales with how many typed routes are registered: going from 1 route
+  to 25 moves cold start by about 0.25 ms in either engine. Long-lived servers
+  recoup it within the first few thousand requests; builds that spawn a process
+  per request or scale to zero should set the `kruda_stdjson` tag to keep the
+  faster cold start. Reproduce with `bench/reproducible/coldstart/coldstart.sh`
+  (results and method in `bench/reproducible/results/2026-07-29-coldstart/`).
 
 ## [1.6.2] — 2026-07-19
 

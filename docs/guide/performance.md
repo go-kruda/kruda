@@ -74,13 +74,11 @@ Selection happens at build time, in this order:
 builds are not excluded (since v1.7.0; earlier versions silently fell back to
 `encoding/json`).
 
-::: warning The startup log reports intent, not the outcome
-`listening … json=sonic` says which of Kruda's two files compiled, not whether
-Sonic is actually doing the work. On a Go version or platform Sonic does not
-support it still prints `json=sonic` while `encoding/json` runs. Treat it as "this
-build did not set `kruda_stdjson`", and pin the Go toolchain if you depend on the
-figures below.
-:::
+`listening … json=sonic` reports the engine actually doing the work, not the tag
+the build used: on a platform or Go version Sonic falls back on, the line reads
+`json=encoding/json`. Kruda picks its JSON response path from the same signal, so
+a fallback build gets the path that suits `encoding/json` rather than the one that
+suits Sonic.
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
 **Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in

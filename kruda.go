@@ -306,7 +306,7 @@ func (app *App) Listen(addr string) error {
 	// Report the active JSON engine: it is chosen at build time by the
 	// kruda_stdjson tag, so this is the only way to confirm from a running
 	// binary which one a build actually got.
-	app.config.Logger.Info("listening", "addr", addr, "json", krudajson.EncoderName)
+	app.config.Logger.Info("listening", "addr", addr, "json", krudajson.ActiveEngine())
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

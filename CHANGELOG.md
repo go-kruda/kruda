@@ -177,10 +177,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is fixed at compile time, and measure unchanged at ~165 ns/op. Map marshalling
   costs roughly 13% more for a 4-key map and 65% for a 50-key map.
 - The `listening` startup log line now reports the active JSON engine as
-  `json=sonic` or `json=encoding/json`. It reports which of the two files
-  compiled, which is the tag's effect — not whether Sonic ends up doing the work.
-  Sonic applies its own platform and Go-version constraints on top and can fall
-  back to `encoding/json` itself while this line still reads `json=sonic`.
+  `json=sonic` or `json=encoding/json`, reporting the engine actually doing the
+  work. Sonic applies its own platform and Go-version constraints on top of
+  Kruda's tag and can route its API to `encoding/json` — an architecture it has no
+  assembly for, or a Go version it has not validated, such as go1.27 and newer for
+  sonic v1.15.0. `json.ActiveEngine` resolves that, and Kruda now selects its JSON
+  response path from it too, so a fallback build takes the path that suits
+  `encoding/json` instead of the one that suits Sonic. `json.EncoderName` still
+  names what the tag selected, for callers that want that.
 - The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
   `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
   static binaries and `scratch`/`distroless` container images — silently fell

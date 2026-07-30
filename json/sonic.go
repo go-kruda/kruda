@@ -19,8 +19,24 @@ import (
 	"github.com/bytedance/sonic"
 )
 
-// EncoderName identifies the active JSON encoder for diagnostics.
+// EncoderName names the engine this build's tag selected. It is not necessarily
+// the engine doing the work — see ActiveEngine.
 const EncoderName = "sonic"
+
+// EngineIsStdlib reports whether encoding/json ends up doing the work. Under the
+// default tag that is true exactly when sonic routes its own API to the standard
+// library, so callers choosing a code path by engine get the real answer rather
+// than the tag's. A const, so the choice stays free on the hot path.
+const EngineIsStdlib = !sonicAccelerated
+
+// ActiveEngine returns the engine actually in use: "sonic" when sonic's
+// accelerated implementation compiled, "encoding/json" when it fell back.
+func ActiveEngine() string {
+	if EngineIsStdlib {
+		return "encoding/json"
+	}
+	return "sonic"
+}
 
 // api is the Sonic configuration Kruda encodes and decodes with.
 //

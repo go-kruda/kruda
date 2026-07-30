@@ -8,9 +8,13 @@
 // Compiling this file is not the same as Sonic doing the work. Sonic carries its
 // own build constraints — amd64/arm64, and only Go versions it has validated
 // (v1.15.0 excludes go1.27 and newer) — and transparently routes its API to
-// encoding/json outside them. This file stays correct everywhere as a result, but
-// EncoderName below reports the tag's effect, not the outcome, so a build on an
-// unsupported toolchain logs json=sonic while encoding/json runs.
+// encoding/json outside them, so this file stays correct everywhere.
+//
+// Two exported names follow from that split, and confusing them is what this
+// package's callers have to avoid. EncoderName is the engine the build tag
+// selected, which fixes the frozen configuration and therefore the bytes.
+// ActiveEngine and EngineIsStdlib describe what is actually encoding, which fixes
+// the cost. Assert output against the first; choose a code path by the second.
 package json
 
 import (

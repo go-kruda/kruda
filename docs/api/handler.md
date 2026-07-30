@@ -177,4 +177,4 @@ type Input struct {
 
 Validation failures return HTTP 422 with structured error details.
 
-**Validation runs by default** since v1.8.0. Opt out with `kruda.New(kruda.WithoutValidation())`, which leaves `validate` tags inert: the request is parsed and nothing is checked. `kruda.WithValidator` is for registering custom rules or messages, not for switching validation on. A tag naming a rule Kruda does not implement — the rule set is smaller than `go-playground/validator`'s — is skipped with a startup warning rather than panicking; `kruda.SupportedValidationRules()` lists what exists.
+**Validation runs by default** since v1.8.0. Opt out with `kruda.New(kruda.WithoutValidation())`, which leaves `validate` tags inert: the request is parsed and nothing is checked. `kruda.WithValidator` is for registering custom rules or messages, not for switching validation on. A tag naming a rule Kruda does not implement — the rule set is smaller than `go-playground/validator`'s — is skipped with a startup warning rather than panicking; `(*kruda.Validator).RuleNames()` lists what a validator recognises, including rules added with `Register`.

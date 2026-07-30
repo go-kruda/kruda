@@ -1095,7 +1095,8 @@ The tag syntax looks like go-playground/validator, which has far more. Do NOT
 generate tags using rules absent from the list above — omitempty, dive, eq, ne,
 datetime, required_if and the rest do not exist here. Kruda skips an unknown rule
 with a startup warning rather than failing, so the tag will simply not be
-enforced. kruda.SupportedValidationRules() returns the list at runtime.
+enforced. (*kruda.Validator).RuleNames() returns the list at runtime, including
+any rule registered with Register.
 
 ` + "```" + `go
 type CreateUser struct {

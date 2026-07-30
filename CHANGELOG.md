@@ -14,8 +14,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   out with `kruda.New(kruda.WithoutValidation())`. `kruda.WithValidator` remains,
   but is now only for registering custom rules or messages.
 
-  `kruda.SupportedValidationRules()` reports the 20 rules this framework
-  implements. The tag syntax resembles `go-playground/validator`, which has far
+  `(*kruda.Validator).RuleNames()` reports the rules a validator recognises —
+  the 20 built in, plus anything registered. The tag syntax resembles `go-playground/validator`, which has far
   more, and tags carried over from it are the likely surprise here — `omitempty`,
   `dive`, `eq`, `ne`, `datetime`, `required_if` and others do not exist.
 

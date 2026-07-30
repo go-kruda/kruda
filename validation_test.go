@@ -3,6 +3,7 @@ package kruda
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"reflect"
 	"slices"
@@ -556,10 +557,15 @@ func TestBuildValidators_UnknownRuleWarnsAndSkips(t *testing.T) {
 	}
 }
 
-// TestSupportedValidationRulesIsSorted keeps the warning's rule list stable and
-// therefore diffable.
-func TestSupportedValidationRulesIsSorted(t *testing.T) {
-	got := SupportedValidationRules()
+// TestRuleNamesIsSortedAndIncludesRegistered keeps the warning's list stable and
+// therefore diffable, and covers the reason it is a method: an application that
+// registered its own rule must see it listed, or the warning tells it that its
+// own rule does not exist.
+func TestRuleNamesIsSortedAndIncludesRegistered(t *testing.T) {
+	if custom := NewValidator().Register("mycheck", func(any, string) bool { return true }).RuleNames(); !slices.Contains(custom, "mycheck") {
+		t.Errorf("a registered rule is missing from RuleNames: %v", custom)
+	}
+	got := NewValidator().RuleNames()
 	if len(got) == 0 {
 		t.Fatal("no rules reported")
 	}
@@ -731,5 +737,44 @@ func TestValidateRequired_FileUpload(t *testing.T) {
 	file := &FileUpload{Name: "test.png", Size: 100, ContentType: "image/png"}
 	if !validateRequired(file, "") {
 		t.Error("non-nil *FileUpload should pass required")
+	}
+}
+
+// TestAllRulesUnknownProducesNoValidator covers the mismatch that empty
+// validators created: len(validators) sets hasValidate on the route, which is
+// what puts a 422 in the generated OpenAPI document. A field whose every rule was
+// skipped validates nothing, so recording it would advertise a response the
+// handler can never produce.
+func TestAllRulesUnknownProducesNoValidator(t *testing.T) {
+	type Input struct {
+		Name string `validate:"omitempty"`
+	}
+	warnedUnknownRules = sync.Map{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})))
+	defer slog.SetDefault(prev)
+
+	if got := buildValidators[Input](NewValidator()); len(got) != 0 {
+		t.Fatalf("a field with only unknown rules produced %d validator(s); OpenAPI would advertise a 422 that cannot happen", len(got))
+	}
+}
+
+// TestUnknownRuleWarningListsRegisteredRules guards the other half: the check
+// uses the app's validator, so the message must too.
+func TestUnknownRuleWarningListsRegisteredRules(t *testing.T) {
+	type Input struct {
+		Name string `validate:"typo,mycheck"`
+	}
+	warnedUnknownRules = sync.Map{}
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(prev)
+
+	v := NewValidator().Register("mycheck", func(any, string) bool { return true })
+	buildValidators[Input](v)
+
+	if !strings.Contains(buf.String(), "mycheck") {
+		t.Errorf("the warning omits a registered rule, telling the app its own rule does not exist: %q", buf.String())
 	}
 }

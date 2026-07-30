@@ -108,22 +108,29 @@ var warnedUnknownRules sync.Map
 
 // warnUnknownRule reports a validate tag naming a rule this package does not
 // implement. That rule is skipped; the field's other rules still apply.
-func warnUnknownRule(rule, typeName, fieldName string) {
+func warnUnknownRule(v *Validator, rule, typeName, fieldName string) {
 	key := rule + "\x00" + typeName + "\x00" + fieldName
 	if _, loaded := warnedUnknownRules.LoadOrStore(key, struct{}{}); loaded {
 		return
 	}
+	// The rules this Validator has, not the built-in set: an application that
+	// registered its own would otherwise be told they are unsupported, which is
+	// the opposite of true and unhelpful precisely when someone has misspelled
+	// one of their own rules.
 	slog.Warn("kruda: unknown validation rule in a validate tag — that rule is ignored, the field's other rules still apply",
 		"rule", rule, "type", typeName, "field", fieldName,
-		"supported", strings.Join(SupportedValidationRules(), ","))
+		"available", strings.Join(v.RuleNames(), ","))
 }
 
-// SupportedValidationRules lists the validation rules this package implements,
-// sorted. The tag syntax resembles go-playground/validator but the rule set is
-// far smaller, so tags carried over from it may name rules that are not here;
-// when one is, the actionable thing to know is which rules exist.
-func SupportedValidationRules() []string {
-	v := NewValidator()
+// RuleNames lists the validation rules this Validator recognises, sorted —
+// the built-in set plus anything added with Register.
+//
+// The tag syntax resembles go-playground/validator, but that library has far more
+// rules, so a tag carried over from it may name one that does not exist here. A
+// rule this Validator does not have is skipped with a startup warning rather than
+// failing the build, so RuleNames is the way to check what a tag can actually
+// use.
+func (v *Validator) RuleNames() []string {
 	names := make([]string, 0, len(v.rules))
 	for n := range v.rules {
 		names = append(names, n)
@@ -181,12 +188,20 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 				//
 				// Nothing that boots today changes: an application with an unknown
 				// rule and a Validator already configured panics as it is.
-				warnUnknownRule(ruleName, t.Name(), field.Name)
+				warnUnknownRule(v, ruleName, t.Name(), field.Name)
 				continue
 			}
 			fv.rules = append(fv.rules, ruleEntry{name: ruleName, param: ruleParam, fn: fn})
 		}
 
+		// A field whose every rule was skipped validates nothing, so it must not
+		// be recorded as a validator. len(validators) is what sets hasValidate on
+		// the route, which is what puts a 422 in the generated OpenAPI document —
+		// keeping an empty entry would advertise a response the handler can never
+		// produce.
+		if len(fv.rules) == 0 {
+			continue
+		}
 		validators = append(validators, fv)
 	}
 

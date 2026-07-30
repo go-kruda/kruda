@@ -118,7 +118,7 @@ Since v1.8.0 `validate` tags are enforced without any configuration. Opt out wit
 `kruda.WithValidator` is for registering custom rules or messages, not for
 switching validation on.
 
-Kruda implements 20 rules — `kruda.SupportedValidationRules()` lists them. The tag
+Kruda implements 20 rules — `(*kruda.Validator).RuleNames()` lists them, plus any registered with `Register`. The tag
 syntax resembles `go-playground/validator`, which has far more, so a tag carried
 over from it may name a rule that does not exist here. Those are skipped with a
 startup warning naming the rule; the field's other rules still apply. The generated

@@ -67,7 +67,7 @@ kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User,
 every field that failed and why. Opt out with `kruda.New(kruda.WithoutValidation())`,
 and use `kruda.WithValidator` only to register custom rules or messages.
 
-The rule set is Kruda's own — 20 rules, listed by `kruda.SupportedValidationRules()`.
+The rule set is Kruda's own — 20 built in, listed by `(*kruda.Validator).RuleNames()`.
 The tag syntax resembles `go-playground/validator` but that library has far more
 rules, so a tag carried over from it may name one that does not exist here. Those
 are skipped with a startup warning naming the rule; the field's other rules still

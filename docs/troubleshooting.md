@@ -77,8 +77,11 @@ Kruda's JSON engine.
 
 ### Selecting the engine
 
-The engine is chosen at build time by the `kruda_stdjson` tag and nothing else.
-Kruda never switches engines at runtime.
+The `kruda_stdjson` tag always selects `encoding/json`. Without it Kruda selects
+Sonic, and Sonic applies its own constraints — amd64/arm64, on Go versions it has
+validated — falling back to `encoding/json` itself outside them. Sonic v1.15.0
+excludes **Go 1.27 and newer**, so a toolchain upgrade can change the engine
+without any change to your build flags. Kruda never switches engines at runtime.
 
 ```bash
 go build ./...                        # Sonic (default)

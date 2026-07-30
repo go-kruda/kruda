@@ -177,15 +177,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is fixed at compile time, and measure unchanged at ~165 ns/op. Map marshalling
   costs roughly 13% more for a 4-key map and 65% for a 50-key map.
 - The `listening` startup log line now reports the active JSON engine as
-  `json=sonic` or `json=encoding/json`. The engine is selected by build tag, so
-  this is the only way to confirm from a running binary which one a build got.
+  `json=sonic` or `json=encoding/json`. It reports which of the two files
+  compiled, which is the tag's effect — not whether Sonic ends up doing the work.
+  Sonic applies its own platform and Go-version constraints on top and can fall
+  back to `encoding/json` itself while this line still reads `json=sonic`.
 - The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
   `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
   static binaries and `scratch`/`distroless` container images — silently fell
   back to `encoding/json` while still reporting a default build. Sonic is pure
-  Go plus assembly and has no cgo dependency; on platforms it does not
-  accelerate, Sonic's own build constraints already route its API to
-  `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
+  Go plus assembly and has no cgo dependency. CGO no longer takes part in the
+  choice: the `kruda_stdjson` tag selects `encoding/json`, and without it Kruda
+  selects Sonic, which then applies its own constraints — amd64/arm64 on Go
+  versions it has validated — and routes to `encoding/json` itself outside them.
+  Sonic v1.15.0 excludes Go 1.27 and newer, so a toolchain upgrade can still
+  change the engine without any change to build flags.
 
   This changes behavior for existing `CGO_ENABLED=0` builds, which now get
   Sonic: JSON decoding is about 6× faster (78.1 → 13.0 µs for a 100-item

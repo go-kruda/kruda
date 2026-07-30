@@ -3,10 +3,14 @@
 // Package json provides a pluggable JSON engine for Kruda.
 // This file uses github.com/bytedance/sonic for SIMD-accelerated JSON processing.
 // It is compiled by default, and is selected regardless of whether CGO is
-// enabled: Sonic is pure Go plus assembly and has no cgo dependency. On
-// platforms or Go versions Sonic does not accelerate (anything other than
-// amd64/arm64), Sonic's own build constraints transparently route its API to
-// encoding/json, so this file stays correct everywhere.
+// enabled: Sonic is pure Go plus assembly and has no cgo dependency.
+//
+// Compiling this file is not the same as Sonic doing the work. Sonic carries its
+// own build constraints — amd64/arm64, and only Go versions it has validated
+// (v1.15.0 excludes go1.27 and newer) — and transparently routes its API to
+// encoding/json outside them. This file stays correct everywhere as a result, but
+// EncoderName below reports the tag's effect, not the outcome, so a build on an
+// unsupported toolchain logs json=sonic while encoding/json runs.
 package json
 
 import (

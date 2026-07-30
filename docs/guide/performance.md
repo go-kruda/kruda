@@ -62,15 +62,30 @@ Route registration order doesn't affect lookup performance.
 | Sonic | default | Assembly-accelerated; clearly ahead on amd64, mixed on arm64 (see below) |
 | encoding/json | `kruda_stdjson` build tag | Portable standard-library baseline |
 
-The engine is selected at build time by that tag alone. **Neither engine needs
-CGO** — Sonic is pure Go plus assembly, so `CGO_ENABLED=0` builds get Sonic too
-(since v1.7.0; earlier versions silently fell back to `encoding/json`). On
-platforms Sonic does not accelerate, its own build constraints route its API to
-`encoding/json`.
+Selection happens at build time, in this order:
+
+1. The `kruda_stdjson` tag always selects `encoding/json`.
+2. Otherwise Kruda selects Sonic — but Sonic then applies **its own** constraints,
+   which cover amd64 and arm64 on the Go versions it has validated. Outside those,
+   Sonic routes its API to `encoding/json` itself. For Sonic v1.15.0 that means
+   **Go 1.27 and newer fall back**, regardless of the tag or the platform.
+
+**Neither engine needs CGO.** Sonic is pure Go plus assembly, so `CGO_ENABLED=0`
+builds are not excluded (since v1.7.0; earlier versions silently fell back to
+`encoding/json`).
+
+::: warning The startup log reports intent, not the outcome
+`listening … json=sonic` says which of Kruda's two files compiled, not whether
+Sonic is actually doing the work. On a Go version or platform Sonic does not
+support it still prints `json=sonic` while `encoding/json` runs. Treat it as "this
+build did not set `kruda_stdjson`", and pin the Go toolchain if you depend on the
+figures below.
+:::
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
-linux/amd64 (`json/engine_bench_test.go`; raw output in
-`bench/reproducible/results/2026-07-29-coldstart/`):
+**Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in
+`bench/reproducible/results/2026-07-29-coldstart/`). Both collapse to 1× on any
+build where Sonic falls back, per the rule above:
 
 | | encoding/json | Sonic | |
 |---|---|---|---|

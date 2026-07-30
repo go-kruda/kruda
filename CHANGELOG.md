@@ -5,6 +5,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Upgrade note — `CGO_ENABLED=0` builds: JSON response bytes change
+
+If you build with `CGO_ENABLED=0`, this release changes which JSON engine you get
+and therefore what your responses look like on the wire. Nothing else in this
+release does that, and it is easy to miss because no build flag of yours changed.
+
+Before this release a `CGO_ENABLED=0` build silently got `encoding/json`, which
+escapes `<`, `>` and `&` in strings. It now gets Sonic, which is configured with
+`EscapeHTML` off. Measured on the same input:
+
+| string in a response | before | after |
+|---|---|---|
+| `if x < 10 && y > 3` | `"if x \u003c 10 \u0026\u0026 y \u003e 3"` | `"if x < 10 && y > 3"` |
+| `<p>Chapter 1</p>` | `"\u003cp\u003eChapter 1\u003c/p\u003e"` | `"<p>Chapter 1</p>"` |
+| `{"title": "A & B"}` | `{"title":"A \u0026 B"}` | `{"title":"A & B"}` |
+
+Enabling CGO does **not** avoid this — CGO no longer takes part in choosing the
+engine, which is the point of the fix below. `-tags kruda_stdjson` is the only way
+to keep the previous behaviour.
+
+What to check before upgrading:
+
+- **Anything that renders API strings as HTML.** Escaped output was masking `<`
+  and `&` for you. Text nodes in React, Vue and similar escape on their own and
+  are unaffected, but `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from
+  a response are not. Responses are served as `application/json`, which no browser
+  executes, so this is about your rendering, not the transport.
+- **Anything keyed on response bytes** — `contrib/etag`, response caches, snapshot
+  tests — will miss once as bodies change.
+
+If you would rather keep the escaping and the speed, `kruda.WithJSONEncoder` can
+supply a Sonic config with `EscapeHTML` on, at roughly 41% on responses containing
+strings. Note that a custom encoder also disables the streaming response path.
+
 ### Security
 
 - `contrib/observability` now requires `google.golang.org/grpc` v1.82.1, clearing

@@ -68,12 +68,19 @@ CGO** — Sonic is pure Go plus assembly, so `CGO_ENABLED=0` builds get Sonic to
 platforms Sonic does not accelerate, its own build constraints route its API to
 `encoding/json`.
 
-How much the engine is worth depends on payload shape. On the encoder and
-decoder themselves, measured on linux/amd64 with `json/engine_bench_test.go`,
-Sonic is roughly 35% faster to encode a 100-item payload and about 6× faster to
-decode one. How much of that reaches request throughput is a separate question —
-a small response spends most of its budget in the kernel, not the encoder — so
-benchmark your own payload shapes rather than assuming either figure carries over.
+On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
+linux/amd64 (`json/engine_bench_test.go`; raw output in
+`bench/reproducible/results/2026-07-29-coldstart/`):
+
+| | encoding/json | Sonic | |
+|---|---|---|---|
+| encode | 10,625 ns | 2,475 ns | **4.3× faster** |
+| decode | 78,133 ns | 13,015 ns | **6.0× faster** |
+
+How much of that reaches request throughput is a separate question, and the
+answer is often "none": a small response spends most of its per-request budget in
+the kernel rather than in the encoder. Benchmark your own payload shapes rather
+than assuming either ratio carries over.
 
 Cold start is the trade: Sonic's JIT warm-up costs about +3 ms and +7 MB RSS per
 process, a fixed cost that does not scale with route count. Set `kruda_stdjson`

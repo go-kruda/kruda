@@ -34,10 +34,14 @@ const EncoderName = "sonic"
 // Sonic's fallback honours EscapeHTML, so the HTML-escaping difference between
 // the engines does not appear on one. It does not implement SortMapKeys or
 // ValidateString — those agree only because encoding/json sorts and substitutes
-// U+FFFD unconditionally — and its errors come from encoding/json. Output beyond
-// escaping is therefore untested rather than known identical, and cannot be
-// tested yet: sonic does not build on 32-bit at all, so no architecture reaches
-// the fallback, and the Go-version route needs a go1.27 that does not exist.
+// U+FFFD unconditionally — and its errors come from encoding/json. Treat output
+// beyond escaping as untested rather than known identical.
+//
+// The fallback is reachable today, not hypothetical: linux/ppc64le, s390x,
+// riscv64, mips64 and loong64 build and take it. (32-bit is a separate story —
+// sonic does not compile there at all, so 386 and arm reach neither path.) Kruda
+// does not run its tests on any of those, so the gap is a matter of coverage
+// rather than of impossibility.
 const EngineIsStdlib = !sonicAccelerated
 
 // ActiveEngine names what is actually encoding, for logs and for labelling

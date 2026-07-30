@@ -90,10 +90,14 @@ Beyond escaping, treat fallback output as untested rather than guaranteed
 identical. Sonic's compat layer does not implement `SortMapKeys` or
 `ValidateString`; those agree only because `encoding/json` sorts map keys and
 substitutes U+FFFD on its own. Error text and types come from `encoding/json`
-there, and nothing else is exercised — no build target can currently produce a
-fallback, since Sonic does not compile on 32-bit at all and Go 1.27 does not
-exist yet. That is why this is stated as a known-narrow result rather than a
-contract.
+there.
+
+The fallback is reachable today rather than hypothetical: `linux/ppc64le`,
+`s390x`, `riscv64`, `mips64` and `loong64` all build and take it. (32-bit is a
+different case — Sonic does not compile on `386` or `arm` at all, so those reach
+neither path.) Kruda's CI runs on amd64 and arm64 only, so nothing exercises the
+fallback. If you deploy to one of those architectures, benchmark and test there
+rather than relying on figures from this page.
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
 **Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in

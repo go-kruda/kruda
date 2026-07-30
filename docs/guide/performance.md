@@ -74,11 +74,17 @@ Selection happens at build time, in this order:
 builds are not excluded (since v1.7.0; earlier versions silently fell back to
 `encoding/json`).
 
-`listening … json=sonic` reports the engine actually doing the work, not the tag
-the build used: on a platform or Go version Sonic falls back on, the line reads
-`json=encoding/json`. Kruda picks its JSON response path from the same signal, so
-a fallback build gets the path that suits `encoding/json` rather than the one that
-suits Sonic.
+`listening … json=` names what is actually encoding. A fallback build reads
+`json=sonic (fallback: encoding/json)` rather than either plain answer, because it
+is genuinely both: Sonic's API is still in front, so the **bytes** are Sonic's,
+while the standard library does the work, so the **speed** is not. Kruda picks its
+JSON response path from the same signal, so a fallback build takes the path that
+suits the standard library.
+
+Only speed changes on fallback — not output. Sonic's fallback honours the
+configuration it was frozen with, so responses are byte-identical to an
+accelerated build. `kruda_stdjson` is the only build whose bytes differ (it
+escapes HTML; see the table above).
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
 **Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in

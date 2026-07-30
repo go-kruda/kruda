@@ -23,17 +23,28 @@ import (
 // the engine doing the work — see ActiveEngine.
 const EncoderName = "sonic"
 
-// EngineIsStdlib reports whether encoding/json ends up doing the work. Under the
-// default tag that is true exactly when sonic routes its own API to the standard
-// library, so callers choosing a code path by engine get the real answer rather
-// than the tag's. A const, so the choice stays free on the hot path.
+// EngineIsStdlib reports whether the standard library is doing the encoding
+// work — true under the default tag exactly when sonic has routed its own API to
+// encoding/json. A const, so the choice stays free on the hot path.
+//
+// This answers a question about **speed**, not about output. Sonic's fallback
+// still honours the Config it was frozen with, so a fallback build emits the
+// same bytes as an accelerated one; only the cost changes. Anything asserting or
+// depending on byte-level behaviour must key on EncoderName, which follows the
+// build tag and therefore the config.
 const EngineIsStdlib = !sonicAccelerated
 
-// ActiveEngine returns the engine actually in use: "sonic" when sonic's
-// accelerated implementation compiled, "encoding/json" when it fell back.
+// ActiveEngine names what is actually encoding, for logs and for labelling
+// benchmark output.
+//
+// A fallback build is neither of the two plain answers: sonic's API is still in
+// front, so the bytes are sonic's, while the standard library does the work, so
+// the speed is not. Calling it "encoding/json" would imply the kruda_stdjson
+// build, which emits different bytes; calling it "sonic" would imply the
+// accelerated speed. It gets its own name.
 func ActiveEngine() string {
 	if EngineIsStdlib {
-		return "encoding/json"
+		return "sonic (fallback: encoding/json)"
 	}
 	return "sonic"
 }

@@ -142,12 +142,16 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// EngineIsStdlib, not EncoderName: this table pins how the engine
-			// actually running escapes HTML. On a build where the tag names sonic
-			// but sonic has fallen back, encoding/json does the escaping, and
-			// expecting sonic's output would fail for the wrong reason.
+			// EncoderName, deliberately, not EngineIsStdlib. This table is about
+			// bytes, and bytes follow the config, which follows the tag: when
+			// sonic falls back its compat layer still honours the Config it was
+			// frozen with — compat.go calls SetEscapeHTML(cfg.EscapeHTML) — so a
+			// fallback build emits sonic's unescaped output, not the standard
+			// library's escaped default. Only speed changes on fallback, not
+			// bytes. EngineIsStdlib answers "is the fast implementation present",
+			// which is a different question and the wrong one here.
 			want := tc.wantStd
-			if !EngineIsStdlib {
+			if EncoderName == "sonic" {
 				want = tc.wantSonic
 			}
 			got, err := Marshal(tc.val)

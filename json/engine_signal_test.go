@@ -40,11 +40,27 @@ func TestSonicConstraintMirrorIsCurrent(t *testing.T) {
 // depends on: ActiveEngine and EngineIsStdlib must agree with each other and with
 // what this build can actually do.
 func TestActiveEngineMatchesThisBuild(t *testing.T) {
-	if got := ActiveEngine(); got != "sonic" && got != "encoding/json" {
-		t.Fatalf("ActiveEngine() = %q, want sonic or encoding/json", got)
-	}
-	if (ActiveEngine() == "encoding/json") != EngineIsStdlib {
-		t.Errorf("ActiveEngine()=%q disagrees with EngineIsStdlib=%v", ActiveEngine(), EngineIsStdlib)
+	// Three states, not two: the fallback is distinguishable from both plain
+	// answers because its bytes are sonic's and its speed is the standard
+	// library's.
+	switch got := ActiveEngine(); got {
+	case "sonic":
+		if EngineIsStdlib {
+			t.Errorf("ActiveEngine()=%q but EngineIsStdlib=true", got)
+		}
+		if EncoderName != "sonic" {
+			t.Errorf("ActiveEngine()=%q under the %s tag", got, EncoderName)
+		}
+	case "encoding/json":
+		if EncoderName != "encoding/json" {
+			t.Errorf("ActiveEngine()=%q but EncoderName=%q — the plain stdlib answer belongs to the kruda_stdjson build only", got, EncoderName)
+		}
+	case "sonic (fallback: encoding/json)":
+		if !EngineIsStdlib || EncoderName != "sonic" {
+			t.Errorf("fallback name reported with EngineIsStdlib=%v EncoderName=%q", EngineIsStdlib, EncoderName)
+		}
+	default:
+		t.Fatalf("ActiveEngine() = %q, not one of the three known states", got)
 	}
 
 	// On an architecture sonic has no assembly for, the default build must report

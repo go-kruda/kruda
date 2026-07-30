@@ -12,6 +12,12 @@ import (
 	stdjson "encoding/json"
 )
 
+// EngineIsStdlib is always true here: this file exists to use encoding/json.
+const EngineIsStdlib = true
+
+// ActiveEngine returns the engine actually in use.
+func ActiveEngine() string { return "encoding/json" }
+
 // EncoderName identifies the active JSON encoder for diagnostics.
 const EncoderName = "encoding/json"
 

@@ -85,7 +85,10 @@ func main() {
 		dsn = "postgres://benchmarkdbuser:benchmarkdbpass@localhost:5433/hello_world?pool_max_conns=64&pool_min_conns=8"
 	}
 
-	fmt.Printf("[kruda] JSON encoder: %s\n", krudajson.EncoderName)
+	// ActiveEngine, not EncoderName: this line labels the evidence a run
+	// produces, and the tag can name sonic on a build where sonic has fallen
+	// back to encoding/json.
+	fmt.Printf("[kruda] JSON encoder: %s\n", krudajson.ActiveEngine())
 
 	cpuDispatchMode, err := normalizeBenchDispatch(os.Getenv("BENCH_KRUDA_CPU_DISPATCH"), "inline")
 	if err != nil {

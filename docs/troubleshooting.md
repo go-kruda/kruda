@@ -66,39 +66,46 @@ Or use a different port:
 app.Listen(":3001")
 ```
 
-## CGO and Sonic JSON
+## Choosing the JSON engine
 
-### `cgo: C compiler not found`
+### Sonic does not need CGO
 
-Sonic JSON requires CGO for SIMD optimizations. If you don't have a C compiler:
+Earlier versions of this page said Sonic required a C compiler. That was wrong:
+Sonic is pure Go plus assembly. If you hit `cgo: C compiler not found`, something
+else in your build needs CGO — a database driver, `-race` on some platforms — not
+Kruda's JSON engine.
 
-Option 1 — Install a C compiler:
-```bash
-# macOS
-xcode-select --install
+### Selecting the engine
 
-# Ubuntu/Debian
-sudo apt install build-essential
-
-# Windows
-# Install MinGW or use WSL
-```
-
-Option 2 — Use stdlib JSON (no CGO):
-```bash
-go build -tags kruda_stdjson ./...
-```
-
-### Selecting the encoding/json fallback
-
-Kruda selects the JSON engine at build time. Disabling CGO selects `encoding/json` automatically; the `kruda_stdjson` tag selects it explicitly. Kruda does not switch engines at runtime after the binary has been built.
-
-Either of these builds uses stdlib JSON:
+The `kruda_stdjson` tag always selects `encoding/json`. Without it Kruda selects
+Sonic, and Sonic applies its own constraints — amd64/arm64, on Go versions it has
+validated — falling back to `encoding/json` itself outside them. Sonic v1.15.0
+excludes **Go 1.27 and newer**, so a toolchain upgrade can change the engine
+without any change to your build flags. Kruda never switches engines at runtime.
 
 ```bash
-CGO_ENABLED=0 go build ./...
-go build -tags kruda_stdjson ./...
+go build ./...                        # Sonic (default)
+go build -tags kruda_stdjson ./...    # encoding/json
 ```
+
+`CGO_ENABLED=0` is **not** a way to select `encoding/json`. It was, accidentally,
+before v1.7.0 — `json/sonic.go` carried a `cgo` build constraint, so every
+CGO-disabled build silently got the standard library while still reporting a
+default build. Since v1.7.0 a `CGO_ENABLED=0` build gets Sonic like any other.
+
+To confirm what a running binary actually got, read the `listening` startup line:
+
+```
+INFO listening addr=:3000 json=sonic
+```
+
+### Upgrading and finding your JSON got faster and your start-up slower
+
+Expected, if you build with `CGO_ENABLED=0`. That build used to get
+`encoding/json` and now gets Sonic: decoding request bodies gets several times
+cheaper, at a fixed cost of roughly +3 ms start-up and +7 MB RSS per process for
+Sonic's JIT warm-up. If you spawn a process per request or scale to zero, set
+`kruda_stdjson` to keep the faster start.
 
 ## Windows Compatibility
 

@@ -79,14 +79,31 @@ See the [Test Client API](/api/test-client) for the full builder API.
 
 ## Do I need CGO for Sonic JSON?
 
-Kruda selects Sonic when CGO is enabled and selects `encoding/json` when CGO is disabled. The engine is chosen at build time.
+No. Sonic is pure Go plus assembly and has never needed a C compiler, so
+`CGO_ENABLED=0` builds — static binaries, `scratch` and `distroless` images — are
+not excluded from it.
 
-To force stdlib JSON (no CGO required):
+CGO is not what selects the engine. The `kruda_stdjson` tag always selects
+`encoding/json`; without it Kruda selects Sonic, and Sonic then applies its own
+constraints (amd64/arm64, on Go versions it has validated — v1.15.0 excludes
+Go 1.27+) and falls back to `encoding/json` itself outside them. See
+[Performance](/guide/performance#json-performance) for the full rule and the
+caveat that the startup log reports the tag, not the outcome.
+
+Before v1.7.0 that was not the case: `json/sonic.go` carried a `cgo` build
+constraint, so every `CGO_ENABLED=0` build silently got `encoding/json` while
+still reporting a default build. If you build without CGO and want the behaviour
+you thought you had, upgrade.
+
+To select the standard library explicitly:
 
 ```bash
 go build -tags kruda_stdjson ./...
 go test -tags kruda_stdjson ./...
 ```
+
+The `listening` startup log line reports which engine a running binary got
+(`json=sonic` or `json=encoding/json`).
 
 ## What Go version do I need?
 

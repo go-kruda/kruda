@@ -65,7 +65,7 @@ func TestGoldenBytesMatchAcrossEngines(t *testing.T) {
 				t.Fatalf("Marshal failed: %v", err)
 			}
 			if string(got) != tc.want {
-				t.Errorf("engine %s: Marshal = %s, want %s", EncoderName, got, tc.want)
+				t.Errorf("engine %s: Marshal = %s, want %s", ActiveEngine(), got, tc.want)
 			}
 
 			buf := &bytes.Buffer{}
@@ -73,7 +73,7 @@ func TestGoldenBytesMatchAcrossEngines(t *testing.T) {
 				t.Fatalf("MarshalToBuffer failed: %v", err)
 			}
 			if buf.String() != tc.want {
-				t.Errorf("engine %s: MarshalToBuffer = %s, want %s", EncoderName, buf.String(), tc.want)
+				t.Errorf("engine %s: MarshalToBuffer = %s, want %s", ActiveEngine(), buf.String(), tc.want)
 			}
 		})
 	}
@@ -97,7 +97,7 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 		}
 		if !bytes.Equal(got, first) {
 			t.Fatalf("engine %s: marshal %d = %s, first = %s (map key order is not deterministic)",
-				EncoderName, i, got, first)
+				ActiveEngine(), i, got, first)
 		}
 
 		buf := &bytes.Buffer{}
@@ -106,7 +106,7 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 		}
 		if !bytes.Equal(buf.Bytes(), first) {
 			t.Fatalf("engine %s: MarshalToBuffer %d = %s, Marshal = %s",
-				EncoderName, i, buf.Bytes(), first)
+				ActiveEngine(), i, buf.Bytes(), first)
 		}
 	}
 }
@@ -142,6 +142,19 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// EncoderName, deliberately, not EngineIsStdlib. Every case here is
+			// HTML escaping, and escaping follows the frozen Config, which
+			// follows the tag: sonic's compat layer calls
+			// SetEscapeHTML(cfg.EscapeHTML), so a fallback build emits the same
+			// unescaped bytes as an accelerated one. EngineIsStdlib answers
+			// whether the fast implementation is present — a cost question, and
+			// the wrong one for a table of bytes.
+			//
+			// This reasoning covers escaping only. compat does not act on
+			// SortMapKeys or ValidateString at all; those happen to agree because
+			// encoding/json sorts and substitutes U+FFFD unconditionally. Do not
+			// extend this table with a case whose divergence is not config-driven
+			// without checking compat for it.
 			want := tc.wantStd
 			if EncoderName == "sonic" {
 				want = tc.wantSonic
@@ -154,7 +167,7 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 				t.Errorf("engine %s: Marshal = %q, want %q\n"+
 					"If this engine's escaping behavior changed on purpose, update this "+
 					"table and the sonic.Config comment in json/sonic.go.",
-					EncoderName, got, want)
+					ActiveEngine(), got, want)
 			}
 		})
 	}

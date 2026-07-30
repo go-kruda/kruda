@@ -138,11 +138,14 @@ roughly one write/send syscall per response.
 
 ## Kruda JSON Encoder Mode
 
-The harness builds Kruda with `KRUDA_GO_TAGS=kruda_stdjson` by default so
-portable CPU-bound evidence does not depend on CGO availability. For JSON
-handler profile investigation, set `KRUDA_GO_TAGS=default` or an empty
-`KRUDA_GO_TAGS` value to build Kruda without explicit Go build tags. On
-CGO-enabled systems, that selects the default Sonic encoder path.
+The harness builds Kruda with `KRUDA_GO_TAGS=kruda_stdjson` by default so that
+CPU-bound evidence measures the same encoder everywhere. For JSON handler
+profile investigation, set `KRUDA_GO_TAGS=default` or an empty `KRUDA_GO_TAGS`
+value to build Kruda without explicit Go build tags, which selects Sonic.
+
+CGO does not enter into it: Sonic is pure Go plus assembly. (Before v1.7.0 a
+`CGO_ENABLED=0` build silently got `encoding/json`, which is why older notes here
+tied the engine to CGO availability.)
 
 Compare the JSON serialization route with stdlib JSON:
 

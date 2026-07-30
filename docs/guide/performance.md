@@ -57,12 +57,35 @@ Route registration order doesn't affect lookup performance.
 
 ## JSON Performance
 
-| Engine | CGO Required | Performance |
+| Engine | Selected by | Performance |
 |--------|-------------|-------------|
-| Sonic | Yes in Kruda's default build | SIMD-accelerated; benchmark with your payloads |
-| encoding/json | No | Portable standard-library baseline |
+| Sonic | default | SIMD-accelerated on amd64/arm64; benchmark with your payloads |
+| encoding/json | `kruda_stdjson` build tag | Portable standard-library baseline |
 
-The engine is selected at build time: CGO-enabled builds use Sonic by default, while `CGO_ENABLED=0` or the `kruda_stdjson` tag selects `encoding/json`.
+The engine is selected at build time by that tag alone. **Neither engine needs
+CGO** — Sonic is pure Go plus assembly, so `CGO_ENABLED=0` builds get Sonic too
+(since v1.7.0; earlier versions silently fell back to `encoding/json`). On
+platforms Sonic does not accelerate, its own build constraints route its API to
+`encoding/json`.
+
+How much the engine is worth depends entirely on payload shape. Measured on an
+8-core linux/amd64 host, `wrk -t4 -c256`, Sonic against `encoding/json`:
+
+| route | payload | delta |
+|---|---|---|
+| encode ~30 B (the TFB `/json` shape) | small | no measurable change |
+| encode ~8 KB | array of 100 structs | +23% req/s |
+| decode ~8 KB request body | POST | +160% req/s |
+
+Small responses do not move because the kernel's per-request TCP cost dominates
+— at ~700k req/s a worker spends ~11 µs per request and encoding 30 bytes is a
+rounding error against that. Bodies of any size are where the engine shows up.
+Reproduce with `bench/reproducible/jsonthroughput/`.
+
+Cold start is the trade: Sonic's JIT warm-up costs about +3 ms and +7 MB RSS per
+process, a fixed cost that does not scale with route count. Set `kruda_stdjson`
+for workloads that spawn a process per request or scale to zero. See
+`bench/reproducible/coldstart/`.
 
 ## Zero-Allocation Hot Path
 

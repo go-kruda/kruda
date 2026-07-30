@@ -65,7 +65,7 @@ func TestGoldenBytesMatchAcrossEngines(t *testing.T) {
 				t.Fatalf("Marshal failed: %v", err)
 			}
 			if string(got) != tc.want {
-				t.Errorf("engine %s: Marshal = %s, want %s", EncoderName, got, tc.want)
+				t.Errorf("engine %s: Marshal = %s, want %s", ActiveEngine(), got, tc.want)
 			}
 
 			buf := &bytes.Buffer{}
@@ -73,7 +73,7 @@ func TestGoldenBytesMatchAcrossEngines(t *testing.T) {
 				t.Fatalf("MarshalToBuffer failed: %v", err)
 			}
 			if buf.String() != tc.want {
-				t.Errorf("engine %s: MarshalToBuffer = %s, want %s", EncoderName, buf.String(), tc.want)
+				t.Errorf("engine %s: MarshalToBuffer = %s, want %s", ActiveEngine(), buf.String(), tc.want)
 			}
 		})
 	}
@@ -97,7 +97,7 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 		}
 		if !bytes.Equal(got, first) {
 			t.Fatalf("engine %s: marshal %d = %s, first = %s (map key order is not deterministic)",
-				EncoderName, i, got, first)
+				ActiveEngine(), i, got, first)
 		}
 
 		buf := &bytes.Buffer{}
@@ -106,7 +106,7 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 		}
 		if !bytes.Equal(buf.Bytes(), first) {
 			t.Fatalf("engine %s: MarshalToBuffer %d = %s, Marshal = %s",
-				EncoderName, i, buf.Bytes(), first)
+				ActiveEngine(), i, buf.Bytes(), first)
 		}
 	}
 }
@@ -142,8 +142,12 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// EngineIsStdlib, not EncoderName: this table pins how the engine
+			// actually running escapes HTML. On a build where the tag names sonic
+			// but sonic has fallen back, encoding/json does the escaping, and
+			// expecting sonic's output would fail for the wrong reason.
 			want := tc.wantStd
-			if EncoderName == "sonic" {
+			if !EngineIsStdlib {
 				want = tc.wantSonic
 			}
 			got, err := Marshal(tc.val)
@@ -154,7 +158,7 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 				t.Errorf("engine %s: Marshal = %q, want %q\n"+
 					"If this engine's escaping behavior changed on purpose, update this "+
 					"table and the sonic.Config comment in json/sonic.go.",
-					EncoderName, got, want)
+					ActiveEngine(), got, want)
 			}
 		})
 	}

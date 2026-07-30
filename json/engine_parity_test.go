@@ -56,10 +56,10 @@ func TestMarshalToBufferMatchesMarshal(t *testing.T) {
 				t.Fatalf("MarshalToBuffer(%v) failed: %v", tc.val, err)
 			}
 			if got := buf.Bytes(); !bytes.Equal(got, want) {
-				t.Errorf("engine %s: MarshalToBuffer = %q, Marshal = %q", EncoderName, got, want)
+				t.Errorf("engine %s: MarshalToBuffer = %q, Marshal = %q", ActiveEngine(), got, want)
 			}
 			if bytes.HasSuffix(buf.Bytes(), []byte("\n")) {
-				t.Errorf("engine %s: trailing newline not trimmed: %q", EncoderName, buf.Bytes())
+				t.Errorf("engine %s: trailing newline not trimmed: %q", ActiveEngine(), buf.Bytes())
 			}
 		})
 	}
@@ -90,15 +90,15 @@ func TestMarshalToBufferMultiKeyMapSemanticParity(t *testing.T) {
 	}
 
 	if len(fromBuffer) != len(in) {
-		t.Fatalf("engine %s: got %d keys, want %d", EncoderName, len(fromBuffer), len(in))
+		t.Fatalf("engine %s: got %d keys, want %d", ActiveEngine(), len(fromBuffer), len(in))
 	}
 	for k, v := range fromMarshal {
 		if fromBuffer[k] != v {
-			t.Errorf("engine %s: key %q = %d, want %d", EncoderName, k, fromBuffer[k], v)
+			t.Errorf("engine %s: key %q = %d, want %d", ActiveEngine(), k, fromBuffer[k], v)
 		}
 	}
 	if bytes.HasSuffix(buf.Bytes(), []byte("\n")) {
-		t.Errorf("engine %s: trailing newline not trimmed: %q", EncoderName, buf.Bytes())
+		t.Errorf("engine %s: trailing newline not trimmed: %q", ActiveEngine(), buf.Bytes())
 	}
 }
 
@@ -117,7 +117,7 @@ func TestMarshalToBufferAppendsToExistingContent(t *testing.T) {
 			t.Fatalf("Marshal failed: %v", err)
 		}
 		if got := buf.String(); got != prefix+string(want) {
-			t.Errorf("engine %s: prefix %q → got %q, want %q", EncoderName, prefix, got, prefix+string(want))
+			t.Errorf("engine %s: prefix %q → got %q, want %q", ActiveEngine(), prefix, got, prefix+string(want))
 		}
 	}
 }
@@ -142,7 +142,7 @@ func TestMarshalToBufferRoundTrips(t *testing.T) {
 		t.Fatalf("Unmarshal of buffered output failed: %v (bytes: %q)", err, buf.Bytes())
 	}
 	if out.Name != in.Name || out.Age != in.Age || out.Score != in.Score || strings.Join(out.Tags, ",") != strings.Join(in.Tags, ",") {
-		t.Errorf("engine %s: round trip mismatch: got %+v, want %+v", EncoderName, out, in)
+		t.Errorf("engine %s: round trip mismatch: got %+v, want %+v", ActiveEngine(), out, in)
 	}
 }
 
@@ -152,13 +152,13 @@ func TestMarshalToBufferRoundTrips(t *testing.T) {
 func TestMarshalToBufferErrorLeavesBufferUsable(t *testing.T) {
 	buf := &bytes.Buffer{}
 	if err := MarshalToBuffer(buf, make(chan int)); err == nil {
-		t.Fatalf("engine %s: expected error for unsupported type", EncoderName)
+		t.Fatalf("engine %s: expected error for unsupported type", ActiveEngine())
 	}
 	buf.Reset()
 	if err := MarshalToBuffer(buf, "ok"); err != nil {
 		t.Fatalf("MarshalToBuffer after error failed: %v", err)
 	}
 	if got := buf.String(); got != `"ok"` {
-		t.Errorf("engine %s: got %q, want %q", EncoderName, got, `"ok"`)
+		t.Errorf("engine %s: got %q, want %q", ActiveEngine(), got, `"ok"`)
 	}
 }

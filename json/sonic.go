@@ -27,21 +27,27 @@ const EncoderName = "sonic"
 // work — true under the default tag exactly when sonic has routed its own API to
 // encoding/json. A const, so the choice stays free on the hot path.
 //
-// This answers a question about **speed**, not about output. Sonic's fallback
-// still honours the Config it was frozen with, so a fallback build emits the
-// same bytes as an accelerated one; only the cost changes. Anything asserting or
-// depending on byte-level behaviour must key on EncoderName, which follows the
-// build tag and therefore the config.
+// This answers a question about cost, not about output. Anything asserting or
+// depending on byte-level behaviour must key on EncoderName instead, which
+// follows the build tag and therefore the frozen Config.
+//
+// Sonic's fallback honours EscapeHTML, so the HTML-escaping difference between
+// the engines does not appear on one. It does not implement SortMapKeys or
+// ValidateString — those agree only because encoding/json sorts and substitutes
+// U+FFFD unconditionally — and its errors come from encoding/json. Output beyond
+// escaping is therefore untested rather than known identical, and cannot be
+// tested yet: sonic does not build on 32-bit at all, so no architecture reaches
+// the fallback, and the Go-version route needs a go1.27 that does not exist.
 const EngineIsStdlib = !sonicAccelerated
 
 // ActiveEngine names what is actually encoding, for logs and for labelling
 // benchmark output.
 //
-// A fallback build is neither of the two plain answers: sonic's API is still in
-// front, so the bytes are sonic's, while the standard library does the work, so
-// the speed is not. Calling it "encoding/json" would imply the kruda_stdjson
-// build, which emits different bytes; calling it "sonic" would imply the
-// accelerated speed. It gets its own name.
+// A fallback build gets its own name rather than either plain answer. Calling it
+// "encoding/json" would imply the kruda_stdjson build, whose HTML escaping
+// differs; calling it "sonic" would imply the accelerated speed. Naming it as a
+// fallback keeps a benchmark run from filing its numbers under an engine it did
+// not use.
 func ActiveEngine() string {
 	if EngineIsStdlib {
 		return "sonic (fallback: encoding/json)"

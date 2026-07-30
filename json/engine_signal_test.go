@@ -40,9 +40,9 @@ func TestSonicConstraintMirrorIsCurrent(t *testing.T) {
 // depends on: ActiveEngine and EngineIsStdlib must agree with each other and with
 // what this build can actually do.
 func TestActiveEngineMatchesThisBuild(t *testing.T) {
-	// Three states, not two: the fallback is distinguishable from both plain
-	// answers because its bytes are sonic's and its speed is the standard
-	// library's.
+	// Three states, not two: a fallback is distinguishable from both plain
+	// answers — its escaping follows sonic's frozen Config while its speed is the
+	// standard library's.
 	switch got := ActiveEngine(); got {
 	case "sonic":
 		if EngineIsStdlib {

@@ -138,7 +138,7 @@ func TestResourceUpdate_ValidationPasses200(t *testing.T) {
 
 // No validator configured → no 422 even on invalid data (typed-identical).
 func TestResourceCreate_NoValidatorNo422(t *testing.T) {
-	app := New() // no WithValidator
+	app := New(WithoutValidation())
 	Resource(app, "/users", &validatedUserService{})
 	app.Compile()
 

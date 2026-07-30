@@ -174,7 +174,7 @@ app.Group("/api/v1").
 ## What You Gain
 
 - **Wing transport** — raw epoll+eventfd on Linux: +27-35% RPS on CPU-bound routes (825K vs 641K req/s plaintext throughput) and +7% on `/fortunes`, both with far better p99; on the pool-bound `/db` and `/queries` it matches Fiber's RPS at the pgx ceiling while beating its p99 (see `bench/reproducible/results/2026-06-13-v1-3-1-consolidated-evidence.md`)
-- **Type-safe handlers** — no more `BodyParser` + manual validation (validation is opt-in via `kruda.WithValidator`)
+- **Type-safe handlers** — no more `BodyParser` + manual validation
 - **No context reuse bugs** — safe string copies by default
 - **HTTP/2 support** — switch to net/http when needed
 - **Auto OpenAPI** — generated from typed handlers

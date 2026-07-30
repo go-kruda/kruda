@@ -165,7 +165,7 @@ func TestOpenAPI_Resource_RequestBodyRefAndCodes(t *testing.T) {
 }
 
 func TestOpenAPI_Resource_No422WithoutValidator(t *testing.T) {
-	app := New(WithOpenAPIInfo("API", "1.0", "")) // no validator
+	app := New(WithOpenAPIInfo("API", "1.0", ""), WithoutValidation())
 	Resource(app, "/users", &validatedUserService{})
 	spec := decodeSpec(t, app)
 

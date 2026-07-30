@@ -213,8 +213,9 @@ func TestTypedHandler_ValidationError_Returns422Code(t *testing.T) {
 }
 
 func TestTypedHandler_NoValidator_SkipsValidation(t *testing.T) {
-	// App without validator — validation tags are ignored
-	app := New()
+	// Validation is on by default, so switching it off has to be explicit for
+	// this to be testing what its name says.
+	app := New(WithoutValidation())
 	var called bool
 
 	h := buildTypedHandler[createUserIn, userOut](app, "POST", "/users", func(c *C[createUserIn]) (*userOut, error) {

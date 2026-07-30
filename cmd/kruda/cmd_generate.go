@@ -87,7 +87,7 @@ import (
 type {{.FuncName}}Request struct {
 	// Add your request fields here with struct tags:
 	// Name string ` + "`" + `json:"name" validate:"required"` + "`" + `
-	// validate tags need kruda.New(kruda.WithValidator(kruda.NewValidator())).
+	// validate tags are enforced by default; see (*kruda.Validator).RuleNames.
 }
 
 // {{.FuncName}}Response defines the output for {{.Method}} {{.Path}}.

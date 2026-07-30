@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -75,37 +78,72 @@ func TestMCPWingDocsKeepQueryAndWriteGuidanceSeparate(t *testing.T) {
 	}
 }
 
-// TestMCPDocsDoNotTeachAutomaticValidation guards the guidance AI assistants
-// read. Validation is opt-in, but krudaDocs used to state the opposite —
-// "Kruda validates struct tags automatically in typed handlers" — and never
-// mentioned WithValidator anywhere, so every assistant following it generated
-// apps whose validate tags did nothing. The scaffold ships .mcp.json, so this
-// is the default path for AI-assisted users.
-func TestMCPDocsDoNotTeachAutomaticValidation(t *testing.T) {
-	falseClaims := []string{
-		"validates struct tags automatically",
-		"validation runs automatically",
-		"automatically validated",
-		"auto-validation",
-		"auto-validate",
-		"already parsed and validated",
+// krudaValidationRules extracts the rule names core implements, by reading the
+// source rather than duplicating the list here. cmd/kruda does not import the
+// core module, so a copied list would silently drift the moment a rule is added
+// or removed.
+func krudaValidationRules(t *testing.T) map[string]bool {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "validation.go"))
+	if err != nil {
+		t.Skipf("cannot read core validation.go: %v", err)
 	}
+	// The rules map entries look like:  "max_size":   validateMaxSize,
+	re := regexp.MustCompile(`(?m)^\s+"([a-z_0-9]+)":\s+validate[A-Za-z]+,`)
+	out := map[string]bool{}
+	for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+		out[m[1]] = true
+	}
+	if len(out) < 10 {
+		t.Fatalf("extracted only %d rules from core; the pattern is stale", len(out))
+	}
+	return out
+}
+
+var validateTagRe = regexp.MustCompile(`validate:\\?"([^"\\]+)`)
+
+// TestMCPDocsOnlyUseRulesThatExist is the check that matters most for AI-facing
+// guidance. Kruda's tag syntax looks like go-playground/validator but implements
+// about 20 rules against that library's hundreds, and an assistant reproducing
+// habits from it will reach for omitempty, dive, eq or required_if. None of those
+// exist here, so the tag is skipped and the field goes unenforced — the failure
+// being silent is what makes it worth a test rather than a review.
+func TestMCPDocsOnlyUseRulesThatExist(t *testing.T) {
+	known := krudaValidationRules(t)
 	for topic, body := range krudaDocs {
-		for _, claim := range falseClaims {
-			if strings.Contains(strings.ToLower(body), claim) {
-				t.Errorf("krudaDocs[%q] tells assistants validation is automatic (%q); it is opt-in via WithValidator", topic, claim)
+		for _, m := range validateTagRe.FindAllStringSubmatch(body, -1) {
+			for _, rule := range strings.Split(m[1], ",") {
+				name, _, _ := strings.Cut(strings.TrimSpace(rule), "=")
+				if name == "" {
+					continue
+				}
+				if !known[name] {
+					t.Errorf("krudaDocs[%q] uses validate rule %q, which core does not implement — it would be skipped and the field left unenforced", topic, name)
+				}
 			}
 		}
 	}
+}
 
-	// Any topic that shows a validate tag has to say how to turn validation on,
-	// or it is teaching the trap.
+// TestMCPDocsDoNotTeachValidationIsOptional replaces a guard that asserted the
+// opposite. Validation was opt-in and the docs had to say so; since it became the
+// default, telling an assistant to add a Validator to switch it on is wrong
+// advice, and calling it opt-in is a false statement.
+func TestMCPDocsDoNotTeachValidationIsOptional(t *testing.T) {
+	stale := []string{
+		"validation is opt-in",
+		"validation is OPT-IN",
+		"opt-in. build the app with a validator",
+		"only when a validator",
+		"need a validator",
+		"without a validator the",
+	}
 	for topic, body := range krudaDocs {
-		if !strings.Contains(body, `validate:"`) {
-			continue
-		}
-		if !strings.Contains(body, "WithValidator") {
-			t.Errorf("krudaDocs[%q] shows validate: tags without mentioning WithValidator", topic)
+		low := strings.ToLower(body)
+		for _, phrase := range stale {
+			if strings.Contains(low, strings.ToLower(phrase)) {
+				t.Errorf("krudaDocs[%q] still describes validation as optional (%q); it is the default since v1.8.0", topic, phrase)
+			}
 		}
 	}
 }

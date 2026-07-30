@@ -58,18 +58,20 @@ type User struct {
     Email string `json:"email"`
 }
 
-app := kruda.New(kruda.WithValidator(kruda.NewValidator()))
-
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
     return &User{ID: "1", Name: c.In.Name, Email: c.In.Email}, nil
 })
 ```
 
-**Validation is opt-in.** Without `WithValidator`, `validate:` tags are inert —
-the request is parsed but not checked, and the handler receives whatever the
-client sent. Kruda logs a warning at startup if it finds `validate:` tags with
-no validator configured. When enabled, a failing request gets a 422 listing
-every field that failed and why.
+**Validation runs by default** since v1.8.0. A failing request gets a 422 listing
+every field that failed and why. Opt out with `kruda.New(kruda.WithoutValidation())`,
+and use `kruda.WithValidator` only to register custom rules or messages.
+
+The rule set is Kruda's own — 20 built in, listed by `(*kruda.Validator).RuleNames()`.
+The tag syntax resembles `go-playground/validator` but that library has far more
+rules, so a tag carried over from it may name one that does not exist here. Those
+are skipped with a startup warning naming the rule; the field's other rules still
+apply.
 
 ## Auto CRUD
 

@@ -211,7 +211,6 @@ func main() {
 	store := NewStore()
 
 	app := kruda.New(
-		kruda.WithValidator(kruda.NewValidator()),
 
 		// ✅ Enable OpenAPI spec generation — this is all you need.
 		// The spec is auto-served at /openapi.json (default path).

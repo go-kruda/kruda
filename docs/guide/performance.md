@@ -59,7 +59,7 @@ Route registration order doesn't affect lookup performance.
 
 | Engine | Selected by | Performance |
 |--------|-------------|-------------|
-| Sonic | default | SIMD-accelerated on amd64/arm64; benchmark with your payloads |
+| Sonic | default | Assembly-accelerated; clearly ahead on amd64, mixed on arm64 (see below) |
 | encoding/json | `kruda_stdjson` build tag | Portable standard-library baseline |
 
 The engine is selected at build time by that tag alone. **Neither engine needs
@@ -81,6 +81,11 @@ How much of that reaches request throughput is a separate question, and the
 answer is often "none": a small response spends most of its per-request budget in
 the kernel rather than in the encoder. Benchmark your own payload shapes rather
 than assuming either ratio carries over.
+
+Those ratios are **amd64**. On darwin/arm64 the same encode benchmark inverts —
+Sonic 17,970 ns against `encoding/json` 10,940 ns — while decode stays about 4.3×
+in Sonic's favour. If you develop on an arm64 Mac and deploy to amd64 Linux, the
+two are not interchangeable for encode-heavy profiling.
 
 Cold start is the trade: Sonic's JIT warm-up costs about +3 ms and +7 MB RSS per
 process, a fixed cost that does not scale with route count. Set `kruda_stdjson`

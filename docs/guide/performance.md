@@ -120,9 +120,25 @@ build where Sonic falls back, per the rule above:
 | decode | 78,133 ns | 13,015 ns | **6.0× faster** |
 
 How much of that reaches request throughput is a separate question, and the
-answer is often "none": a small response spends most of its per-request budget in
-the kernel rather than in the encoder. Benchmark your own payload shapes rather
-than assuming either ratio carries over.
+answer ranges from nothing to 2.6×. Measured on an 8-core linux/amd64 host with
+`wrk -t4 -c256`, five rounds with the arm order reversed on even rounds:
+
+| route | payload | delta |
+|---|---|---|
+| encode ~30 B — the TFB `/json` shape | small | no measurable change |
+| encode ~8 KB | array of 100 structs | **+23% req/s** |
+| decode ~8 KB request body | POST | **+160% req/s** |
+
+Small responses do not move because the kernel's per-request cost dominates: at
+~700k req/s a worker spends roughly 11 µs per request, and encoding 30 bytes is a
+rounding error against that. Request bodies are where the engine shows up — note
+the absolute figures, 34k req/s against 700k on the small route, because decoding
+8 KB dominates that route's cost completely.
+
+So a service serving small JSON reads sees no throughput change from the engine,
+while one accepting JSON bodies can see request handling get several times
+cheaper. Reproduce with `bench/reproducible/jsonthroughput/jsonthroughput.sh`;
+raw output and method in `bench/reproducible/results/2026-07-29-json-throughput/`.
 
 Those ratios are **amd64**. On darwin/arm64 the same encode benchmark inverts —
 Sonic 17,970 ns against `encoding/json` 10,940 ns — while decode stays about 4.3×

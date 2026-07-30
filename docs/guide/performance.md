@@ -93,11 +93,21 @@ substitutes U+FFFD on its own. Error text and types come from `encoding/json`
 there.
 
 The fallback is reachable today rather than hypothetical: `linux/ppc64le`,
-`s390x`, `riscv64`, `mips64` and `loong64` all build and take it. (32-bit is a
-different case — Sonic does not compile on `386` or `arm` at all, so those reach
-neither path.) Kruda's CI runs on amd64 and arm64 only, so nothing exercises the
-fallback. If you deploy to one of those architectures, benchmark and test there
-rather than relying on figures from this page.
+`s390x`, `riscv64`, `mips64` and `loong64` all build and take it. Kruda's CI runs
+on amd64 and arm64 only, so nothing exercises it. If you deploy to one of those
+architectures, benchmark and test there rather than relying on figures from this
+page.
+
+::: warning 32-bit: `arm` needs `kruda_stdjson`, `386` does not build at all
+Sonic refuses to compile on 32-bit, from a deliberate guard in its own internals,
+so the default build fails there. On `linux/arm`, `-tags kruda_stdjson` works
+around it by dropping the Sonic dependency.
+
+`linux/386` cannot be built at all, and not because of JSON: Wing's Linux engine
+calls `syscall.SYS_ACCEPT4`, which Go does not define for 386. No build tag helps.
+Both are build failures rather than fallbacks — the engine choice never gets a
+chance to matter.
+:::
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
 **Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in

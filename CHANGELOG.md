@@ -184,8 +184,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the work, so the speed is not Sonic's. Output beyond escaping is untested on a
   fallback rather than guaranteed identical. A fallback is reachable today, not
   hypothetical: `linux/ppc64le`, `s390x`, `riscv64`, `mips64` and `loong64` build
-  and take it, while 32-bit reaches neither path because Sonic does not compile
-  there. CI covers amd64 and arm64 only, so none of it is exercised. Sonic applies its own platform and Go-version constraints on top of
+  and take it; CI covers amd64 and arm64 only, so none of it is exercised. On
+  32-bit the default build does not compile at all, because Sonic refuses to; on
+  `linux/arm` the `kruda_stdjson` tag drops the dependency and builds, while
+  `linux/386` cannot be built at all for an unrelated reason — Wing's Linux
+  engine uses `syscall.SYS_ACCEPT4`, undefined for 386. Sonic applies its own platform and Go-version constraints on top of
   Kruda's tag and can route its API to `encoding/json` — an architecture it has no
   assembly for, or a Go version it has not validated, such as go1.27 and newer for
   sonic v1.15.0. `json.ActiveEngine` resolves that, and Kruda now selects its JSON

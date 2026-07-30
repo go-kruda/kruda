@@ -85,6 +85,16 @@ jobs:
             GOOS=linux GOARCH="$arch" go vet ./...
           done
 
+          # 32-bit is not a fallback case: sonic refuses to compile there, so the
+          # default build fails and kruda_stdjson is the documented way to build
+          # for linux/arm. Pin it, since nothing else checks it.
+          #
+          # linux/386 is deliberately absent: it cannot be built at all, with or
+          # without the tag, because wing_engine_linux.go uses
+          # syscall.SYS_ACCEPT4, which Go does not define for 386.
+          echo "== linux/arm, kruda_stdjson =="
+          GOOS=linux GOARCH=arm go build -tags kruda_stdjson ./...
+
       - name: Test contrib packages
         shell: bash
         # Dynamically discovers contrib modules so new modules cannot be missed

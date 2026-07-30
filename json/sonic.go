@@ -38,10 +38,14 @@ const EncoderName = "sonic"
 // beyond escaping as untested rather than known identical.
 //
 // The fallback is reachable today, not hypothetical: linux/ppc64le, s390x,
-// riscv64, mips64 and loong64 build and take it. (32-bit is a separate story —
-// sonic does not compile there at all, so 386 and arm reach neither path.) Kruda
-// does not run its tests on any of those, so the gap is a matter of coverage
-// rather than of impossibility.
+// riscv64, mips64 and loong64 build and take it. Kruda does not run its tests on
+// any of those, so the gap is coverage rather than impossibility.
+//
+// 32-bit selects this same fallback but cannot build it: sonic refuses to
+// compile there, from a deliberate guard in its own internals. On linux/arm the
+// kruda_stdjson tag works around that by dropping the sonic import. linux/386
+// cannot be built at all, for an unrelated reason — Wing's Linux engine uses
+// syscall.SYS_ACCEPT4, which Go does not define for 386 — so no JSON tag helps.
 const EngineIsStdlib = !sonicAccelerated
 
 // ActiveEngine names what is actually encoding, for logs and for labelling

@@ -397,7 +397,6 @@ Uploaded filenames are automatically sanitized with `filepath.Base()` to strip d
 
 ```go
 app := kruda.New(
-    kruda.WithValidator(kruda.NewValidator()), // max_size/mime need a Validator
     kruda.WithBodyLimit(8<<20),                // BodyLimit defaults to 4MB
 )
 

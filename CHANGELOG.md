@@ -5,6 +5,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Breaking
+
+- **Validation now runs by default.** `validate` tags on typed-handler and
+  `Resource` inputs are enforced without configuration; previously they were inert
+  unless a `Validator` was set, so an application carrying them may start
+  rejecting requests it used to accept, with 422 and a per-field error body. Opt
+  out with `kruda.New(kruda.WithoutValidation())`. `kruda.WithValidator` remains,
+  but is now only for registering custom rules or messages.
+
+  `kruda.SupportedValidationRules()` reports the 20 rules this framework
+  implements. The tag syntax resembles `go-playground/validator`, which has far
+  more, and tags carried over from it are the likely surprise here — `omitempty`,
+  `dive`, `eq`, `ne`, `datetime`, `required_if` and others do not exist.
+
+- An unknown validation rule no longer panics at route registration; it is skipped
+  and reported once at startup with the rule, type, field and the list of rules
+  that do exist. This had to change before validation could default on: while
+  validation was opt-in, a tag naming a rule Kruda does not implement never
+  reached the compiler for it, so applications carrying `omitempty` run today.
+  Panicking would have turned enabling validation into a failure to start rather
+  than a stricter response. Applications that already configured a `Validator` are
+  unaffected — an unknown rule there panics already, so none that boot today have
+  one.
+
+- Removed the startup warning that fired when `validate` tags were found with no
+  `Validator` configured. It existed to surface tags that silently did nothing;
+  they no longer do.
+
+
 ## [1.7.0] — 2026-07-30
 
 ### Upgrade note — `CGO_ENABLED=0` builds: JSON response bytes change

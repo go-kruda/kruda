@@ -82,8 +82,6 @@ func buildTypedHandler[In any, Out any](
 	var validators []fieldValidator
 	if app.config.Validator != nil {
 		validators = buildValidators[In](app.config.Validator)
-	} else {
-		warnIfValidateTagsIgnored(reflect.TypeOf((*In)(nil)).Elem(), method, path)
 	}
 
 	// Apply route options

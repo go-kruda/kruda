@@ -93,6 +93,7 @@ func defaultConfig() Config {
 		JSONEncoder:       krudajson.Marshal,
 		JSONDecoder:       krudajson.Unmarshal,
 		JSONStreamEncoder: krudajson.MarshalToBuffer,
+		Validator:         NewValidator(),
 		Logger:            slog.Default(),
 		SecurityHeaders:   false,
 		Security: SecurityConfig{
@@ -422,9 +423,29 @@ func parseSize(s string) (int64, error) {
 	return n, err
 }
 
-// WithValidator sets a pre-configured Validator on the App.
+// WithValidator replaces the App's Validator, for registering custom rules or
+// messages. A Validator is configured by default, so this is only needed to
+// change one — not to switch validation on.
+//
+// Custom rules must be registered on the Validator before the typed routes that
+// use them, because validators are compiled at registration time.
+//
+// Passing nil disables validation entirely; prefer WithoutValidation, which says
+// so.
 func WithValidator(v *Validator) Option {
 	return func(a *App) { a.config.Validator = v }
+}
+
+// WithoutValidation turns validation off, leaving validate tags inert: input is
+// parsed and bound, and nothing is checked.
+//
+// It exists as an escape hatch for upgrades. Validation became the default in
+// v1.8.0; before that it ran only when a Validator was configured, so an
+// application written against an earlier version may carry validate tags it never
+// actually enforced. If enabling them rejects traffic that used to be accepted,
+// this restores the old behaviour while the tags are reviewed.
+func WithoutValidation() Option {
+	return func(a *App) { a.config.Validator = nil }
 }
 
 // WithContainer attaches a DI container to the App.

@@ -112,8 +112,17 @@ type Input struct {
 ```
 
 
-::: warning Validation is opt-in
-Validation runs only when the app is built with `kruda.New(kruda.WithValidator(kruda.NewValidator()))`. Without it the `validate` tags do nothing — the request is parsed, nothing is checked, and the handler receives whatever the client sent. Kruda warns at startup when it finds `validate` tags and no validator. The generated OpenAPI schema advertises the constraints either way; only enforcement is gated.
+::: tip Validation runs by default
+Since v1.8.0 `validate` tags are enforced without any configuration. Opt out with
+`kruda.New(kruda.WithoutValidation())`, which parses input and checks nothing.
+`kruda.WithValidator` is for registering custom rules or messages, not for
+switching validation on.
+
+Kruda implements 20 rules — `kruda.SupportedValidationRules()` lists them. The tag
+syntax resembles `go-playground/validator`, which has far more, so a tag carried
+over from it may name a rule that does not exist here. Those are skipped with a
+startup warning naming the rule; the field's other rules still apply. The generated
+OpenAPI schema advertises the constraints regardless.
 :::
 
 When validation fails, Kruda returns a structured error response:

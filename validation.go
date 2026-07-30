@@ -6,44 +6,13 @@ import (
 	"net/mail"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 
 	krudajson "github.com/go-kruda/kruda/json"
 )
-
-// warnedValidateTagsIgnored keeps the warning below to one per process: an app
-// with fifty typed routes has one mistake, not fifty.
-var warnedValidateTagsIgnored atomic.Bool
-
-func resetValidateTagWarningForTest() { warnedValidateTagsIgnored.Store(false) }
-
-// warnIfValidateTagsIgnored warns once when a typed route's input carries
-// validate: tags and no Validator is configured.
-//
-// Validation is opt-in, so without a Validator those tags do nothing at all —
-// no error, no log line, and the handler receives whatever the client sent. The
-// tag looks like it is working, which makes this the one default worth being
-// loud about: the README's own typed-handler example shows validate: tags, and
-// a reader who copies it gets unvalidated input reaching their handler.
-//
-// It scans only top-level fields, matching what buildValidators compiles.
-func warnIfValidateTagsIgnored(t reflect.Type, method, path string) {
-	if t.Kind() != reflect.Struct {
-		return
-	}
-	for i := 0; i < t.NumField(); i++ {
-		if t.Field(i).Tag.Get("validate") == "" {
-			continue
-		}
-		if warnedValidateTagsIgnored.CompareAndSwap(false, true) {
-			slog.Warn("kruda: validate: tags found but no Validator is configured — input is NOT being validated. Pass kruda.WithValidator(kruda.NewValidator()) to kruda.New",
-				"route", method+" "+path, "field", t.Field(i).Name)
-		}
-		return
-	}
-}
 
 // ValidatorFunc is the signature for validation rule functions.
 // value is the field value to validate, param is the rule parameter
@@ -133,6 +102,36 @@ type ruleEntry struct {
 	fn    ValidatorFunc // pre-looked-up function
 }
 
+// warnedUnknownRules keeps the warning to one line per rule per field, so a type
+// registered on many routes does not repeat it.
+var warnedUnknownRules sync.Map
+
+// warnUnknownRule reports a validate tag naming a rule this package does not
+// implement. That rule is skipped; the field's other rules still apply.
+func warnUnknownRule(rule, typeName, fieldName string) {
+	key := rule + "\x00" + typeName + "\x00" + fieldName
+	if _, loaded := warnedUnknownRules.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	slog.Warn("kruda: unknown validation rule in a validate tag — that rule is ignored, the field's other rules still apply",
+		"rule", rule, "type", typeName, "field", fieldName,
+		"supported", strings.Join(SupportedValidationRules(), ","))
+}
+
+// SupportedValidationRules lists the validation rules this package implements,
+// sorted. The tag syntax resembles go-playground/validator but the rule set is
+// far smaller, so tags carried over from it may name rules that are not here;
+// when one is, the actionable thing to know is which rules exist.
+func SupportedValidationRules() []string {
+	v := NewValidator()
+	names := make([]string, 0, len(v.rules))
+	for n := range v.rules {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // buildValidators reflects on type T and pre-compiles validator chains.
 // Called at route registration time. Returns nil if no validate tags found.
 func buildValidators[T any](v *Validator) []fieldValidator {
@@ -172,7 +171,18 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 			ruleName, ruleParam, _ := strings.Cut(rule, "=")
 			fn, ok := v.rules[ruleName]
 			if !ok {
-				panic(fmt.Sprintf("kruda: unknown validation rule %q on field %s", ruleName, field.Name))
+				// Warn and skip rather than panic. This package implements 20
+				// rules and borrows its tag syntax from go-playground/validator,
+				// which has hundreds — omitempty alone is close to universal in Go
+				// codebases. While validation was opt-in those tags sat inert, so
+				// applications carrying them run today. Panicking here would turn
+				// validation-by-default into a boot failure for them, which is
+				// worse than one rule going unenforced and being said so.
+				//
+				// Nothing that boots today changes: an application with an unknown
+				// rule and a Validator already configured panics as it is.
+				warnUnknownRule(ruleName, t.Name(), field.Name)
+				continue
 			}
 			fv.rules = append(fv.rules, ruleEntry{name: ruleName, param: ruleParam, fn: fn})
 		}

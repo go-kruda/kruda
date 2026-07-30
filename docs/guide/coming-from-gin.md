@@ -168,6 +168,6 @@ app.Group("/api/v1").
 - **Benchmark evidence** — versioned results and reproduction commands are documented in the [performance guide](/guide/performance)
 - **Type-safe handlers** — no more manual `ShouldBindJSON`
 - **Pluggable transport** — Wing (default on Linux), fasthttp (default on macOS), or net/http (HTTP/2)
-- **Less binding boilerplate** — typed inputs declare binding and validation together, both applied before the handler runs (validation once `kruda.WithValidator` is set)
+- **Less binding boilerplate** — typed inputs declare binding and validation together, both applied before the handler runs
 - **Auto OpenAPI** — generated from your typed handlers
 - **Built-in DI** — optional dependency injection without codegen

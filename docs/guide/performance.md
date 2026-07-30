@@ -81,10 +81,19 @@ while the standard library does the work, so the **speed** is not. Kruda picks i
 JSON response path from the same signal, so a fallback build takes the path that
 suits the standard library.
 
-Only speed changes on fallback — not output. Sonic's fallback honours the
-configuration it was frozen with, so responses are byte-identical to an
-accelerated build. `kruda_stdjson` is the only build whose bytes differ (it
-escapes HTML; see the table above).
+The escaping difference above does **not** appear on a fallback build: Sonic's
+compat layer honours the `EscapeHTML` setting it was frozen with, so it emits the
+same unescaped output an accelerated build does. `kruda_stdjson` remains the only
+configuration whose bytes are known to differ.
+
+Beyond escaping, treat fallback output as untested rather than guaranteed
+identical. Sonic's compat layer does not implement `SortMapKeys` or
+`ValidateString`; those agree only because `encoding/json` sorts map keys and
+substitutes U+FFFD on its own. Error text and types come from `encoding/json`
+there, and nothing else is exercised — no build target can currently produce a
+fallback, since Sonic does not compile on 32-bit at all and Go 1.27 does not
+exist yet. That is why this is stated as a known-narrow result rather than a
+contract.
 
 On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
 **Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in

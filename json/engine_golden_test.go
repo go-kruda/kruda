@@ -142,14 +142,19 @@ func TestKnownCrossEngineDivergences(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// EncoderName, deliberately, not EngineIsStdlib. This table is about
-			// bytes, and bytes follow the config, which follows the tag: when
-			// sonic falls back its compat layer still honours the Config it was
-			// frozen with — compat.go calls SetEscapeHTML(cfg.EscapeHTML) — so a
-			// fallback build emits sonic's unescaped output, not the standard
-			// library's escaped default. Only speed changes on fallback, not
-			// bytes. EngineIsStdlib answers "is the fast implementation present",
-			// which is a different question and the wrong one here.
+			// EncoderName, deliberately, not EngineIsStdlib. Every case here is
+			// HTML escaping, and escaping follows the frozen Config, which
+			// follows the tag: sonic's compat layer calls
+			// SetEscapeHTML(cfg.EscapeHTML), so a fallback build emits the same
+			// unescaped bytes as an accelerated one. EngineIsStdlib answers
+			// whether the fast implementation is present — a cost question, and
+			// the wrong one for a table of bytes.
+			//
+			// This reasoning covers escaping only. compat does not act on
+			// SortMapKeys or ValidateString at all; those happen to agree because
+			// encoding/json sorts and substitutes U+FFFD unconditionally. Do not
+			// extend this table with a case whose divergence is not config-driven
+			// without checking compat for it.
 			want := tc.wantStd
 			if EncoderName == "sonic" {
 				want = tc.wantSonic

@@ -179,8 +179,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `listening` startup log line now reports the active JSON engine as
   `json=sonic`, `json=encoding/json`, or `json=sonic (fallback: encoding/json)`,
   naming what is actually encoding. The third is genuinely distinct: Sonic's API
-  is still in front so the bytes are Sonic's, while the standard library does the
-  work so the speed is not — only cost changes on a fallback, not output. Sonic applies its own platform and Go-version constraints on top of
+  is still in front, so its `EscapeHTML` setting is honoured and the HTML-escaping
+  divergence between the engines does not appear, while the standard library does
+  the work, so the speed is not Sonic's. Output beyond escaping is untested on a
+  fallback rather than guaranteed identical — no build target can produce one
+  today, as Sonic does not compile on 32-bit and Go 1.27 does not exist yet. Sonic applies its own platform and Go-version constraints on top of
   Kruda's tag and can route its API to `encoding/json` — an architecture it has no
   assembly for, or a Go version it has not validated, such as go1.27 and newer for
   sonic v1.15.0. `json.ActiveEngine` resolves that, and Kruda now selects its JSON

@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-07-30
+
 ### Upgrade note — `CGO_ENABLED=0` builds: JSON response bytes change
 
 If you build with `CGO_ENABLED=0`, this release changes which JSON engine you get

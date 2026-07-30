@@ -695,8 +695,16 @@ func init() {
 	}
 }
 
+// shouldUseWingJSONStream selects the streaming responder, which is the better
+// path when encoding/json is doing the work and not when sonic is.
+//
+// It asks which engine is actually active, not which one the build tag named.
+// Those differ when sonic routes its own API to the standard library — an
+// architecture it has no assembly for, or a Go version it has not validated — and
+// keying on the tag there picked sonic's path while encoding/json ran, losing the
+// stream lane on exactly the builds that want it.
 func shouldUseWingJSONStream() bool {
-	return krudajson.EncoderName == "encoding/json"
+	return krudajson.EngineIsStdlib
 }
 
 func contentLengthString(length int) string {

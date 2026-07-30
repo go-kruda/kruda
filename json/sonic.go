@@ -3,10 +3,18 @@
 // Package json provides a pluggable JSON engine for Kruda.
 // This file uses github.com/bytedance/sonic for SIMD-accelerated JSON processing.
 // It is compiled by default, and is selected regardless of whether CGO is
-// enabled: Sonic is pure Go plus assembly and has no cgo dependency. On
-// platforms or Go versions Sonic does not accelerate (anything other than
-// amd64/arm64), Sonic's own build constraints transparently route its API to
-// encoding/json, so this file stays correct everywhere.
+// enabled: Sonic is pure Go plus assembly and has no cgo dependency.
+//
+// Compiling this file is not the same as Sonic doing the work. Sonic carries its
+// own build constraints — amd64/arm64, and only Go versions it has validated
+// (v1.15.0 excludes go1.27 and newer) — and transparently routes its API to
+// encoding/json outside them, so this file stays correct everywhere.
+//
+// Two exported names follow from that split, and confusing them is what this
+// package's callers have to avoid. EncoderName is the engine the build tag
+// selected, which fixes the frozen configuration and therefore the bytes.
+// ActiveEngine and EngineIsStdlib describe what is actually encoding, which fixes
+// the cost. Assert output against the first; choose a code path by the second.
 package json
 
 import (
@@ -15,8 +23,49 @@ import (
 	"github.com/bytedance/sonic"
 )
 
-// EncoderName identifies the active JSON encoder for diagnostics.
+// EncoderName names the engine this build's tag selected. It is not necessarily
+// the engine doing the work — see ActiveEngine.
 const EncoderName = "sonic"
+
+// EngineIsStdlib reports whether the standard library is doing the encoding
+// work — true under the default tag exactly when sonic has routed its own API to
+// encoding/json. A const, so the choice stays free on the hot path.
+//
+// This answers a question about cost, not about output. Anything asserting or
+// depending on byte-level behaviour must key on EncoderName instead, which
+// follows the build tag and therefore the frozen Config.
+//
+// Sonic's fallback honours EscapeHTML, so the HTML-escaping difference between
+// the engines does not appear on one. It does not implement SortMapKeys or
+// ValidateString — those agree only because encoding/json sorts and substitutes
+// U+FFFD unconditionally — and its errors come from encoding/json. Treat output
+// beyond escaping as untested rather than known identical.
+//
+// The fallback is reachable today, not hypothetical: linux/ppc64le, s390x,
+// riscv64, mips64 and loong64 build and take it. Kruda does not run its tests on
+// any of those, so the gap is coverage rather than impossibility.
+//
+// 32-bit selects this same fallback but cannot build it: sonic refuses to
+// compile there, from a deliberate guard in its own internals. On linux/arm the
+// kruda_stdjson tag works around that by dropping the sonic import. linux/386
+// cannot be built at all, for an unrelated reason — Wing's Linux engine uses
+// syscall.SYS_ACCEPT4, which Go does not define for 386 — so no JSON tag helps.
+const EngineIsStdlib = !sonicAccelerated
+
+// ActiveEngine names what is actually encoding, for logs and for labelling
+// benchmark output.
+//
+// A fallback build gets its own name rather than either plain answer. Calling it
+// "encoding/json" would imply the kruda_stdjson build, whose HTML escaping
+// differs; calling it "sonic" would imply the accelerated speed. Naming it as a
+// fallback keeps a benchmark run from filing its numbers under an engine it did
+// not use.
+func ActiveEngine() string {
+	if EngineIsStdlib {
+		return "sonic (fallback: encoding/json)"
+	}
+	return "sonic"
+}
 
 // api is the Sonic configuration Kruda encodes and decodes with.
 //

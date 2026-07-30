@@ -57,12 +57,82 @@ Route registration order doesn't affect lookup performance.
 
 ## JSON Performance
 
-| Engine | CGO Required | Performance |
+| Engine | Selected by | Performance |
 |--------|-------------|-------------|
-| Sonic | Yes in Kruda's default build | SIMD-accelerated; benchmark with your payloads |
-| encoding/json | No | Portable standard-library baseline |
+| Sonic | default | Assembly-accelerated; clearly ahead on amd64, mixed on arm64 (see below) |
+| encoding/json | `kruda_stdjson` build tag | Portable standard-library baseline |
 
-The engine is selected at build time: CGO-enabled builds use Sonic by default, while `CGO_ENABLED=0` or the `kruda_stdjson` tag selects `encoding/json`.
+Selection happens at build time, in this order:
+
+1. The `kruda_stdjson` tag always selects `encoding/json`.
+2. Otherwise Kruda selects Sonic — but Sonic then applies **its own** constraints,
+   which cover amd64 and arm64 on the Go versions it has validated. Outside those,
+   Sonic routes its API to `encoding/json` itself. For Sonic v1.15.0 that means
+   **Go 1.27 and newer fall back**, regardless of the tag or the platform.
+
+**Neither engine needs CGO.** Sonic is pure Go plus assembly, so `CGO_ENABLED=0`
+builds are not excluded (since v1.7.0; earlier versions silently fell back to
+`encoding/json`).
+
+`listening … json=` names what is actually encoding. A fallback build reads
+`json=sonic (fallback: encoding/json)` rather than either plain answer, because it
+is genuinely both: Sonic's API is still in front, so the **bytes** are Sonic's,
+while the standard library does the work, so the **speed** is not. Kruda picks its
+JSON response path from the same signal, so a fallback build takes the path that
+suits the standard library.
+
+The escaping difference above does **not** appear on a fallback build: Sonic's
+compat layer honours the `EscapeHTML` setting it was frozen with, so it emits the
+same unescaped output an accelerated build does. `kruda_stdjson` remains the only
+configuration whose bytes are known to differ.
+
+Beyond escaping, treat fallback output as untested rather than guaranteed
+identical. Sonic's compat layer does not implement `SortMapKeys` or
+`ValidateString`; those agree only because `encoding/json` sorts map keys and
+substitutes U+FFFD on its own. Error text and types come from `encoding/json`
+there.
+
+The fallback is reachable today rather than hypothetical: `linux/ppc64le`,
+`s390x`, `riscv64`, `mips64` and `loong64` all build and take it. Kruda's CI runs
+on amd64 and arm64 only, so nothing exercises it. If you deploy to one of those
+architectures, benchmark and test there rather than relying on figures from this
+page.
+
+::: warning 32-bit: `arm` needs `kruda_stdjson`, `386` does not build at all
+Sonic refuses to compile on 32-bit, from a deliberate guard in its own internals,
+so the default build fails there. On `linux/arm`, `-tags kruda_stdjson` works
+around it by dropping the Sonic dependency.
+
+`linux/386` cannot be built at all, and not because of JSON: Wing's Linux engine
+calls `syscall.SYS_ACCEPT4`, which Go does not define for 386. No build tag helps.
+Both are build failures rather than fallbacks — the engine choice never gets a
+chance to matter.
+:::
+
+On the encoder and decoder themselves, a 100-item payload, medians of 12 runs on
+**Go 1.25.11, linux/amd64** (`json/engine_bench_test.go`; raw output in
+`bench/reproducible/results/2026-07-29-coldstart/`). Both collapse to 1× on any
+build where Sonic falls back, per the rule above:
+
+| | encoding/json | Sonic | |
+|---|---|---|---|
+| encode | 10,625 ns | 2,475 ns | **4.3× faster** |
+| decode | 78,133 ns | 13,015 ns | **6.0× faster** |
+
+How much of that reaches request throughput is a separate question, and the
+answer is often "none": a small response spends most of its per-request budget in
+the kernel rather than in the encoder. Benchmark your own payload shapes rather
+than assuming either ratio carries over.
+
+Those ratios are **amd64**. On darwin/arm64 the same encode benchmark inverts —
+Sonic 17,970 ns against `encoding/json` 10,940 ns — while decode stays about 4.3×
+in Sonic's favour. If you develop on an arm64 Mac and deploy to amd64 Linux, the
+two are not interchangeable for encode-heavy profiling.
+
+Cold start is the trade: Sonic's JIT warm-up costs about +3 ms and +7 MB RSS per
+process, a fixed cost that does not scale with route count. Set `kruda_stdjson`
+for workloads that spawn a process per request or scale to zero. See
+`bench/reproducible/coldstart/`.
 
 ## Zero-Allocation Hot Path
 

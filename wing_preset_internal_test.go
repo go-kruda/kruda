@@ -374,8 +374,12 @@ func TestWingSendStaticJSONUsesJSONResponder(t *testing.T) {
 }
 
 func TestPresetJSONSerializeUsesStreamResponderWithStdJSON(t *testing.T) {
-	if krudajson.EncoderName != "encoding/json" {
-		t.Skip("stream responder is used only when the active encoder avoids an intermediate marshal allocation")
+	// Gate on the same signal the production path uses. Keying on EncoderName
+	// would skip this on builds where the tag names sonic but sonic has fallen
+	// back to encoding/json — which is precisely where the stream responder is
+	// now selected.
+	if !krudajson.EngineIsStdlib {
+		t.Skip("stream responder is used only when encoding/json is the active engine")
 	}
 
 	app := New(Wing(), WithJSONStreamEncoder(func(buf *bytes.Buffer, v any) error {

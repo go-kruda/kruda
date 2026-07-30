@@ -5,6 +5,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Upgrade note — `CGO_ENABLED=0` builds: JSON response bytes change
+
+If you build with `CGO_ENABLED=0`, this release changes which JSON engine you get
+and therefore what your responses look like on the wire. Nothing else in this
+release does that, and it is easy to miss because no build flag of yours changed.
+
+Before this release a `CGO_ENABLED=0` build silently got `encoding/json`, which
+escapes `<`, `>` and `&` in strings. It now gets Sonic, which is configured with
+`EscapeHTML` off. Measured on the same input:
+
+| string in a response | before | after |
+|---|---|---|
+| `if x < 10 && y > 3` | `"if x \u003c 10 \u0026\u0026 y \u003e 3"` | `"if x < 10 && y > 3"` |
+| `<p>Chapter 1</p>` | `"\u003cp\u003eChapter 1\u003c/p\u003e"` | `"<p>Chapter 1</p>"` |
+| `{"title": "A & B"}` | `{"title":"A \u0026 B"}` | `{"title":"A & B"}` |
+
+Enabling CGO does **not** avoid this — CGO no longer takes part in choosing the
+engine, which is the point of the fix below. `-tags kruda_stdjson` is the only way
+to keep the previous behaviour.
+
+What to check before upgrading:
+
+- **Anything that renders API strings as HTML.** Escaped output was masking `<`
+  and `&` for you. Text nodes in React, Vue and similar escape on their own and
+  are unaffected, but `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from
+  a response are not. Responses are served as `application/json`, which no browser
+  executes, so this is about your rendering, not the transport.
+- **Anything keyed on response bytes** — `contrib/etag`, response caches, snapshot
+  tests — will miss once as bodies change.
+
+If you would rather keep the escaping and the speed, `kruda.WithJSONEncoder` can
+supply a Sonic config with `EscapeHTML` on, at roughly 41% on responses containing
+strings. Note that a custom encoder also disables the streaming response path.
+
 ### Security
 
 - `contrib/observability` now requires `google.golang.org/grpc` v1.82.1, clearing
@@ -177,15 +211,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   is fixed at compile time, and measure unchanged at ~165 ns/op. Map marshalling
   costs roughly 13% more for a 4-key map and 65% for a 50-key map.
 - The `listening` startup log line now reports the active JSON engine as
-  `json=sonic` or `json=encoding/json`. The engine is selected by build tag, so
-  this is the only way to confirm from a running binary which one a build got.
+  `json=sonic`, `json=encoding/json`, or `json=sonic (fallback: encoding/json)`,
+  naming what is actually encoding. The third is genuinely distinct: Sonic's API
+  is still in front, so its `EscapeHTML` setting is honoured and the HTML-escaping
+  divergence between the engines does not appear, while the standard library does
+  the work, so the speed is not Sonic's. Output beyond escaping is untested on a
+  fallback rather than guaranteed identical. A fallback is reachable today, not
+  hypothetical: `linux/ppc64le`, `s390x`, `riscv64`, `mips64` and `loong64` build
+  and take it; CI covers amd64 and arm64 only, so none of it is exercised. On
+  32-bit the default build does not compile at all, because Sonic refuses to; on
+  `linux/arm` the `kruda_stdjson` tag drops the dependency and builds, while
+  `linux/386` cannot be built at all for an unrelated reason — Wing's Linux
+  engine uses `syscall.SYS_ACCEPT4`, undefined for 386. Sonic applies its own platform and Go-version constraints on top of
+  Kruda's tag and can route its API to `encoding/json` — an architecture it has no
+  assembly for, or a Go version it has not validated, such as go1.27 and newer for
+  sonic v1.15.0. `json.ActiveEngine` resolves that, and Kruda now selects its JSON
+  response path from it too, so a fallback build takes the path that suits
+  `encoding/json` instead of the one that suits Sonic. `json.EncoderName` still
+  names what the tag selected, for callers that want that.
 - The Sonic JSON engine no longer requires CGO. `json/sonic.go` was gated on the
   `cgo` build constraint, so any `CGO_ENABLED=0` build — the common setting for
   static binaries and `scratch`/`distroless` container images — silently fell
   back to `encoding/json` while still reporting a default build. Sonic is pure
-  Go plus assembly and has no cgo dependency; on platforms it does not
-  accelerate, Sonic's own build constraints already route its API to
-  `encoding/json`. The engine now depends only on the `kruda_stdjson` tag.
+  Go plus assembly and has no cgo dependency. CGO no longer takes part in the
+  choice: the `kruda_stdjson` tag selects `encoding/json`, and without it Kruda
+  selects Sonic, which then applies its own constraints — amd64/arm64 on Go
+  versions it has validated — and routes to `encoding/json` itself outside them.
+  Sonic v1.15.0 excludes Go 1.27 and newer, so a toolchain upgrade can still
+  change the engine without any change to build flags.
 
   This changes behavior for existing `CGO_ENABLED=0` builds, which now get
   Sonic: JSON decoding is about 6× faster (78.1 → 13.0 µs for a 100-item

@@ -158,20 +158,29 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs a **reproduction** and a fix narrow enough
-to install blind. In Kruda's code that means the fix's diff carries a test that
-**fails without the fix** (how `TestWingParser_RejectsMalformedHeaderLines` and
-friends came to exist); in a dependency, an upstream advisory plus govulncheck
-showing it reachable from Kruda (the GO-2026-6061 pattern). Provenance is
-irrelevant — a `FuzzParserDifferential` hit and a stranger's report produce the same
-test. **No document substitutes for the reproduction**, and that is the point: a
-report in `Triage`, an accepted draft, an advisory id, or a filled-in advisory all
-fail to prove anything — `SECURITY.md` asks the *reporter* for affected versions and
-impact, so those fields are frequently just their claim restated. Can't reproduce in
-time? Ship a minor; embargo is fine. Proactive hardening has no defect to reproduce
-and is an ordinary behaviour change (v1.4.0's DoS caps were a minor); a fix moving a
-floor for everyone is a minor with a `### Security` section (v1.5.0's Go bump,
-despite two advisory ids).
+The gate is deliberately narrow and needs **all three**:
+
+1. **Reproduced** — in Kruda's code, the fix's diff carries a test that **fails
+   without the fix** (how `TestWingParser_RejectsMalformedHeaderLines` came to
+   exist); in a dependency, an upstream advisory plus govulncheck showing it
+   reachable from Kruda (the GO-2026-6061 pattern). Provenance is irrelevant: a
+   `FuzzParserDifferential` hit and a stranger's report owe the same test. **No
+   document substitutes** — a `Triage` report, an accepted draft, an advisory id and
+   a filled-in advisory all prove nothing, since `SECURITY.md` asks the *reporter*
+   for affected versions and impact.
+2. **An attack, not just a defect** — every bug fix has a failing test, so this is
+   the half that does the work. The advisory must say **who the attacker is, what
+   they gain, and which boundary breaks**; "nothing they didn't already have" means
+   ordinary bug, ordinary route, however severe. Worked example:
+   validation-by-default is trivially reproducible and still not a vulnerability —
+   `validate` tags were inert, so an app relying on them relied on something that
+   never ran, and no Kruda boundary breaks. That is v1.8.0, not a patch.
+3. **Narrow enough to install unread.**
+
+Can't reproduce in time? Ship a minor; embargo is fine. Proactive hardening has no
+defect to reproduce (v1.4.0's DoS caps were a minor); a fix moving a floor for
+everyone is a minor with a `### Security` section (v1.5.0's Go bump, despite two
+advisory ids).
 
 ## Testing
 ```bash

@@ -105,6 +105,41 @@ into a patch. The exemption applies only when **both** hold:
   test can be written for it and it takes the ordinary route. That is why
   v1.4.0's accept-side DoS caps were a minor, not a patch.
 
+- **The reproduction demonstrates an attack, not merely a defect.** This
+  second half is not optional, because reproduction on its own admits
+  everything: *every* bug fix carries a test that fails without it, so a
+  gate that stops at "there is a failing test" is a gate that lets any
+  behaviour change through under a security label.
+
+  The distinction that has to be made, and written into the advisory:
+
+  - An ordinary bug is the software doing the wrong thing for a
+    legitimate user.
+  - A vulnerability is an **attacker** causing the software to violate a
+    security property — confidentiality, integrity, or availability —
+    across a boundary Kruda states or implies it enforces.
+
+  So the advisory must answer three questions the failing test cannot:
+  **who is the attacker, what do they gain, and which boundary breaks.**
+  If the honest answer to "what do they gain" is "nothing they did not
+  already have", it is an ordinary bug and takes the ordinary route,
+  however severe.
+
+  The reproduction has to be shaped accordingly: it drives adversarial
+  input across the boundary and shows the boundary broken.
+  `TestWingParser_RejectsMalformedHeaderLines` is the shape — a crafted
+  request, a parser that must not be fooled by it — rather than a test
+  asserting a correct value for well-formed input.
+
+  Worked example, because it is the case most likely to be relabelled.
+  Validation-by-default is easy to reproduce: a test showing a malformed
+  email reaching a handler fails without the change. It is still not a
+  vulnerability. The attacker gains nothing Kruda ever prevented —
+  `validate` tags were inert, so an application relying on them was
+  relying on something that never ran, and whether that harms the
+  application is a property of the application, not of a Kruda boundary.
+  Ordinary route, v1.8.0.
+
 - **The fix is narrow enough to be safe to install unread.** One that
   moves a floor every adopter must follow goes in a minor with a
   `### Security` section, as v1.5.0's Go-version bump did — even though
@@ -154,18 +189,17 @@ retired with ADR 0001 and must not be cited again.
 - Security fixes keep the patch channel, which is the one that reaches
   adopters without being read. The cost is that a security patch has to
   stay narrow enough to be safe to install unread.
-- Most of the gate is now objective rather than self-attested: a test
-  either fails against the unfixed tree or it does not, and anyone
-  reading the diff — or CI — can check which. That is a deliberate
-  improvement over four earlier drafts that each rested on a document
-  somebody could simply write.
-- The residual risk is named rather than papered over, and reproduction
-  shrinks it to one question it cannot answer: whether a demonstrated
-  defect is a *security* defect rather than an ordinary bug. A failing
-  test proves the behaviour exists; it cannot prove the behaviour is
-  exploitable. That call stays with the maintainer, and in a
-  single-maintainer project no gate closes it. What the gate does is
-  leave a runnable artifact behind, so a wrong call is discoverable
-  afterwards instead of invisible.
+- Half the gate is objective: a test either fails against the unfixed
+  tree or it does not, and CI can check which. That is a deliberate
+  improvement over earlier drafts of this ADR that rested entirely on
+  documents somebody could simply write.
+- The other half is a judgement and is stated as one rather than dressed
+  up: whether a demonstrated defect is an attack. It is not left as a
+  footnote, because reproduction alone admits every bug fix — it is a
+  gate condition with three questions attached, and answering them in
+  writing is the work. In a single-maintainer project no procedure closes
+  it. What the gate buys is that a wrong call leaves behind both a
+  runnable test and a written threat model, so it is discoverable
+  afterwards rather than invisible.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

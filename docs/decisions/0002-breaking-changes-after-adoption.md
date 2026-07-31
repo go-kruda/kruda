@@ -54,7 +54,9 @@ patch on 2026-07-30.
 narrow, because a loose one would swallow the rule: almost any tightening
 can be described as hardening, and validation-by-default — which rejects
 malformed input — is exactly the kind of change that could be relabelled
-into a patch. The exemption applies only when **both** hold:
+into a patch. The exemption applies only when **all three** hold —
+the vulnerability is **reproduced**, the reproduction demonstrates an
+**attack**, and the fix is **narrow**:
 
 - **The vulnerability has been reproduced.** Not reported, not accepted,
   not written up — reproduced, by the maintainer, with the reproduction
@@ -73,10 +75,11 @@ into a patch. The exemption applies only when **both** hold:
     rather than a line in someone else's changelog.
 
   **Reproduction is the requirement because no document can carry it.**
-  Four earlier drafts of this ADR looked for an artifact that would prove
-  the vulnerability was confirmed — a report, an advisory id, a completed
-  assessment, a filled-in advisory — and each was satisfiable without
-  anyone having confirmed anything. The last is the clearest: `SECURITY.md`
+  Earlier drafts of this ADR looked for an artifact that would prove the
+  vulnerability was confirmed — a received report, an advisory id, a
+  completed assessment, a maintainer's accept click, a filled-in advisory
+  — and every one was satisfiable without anyone having confirmed
+  anything. The last is the clearest: `SECURITY.md`
   asks reporters to supply affected versions and an impact assessment, so
   a filled-in advisory is often just the reporter's own claim, restated.
   A failing test cannot be delegated to the reporter, cannot be produced
@@ -106,9 +109,9 @@ into a patch. The exemption applies only when **both** hold:
   v1.4.0's accept-side DoS caps were a minor, not a patch.
 
 - **The reproduction demonstrates an attack, not merely a defect.** This
-  second half is not optional, because reproduction on its own admits
-  everything: *every* bug fix carries a test that fails without it, so a
-  gate that stops at "there is a failing test" is a gate that lets any
+  second condition is what does the work, because the first admits
+  everything on its own: *every* bug fix carries a test that fails
+  without it, so a gate that stops at "there is a failing test" lets any
   behaviour change through under a security label.
 
   The distinction that has to be made, and written into the advisory:
@@ -189,17 +192,18 @@ retired with ADR 0001 and must not be cited again.
 - Security fixes keep the patch channel, which is the one that reaches
   adopters without being read. The cost is that a security patch has to
   stay narrow enough to be safe to install unread.
-- Half the gate is objective: a test either fails against the unfixed
-  tree or it does not, and CI can check which. That is a deliberate
-  improvement over earlier drafts of this ADR that rested entirely on
-  documents somebody could simply write.
-- The other half is a judgement and is stated as one rather than dressed
-  up: whether a demonstrated defect is an attack. It is not left as a
-  footnote, because reproduction alone admits every bug fix — it is a
-  gate condition with three questions attached, and answering them in
-  writing is the work. In a single-maintainer project no procedure closes
-  it. What the gate buys is that a wrong call leaves behind both a
-  runnable test and a written threat model, so it is discoverable
-  afterwards rather than invisible.
+- Only the first of the three conditions is objective: a test either
+  fails against the unfixed tree or it does not, and CI can check which.
+  That is a deliberate improvement over earlier drafts of this ADR, which
+  rested entirely on documents somebody could simply write.
+- The second and third conditions — is it an attack, is the fix narrow —
+  are judgements, and are stated as judgements rather than dressed up as
+  checks. The second is not left as a footnote, because the first admits
+  every bug fix on its own; it is a gate condition with three questions
+  attached, and answering them in writing is the work. In a
+  single-maintainer project no procedure closes either judgement. What
+  the gate buys is that a wrong call leaves behind a runnable test and a
+  written threat model, so it is discoverable afterwards rather than
+  invisible.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

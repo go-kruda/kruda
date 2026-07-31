@@ -51,21 +51,33 @@ it belongs in the unread channel. Kruda already depends on this working —
 patch on 2026-07-30.
 
 "Specific and identified" is the whole gate, and it is deliberately
-narrow, because a self-declared one would swallow the rule: almost any
-tightening can be described as hardening, and validation-by-default —
-which rejects malformed input — is exactly the kind of change that could
-be relabelled into a patch. So the exemption applies only when **both**
-hold:
+narrow, because a loose one would swallow the rule: almost any tightening
+can be described as hardening, and validation-by-default — which rejects
+malformed input — is exactly the kind of change that could be relabelled
+into a patch. The exemption applies only when **both** hold:
 
-- There is a named vulnerability the fix closes: an advisory id
-  (CVE/GHSA/`GO-YYYY-NNNN`), or a report received under `SECURITY.md`.
-  Proactive hardening with no specific vulnerability behind it is an
-  ordinary behaviour change and takes the ordinary route — that is why
-  v1.4.0's accept-side DoS caps were a minor, not a patch.
-- The fix is narrow enough to be safe to install unread. One that moves a
-  floor every adopter must follow goes in a minor with a `### Security`
-  section, as v1.5.0's Go-version bump did — even though it carried two
-  advisory ids.
+- **The vulnerability has an advisory id.** Upstream (`CVE-…`, `GHSA-…`,
+  `GO-YYYY-NNNN`) for a dependency, or one Kruda issues itself through
+  GitHub Security Advisories, which is where `SECURITY.md` already routes
+  reports. A draft advisory id counts, so an embargo never forces the
+  wrong version number.
+
+  The id is what makes this checkable, and the reason to require the id
+  rather than the report is that `SECURITY.md` separates acknowledgment
+  (48 hours) from assessment (7 days). A *received* report is an
+  unassessed claim from anyone; it must not authorize a
+  behaviour-changing patch. A report earns an id only by surviving
+  assessment, so requiring the id is what puts the triage step inside the
+  gate. If a report is still being assessed and a fix cannot wait, ship
+  it as a minor.
+
+  Proactive hardening has no id and so takes the ordinary route — that is
+  why v1.4.0's accept-side DoS caps were a minor, not a patch.
+
+- **The fix is narrow enough to be safe to install unread.** One that
+  moves a floor every adopter must follow goes in a minor with a
+  `### Security` section, as v1.5.0's Go-version bump did — even though
+  it carried two advisory ids.
 
 Obligation 2 also changes shape here: an opt-out that reinstates the
 vulnerability must not exist. What has to stay tunable is any *limit* the
@@ -111,5 +123,12 @@ retired with ADR 0001 and must not be cited again.
 - Security fixes keep the patch channel, which is the one that reaches
   adopters without being read. The cost is that a security patch has to
   stay narrow enough to be safe to install unread.
+- The residual risk is named rather than papered over: the maintainer can
+  issue a Kruda advisory, so the gate is ultimately self-served. What it
+  buys is that doing so is a deliberate, public, written act — a
+  published advisory naming an affected component and a reporter — rather
+  than a word chosen while writing a CHANGELOG entry. That is the honest
+  ceiling for a single-maintainer project; the gate raises the cost of a
+  wrong call, it cannot remove it.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

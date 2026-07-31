@@ -158,11 +158,14 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs an advisory id (CVE/GHSA/`GO-YYYY-NNNN`)
-or a `SECURITY.md` report, **and** a fix narrow enough to install blind. Proactive
-hardening with no named vulnerability is an ordinary behaviour change (v1.4.0's DoS
-caps were a minor); a fix that moves a floor for everyone is a minor with a
-`### Security` section (v1.5.0's Go bump, despite two advisory ids).
+The gate is deliberately narrow — it needs an **advisory id**
+(`CVE-…`/`GHSA-…`/`GO-YYYY-NNNN`, upstream or one Kruda issues; a draft id counts)
+**and** a fix narrow enough to install blind. Require the id, never a mere report:
+`SECURITY.md` acknowledges within 48h but assesses within 7 days, so an unassessed
+report must not authorize a patch — if it cannot wait, ship a minor. Proactive
+hardening has no id and is an ordinary behaviour change (v1.4.0's DoS caps were a
+minor); a fix that moves a floor for everyone is a minor with a `### Security`
+section (v1.5.0's Go bump, despite two advisory ids).
 
 ## Testing
 ```bash

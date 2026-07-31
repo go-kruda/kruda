@@ -151,7 +151,9 @@ Governed by `docs/decisions/0002-breaking-changes-after-adoption.md`. Kruda has 
 production adopter, so "adopters ≈ 0" (ADR 0001) is no longer a valid argument.
 A breaking **or behaviour** change must: never ship in a patch; ship a documented
 way to keep the old behaviour, in the same CHANGELOG entry; state concretely what
-an adopter sees if they do nothing; and be the only such change in its release.
+an adopter sees if they do nothing; and leave the release with a single
+attributable cause — a change plus the prerequisites that make it safe is one
+item, but two independent behaviour changes are two releases.
 
 ## Testing
 ```bash

@@ -1,13 +1,14 @@
 # ADR 0001: Ship the Preset API redesign as a breaking change in a v1 minor release
 
 Date: 2026-06-12
-Status: Accepted — premise expired 2026-06-29
+Status: Accepted
 
-> This ADR still records why v1.3.0 shipped a breaking change as a minor.
-> Its premise — effectively zero external adopters — stopped holding on
-> 2026-06-29, when Rianhub was confirmed to be running Kruda in
-> production. It no longer governs new decisions; see
-> [ADR 0002](0002-breaking-changes-after-adoption.md).
+> Still in force. Kruda runs in production in Rianhub, but Rianhub is the
+> maintainer's own service, so the premise below — effectively zero
+> external adopters — continues to hold.
+> [ADR 0002](0002-breaking-changes-after-adoption.md) extends this to
+> runtime behaviour changes, which this ADR does not cover; it does not
+> replace it.
 
 ## Context
 

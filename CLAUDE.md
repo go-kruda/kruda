@@ -147,63 +147,28 @@ app := kruda.New().
 - Functional options pattern for configuration
 
 ## Versioning & Breaking Changes
-Governed by `docs/decisions/0002-breaking-changes-after-adoption.md`. Kruda has a
-production adopter, so "adopters ≈ 0" (ADR 0001) is no longer a valid argument.
-Four obligations for a breaking **or behaviour** change:
+`docs/decisions/0001-break-api-in-v1-minor.md` governs the **API surface**: breaking
+changes may ship in a v1 minor, because Kruda has no external users — the maintainer
+is the only one, and Rianhub is the maintainer's own service. That premise still
+holds; do not claim otherwise.
 
-1. **The version number is a signal, not the warning.** Kruda deliberately does
-   **not** ban behaviour changes from patches — v1.7.1 ships validation-by-default,
-   which changes behaviour and adds exported API. In exchange the disclosure duty is
-   unconditional: any release that can change what an application does carries a
-   `### Breaking` section with the opt-out and the concrete before/after, **whatever
-   its number**. Consequence to state plainly, not hide: **Kruda's patch channel is
-   not safe to install unread**, and `gorelease`/`apidiff` will flag such a patch.
-2. **Ship a documented way to keep the old behaviour**, in the same CHANGELOG entry
-   (`-tags kruda_stdjson`; `kruda.WithoutValidation()`). ⚠️ **Obligation 1's
-   indifference to version levels does NOT extend to a compile-time break.** A
-   removed or renamed symbol can never satisfy this obligation — nothing brings it
-   back — and **a deprecation window does not fix that**, since the window lives in an
-   earlier release while ob. 2 asks for the opt-out in *this* entry. The window
-   substitutes, and is paid for on both ends: the deprecation release keeps the old
-   symbol alive and announces its end; the removal release must give the replacement
-   mapping **and name the version that announced the deprecation**, and must **not be
-   a patch** — a removal is the only change with no opt-out at all, so the number is
-   the last signal left. No window → **v2.0.0**. Additions are fine at any level,
-   patches included.
-3. **State it concretely** — v1.7.0's before/after byte table is the standard. This
-   now does the work the version number used to be trusted for.
-4. **One attributable cause per release, and stage them.** A change plus the
-   prerequisites that make it safe is one item; two independent behaviour changes are
-   two releases. Staging has the teeth: v1.7.1 waits until Rianhub has absorbed
-   v1.7.0. Waiting is the default; **jumping the queue** is what must be justified.
+`docs/decisions/0002-breaking-changes-after-adoption.md` extends it to **runtime
+behaviour changes**, which compile cleanly and surface in production instead. Four
+short rules, sized for a single self-coordinating user:
 
-**The exception — a real attack may jump the queue** and ship out of band without
-waiting for the adopter to absorb the previous release.
-The gate is deliberately narrow and needs **all three**:
+1. **Say what changed, concretely, in the CHANGELOG** — v1.7.0's before/after byte
+   table is the standard. This is the rule that actually helps.
+2. **Give an escape hatch when it is cheap** (`-tags kruda_stdjson`;
+   `kruda.WithoutValidation()`). When it would be expensive, fixing forward is fine.
+3. **One behaviour change per release**, so production misbehaving has one suspect.
+   A change plus its prerequisites is one item; v1.7.1 waits for Rianhub to take v1.7.0.
+4. **Version numbers signal attention needed, not semver.** A patch may change
+   behaviour and add exported API — that is why validation-by-default is v1.7.1, and
+   why `gorelease`/`apidiff` will flag it. A real vulnerability fix skips rule 3.
 
-1. **Reproduced** — in Kruda's code, the fix's diff carries a test that **fails
-   without the fix** (how `TestWingParser_RejectsMalformedHeaderLines` came to
-   exist); in a dependency, an upstream advisory plus govulncheck showing it
-   reachable from Kruda (the GO-2026-6061 pattern). Provenance is irrelevant: a
-   `FuzzParserDifferential` hit and a stranger's report owe the same test. **No
-   document substitutes** — a `Triage` report, an accepted draft, an advisory id and
-   a filled-in advisory all prove nothing, since `SECURITY.md` asks the *reporter*
-   for affected versions and impact.
-2. **An attack, not just a defect** — every bug fix has a failing test, so this is
-   the half that does the work. The advisory must say **who the attacker is, what
-   they gain, and which boundary breaks**; "nothing they didn't already have" means
-   ordinary bug, waits its turn, however severe. Worked example:
-   validation-by-default is trivially reproducible and still not a vulnerability —
-   `validate` tags were inert, so an app relying on them relied on something that
-   never ran, and no Kruda boundary breaks. So v1.7.1 waits for Rianhub to absorb
-   v1.7.0 rather than jumping.
-3. **Narrow enough to ship on its own** — jumping the queue means shipping without
-   the soak staging would have given, so it must not carry anything that needed one.
-
-Can't reproduce in time? It waits its turn; embargo is fine. Proactive hardening has
-no defect to reproduce (v1.4.0's DoS caps took the ordinary route); a fix moving a
-floor for everyone takes it too, with a `### Security` section (v1.5.0's Go bump,
-despite two advisory ids).
+⚠️ These rules assume the only installer is the person writing them. **If Kruda gains
+external users they are wrong, not merely incomplete** — real adopters need
+deprecation windows, mandatory opt-outs, and a patch channel safe to install unread.
 
 ## Testing
 ```bash

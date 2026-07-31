@@ -14,13 +14,15 @@ is still true.
 
 What changed is not the adopter count but the *kind* of change. Kruda
 runs in Rianhub, the maintainer's own browser-facing production service
-on Linux, and the last two releases broke things ADR 0001 never spoke
-about:
+on Linux, and two changes have touched things ADR 0001 never spoke about
+— one shipped, one is why this ADR is being written now:
 
-- v1.7.0 changed which JSON engine a `CGO_ENABLED=0` build gets, and so
-  changed the bytes of every JSON response containing `<`, `>` or `&`.
-- v1.7.1 enforces `validate` tags by default, so an application can start
-  rejecting requests it previously accepted.
+- **v1.7.0, released 2026-07-30**, changed which JSON engine a
+  `CGO_ENABLED=0` build gets, and so changed the bytes of every JSON
+  response containing `<`, `>` or `&`.
+- **v1.7.1, unreleased at the time of writing**, enforces `validate`
+  tags by default, so an application can start rejecting requests it
+  previously accepted. It is merged and waiting; see rule 3.
 
 Neither removes a symbol. ADR 0001 reasoned entirely about the API
 surface, where a break fails loudly at build time on a developer's
@@ -40,10 +42,10 @@ will see if you do nothing. This is the rule that actually helps, because
 the person debugging Rianhub at 2am has forgotten the change and is
 reading that entry.
 
-**2. Give an escape hatch when it is cheap.** v1.7.0 has
-`-tags kruda_stdjson`; v1.7.1 has `kruda.New(kruda.WithoutValidation())`.
-Both cost almost nothing and buy an instant rollback that does not need a
-downgrade. When an escape hatch would be expensive, fixing forward is
+**2. Give an escape hatch when it is cheap.** v1.7.0 shipped with
+`-tags kruda_stdjson`; v1.7.1 will ship with
+`kruda.New(kruda.WithoutValidation())`. Both cost almost nothing and buy
+an instant rollback that does not need a downgrade. When an escape hatch would be expensive, fixing forward is
 fine — that is the advantage of owning both sides.
 
 **3. One behaviour change per release.** Never ship two independent ones

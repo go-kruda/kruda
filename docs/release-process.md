@@ -43,16 +43,18 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0002-breaking-changes-after-adoption.md)
 - [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
-  - [ ] It is not going out in a patch release. The only exception needs **both**: a
-        vulnerability **confirmed real and written up as an advisory** — upstream's published
-        advisory for a dependency, a `SECURITY.md` report the maintainer **accepted** (GitHub
-        `Triage` → *Accept and open as draft*), or one the maintainer found (fuzz,
-        govulncheck, review) and drafted the advisory for — **and** a fix narrow enough to
-        install unread. Does **not** qualify: a report still in `Triage`, however urgent (ship
-        a minor); an assessment that concluded not-a-vulnerability, out-of-scope, or
-        won't-fix; the mere existence of an advisory id. Embargoed-but-confirmed does qualify.
-        Proactive hardening names no exploitable defect, so no advisory can be written for it;
-        a fix that moves a floor for every adopter is a minor with a `### Security` section
+  - [ ] It is not going out in a patch release. The only exception needs **both**: an advisory
+        **written up with affected component, affected versions and impact** — upstream's
+        published one for a dependency, otherwise the maintainer's own, and it does not matter
+        whether a reporter or an in-house fuzz/govulncheck run found it — **and** a fix narrow
+        enough to install unread. The filled-in write-up is the test; **no GitHub state is**.
+        Does **not** qualify: a report still in `Triage`, however urgent (ship a minor); a
+        report *accepted into a draft* while the investigation is still running and impact is
+        unwritten — accepting opens a workspace, it is not a finding; an assessment that
+        concluded not-a-vulnerability, out-of-scope or won't-fix; a bare advisory id.
+        Embargoed-but-written-up does qualify. Proactive hardening names no exploitable
+        defect, so no advisory can be written for it; a fix that moves a floor for every
+        adopter is a minor with a `### Security` section
   - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry — for a
         qualifying security fix this is instead "no opt-out reinstates the vulnerability; any
         limit the fix introduces is tunable"

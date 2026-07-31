@@ -158,20 +158,21 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs a vulnerability **confirmed real and
-written up as an advisory** **and** a fix narrow enough to install blind. Three
-routes, all valid: upstream's published advisory for a dependency; a `SECURITY.md`
-report the maintainer *accepted* (GitHub `Triage` → **Accept and open as draft**);
-or one the maintainer found themselves (fuzz, govulncheck, review) and drafted the
-advisory for — no external reporter is required, or `FuzzParserDifferential`
-findings could never be patched. **Confirmed, not merely assessed** — a report still
-in `Triage` does not qualify however urgent (ship a minor), nor an assessment
-concluding not-a-vulnerability / out-of-scope / won't-fix, nor the bare existence of
-an advisory id. Embargoed-but-confirmed does qualify. Proactive hardening names no
-exploitable defect, so no advisory can be written for it and it is an ordinary
-behaviour change (v1.4.0's DoS caps were a minor); a fix that moves a floor for
-everyone is a minor with a `### Security` section (v1.5.0's Go bump, despite two
-advisory ids).
+The gate is deliberately narrow — it needs an advisory **written up with affected
+component, affected versions and impact** **and** a fix narrow enough to install
+blind. Upstream's published advisory covers a dependency; otherwise the maintainer
+writes it, and provenance is irrelevant — a `FuzzParserDifferential` or govulncheck
+finding qualifies exactly like a reported one, or Kruda's own fuzzing could never be
+patched. **The filled-in write-up is the test; no GitHub state is.** Does not
+qualify: a report still in `Triage`, however urgent (ship a minor); a report
+*accepted into a draft* with the investigation still running and impact unwritten —
+accepting opens a workspace for investigating *with* the reporter, it is not a
+finding, and it can still end in "closed, not a vulnerability"; an assessment
+concluding not-a-vulnerability / out-of-scope / won't-fix; a bare advisory id.
+Embargoed-but-written-up does qualify. Proactive hardening names no exploitable
+defect, so no advisory can be written for it and it is an ordinary behaviour change
+(v1.4.0's DoS caps were a minor); a fix that moves a floor for everyone is a minor
+with a `### Security` section (v1.5.0's Go bump, despite two advisory ids).
 
 ## Testing
 ```bash

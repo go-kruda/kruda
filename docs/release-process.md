@@ -43,12 +43,14 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0002-breaking-changes-after-adoption.md)
 - [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
-  - [ ] It is not going out in a patch release. The only exception needs **both**: an
-        **advisory id** for the vulnerability (`CVE-…`/`GHSA-…`/`GO-YYYY-NNNN`, upstream or
-        Kruda-issued; a draft id counts) **and** a fix narrow enough to install unread. A
-        report that has not finished `SECURITY.md` assessment has no id and does not qualify —
-        if it cannot wait, ship a minor. Proactive hardening has no id either; and a fix that
-        moves a floor for every adopter is a minor with a `### Security` section
+  - [ ] It is not going out in a patch release. The only exception needs **both**: a
+        **completed, written-down assessment** of the vulnerability — upstream's published
+        advisory for a dependency, or the maintainer finishing the `SECURITY.md` assessment —
+        **and** a fix narrow enough to install unread. An advisory id is **not** the test: a
+        private GitHub report creates a draft advisory before anyone reviews it. An unfinished
+        assessment ships as a minor however urgent; embargoed-but-assessed qualifies.
+        Proactive hardening has no assessment behind it; a fix that moves a floor for every
+        adopter is a minor with a `### Security` section
   - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry — for a
         qualifying security fix this is instead "no opt-out reinstates the vulnerability; any
         limit the fix introduces is tunable"

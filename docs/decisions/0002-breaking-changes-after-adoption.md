@@ -56,23 +56,28 @@ can be described as hardening, and validation-by-default — which rejects
 malformed input — is exactly the kind of change that could be relabelled
 into a patch. The exemption applies only when **both** hold:
 
-- **The vulnerability has an advisory id.** Upstream (`CVE-…`, `GHSA-…`,
-  `GO-YYYY-NNNN`) for a dependency, or one Kruda issues itself through
-  GitHub Security Advisories, which is where `SECURITY.md` already routes
-  reports. A draft advisory id counts, so an embargo never forces the
-  wrong version number.
+- **The vulnerability has been assessed and confirmed, and the assessment
+  is written down.** Either upstream did it — a published advisory
+  against a dependency (`CVE-…`, `GHSA-…`, `GO-YYYY-NNNN`) — or Kruda's
+  maintainer completed the `SECURITY.md` assessment and recorded the
+  outcome on the advisory.
 
-  The id is what makes this checkable, and the reason to require the id
-  rather than the report is that `SECURITY.md` separates acknowledgment
-  (48 hours) from assessment (7 days). A *received* report is an
-  unassessed claim from anyone; it must not authorize a
-  behaviour-changing patch. A report earns an id only by surviving
-  assessment, so requiring the id is what puts the triage step inside the
-  gate. If a report is still being assessed and a fix cannot wait, ship
-  it as a minor.
+  The test is the completed assessment, **not the existence of an
+  advisory id**, and the difference matters because reporting a
+  vulnerability privately on GitHub *creates a draft advisory
+  immediately*, before a maintainer has looked at it. An id can therefore
+  exist while the claim is still entirely unexamined. `SECURITY.md` draws
+  the same line itself: acknowledgment within 48 hours, assessment within
+  7 days. A received report is an unassessed claim from anyone and must
+  never authorize a behaviour-changing patch.
 
-  Proactive hardening has no id and so takes the ordinary route — that is
-  why v1.4.0's accept-side DoS caps were a minor, not a patch.
+  Publication may lag the assessment — an embargoed fix still qualifies,
+  because what is required has already happened. An assessment that has
+  *not* finished does not qualify, however urgent: ship that as a minor.
+
+  Proactive hardening has no such assessment behind it and takes the
+  ordinary route — that is why v1.4.0's accept-side DoS caps were a
+  minor, not a patch.
 
 - **The fix is narrow enough to be safe to install unread.** One that
   moves a floor every adopter must follow goes in a minor with a

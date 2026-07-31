@@ -56,52 +56,54 @@ can be described as hardening, and validation-by-default — which rejects
 malformed input — is exactly the kind of change that could be relabelled
 into a patch. The exemption applies only when **both** hold:
 
-- **The vulnerability is confirmed real, and the confirmation is written
-  up as an advisory** naming the affected component, the affected
-  versions, and the impact.
+- **The vulnerability has been reproduced.** Not reported, not accepted,
+  not written up — reproduced, by the maintainer, with the reproduction
+  in the repository:
 
-  The **write-up is the test**, and it is deliberately the same test
-  wherever the vulnerability came from. Only the author differs:
+  - **In Kruda's own code** — the fix's diff contains a regression test
+    that fails without the fix and passes with it. That is already how
+    this repo works: `TestWingParser_RejectsMalformedHeaderLines` and its
+    neighbours exist because specific parser defects were reproduced
+    first.
+  - **In a dependency** — upstream's published advisory (`CVE-…`,
+    `GHSA-…`, `GO-YYYY-NNNN`) supplies the analysis, and govulncheck
+    supplies the reachability from Kruda. That is exactly how
+    GO-2026-6061 was handled: govulncheck reported it reachable from
+    `observability.buildSDK`, which is what made it Kruda's problem
+    rather than a line in someone else's changelog.
 
-  - **In a dependency** — upstream already did it. Their published
-    advisory (`CVE-…`, `GHSA-…`, `GO-YYYY-NNNN`) is the write-up. This is
-    the GO-2026-6061 grpc case.
-  - **Anywhere in Kruda** — the maintainer writes it, whether the
-    vulnerability arrived as a report or was found in-house by a fuzz
-    run, a govulncheck result, or a code review. Provenance changes
-    nothing: `FuzzParserDifferential` and the govulncheck workflow exist
-    precisely to find these, and a smuggling vector Kruda's own fuzzing
-    catches needs the patch channel as much as one a stranger emails in.
+  **Reproduction is the requirement because no document can carry it.**
+  Four earlier drafts of this ADR looked for an artifact that would prove
+  the vulnerability was confirmed — a report, an advisory id, a completed
+  assessment, a filled-in advisory — and each was satisfiable without
+  anyone having confirmed anything. The last is the clearest: `SECURITY.md`
+  asks reporters to supply affected versions and an impact assessment, so
+  a filled-in advisory is often just the reporter's own claim, restated.
+  A failing test cannot be delegated to the reporter, cannot be produced
+  by clicking anything, and is checkable by anyone reading the diff.
 
-  **No GitHub state is the test, and "Accept and open as draft" in
-  particular is not.** Accepting a report opens a draft so the maintainer
-  can investigate — often together with the reporter — so it routinely
-  happens *before* any determination, and the investigation can still end
-  in the report being closed as not a vulnerability. Treating the accept
-  click as confirmation would let an accepted-but-unexamined report
-  authorize a patch, which is the same hole as accepting the report
-  itself, one step further in. The button opens the workspace; the filled
-  -in advisory records the judgement.
+  Nothing about *provenance* matters, therefore. A report from a stranger
+  and a hit from `FuzzParserDifferential` take the identical path, because
+  the test they both have to produce is the same one.
 
   So the disqualifying cases are:
 
-  - A report still in `Triage` — an unassessed claim from anyone. It must
-    never authorize a behaviour-changing patch, however urgent it sounds.
-    `SECURITY.md` allows 7 days for assessment; if a fix cannot wait for
-    it, ship the fix as a minor.
-  - A report accepted into a draft where the investigation is still
-    running and the advisory has no affected versions or impact written
-    in. Accepted is not confirmed.
-  - An assessment that finished and concluded *not* a vulnerability, out
-    of scope, or won't-fix. "Assessed" is not the test either; a closed
-    report qualifies for nothing.
+  - A report still in `Triage`, or one accepted into a draft while the
+    investigation runs. Neither is a reproduction. However urgent it
+    sounds, `SECURITY.md` allows 7 days for assessment; a fix that cannot
+    wait ships as a minor.
+  - An assessment that concluded *not* a vulnerability, out of scope, or
+    won't-fix.
+  - A fix whose diff carries no test that fails without it. If the
+    defect cannot be demonstrated, it has not been confirmed — and a fix
+    for something undemonstrated is not safe to install unread, which is
+    the whole test in obligation 1.
 
-  Publication may lag confirmation — an embargoed fix still qualifies,
-  because the write-up already exists.
+  Publication may lag reproduction — an embargoed fix still qualifies.
 
-  Proactive hardening identifies no specific exploitable defect, so no
-  advisory can be written for it and it takes the ordinary route — that
-  is why v1.4.0's accept-side DoS caps were a minor, not a patch.
+  Proactive hardening has no specific defect to reproduce, so no such
+  test can be written for it and it takes the ordinary route. That is why
+  v1.4.0's accept-side DoS caps were a minor, not a patch.
 
 - **The fix is narrow enough to be safe to install unread.** One that
   moves a floor every adopter must follow goes in a minor with a
@@ -152,14 +154,18 @@ retired with ADR 0001 and must not be cited again.
 - Security fixes keep the patch channel, which is the one that reaches
   adopters without being read. The cost is that a security patch has to
   stay narrow enough to be safe to install unread.
-- The residual risk is named rather than papered over. For anything in
-  Kruda itself the maintainer authors the write-up that the gate tests,
-  so the gate is self-served — most starkly when they are also the
-  finder. Closing that is not possible in a single-maintainer project;
-  any gate loops back to the same person. What it buys is that qualifying
-  means writing an advisory that names an affected component, affected
-  versions, and an impact — a deliberate written act, rather than a word
-  chosen while writing a CHANGELOG entry. It raises the cost of a wrong
-  call; it cannot remove it.
+- Most of the gate is now objective rather than self-attested: a test
+  either fails against the unfixed tree or it does not, and anyone
+  reading the diff — or CI — can check which. That is a deliberate
+  improvement over four earlier drafts that each rested on a document
+  somebody could simply write.
+- The residual risk is named rather than papered over, and reproduction
+  shrinks it to one question it cannot answer: whether a demonstrated
+  defect is a *security* defect rather than an ordinary bug. A failing
+  test proves the behaviour exists; it cannot prove the behaviour is
+  exploitable. That call stays with the maintainer, and in a
+  single-maintainer project no gate closes it. What the gate does is
+  leave a runnable artifact behind, so a wrong call is discoverable
+  afterwards instead of invisible.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

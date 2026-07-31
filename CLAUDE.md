@@ -158,21 +158,20 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs an advisory **written up with affected
-component, affected versions and impact** **and** a fix narrow enough to install
-blind. Upstream's published advisory covers a dependency; otherwise the maintainer
-writes it, and provenance is irrelevant — a `FuzzParserDifferential` or govulncheck
-finding qualifies exactly like a reported one, or Kruda's own fuzzing could never be
-patched. **The filled-in write-up is the test; no GitHub state is.** Does not
-qualify: a report still in `Triage`, however urgent (ship a minor); a report
-*accepted into a draft* with the investigation still running and impact unwritten —
-accepting opens a workspace for investigating *with* the reporter, it is not a
-finding, and it can still end in "closed, not a vulnerability"; an assessment
-concluding not-a-vulnerability / out-of-scope / won't-fix; a bare advisory id.
-Embargoed-but-written-up does qualify. Proactive hardening names no exploitable
-defect, so no advisory can be written for it and it is an ordinary behaviour change
-(v1.4.0's DoS caps were a minor); a fix that moves a floor for everyone is a minor
-with a `### Security` section (v1.5.0's Go bump, despite two advisory ids).
+The gate is deliberately narrow — it needs a **reproduction** and a fix narrow enough
+to install blind. In Kruda's code that means the fix's diff carries a test that
+**fails without the fix** (how `TestWingParser_RejectsMalformedHeaderLines` and
+friends came to exist); in a dependency, an upstream advisory plus govulncheck
+showing it reachable from Kruda (the GO-2026-6061 pattern). Provenance is
+irrelevant — a `FuzzParserDifferential` hit and a stranger's report produce the same
+test. **No document substitutes for the reproduction**, and that is the point: a
+report in `Triage`, an accepted draft, an advisory id, or a filled-in advisory all
+fail to prove anything — `SECURITY.md` asks the *reporter* for affected versions and
+impact, so those fields are frequently just their claim restated. Can't reproduce in
+time? Ship a minor; embargo is fine. Proactive hardening has no defect to reproduce
+and is an ordinary behaviour change (v1.4.0's DoS caps were a minor); a fix moving a
+floor for everyone is a minor with a `### Security` section (v1.5.0's Go bump,
+despite two advisory ids).
 
 ## Testing
 ```bash

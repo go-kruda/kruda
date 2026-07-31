@@ -85,8 +85,10 @@ surprised adopter is reading. Obligation 1 makes this sharper rather than
 softer: adopters may now pass through releases without reading them, so
 "they had a window" cannot be assumed to mean they saw it.
 
-A deprecation window therefore does not satisfy obligation 2 — it
-substitutes for it, and the substitution has to be paid for on both ends:
+A removal therefore takes one of two routes, and only one.
+
+**Route A — a deprecation window.** It does not satisfy obligation 2; it
+substitutes for it, and the substitution is paid for on both ends:
 
 - **At the deprecation release** — the new symbol lands, the old one
   keeps working, and that entry says the old one is going away. Here the
@@ -101,7 +103,11 @@ substitutes for it, and the substitution has to be paid for on both ends:
   opt-out at all, so the number is the last signal left. A removal ships
   at a minor or above.
 
-When no window is possible or wanted, the answer is **v2.0.0**.
+**Route B — v2.0.0**, when no window is possible or wanted. Route A's
+three requirements do not apply to it: there was no deprecation release
+to point back at, and the major version carries the signal on its own.
+The removal entry still owes the replacement mapping, because obligation
+3 has no escapes.
 
 This ADR is therefore **not** a standing permission slip for removals.
 Where the release checklist has always allowed a removal to proceed on

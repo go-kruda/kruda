@@ -254,7 +254,8 @@ policy could quietly stop binding:
 | obligation | escape | what it is |
 |---|---|---|
 | 1 — disclose | none | every change discloses, at every level |
-| 2 — opt-out | removal | *substituted* by a deprecation window, paid on both ends |
+| 2 — opt-out | removal, Route A | *substituted* by a deprecation window, paid on both ends |
+| 2 — opt-out | removal, Route B | *waived*; v2.0.0 carries the signal instead |
 | 2 — opt-out | queue-jumping security fix | *waived* outright |
 | 3 — state concretely | none | and it absorbs the load wherever obligation 2 is escaped |
 | 4 — one cause | none | two independent behaviour changes are always two releases |

@@ -43,11 +43,18 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed. Additions are fine at any level — a patch may add
       exported API here, and `gorelease`/`apidiff` will flag it; that is expected, not a stop.
-      **Removals and renames are the exception to that**: an absent symbol cannot offer a way
-      to keep the old behaviour, so it needs either a **deprecation window** (the old symbol
-      kept working for at least one release, which is the opt-out) or **v2.0.0**. ADR 0002 is
-      not a standing grant here; ADR 0001 covers v1.3.0's window-less removals and nothing
-      later. See docs/decisions/0002-breaking-changes-after-adoption.md, obligation 2
+      **Removals and renames are the exception**, because an absent symbol can never offer a
+      way to keep the old behaviour. Each removal needs **v2.0.0**, or a deprecation window
+      paid for on both ends:
+  - [ ] The deprecation release shipped the new symbol, kept the old one working, and said in
+        its entry that the old one is going away
+  - [ ] **This** entry gives the replacement mapping concretely **and names the version where
+        the deprecation was announced** — a window in a past release is not an opt-out in this
+        one, and an adopter may have skipped straight over it
+  - [ ] It is **not** a patch. A removal is the one change with no opt-out at all, so the
+        version number is the last signal left: minor or above
+  - [ ] ADR 0002 is not a standing grant here; ADR 0001 covers v1.3.0's window-less removals
+        and nothing later. See docs/decisions/0002-breaking-changes-after-adoption.md, ob. 2
 - [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
   - [ ] It carries a `### Breaking` section **whatever the version number is**. A patch may
         change behaviour here — the number is a signal, not the warning, so this section and

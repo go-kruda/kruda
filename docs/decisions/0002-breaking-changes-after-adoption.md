@@ -74,14 +74,34 @@ opt-out is a signal to reconsider the change, not to skip the opt-out.
 *This is what separates a compile-time break from a behaviour change*, and
 obligation 1's indifference to version levels does **not** extend to one.
 A removed or renamed exported symbol cannot offer a way to keep the old
-behaviour — once it is gone, no flag brings it back — so it can never
-satisfy this obligation on its own. A removal therefore needs one of:
+behaviour — once it is gone, no flag brings it back.
 
-- **A deprecation window.** The old symbol keeps working alongside the
-  new one for at least one release, which *is* the opt-out, and the
-  removal that follows is then an ordinary change under all four
-  obligations at whatever level fits.
-- **v2.0.0**, when no such window is possible or wanted.
+**A removal can never satisfy this obligation, and a deprecation window
+does not change that.** It is tempting to say the window *is* the
+opt-out, but the window belongs to an earlier release; in the entry that
+actually removes the symbol there is nothing to opt into, and obligation
+2 asks for the opt-out in *that* entry, because that is the one a
+surprised adopter is reading. Obligation 1 makes this sharper rather than
+softer: adopters may now pass through releases without reading them, so
+"they had a window" cannot be assumed to mean they saw it.
+
+A deprecation window therefore does not satisfy obligation 2 — it
+substitutes for it, and the substitution has to be paid for on both ends:
+
+- **At the deprecation release** — the new symbol lands, the old one
+  keeps working, and that entry says the old one is going away. Here the
+  opt-out is real and present: keep using the old symbol.
+- **At the removal release** — obligation 2 is unsatisfiable, so
+  obligation 3 carries the whole load. The entry must give the
+  replacement mapping concretely, and must name the version where the
+  deprecation was announced, so an adopter who jumped straight over that
+  release can find what they missed.
+- **Never in a patch.** This is the one place a version level is still
+  load-bearing, and for a specific reason: it is the only change with no
+  opt-out at all, so the number is the last signal left. A removal ships
+  at a minor or above.
+
+When no window is possible or wanted, the answer is **v2.0.0**.
 
 This ADR is therefore **not** a standing permission slip for removals.
 Where the release checklist has always allowed a removal to proceed on
@@ -216,10 +236,26 @@ is **narrow**:
   with a `### Security` section, as v1.5.0's Go-version bump did — even
   though it carried two advisory ids.
 
-Obligation 2 also changes shape here: an opt-out that reinstates the
-vulnerability must not exist. What has to stay tunable is any *limit* the
-fix introduces (v1.4.0's caps ship with `WithMaxConns(0)`), never the
-rejection itself.
+Obligation 2 is **waived** for a queue-jumping fix, not satisfied by some
+narrower reading of it: an opt-out that reinstates the vulnerability must
+not exist, so there is deliberately no way to keep the old behaviour.
+What must stay tunable is any *limit* the fix introduces (v1.4.0's caps
+ship with `WithMaxConns(0)`), never the rejection itself.
+
+It is worth listing where the escapes are, since each is a place the
+policy could quietly stop binding:
+
+| obligation | escape | what it is |
+|---|---|---|
+| 1 — disclose | none | every change discloses, at every level |
+| 2 — opt-out | removal | *substituted* by a deprecation window, paid on both ends |
+| 2 — opt-out | queue-jumping security fix | *waived* outright |
+| 3 — state concretely | none | and it absorbs the load wherever obligation 2 is escaped |
+| 4 — one cause | none | two independent behaviour changes are always two releases |
+| 4 — stage them | queue-jumping security fix | ships out of band, ahead of the queue |
+
+Nothing here is dressed up as compliance. Where an obligation does not
+hold, it says so.
 
 Adopter count is no longer an argument in any of this. "Adopters ≈ 0" was
 retired with ADR 0001 and must not be cited again.

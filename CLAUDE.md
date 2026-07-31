@@ -161,10 +161,15 @@ Four obligations for a breaking **or behaviour** change:
 2. **Ship a documented way to keep the old behaviour**, in the same CHANGELOG entry
    (`-tags kruda_stdjson`; `kruda.WithoutValidation()`). ⚠️ **Obligation 1's
    indifference to version levels does NOT extend to a compile-time break.** A
-   removed or renamed exported symbol can never satisfy this obligation — nothing
-   brings it back — so a removal needs either a **deprecation window** (old symbol
-   kept alive ≥1 release, which is the opt-out) or **v2.0.0**. Additions are fine at
-   any level, including a patch.
+   removed or renamed symbol can never satisfy this obligation — nothing brings it
+   back — and **a deprecation window does not fix that**, since the window lives in an
+   earlier release while ob. 2 asks for the opt-out in *this* entry. The window
+   substitutes, and is paid for on both ends: the deprecation release keeps the old
+   symbol alive and announces its end; the removal release must give the replacement
+   mapping **and name the version that announced the deprecation**, and must **not be
+   a patch** — a removal is the only change with no opt-out at all, so the number is
+   the last signal left. No window → **v2.0.0**. Additions are fine at any level,
+   patches included.
 3. **State it concretely** — v1.7.0's before/after byte table is the standard. This
    now does the work the version number used to be trusted for.
 4. **One attributable cause per release, and stage them.** A change plus the

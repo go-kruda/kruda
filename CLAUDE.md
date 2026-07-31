@@ -155,11 +155,14 @@ an adopter sees if they do nothing; and leave the release with a single
 attributable cause — a change plus the prerequisites that make it safe is one
 item, but two independent behaviour changes are two releases.
 
-**Security fixes are the exception to "never in a patch"** — patch is the channel
-that reaches adopters unread, which is where a vulnerability fix belongs. It works
-out because an opt-out reinstating the vulnerability must not exist, so no new
-exported API appears. Keep such a patch narrow; anything wider is a minor with a
-`### Security` section.
+The rule behind "never in a patch" is that **a patch must be safe to install
+unread**. That is also the exception: a fix for a *specific, identified*
+vulnerability belongs in the unread channel, because not installing it is worse.
+The gate is deliberately narrow — it needs an advisory id (CVE/GHSA/`GO-YYYY-NNNN`)
+or a `SECURITY.md` report, **and** a fix narrow enough to install blind. Proactive
+hardening with no named vulnerability is an ordinary behaviour change (v1.4.0's DoS
+caps were a minor); a fix that moves a floor for everyone is a minor with a
+`### Security` section (v1.5.0's Go bump, despite two advisory ids).
 
 ## Testing
 ```bash

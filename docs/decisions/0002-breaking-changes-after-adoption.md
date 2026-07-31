@@ -36,35 +36,41 @@ Breaking and behaviour changes continue to ship in v1 **minor** releases.
 What protects adopters is no longer their absence; it is three
 obligations that every such change must meet.
 
-**1. Never in a patch — except to fix a vulnerability.** Patch is the
-channel people upgrade through without reading anything — `go get -u`,
-Dependabot, `@latest` in CI. Any change that can alter what an
-application does, at compile time or at run time, forces at least a
-minor. The size of the diff is not the size of the change.
+**1. A patch must be safe to install unread.** Patch is the channel
+people upgrade through without reading anything — `go get -u`,
+Dependabot, `@latest` in CI. Everything else about patches follows from
+that one property, so state it that way rather than as a list of bans.
 
-A security fix inverts that argument rather than escaping it. Hardening a
-parser or adding a limit *is* a behaviour change — requests that used to
-be served now get rejected — but the unread auto-upgrade channel is
-exactly where such a fix belongs, because the alternative is adopters
-sitting on a known-vulnerable version until they next read release notes.
-Kruda already depends on this working: `contrib/observability/v1.0.1`
-delivered the GO-2026-6061 grpc fix as a patch on 2026-07-30.
+An ordinary behaviour change is not safe to install unread, so it forces
+at least a minor. The size of the diff is not the size of the change.
 
-Obligation 2 is what makes the two cases differ, and it is worth stating
-as a derivation rather than a carve-out. An ordinary behaviour change
-must ship a public opt-out; a public opt-out is new exported API; new
-exported API is a minor by definition. So obligations 1 and 2 agree
-without needing to be reconciled. A security fix is the case where
-obligation 2 produces nothing — an opt-out that reinstates the
-vulnerability must not exist — so no new API appears and the patch
-channel stays open. What must remain tunable is any *limit* the fix
-introduces (v1.4.0's accept-side caps ship with `WithMaxConns(0)`), never
-the rejection itself.
+A fix for a **specific, identified vulnerability** is the case where the
+test comes out the other way: not installing it is the greater danger, so
+it belongs in the unread channel. Kruda already depends on this working —
+`contrib/observability/v1.0.1` delivered the GO-2026-6061 grpc fix as a
+patch on 2026-07-30.
 
-The exchange for that latitude is narrowness: a security patch is not a
-place to land unrelated tightening. A fix that cannot be kept narrow, or
-that moves a floor every adopter must follow, goes in a minor with a
-`### Security` section — as v1.5.0's Go-version bump did.
+"Specific and identified" is the whole gate, and it is deliberately
+narrow, because a self-declared one would swallow the rule: almost any
+tightening can be described as hardening, and validation-by-default —
+which rejects malformed input — is exactly the kind of change that could
+be relabelled into a patch. So the exemption applies only when **both**
+hold:
+
+- There is a named vulnerability the fix closes: an advisory id
+  (CVE/GHSA/`GO-YYYY-NNNN`), or a report received under `SECURITY.md`.
+  Proactive hardening with no specific vulnerability behind it is an
+  ordinary behaviour change and takes the ordinary route — that is why
+  v1.4.0's accept-side DoS caps were a minor, not a patch.
+- The fix is narrow enough to be safe to install unread. One that moves a
+  floor every adopter must follow goes in a minor with a `### Security`
+  section, as v1.5.0's Go-version bump did — even though it carried two
+  advisory ids.
+
+Obligation 2 also changes shape here: an opt-out that reinstates the
+vulnerability must not exist. What has to stay tunable is any *limit* the
+fix introduces (v1.4.0's caps ship with `WithMaxConns(0)`), never the
+rejection itself.
 
 **2. Ship a documented way to keep the old behaviour.** v1.7.0 has
 `-tags kruda_stdjson`; validation-by-default has

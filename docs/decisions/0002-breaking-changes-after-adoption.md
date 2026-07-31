@@ -56,19 +56,31 @@ can be described as hardening, and validation-by-default — which rejects
 malformed input — is exactly the kind of change that could be relabelled
 into a patch. The exemption applies only when **both** hold:
 
-- **The vulnerability has been assessed and *confirmed real*.** Either
-  upstream did the confirming — a published advisory against a dependency
-  (`CVE-…`, `GHSA-…`, `GO-YYYY-NNNN`) — or Kruda's maintainer completed
-  the `SECURITY.md` assessment and accepted the report as a genuine,
-  in-scope vulnerability.
+- **The vulnerability is confirmed real and written down as an
+  advisory.** One condition; how it gets satisfied depends on where the
+  vulnerability came from, and all three routes must work:
 
-  For a report that came in through `SECURITY.md`, GitHub's own states
-  make this checkable. A privately reported vulnerability arrives with
-  status **`Triage`**; it is a separate object from a draft advisory and
-  becomes one only when the maintainer clicks **Accept and open as
-  draft**. That accept step *is* the confirmation this gate asks for.
+  - **In a dependency** — upstream's published advisory (`CVE-…`,
+    `GHSA-…`, `GO-YYYY-NNNN`) is the confirmation. Upstream did the
+    assessing. This is the GO-2026-6061 grpc case.
+  - **Reported by someone else** — the maintainer accepts it. GitHub's
+    states make this checkable: a privately reported vulnerability
+    arrives with status **`Triage`**, is a separate object from a draft
+    advisory, and becomes one only when the maintainer clicks **Accept
+    and open as draft**. That accept step *is* the confirmation.
+  - **Found by the maintainer** — a fuzz finding, a govulncheck result, a
+    code review. There is no report to accept, so the maintainer drafts
+    the advisory directly. Requiring an external reporter would be
+    perverse here: `FuzzParserDifferential` and the govulncheck workflow
+    exist precisely to find these, and a smuggling vector Kruda's own
+    fuzzing catches needs the patch channel as much as one a stranger
+    emails in.
 
-  So the two disqualifying cases are explicit:
+  What all three share is the artifact: an advisory naming the affected
+  component, the affected versions, and the impact. That is the line
+  against relabelling, because a vulnerability can be written up that way
+  and general hardening cannot. Two disqualifying cases follow, and both
+  are worth stating rather than implying:
 
   - A report still in `Triage` — an unassessed claim from anyone. It must
     never authorize a behaviour-changing patch, however urgent it sounds.
@@ -81,9 +93,9 @@ into a patch. The exemption applies only when **both** hold:
   Publication may lag confirmation — an embargoed fix still qualifies,
   because the confirming has already happened.
 
-  Proactive hardening has no confirmed vulnerability behind it and takes
-  the ordinary route — that is why v1.4.0's accept-side DoS caps were a
-  minor, not a patch.
+  Proactive hardening identifies no specific exploitable defect, so no
+  advisory can be written for it and it takes the ordinary route — that
+  is why v1.4.0's accept-side DoS caps were a minor, not a patch.
 
 - **The fix is narrow enough to be safe to install unread.** One that
   moves a floor every adopter must follow goes in a minor with a
@@ -134,12 +146,14 @@ retired with ADR 0001 and must not be cited again.
 - Security fixes keep the patch channel, which is the one that reaches
   adopters without being read. The cost is that a security patch has to
   stay narrow enough to be safe to install unread.
-- The residual risk is named rather than papered over: the maintainer can
-  issue a Kruda advisory, so the gate is ultimately self-served. What it
-  buys is that doing so is a deliberate, public, written act — a
-  published advisory naming an affected component and a reporter — rather
-  than a word chosen while writing a CHANGELOG entry. That is the honest
-  ceiling for a single-maintainer project; the gate raises the cost of a
-  wrong call, it cannot remove it.
+- The residual risk is named rather than papered over, and it sits in the
+  maintainer-discovered route specifically: there, the maintainer both
+  finds the vulnerability and confirms it, so that route is self-served
+  by construction. Closing it is not possible in a single-maintainer
+  project — any gate loops back to the same person. What the gate buys is
+  that qualifying requires drafting an advisory that names an affected
+  component, affected versions, and an impact, which is a deliberate
+  written act rather than a word chosen while writing a CHANGELOG entry.
+  It raises the cost of a wrong call; it cannot remove it.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

@@ -158,16 +158,20 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs a vulnerability **assessed and confirmed
-real** (upstream's published advisory for a dependency, or a `SECURITY.md` report
-the maintainer has *accepted*: GitHub `Triage` → **Accept and open as draft**)
-**and** a fix narrow enough to install blind. **Confirmed, not merely assessed** — a
-report still in `Triage` does not qualify however urgent (ship a minor), nor does an
-assessment concluding not-a-vulnerability / out-of-scope / won't-fix, nor the bare
-existence of an advisory id. Embargoed-but-confirmed does qualify. Proactive
-hardening has no confirmed vulnerability and is an ordinary behaviour change
-(v1.4.0's DoS caps were a minor); a fix that moves a floor for everyone is a minor
-with a `### Security` section (v1.5.0's Go bump, despite two advisory ids).
+The gate is deliberately narrow — it needs a vulnerability **confirmed real and
+written up as an advisory** **and** a fix narrow enough to install blind. Three
+routes, all valid: upstream's published advisory for a dependency; a `SECURITY.md`
+report the maintainer *accepted* (GitHub `Triage` → **Accept and open as draft**);
+or one the maintainer found themselves (fuzz, govulncheck, review) and drafted the
+advisory for — no external reporter is required, or `FuzzParserDifferential`
+findings could never be patched. **Confirmed, not merely assessed** — a report still
+in `Triage` does not qualify however urgent (ship a minor), nor an assessment
+concluding not-a-vulnerability / out-of-scope / won't-fix, nor the bare existence of
+an advisory id. Embargoed-but-confirmed does qualify. Proactive hardening names no
+exploitable defect, so no advisory can be written for it and it is an ordinary
+behaviour change (v1.4.0's DoS caps were a minor); a fix that moves a floor for
+everyone is a minor with a `### Security` section (v1.5.0's Go bump, despite two
+advisory ids).
 
 ## Testing
 ```bash

@@ -49,7 +49,7 @@ type C[T any] struct {
 }
 
 // Usage: body + param + query parsed into one struct.
-// validate: tags are enforced by default since v1.8.0. Opt out with
+// validate: tags are enforced by default since v1.7.1. Opt out with
 // kruda.New(kruda.WithoutValidation()). A tag naming a rule Kruda does not
 // implement is skipped with a startup warning rather than a panic.
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
@@ -149,15 +149,26 @@ app := kruda.New().
 ## Versioning & Breaking Changes
 Governed by `docs/decisions/0002-breaking-changes-after-adoption.md`. Kruda has a
 production adopter, so "adopters ≈ 0" (ADR 0001) is no longer a valid argument.
-A breaking **or behaviour** change must: never ship in a patch; ship a documented
-way to keep the old behaviour, in the same CHANGELOG entry; state concretely what
-an adopter sees if they do nothing; and leave the release with a single
-attributable cause — a change plus the prerequisites that make it safe is one
-item, but two independent behaviour changes are two releases.
+Four obligations for a breaking **or behaviour** change:
 
-The rule behind "never in a patch" is that **a patch must be safe to install
-unread**. That is also the exception: a fix for a *specific, identified*
-vulnerability belongs in the unread channel, because not installing it is worse.
+1. **The version number is a signal, not the warning.** Kruda deliberately does
+   **not** ban behaviour changes from patches — v1.7.1 ships validation-by-default,
+   which changes behaviour and adds exported API. In exchange the disclosure duty is
+   unconditional: any release that can change what an application does carries a
+   `### Breaking` section with the opt-out and the concrete before/after, **whatever
+   its number**. Consequence to state plainly, not hide: **Kruda's patch channel is
+   not safe to install unread**, and `gorelease`/`apidiff` will flag such a patch.
+2. **Ship a documented way to keep the old behaviour**, in the same CHANGELOG entry
+   (`-tags kruda_stdjson`; `kruda.WithoutValidation()`).
+3. **State it concretely** — v1.7.0's before/after byte table is the standard. This
+   now does the work the version number used to be trusted for.
+4. **One attributable cause per release, and stage them.** A change plus the
+   prerequisites that make it safe is one item; two independent behaviour changes are
+   two releases. Staging has the teeth: v1.7.1 waits until Rianhub has absorbed
+   v1.7.0. Waiting is the default; **jumping the queue** is what must be justified.
+
+**The exception — a real attack may jump the queue** and ship out of band without
+waiting for the adopter to absorb the previous release.
 The gate is deliberately narrow and needs **all three**:
 
 1. **Reproduced** — in Kruda's code, the fix's diff carries a test that **fails
@@ -171,16 +182,18 @@ The gate is deliberately narrow and needs **all three**:
 2. **An attack, not just a defect** — every bug fix has a failing test, so this is
    the half that does the work. The advisory must say **who the attacker is, what
    they gain, and which boundary breaks**; "nothing they didn't already have" means
-   ordinary bug, ordinary route, however severe. Worked example:
+   ordinary bug, waits its turn, however severe. Worked example:
    validation-by-default is trivially reproducible and still not a vulnerability —
    `validate` tags were inert, so an app relying on them relied on something that
-   never ran, and no Kruda boundary breaks. That is v1.8.0, not a patch.
-3. **Narrow enough to install unread.**
+   never ran, and no Kruda boundary breaks. So v1.7.1 waits for Rianhub to absorb
+   v1.7.0 rather than jumping.
+3. **Narrow enough to ship on its own** — jumping the queue means shipping without
+   the soak staging would have given, so it must not carry anything that needed one.
 
-Can't reproduce in time? Ship a minor; embargo is fine. Proactive hardening has no
-defect to reproduce (v1.4.0's DoS caps were a minor); a fix moving a floor for
-everyone is a minor with a `### Security` section (v1.5.0's Go bump, despite two
-advisory ids).
+Can't reproduce in time? It waits its turn; embargo is fine. Proactive hardening has
+no defect to reproduce (v1.4.0's DoS caps took the ordinary route); a fix moving a
+floor for everyone takes it too, with a `### Security` section (v1.5.0's Go bump,
+despite two advisory ids).
 
 ## Testing
 ```bash

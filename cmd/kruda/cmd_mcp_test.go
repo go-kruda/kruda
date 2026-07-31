@@ -142,7 +142,7 @@ func TestMCPDocsDoNotTeachValidationIsOptional(t *testing.T) {
 		low := strings.ToLower(body)
 		for _, phrase := range stale {
 			if strings.Contains(low, strings.ToLower(phrase)) {
-				t.Errorf("krudaDocs[%q] still describes validation as optional (%q); it is the default since v1.8.0", topic, phrase)
+				t.Errorf("krudaDocs[%q] still describes validation as optional (%q); it is the default since v1.7.1", topic, phrase)
 			}
 		}
 	}

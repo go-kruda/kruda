@@ -32,31 +32,79 @@ release checklist both spoke only about the API surface.
 
 ## Decision
 
-Breaking and behaviour changes continue to ship in v1 **minor** releases.
-What protects adopters is no longer their absence; it is three
-obligations that every such change must meet.
+Breaking and behaviour changes keep shipping inside the v1 line, and the
+version number is a signal rather than the protection. What protects
+adopters is no longer their absence; it is four obligations that every
+such change must meet.
 
-**1. A patch must be safe to install unread.** Patch is the channel
-people upgrade through without reading anything — `go get -u`,
-Dependabot, `@latest` in CI. Everything else about patches follows from
-that one property, so state it that way rather than as a list of bans.
+**1. The version number does not carry the warning — the CHANGELOG
+does.** Patch is the channel people upgrade through without reading
+anything: `go get -u`, Dependabot, `@latest` in CI. The strict conclusion
+to draw from that is "a behaviour change must never ship in a patch", and
+this ADR deliberately does **not** adopt it. Kruda's v1 line has been
+outside strict semver since ADR 0001; release levels here are chosen by
+how much attention a release needs, not derived mechanically. The
+validation change ships as **v1.7.1** on that basis, despite changing
+behaviour and adding two exported symbols.
 
-An ordinary behaviour change is not safe to install unread, so it forces
-at least a minor. The size of the diff is not the size of the change.
+The obligation that replaces the ban is disclosure, and it is
+unconditional where the ban was categorical:
 
-A fix for a **specific, identified vulnerability** is the case where the
-test comes out the other way: not installing it is the greater danger, so
-it belongs in the unread channel. Kruda already depends on this working —
-`contrib/observability/v1.0.1` delivered the GO-2026-6061 grpc fix as a
-patch on 2026-07-30.
+- Every release that can change what an application does carries a
+  `### Breaking` section with the opt-out (obligation 2) and the concrete
+  before/after (obligation 3) — **whatever its version number**.
+- Because a Kruda patch may change behaviour, the patch channel is not
+  safe to install unread, and the project must say so plainly rather than
+  let the number imply otherwise. An adopter who auto-merges patches
+  needs that stated somewhere they will see it, not inferred from semver.
 
-"Specific and identified" is the whole gate, and it is deliberately
-narrow, because a loose one would swallow the rule: almost any tightening
-can be described as hardening, and validation-by-default — which rejects
-malformed input — is exactly the kind of change that could be relabelled
-into a patch. The exemption applies only when **all three** hold —
-the vulnerability is **reproduced**, the reproduction demonstrates an
-**attack**, and the fix is **narrow**:
+The cost is accepted openly rather than argued away: `gorelease` and
+`apidiff` will flag a patch that adds exported API, and an adopter who
+trusts semver mechanically will be surprised at some point. Obligations 2
+and 3 exist so that the surprise is documented and recoverable instead of
+silent.
+
+**2. Ship a documented way to keep the old behaviour.** v1.7.0 has
+`-tags kruda_stdjson`; validation-by-default has
+`kruda.New(kruda.WithoutValidation())`. The opt-out belongs in the same
+CHANGELOG entry as the change, because an adopter who is surprised is
+reading that entry and nothing else. A change that cannot offer an
+opt-out is a signal to reconsider the change, not to skip the opt-out.
+
+**3. State it concretely.** v1.7.0's before/after byte table is the
+standard: what an adopter should grep for, and what they will see if they
+do nothing. With obligation 1 no longer reserving behaviour changes to
+minors, this is the obligation doing the work the version number used to
+be trusted for.
+
+**4. Keep a release to one attributable cause, and stage them.** An
+adopter must never have to absorb two *independent* behaviour changes in
+one upgrade, so that any breakage they hit has a single suspect. A change
+together with the prerequisites it needs to be safe counts as one item —
+v1.7.1 carries validation-by-default plus the unknown-rule change that
+had to precede it, and that is one cause, not two. The response-byte
+change was a second cause, which is why it went out separately as v1.7.0.
+
+Staging is the half with teeth: v1.7.1 waits until Rianhub has absorbed
+v1.7.0, so that if something breaks in production there is one thing to
+look at. Waiting is the default, and jumping the queue is what has to be
+justified.
+
+### The exception: a real attack may jump the queue
+
+A fix for a **specific, identified vulnerability** ships immediately,
+out of band, without waiting for the adopter to absorb the previous
+release. Not installing it is the greater danger, and Kruda already
+depends on this working — `contrib/observability/v1.0.1` delivered the
+GO-2026-6061 grpc fix on 2026-07-30 without staging behind anything.
+
+That latitude is the thing worth laundering, so the gate is deliberately
+narrow. Almost any tightening can be described as hardening, and
+validation-by-default — which rejects malformed input — is exactly the
+kind of change that could be relabelled to skip its wait. The exception
+applies only when **all three** hold — the vulnerability is
+**reproduced**, the reproduction demonstrates an **attack**, and the fix
+is **narrow**:
 
 - **The vulnerability has been reproduced.** Not reported, not accepted,
   not written up — reproduced, by the maintainer, with the reproduction
@@ -79,11 +127,11 @@ the vulnerability is **reproduced**, the reproduction demonstrates an
   vulnerability was confirmed — a received report, an advisory id, a
   completed assessment, a maintainer's accept click, a filled-in advisory
   — and every one was satisfiable without anyone having confirmed
-  anything. The last is the clearest: `SECURITY.md`
-  asks reporters to supply affected versions and an impact assessment, so
-  a filled-in advisory is often just the reporter's own claim, restated.
-  A failing test cannot be delegated to the reporter, cannot be produced
-  by clicking anything, and is checkable by anyone reading the diff.
+  anything. The last is the clearest: `SECURITY.md` asks reporters to
+  supply affected versions and an impact assessment, so a filled-in
+  advisory is often just the reporter's own claim, restated. A failing
+  test cannot be delegated to the reporter, cannot be produced by
+  clicking anything, and is checkable by anyone reading the diff.
 
   Nothing about *provenance* matters, therefore. A report from a stranger
   and a hit from `FuzzParserDifferential` take the identical path, because
@@ -94,25 +142,24 @@ the vulnerability is **reproduced**, the reproduction demonstrates an
   - A report still in `Triage`, or one accepted into a draft while the
     investigation runs. Neither is a reproduction. However urgent it
     sounds, `SECURITY.md` allows 7 days for assessment; a fix that cannot
-    wait ships as a minor.
+    wait for it takes its turn in the queue like anything else.
   - An assessment that concluded *not* a vulnerability, out of scope, or
     won't-fix.
-  - A fix whose diff carries no test that fails without it. If the
-    defect cannot be demonstrated, it has not been confirmed — and a fix
-    for something undemonstrated is not safe to install unread, which is
-    the whole test in obligation 1.
+  - A fix whose diff carries no test that fails without it. A defect that
+    cannot be demonstrated has not been confirmed, and an unconfirmed
+    defect is not a reason to skip staging.
 
   Publication may lag reproduction — an embargoed fix still qualifies.
 
   Proactive hardening has no specific defect to reproduce, so no such
-  test can be written for it and it takes the ordinary route. That is why
-  v1.4.0's accept-side DoS caps were a minor, not a patch.
+  test can be written for it and it waits its turn. That is why v1.4.0's
+  accept-side DoS caps shipped as an ordinary release.
 
 - **The reproduction demonstrates an attack, not merely a defect.** This
   second condition is what does the work, because the first admits
   everything on its own: *every* bug fix carries a test that fails
   without it, so a gate that stops at "there is a failing test" lets any
-  behaviour change through under a security label.
+  change jump the queue under a security label.
 
   The distinction that has to be made, and written into the advisory:
 
@@ -125,8 +172,8 @@ the vulnerability is **reproduced**, the reproduction demonstrates an
   So the advisory must answer three questions the failing test cannot:
   **who is the attacker, what do they gain, and which boundary breaks.**
   If the honest answer to "what do they gain" is "nothing they did not
-  already have", it is an ordinary bug and takes the ordinary route,
-  however severe.
+  already have", it is an ordinary bug and waits its turn, however
+  severe.
 
   The reproduction has to be shaped accordingly: it drives adversarial
   input across the boundary and shows the boundary broken.
@@ -141,47 +188,38 @@ the vulnerability is **reproduced**, the reproduction demonstrates an
   `validate` tags were inert, so an application relying on them was
   relying on something that never ran, and whether that harms the
   application is a property of the application, not of a Kruda boundary.
-  Ordinary route, v1.8.0.
+  So v1.7.1 waits for Rianhub to absorb v1.7.0; it does not jump.
 
-- **The fix is narrow enough to be safe to install unread.** One that
-  moves a floor every adopter must follow goes in a minor with a
-  `### Security` section, as v1.5.0's Go-version bump did — even though
-  it carried two advisory ids.
+- **The fix is narrow enough to ship on its own.** Jumping the queue
+  means shipping without the soak the staging rule would have provided,
+  so a queue-jumping fix must not carry anything that needed one. A fix
+  that moves a floor every adopter must follow takes the ordinary route
+  with a `### Security` section, as v1.5.0's Go-version bump did — even
+  though it carried two advisory ids.
 
 Obligation 2 also changes shape here: an opt-out that reinstates the
 vulnerability must not exist. What has to stay tunable is any *limit* the
 fix introduces (v1.4.0's caps ship with `WithMaxConns(0)`), never the
 rejection itself.
 
-**2. Ship a documented way to keep the old behaviour.** v1.7.0 has
-`-tags kruda_stdjson`; validation-by-default has
-`kruda.New(kruda.WithoutValidation())`. The opt-out belongs in the same
-CHANGELOG entry as the change, because an adopter who is surprised is
-reading that entry and nothing else. A change that cannot offer an
-opt-out is a signal to reconsider the change, not to skip the opt-out.
-
-**3. State it concretely, and keep a release to one attributable cause.**
-v1.7.0's before/after byte table is the standard for "concretely": what
-an adopter should grep for, and what they will see if they do nothing.
-And an adopter must never have to absorb two *independent* behaviour
-changes in one upgrade, so that any breakage they hit has a single
-suspect. A change together with the prerequisites it needs to be safe
-counts as one item — v1.8.0 carries validation-by-default plus the
-unknown-rule change that had to precede it, and that is one cause, not
-two. The response-byte change was the second cause, which is why it went
-out separately as v1.7.0 and Rianhub takes it first.
-
 Adopter count is no longer an argument in any of this. "Adopters ≈ 0" was
 retired with ADR 0001 and must not be cited again.
 
 ## Consequences
 
-- The v1 line remains not strictly semver-compliant, but this is now a
-  stated policy with obligations attached, rather than a one-off
-  exception justified by an empty user base.
-- Two behaviour changes ready together mean two minor releases, not one.
-  A slower release cadence is the price of a single attributable cause
-  per upgrade.
+- The v1 line remains not strictly semver-compliant, and this ADR widens
+  that rather than narrowing it: a patch may now change behaviour and add
+  exported API. This is a stated policy with obligations attached rather
+  than a one-off exception, but the honest summary is that Kruda's
+  version numbers describe intent, not a mechanical contract.
+- **The patch channel is no longer safe to install unread.** That
+  guarantee is what obligation 1 gave up, and nothing else replaces it —
+  obligations 2 and 3 make the change documented and reversible, not
+  invisible in advance. Adopters running unattended patch auto-merge need
+  to know this, so it belongs in adopter-facing docs and not only here.
+- Two independent behaviour changes ready together still mean two
+  releases, not one. That, not the version level, is what keeps a single
+  attributable cause per upgrade.
 - The release checklist gains a question per breaking or behaviour
   change: is the opt-out documented, is the CHANGELOG note concrete
   enough to act on, and does any breakage this release could cause trace
@@ -189,13 +227,13 @@ retired with ADR 0001 and must not be cited again.
 - v2.0.0 stays available, and is now the answer for a non-security change
   that cannot offer an opt-out at all — not merely a milestone deferred
   until adoption arrives.
-- Security fixes keep the patch channel, which is the one that reaches
-  adopters without being read. The cost is that a security patch has to
-  stay narrow enough to be safe to install unread.
-- Only the first of the three conditions is objective: a test either
-  fails against the unfixed tree or it does not, and CI can check which.
-  That is a deliberate improvement over earlier drafts of this ADR, which
-  rested entirely on documents somebody could simply write.
+- A real security fix ships out of band, ahead of the staging queue. The
+  cost is that such a fix must stay narrow enough to go out without a
+  soak behind it.
+- Only the first of the three exception conditions is objective: a test
+  either fails against the unfixed tree or it does not, and CI can check
+  which. That is a deliberate improvement over earlier drafts of this
+  ADR, which rested entirely on documents somebody could simply write.
 - The second and third conditions — is it an attack, is the fix narrow —
   are judgements, and are stated as judgements rather than dressed up as
   checks. The second is not left as a footnote, because the first admits

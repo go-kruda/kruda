@@ -180,7 +180,7 @@ func WithoutValidation() Option
 Turns validation off, leaving `validate` tags inert: input is parsed and bound,
 and nothing is checked.
 
-Validation became the default in v1.8.0. Before that it ran only when a
+Validation became the default in v1.7.1. Before that it ran only when a
 `Validator` was configured, so an application written against an earlier version
 may carry `validate` tags it never actually enforced. This restores the old
 behaviour while those tags are reviewed.

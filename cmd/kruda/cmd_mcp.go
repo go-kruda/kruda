@@ -1080,7 +1080,7 @@ max_size only fires below BodyLimit (default 4MB) — above it the transport ret
 
 	"validation": `# Validation
 
-Validation runs BY DEFAULT since v1.8.0 — do not add an option to switch it on.
+Validation runs BY DEFAULT since v1.7.1 — do not add an option to switch it on.
 kruda.WithoutValidation() switches it off; kruda.WithValidator is only for
 registering custom rules or messages.
 

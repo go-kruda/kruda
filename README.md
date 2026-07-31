@@ -63,7 +63,7 @@ kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User,
 })
 ```
 
-**Validation runs by default** since v1.8.0. A failing request gets a 422 listing
+**Validation runs by default** since v1.7.1. A failing request gets a 422 listing
 every field that failed and why. Opt out with `kruda.New(kruda.WithoutValidation())`,
 and use `kruda.WithValidator` only to register custom rules or messages.
 

@@ -43,7 +43,11 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0002-breaking-changes-after-adoption.md)
 - [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
-  - [ ] It is not going out in a patch release. The exception needs **all three**:
+  - [ ] It carries a `### Breaking` section **whatever the version number is**. A patch may
+        change behaviour here — the number is a signal, not the warning, so this section and
+        the two items below are the only protection an adopter gets
+  - [ ] It is waiting its turn behind the previous release, unless it qualifies to **jump the
+        queue** — which needs **all three**:
     - [ ] **Reproduced.** In Kruda's code, this diff contains a test that **fails without the
           fix** — confirm by running it against the unfixed tree, not by reading it. In a
           dependency, an upstream advisory (`CVE-…`/`GHSA-…`/`GO-YYYY-NNNN`) **plus**
@@ -51,16 +55,16 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
     - [ ] **It is an attack, not just a defect** — every bug fix has a failing test, so this
           is the half that does the work. Write in the advisory: **who is the attacker, what
           do they gain, which boundary breaks.** "Nothing they did not already have" means
-          ordinary bug, ordinary route, however severe. The test must drive adversarial input
+          ordinary bug, waits its turn, however severe. The test must drive adversarial input
           across the boundary, not merely assert a correct value
-    - [ ] **Narrow enough to install unread**
+    - [ ] **Narrow enough to ship on its own**, without the soak that waiting would have given
     - [ ] None of these substitute for the above: a report in `Triage`; a report accepted into
           a draft; a filled-in advisory (`SECURITY.md` asks the *reporter* for affected
           versions and impact, so those fields are often their claim, not a finding); an
           advisory id; an assessment concluding not-a-vulnerability/out-of-scope/won't-fix
-    - [ ] Can't reproduce it in time? Ship the fix as a minor. Embargo is fine — publication
-          may lag the reproduction. Proactive hardening has no defect to reproduce; a fix
-          moving a floor for every adopter is a minor with a `### Security` section
+    - [ ] Can't reproduce it in time? It waits its turn. Embargo is fine — publication may lag
+          the reproduction. Proactive hardening has no defect to reproduce; a fix moving a
+          floor for every adopter waits too, with a `### Security` section
   - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry — for a
         qualifying security fix this is instead "no opt-out reinstates the vulnerability; any
         limit the fix introduces is tunable"

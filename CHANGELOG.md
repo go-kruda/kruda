@@ -33,7 +33,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Validator` configured. It existed to surface tags that silently did nothing;
   they no longer do.
 
-  Why these ship in a minor rather than a major, and what that commits Kruda to:
+  **This is a patch release that changes behaviour.** Kruda's version numbers
+  signal how much attention a release needs; they are not a semver guarantee, and
+  the patch channel here is **not safe to install unread**. If you auto-merge patch
+  upgrades, read the section above before taking this one. The reasoning, and what
+  it commits Kruda to, is in
   `docs/decisions/0002-breaking-changes-after-adoption.md`.
 
 

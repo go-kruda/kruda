@@ -113,7 +113,7 @@ type Input struct {
 
 
 ::: tip Validation runs by default
-Since v1.8.0 `validate` tags are enforced without any configuration. Opt out with
+Since v1.7.1 `validate` tags are enforced without any configuration. Opt out with
 `kruda.New(kruda.WithoutValidation())`, which parses input and checks nothing.
 `kruda.WithValidator` is for registering custom rules or messages, not for
 switching validation on.

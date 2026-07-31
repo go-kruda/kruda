@@ -440,7 +440,7 @@ func WithValidator(v *Validator) Option {
 // parsed and bound, and nothing is checked.
 //
 // It exists as an escape hatch for upgrades. Validation became the default in
-// v1.8.0; before that it ran only when a Validator was configured, so an
+// v1.7.1; before that it ran only when a Validator was configured, so an
 // application written against an earlier version may carry validate tags it never
 // actually enforced. If enabling them rejects traffic that used to be accepted,
 // this restores the old behaviour while the tags are reviewed.

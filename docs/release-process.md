@@ -46,7 +46,8 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
   - [ ] It is not going out in a patch release
   - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry
   - [ ] The CHANGELOG note is concrete — what to grep for, and what an adopter sees if they do nothing
-  - [ ] It is the only behaviour change in this release
+  - [ ] Any breakage this release could cause traces to a single cause — a change plus its
+        prerequisites is one item; two independent behaviour changes are two releases
 
 ## Tagging
 

@@ -33,6 +33,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Validator` configured. It existed to surface tags that silently did nothing;
   they no longer do.
 
+  Why these ship in a minor rather than a major, and what that commits Kruda to:
+  `docs/decisions/0002-breaking-changes-after-adoption.md`.
+
 
 ## [1.7.0] — 2026-07-30
 

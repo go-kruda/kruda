@@ -50,13 +50,16 @@ CHANGELOG entry as the change, because an adopter who is surprised is
 reading that entry and nothing else. A change that cannot offer an
 opt-out is a signal to reconsider the change, not to skip the opt-out.
 
-**3. State it concretely, and stage one per minor.** v1.7.0's before/
-after byte table is the standard for "concretely": what an adopter should
-grep for, and what they will see if they do nothing. And an adopter must
-never have to absorb two behaviour changes in one upgrade. The
-response-byte change and validation-by-default were ready at the same
-time; validation was held back to v1.8.0 so Rianhub takes v1.7.0 first
-and can attribute any breakage to one cause.
+**3. State it concretely, and keep a release to one attributable cause.**
+v1.7.0's before/after byte table is the standard for "concretely": what
+an adopter should grep for, and what they will see if they do nothing.
+And an adopter must never have to absorb two *independent* behaviour
+changes in one upgrade, so that any breakage they hit has a single
+suspect. A change together with the prerequisites it needs to be safe
+counts as one item — v1.8.0 carries validation-by-default plus the
+unknown-rule change that had to precede it, and that is one cause, not
+two. The response-byte change was the second cause, which is why it went
+out separately as v1.7.0 and Rianhub takes it first.
 
 Adopter count is no longer an argument in any of this. "Adopters ≈ 0" was
 retired with ADR 0001 and must not be cited again.
@@ -69,9 +72,10 @@ retired with ADR 0001 and must not be cited again.
 - Two behaviour changes ready together mean two minor releases, not one.
   A slower release cadence is the price of a single attributable cause
   per upgrade.
-- The release checklist gains three questions per breaking or behaviour
+- The release checklist gains a question per breaking or behaviour
   change: is the opt-out documented, is the CHANGELOG note concrete
-  enough to act on, and is this the only such change in the release.
+  enough to act on, and does any breakage this release could cause trace
+  back to a single suspect.
 - v2.0.0 stays available, and is now the answer for a change that cannot
   offer an opt-out at all — not merely a milestone deferred until
   adoption arrives.

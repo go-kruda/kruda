@@ -43,8 +43,12 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
       planned; unchanged nested modules are not retagged
 - [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0002-breaking-changes-after-adoption.md)
 - [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
-  - [ ] It is not going out in a patch release
-  - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry
+  - [ ] It is not going out in a patch release — **unless it fixes a vulnerability**, which
+        belongs in a patch precisely because that is the channel adopters install unread;
+        keep it narrow, and put anything wider in a minor with a `### Security` section
+  - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry — for a
+        security fix this is instead "no opt-out reinstates the vulnerability; any limit the
+        fix introduces is tunable"
   - [ ] The CHANGELOG note is concrete — what to grep for, and what an adopter sees if they do nothing
   - [ ] Any breakage this release could cause traces to a single cause — a change plus its
         prerequisites is one item; two independent behaviour changes are two releases

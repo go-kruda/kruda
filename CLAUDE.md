@@ -155,6 +155,12 @@ an adopter sees if they do nothing; and leave the release with a single
 attributable cause — a change plus the prerequisites that make it safe is one
 item, but two independent behaviour changes are two releases.
 
+**Security fixes are the exception to "never in a patch"** — patch is the channel
+that reaches adopters unread, which is where a vulnerability fix belongs. It works
+out because an opt-out reinstating the vulnerability must not exist, so no new
+exported API appears. Keep such a patch narrow; anything wider is a minor with a
+`### Security` section.
+
 ## Testing
 ```bash
 # Core tests — Wing tests are included since v1.2.0 (no separate cd needed)

@@ -36,12 +36,35 @@ Breaking and behaviour changes continue to ship in v1 **minor** releases.
 What protects adopters is no longer their absence; it is three
 obligations that every such change must meet.
 
-**1. Never in a patch.** Patch is the channel people upgrade through
-without reading anything — `go get -u`, Dependabot, `@latest` in CI. Any
-change that can alter what an application does, at compile time or at run
-time, forces at least a minor. This is why validation-by-default targets
-v1.8.0 rather than v1.7.1 despite a small diff: the size of the diff is
-not the size of the change.
+**1. Never in a patch — except to fix a vulnerability.** Patch is the
+channel people upgrade through without reading anything — `go get -u`,
+Dependabot, `@latest` in CI. Any change that can alter what an
+application does, at compile time or at run time, forces at least a
+minor. The size of the diff is not the size of the change.
+
+A security fix inverts that argument rather than escaping it. Hardening a
+parser or adding a limit *is* a behaviour change — requests that used to
+be served now get rejected — but the unread auto-upgrade channel is
+exactly where such a fix belongs, because the alternative is adopters
+sitting on a known-vulnerable version until they next read release notes.
+Kruda already depends on this working: `contrib/observability/v1.0.1`
+delivered the GO-2026-6061 grpc fix as a patch on 2026-07-30.
+
+Obligation 2 is what makes the two cases differ, and it is worth stating
+as a derivation rather than a carve-out. An ordinary behaviour change
+must ship a public opt-out; a public opt-out is new exported API; new
+exported API is a minor by definition. So obligations 1 and 2 agree
+without needing to be reconciled. A security fix is the case where
+obligation 2 produces nothing — an opt-out that reinstates the
+vulnerability must not exist — so no new API appears and the patch
+channel stays open. What must remain tunable is any *limit* the fix
+introduces (v1.4.0's accept-side caps ship with `WithMaxConns(0)`), never
+the rejection itself.
+
+The exchange for that latitude is narrowness: a security patch is not a
+place to land unrelated tightening. A fix that cannot be kept narrow, or
+that moves a floor every adopter must follow, goes in a minor with a
+`### Security` section — as v1.5.0's Go-version bump did.
 
 **2. Ship a documented way to keep the old behaviour.** v1.7.0 has
 `-tags kruda_stdjson`; validation-by-default has
@@ -76,8 +99,11 @@ retired with ADR 0001 and must not be cited again.
   change: is the opt-out documented, is the CHANGELOG note concrete
   enough to act on, and does any breakage this release could cause trace
   back to a single suspect.
-- v2.0.0 stays available, and is now the answer for a change that cannot
-  offer an opt-out at all — not merely a milestone deferred until
-  adoption arrives.
+- v2.0.0 stays available, and is now the answer for a non-security change
+  that cannot offer an opt-out at all — not merely a milestone deferred
+  until adoption arrives.
+- Security fixes keep the patch channel, which is the one that reaches
+  adopters without being read. The cost is that a security patch has to
+  stay narrow enough to be safe to install unread.
 - ADR 0001 remains the record of why v1.3.0 broke the API. It no longer
   governs new decisions.

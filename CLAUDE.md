@@ -146,6 +146,13 @@ app := kruda.New().
 - Use `slog` for logging (Go 1.21+ standard)
 - Functional options pattern for configuration
 
+## Versioning & Breaking Changes
+Governed by `docs/decisions/0002-breaking-changes-after-adoption.md`. Kruda has a
+production adopter, so "adopters ≈ 0" (ADR 0001) is no longer a valid argument.
+A breaking **or behaviour** change must: never ship in a patch; ship a documented
+way to keep the old behaviour, in the same CHANGELOG entry; state concretely what
+an adopter sees if they do nothing; and be the only such change in its release.
+
 ## Testing
 ```bash
 # Core tests — Wing tests are included since v1.2.0 (no separate cd needed)

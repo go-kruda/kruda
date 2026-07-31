@@ -41,7 +41,12 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] Every released submodule's `go.mod` requires a compatible published core version; bump it only when the submodule needs newer core APIs or behavior
 - [ ] Every changed nested module has an independently incremented prefixed tag
       planned; unchanged nested modules are not retagged
-- [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0001-break-api-in-v1-minor.md for the v1.3.0 exception)
+- [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0002-breaking-changes-after-adoption.md)
+- [ ] For each breaking **or behaviour** change in this release (per docs/decisions/0002-breaking-changes-after-adoption.md):
+  - [ ] It is not going out in a patch release
+  - [ ] A documented way to keep the old behaviour ships in the same CHANGELOG entry
+  - [ ] The CHANGELOG note is concrete — what to grep for, and what an adopter sees if they do nothing
+  - [ ] It is the only behaviour change in this release
 
 ## Tagging
 

@@ -71,6 +71,25 @@ CHANGELOG entry as the change, because an adopter who is surprised is
 reading that entry and nothing else. A change that cannot offer an
 opt-out is a signal to reconsider the change, not to skip the opt-out.
 
+*This is what separates a compile-time break from a behaviour change*, and
+obligation 1's indifference to version levels does **not** extend to one.
+A removed or renamed exported symbol cannot offer a way to keep the old
+behaviour — once it is gone, no flag brings it back — so it can never
+satisfy this obligation on its own. A removal therefore needs one of:
+
+- **A deprecation window.** The old symbol keeps working alongside the
+  new one for at least one release, which *is* the opt-out, and the
+  removal that follows is then an ordinary change under all four
+  obligations at whatever level fits.
+- **v2.0.0**, when no such window is possible or wanted.
+
+This ADR is therefore **not** a standing permission slip for removals.
+Where the release checklist has always allowed a removal to proceed on
+the strength of an accepted ADR, the route this one provides is the
+deprecation window, not its own signature. ADR 0001 remains the accepted
+exception for v1.3.0's window-less removals; it covers those and nothing
+later.
+
 **3. State it concretely.** v1.7.0's before/after byte table is the
 standard: what an adopter should grep for, and what they will see if they
 do nothing. With obligation 1 no longer reserving behaviour changes to
@@ -224,9 +243,14 @@ retired with ADR 0001 and must not be cited again.
   change: is the opt-out documented, is the CHANGELOG note concrete
   enough to act on, and does any breakage this release could cause trace
   back to a single suspect.
-- v2.0.0 stays available, and is now the answer for a non-security change
-  that cannot offer an opt-out at all — not merely a milestone deferred
+- v2.0.0 stays available, and is now the answer for a change that cannot
+  offer an opt-out at all — in practice a removal nobody wants to
+  precede with a deprecation window — rather than a milestone deferred
   until adoption arrives.
+- Compile-time breaks got *stricter* here while behaviour changes got
+  looser, which is the opposite of how the two are usually ranked. It
+  follows from obligation 2 rather than from taste: a behaviour change
+  can be handed an opt-out, and a deleted symbol cannot.
 - A real security fix ships out of band, ahead of the staging queue. The
   cost is that such a fix must stay narrow enough to go out without a
   soak behind it.

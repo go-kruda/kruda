@@ -159,7 +159,12 @@ Four obligations for a breaking **or behaviour** change:
    its number**. Consequence to state plainly, not hide: **Kruda's patch channel is
    not safe to install unread**, and `gorelease`/`apidiff` will flag such a patch.
 2. **Ship a documented way to keep the old behaviour**, in the same CHANGELOG entry
-   (`-tags kruda_stdjson`; `kruda.WithoutValidation()`).
+   (`-tags kruda_stdjson`; `kruda.WithoutValidation()`). ⚠️ **Obligation 1's
+   indifference to version levels does NOT extend to a compile-time break.** A
+   removed or renamed exported symbol can never satisfy this obligation — nothing
+   brings it back — so a removal needs either a **deprecation window** (old symbol
+   kept alive ≥1 release, which is the opt-out) or **v2.0.0**. Additions are fine at
+   any level, including a patch.
 3. **State it concretely** — v1.7.0's before/after byte table is the standard. This
    now does the work the version number used to be trusted for.
 4. **One attributable cause per release, and stage them.** A change plus the

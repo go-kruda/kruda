@@ -158,16 +158,16 @@ item, but two independent behaviour changes are two releases.
 The rule behind "never in a patch" is that **a patch must be safe to install
 unread**. That is also the exception: a fix for a *specific, identified*
 vulnerability belongs in the unread channel, because not installing it is worse.
-The gate is deliberately narrow — it needs a **completed, written-down assessment**
-(upstream's published advisory for a dependency, or the maintainer finishing the
-`SECURITY.md` assessment) **and** a fix narrow enough to install blind. The test is
-the assessment, **not an advisory id**: reporting privately on GitHub creates a
-draft advisory immediately, so an id can exist while the claim is still unexamined.
-An unfinished assessment ships as a minor however urgent; an embargoed but assessed
-fix qualifies. Proactive hardening has no assessment behind it and is an ordinary
-behaviour change (v1.4.0's DoS caps were a minor); a fix that moves a floor for
-everyone is a minor with a `### Security` section (v1.5.0's Go bump, despite two
-advisory ids).
+The gate is deliberately narrow — it needs a vulnerability **assessed and confirmed
+real** (upstream's published advisory for a dependency, or a `SECURITY.md` report
+the maintainer has *accepted*: GitHub `Triage` → **Accept and open as draft**)
+**and** a fix narrow enough to install blind. **Confirmed, not merely assessed** — a
+report still in `Triage` does not qualify however urgent (ship a minor), nor does an
+assessment concluding not-a-vulnerability / out-of-scope / won't-fix, nor the bare
+existence of an advisory id. Embargoed-but-confirmed does qualify. Proactive
+hardening has no confirmed vulnerability and is an ordinary behaviour change
+(v1.4.0's DoS caps were a minor); a fix that moves a floor for everyone is a minor
+with a `### Security` section (v1.5.0's Go bump, despite two advisory ids).
 
 ## Testing
 ```bash

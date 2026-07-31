@@ -56,27 +56,33 @@ can be described as hardening, and validation-by-default — which rejects
 malformed input — is exactly the kind of change that could be relabelled
 into a patch. The exemption applies only when **both** hold:
 
-- **The vulnerability has been assessed and confirmed, and the assessment
-  is written down.** Either upstream did it — a published advisory
-  against a dependency (`CVE-…`, `GHSA-…`, `GO-YYYY-NNNN`) — or Kruda's
-  maintainer completed the `SECURITY.md` assessment and recorded the
-  outcome on the advisory.
+- **The vulnerability has been assessed and *confirmed real*.** Either
+  upstream did the confirming — a published advisory against a dependency
+  (`CVE-…`, `GHSA-…`, `GO-YYYY-NNNN`) — or Kruda's maintainer completed
+  the `SECURITY.md` assessment and accepted the report as a genuine,
+  in-scope vulnerability.
 
-  The test is the completed assessment, **not the existence of an
-  advisory id**, and the difference matters because reporting a
-  vulnerability privately on GitHub *creates a draft advisory
-  immediately*, before a maintainer has looked at it. An id can therefore
-  exist while the claim is still entirely unexamined. `SECURITY.md` draws
-  the same line itself: acknowledgment within 48 hours, assessment within
-  7 days. A received report is an unassessed claim from anyone and must
-  never authorize a behaviour-changing patch.
+  For a report that came in through `SECURITY.md`, GitHub's own states
+  make this checkable. A privately reported vulnerability arrives with
+  status **`Triage`**; it is a separate object from a draft advisory and
+  becomes one only when the maintainer clicks **Accept and open as
+  draft**. That accept step *is* the confirmation this gate asks for.
 
-  Publication may lag the assessment — an embargoed fix still qualifies,
-  because what is required has already happened. An assessment that has
-  *not* finished does not qualify, however urgent: ship that as a minor.
+  So the two disqualifying cases are explicit:
 
-  Proactive hardening has no such assessment behind it and takes the
-  ordinary route — that is why v1.4.0's accept-side DoS caps were a
+  - A report still in `Triage` — an unassessed claim from anyone. It must
+    never authorize a behaviour-changing patch, however urgent it sounds.
+    `SECURITY.md` allows 7 days for assessment; if a fix cannot wait for
+    it, ship the fix as a minor.
+  - An assessment that finished and concluded *not* a vulnerability, out
+    of scope, or won't-fix. "Assessed" is not the test; **confirmed** is.
+    A closed report qualifies for nothing.
+
+  Publication may lag confirmation — an embargoed fix still qualifies,
+  because the confirming has already happened.
+
+  Proactive hardening has no confirmed vulnerability behind it and takes
+  the ordinary route — that is why v1.4.0's accept-side DoS caps were a
   minor, not a patch.
 
 - **The fix is narrow enough to be safe to install unread.** One that

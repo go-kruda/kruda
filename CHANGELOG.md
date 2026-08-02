@@ -86,13 +86,23 @@ to keep the previous behaviour.
 
 What to check before upgrading:
 
-- **Anything that renders API strings as HTML.** Escaped output was masking `<`
-  and `&` for you. Text nodes in React, Vue and similar escape on their own and
-  are unaffected, but `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from
-  a response are not. Responses are served as `application/json`, which no browser
-  executes, so this is about your rendering, not the transport.
 - **Anything keyed on response bytes** — `contrib/etag`, response caches, snapshot
-  tests — will miss once as bodies change.
+  tests, anything diffing or signing a raw body — will miss once as bodies change.
+  This is the whole of the practical impact.
+- **Anything that consumes the body without parsing it as JSON.** A client calling
+  `res.json()` is unaffected — see the correction below.
+
+> **Correction (2026-07-31).** This section originally led with a warning about
+> `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from a response, on the
+> grounds that "escaped output was masking `<` and `&` for you". That is wrong, and
+> it sent at least one upgrade pre-flight looking in the wrong place. The JSON
+> escape \u003c and a literal `<` are two encodings of the same character, so **every
+> conformant parser yields an identical value** — verified by marshalling the same
+> struct with `EscapeHTML` on and off and parsing both: the wire bytes differ, and
+> `JSON.parse` returns the same string. The escaping never survived to the DOM, so
+> it was never masking anything for a client that parses JSON, and the XSS posture
+> of a raw-HTML sink is exactly what it was before this release. Byte-level
+> consumers remain genuinely affected.
 
 If you would rather keep the escaping and the speed, `kruda.WithJSONEncoder` can
 supply a Sonic config with `EscapeHTML` on, at roughly 41% on responses containing

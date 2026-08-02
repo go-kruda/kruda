@@ -34,9 +34,32 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   they no longer do.
 
   **This is a patch release that changes behaviour.** Kruda's version numbers signal
-  how much attention a release needs rather than a semver guarantee, so read the
-  section above before taking this one — do not auto-merge it. Reasoning:
+  how much attention a release needs rather than a semver guarantee, so read this
+  section before taking it — do not auto-merge it. Reasoning:
   `docs/decisions/0002-breaking-changes-after-adoption.md`.
+
+  What to check before upgrading:
+
+  ```bash
+  grep -rn 'validate:"' --include='*.go' .
+  ```
+
+  - **Every tag that grep finds is now enforced.** Requests that did not satisfy one
+    were served before and get a 422 now. The ones to look at first are fields whose
+    tags were written aspirationally and never tested, since nothing has been
+    checking them.
+  - **Tags naming a rule Kruda does not have are skipped, not enforced** — so a field
+    you believe is validated may still not be. Kruda implements 20 rules;
+    `omitempty`, `dive`, `eq`, `ne`, `datetime` and `required_if` are among the
+    `go-playground/validator` tags that do not exist here. Each one logs a warning at
+    startup naming the rule, the type and the field: read that log once after
+    upgrading.
+  - **Tests that assert a 2xx for invalid input will start failing.** That is the
+    cheap way to find the affected endpoints — it happens at test time rather than in
+    production.
+  - **`kruda.WithValidator` no longer switches validation on**, because it is already
+    on. If you passed it only for that, it is now redundant; keep it only for custom
+    rules or messages.
 
 
 ## [1.7.0] — 2026-07-30

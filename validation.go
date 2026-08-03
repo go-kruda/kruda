@@ -307,7 +307,7 @@ func (fv *fieldValidator) fieldError(messages map[string]string, rule ruleEntry,
 // is skipped here: running an element rule against the container is what the
 // dive support exists to prevent.
 func (fv *fieldValidator) validateElems(messages map[string]string, fieldVal reflect.Value, errs []FieldError) []FieldError {
-	if fieldVal.Kind() == reflect.Ptr {
+	if fieldVal.Kind() == reflect.Pointer {
 		if fieldVal.IsNil() {
 			return errs
 		}
@@ -344,7 +344,7 @@ func (fv *fieldValidator) applyElemRules(messages map[string]string, elem reflec
 // diveKind reports the collection kind `dive` will walk, or reflect.Invalid if
 // the type is not a collection. Pointers are followed once.
 func diveKind(t reflect.Type) reflect.Kind {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch k := t.Kind(); k {

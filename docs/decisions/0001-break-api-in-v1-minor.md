@@ -3,6 +3,13 @@
 Date: 2026-06-12
 Status: Accepted
 
+> Still in force. Kruda runs in production in Rianhub, but Rianhub is the
+> maintainer's own service, so the premise below — effectively zero
+> external adopters — continues to hold.
+> [ADR 0002](0002-breaking-changes-after-adoption.md) extends this to
+> runtime behaviour changes, which this ADR does not cover; it does not
+> replace it.
+
 ## Context
 
 The Preset API redesign renames the per-route tuning surface

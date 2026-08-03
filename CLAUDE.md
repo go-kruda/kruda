@@ -49,7 +49,7 @@ type C[T any] struct {
 }
 
 // Usage: body + param + query parsed into one struct.
-// validate: tags are enforced by default since v1.8.0. Opt out with
+// validate: tags are enforced by default since v1.7.1. Opt out with
 // kruda.New(kruda.WithoutValidation()). A tag naming a rule Kruda does not
 // implement is skipped with a startup warning rather than a panic.
 kruda.Post[CreateUser, User](app, "/users", func(c *kruda.C[CreateUser]) (*User, error) {
@@ -145,6 +145,30 @@ app := kruda.New().
 - Minimal external deps for core (Sonic JSON opt-out via `kruda_stdjson` build tag)
 - Use `slog` for logging (Go 1.21+ standard)
 - Functional options pattern for configuration
+
+## Versioning & Breaking Changes
+`docs/decisions/0001-break-api-in-v1-minor.md` governs the **API surface**: breaking
+changes may ship in a v1 minor, because Kruda has no external users — the maintainer
+is the only one, and Rianhub is the maintainer's own service. That premise still
+holds; do not claim otherwise.
+
+`docs/decisions/0002-breaking-changes-after-adoption.md` extends it to **runtime
+behaviour changes**, which compile cleanly and surface in production instead. Four
+short rules, sized for a single self-coordinating user:
+
+1. **Say what changed, concretely, in the CHANGELOG** — v1.7.0's before/after byte
+   table is the standard. This is the rule that actually helps.
+2. **Give an escape hatch when it is cheap** (`-tags kruda_stdjson`;
+   `kruda.WithoutValidation()`). When it would be expensive, fixing forward is fine.
+3. **One behaviour change per release**, so production misbehaving has one suspect.
+   A change plus its prerequisites is one item; v1.7.1 waits for Rianhub to take v1.7.0.
+4. **Version numbers signal attention needed, not semver.** A patch may change
+   behaviour and add exported API — that is why validation-by-default is v1.7.1, and
+   why `gorelease`/`apidiff` will flag it. A real vulnerability fix skips rule 3.
+
+⚠️ These rules assume the only installer is the person writing them. **If Kruda gains
+external users they are wrong, not merely incomplete** — real adopters need
+deprecation windows, mandatory opt-outs, and a patch channel safe to install unread.
 
 ## Testing
 ```bash

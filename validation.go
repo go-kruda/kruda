@@ -91,8 +91,10 @@ func (v *Validator) Messages(overrides map[string]string) *Validator {
 type fieldValidator struct {
 	index     int         // struct field index
 	fieldName string      // json tag name or lowercased struct field name
-	rules     []ruleEntry // pre-parsed rules in order
+	rules     []ruleEntry // pre-parsed rules in order, applied to the field itself
+	elemRules []ruleEntry // rules after `dive`, applied to each element
 	customMsg string      // from `message:"..."` tag, empty if not set
+	omitEmpty bool        // `omitempty`: a zero value skips the field's rules
 }
 
 // ruleEntry is a single parsed validation rule.
@@ -119,7 +121,8 @@ func warnUnknownRule(v *Validator, rule, typeName, fieldName string) {
 	// one of their own rules.
 	slog.Warn("kruda: unknown validation rule in a validate tag — that rule is ignored, the field's other rules still apply",
 		"rule", rule, "type", typeName, "field", fieldName,
-		"available", strings.Join(v.RuleNames(), ","))
+		"available", strings.Join(v.RuleNames(), ","),
+		"modifiers", "omitempty,dive")
 }
 
 // RuleNames lists the validation rules this Validator recognises, sorted —
@@ -130,6 +133,12 @@ func warnUnknownRule(v *Validator, rule, typeName, fieldName string) {
 // rule this Validator does not have is skipped with a startup warning rather than
 // failing the build, so RuleNames is the way to check what a tag can actually
 // use.
+//
+// The modifiers `omitempty` and `dive` are supported and deliberately absent from
+// this list: they are not rules, carry no ValidatorFunc, and cannot be added with
+// Register. `omitempty` skips a field's rules when its value is the zero value;
+// `dive` applies every rule after it to each element of a slice, array or map
+// instead of to the container.
 func (v *Validator) RuleNames() []string {
 	names := make([]string, 0, len(v.rules))
 	for n := range v.rules {
@@ -173,9 +182,35 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 		}
 
 		// Parse rules: "required,min=2,email" → [{required,""}, {min,"2"}, {email,""}]
+		//
+		// target is where the next rule lands. `dive` moves it from the field's
+		// own rules to the per-element ones, so the split is resolved here rather
+		// than re-derived on every request.
+		target := &fv.rules
 		for _, rule := range strings.Split(tag, ",") {
 			rule = strings.TrimSpace(rule)
 			ruleName, ruleParam, _ := strings.Cut(rule, "=")
+
+			// omitempty and dive are modifiers, not rules: they carry no
+			// ValidatorFunc and change how the rules around them apply. That
+			// distinction is why they cannot be left to the unknown-rule path —
+			// skipping a constraint only relaxes validation, but skipping a
+			// modifier applies the rules after it in the wrong place. Dropping
+			// omitempty makes an optional field behave as required; dropping
+			// dive runs an element rule against the container, which no slice
+			// can satisfy.
+			switch ruleName {
+			case "omitempty":
+				fv.omitEmpty = true
+				continue
+			case "dive":
+				target = &fv.elemRules
+				if k := diveKind(field.Type); k == reflect.Invalid {
+					warnDiveOnNonCollection(t.Name(), field.Name, field.Type.String())
+				}
+				continue
+			}
+
 			fn, ok := v.rules[ruleName]
 			if !ok {
 				// Warn and skip rather than panic. This package implements 20
@@ -191,15 +226,15 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 				warnUnknownRule(v, ruleName, t.Name(), field.Name)
 				continue
 			}
-			fv.rules = append(fv.rules, ruleEntry{name: ruleName, param: ruleParam, fn: fn})
+			*target = append(*target, ruleEntry{name: ruleName, param: ruleParam, fn: fn})
 		}
 
 		// A field whose every rule was skipped validates nothing, so it must not
 		// be recorded as a validator. len(validators) is what sets hasValidate on
 		// the route, which is what puts a 422 in the generated OpenAPI document —
 		// keeping an empty entry would advertise a response the handler can never
-		// produce.
-		if len(fv.rules) == 0 {
+		// produce. A lone `omitempty` lands here too: it constrains nothing.
+		if len(fv.rules) == 0 && len(fv.elemRules) == 0 {
 			continue
 		}
 		validators = append(validators, fv)
@@ -219,25 +254,25 @@ func validate(validators []fieldValidator, v reflect.Value, messages map[string]
 
 	for _, fv := range validators {
 		fieldVal := v.Field(fv.index)
-		value := fieldVal.Interface()
 
-		for _, rule := range fv.rules {
-			if rule.fn(value, rule.param) {
-				continue // valid
+		// Tested before the value is boxed: an empty optional field costs a zero
+		// check and skips the Interface() allocation entirely.
+		if fv.omitEmpty && fieldVal.IsZero() {
+			continue
+		}
+
+		if len(fv.rules) > 0 {
+			value := fieldVal.Interface()
+			for _, rule := range fv.rules {
+				if rule.fn(value, rule.param) {
+					continue
+				}
+				errs = append(errs, fv.fieldError(messages, rule, fv.fieldName, value))
 			}
+		}
 
-			msg := fv.customMsg
-			if msg == "" {
-				msg = formatMessage(messages, rule.name, fv.fieldName, rule.param)
-			}
-
-			errs = append(errs, FieldError{
-				Field:   fv.fieldName,
-				Rule:    rule.name,
-				Param:   rule.param,
-				Message: msg,
-				Value:   fmt.Sprintf("%v", value),
-			})
+		if len(fv.elemRules) > 0 {
+			errs = fv.validateElems(messages, fieldVal, errs)
 		}
 	}
 
@@ -245,6 +280,90 @@ func validate(validators []fieldValidator, v reflect.Value, messages map[string]
 		return nil
 	}
 	return &ValidationError{Errors: errs}
+}
+
+// fieldError builds the failure record for one rule. name is passed separately
+// so a `dive` failure can report the element it came from rather than the
+// container.
+func (fv *fieldValidator) fieldError(messages map[string]string, rule ruleEntry, name string, value any) FieldError {
+	msg := fv.customMsg
+	if msg == "" {
+		msg = formatMessage(messages, rule.name, name, rule.param)
+	}
+	return FieldError{
+		Field:   name,
+		Rule:    rule.name,
+		Param:   rule.param,
+		Message: msg,
+		Value:   fmt.Sprintf("%v", value),
+	}
+}
+
+// validateElems applies the rules after `dive` to each element of a slice,
+// array or map. Errors name the element — `tags[2]`, `limits[free]` — because a
+// message that only says "tags" leaves the caller to find which entry failed.
+//
+// A field that is not a collection produced a startup warning at build time and
+// is skipped here: running an element rule against the container is what the
+// dive support exists to prevent.
+func (fv *fieldValidator) validateElems(messages map[string]string, fieldVal reflect.Value, errs []FieldError) []FieldError {
+	if fieldVal.Kind() == reflect.Pointer {
+		if fieldVal.IsNil() {
+			return errs
+		}
+		fieldVal = fieldVal.Elem()
+	}
+
+	switch fieldVal.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < fieldVal.Len(); i++ {
+			name := fv.fieldName + "[" + strconv.Itoa(i) + "]"
+			errs = fv.applyElemRules(messages, fieldVal.Index(i), name, errs)
+		}
+	case reflect.Map:
+		iter := fieldVal.MapRange()
+		for iter.Next() {
+			name := fv.fieldName + "[" + fmt.Sprintf("%v", iter.Key().Interface()) + "]"
+			errs = fv.applyElemRules(messages, iter.Value(), name, errs)
+		}
+	}
+	return errs
+}
+
+func (fv *fieldValidator) applyElemRules(messages map[string]string, elem reflect.Value, name string, errs []FieldError) []FieldError {
+	value := elem.Interface()
+	for _, rule := range fv.elemRules {
+		if rule.fn(value, rule.param) {
+			continue
+		}
+		errs = append(errs, fv.fieldError(messages, rule, name, value))
+	}
+	return errs
+}
+
+// diveKind reports the collection kind `dive` will walk, or reflect.Invalid if
+// the type is not a collection. Pointers are followed once.
+func diveKind(t reflect.Type) reflect.Kind {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch k := t.Kind(); k {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return k
+	}
+	return reflect.Invalid
+}
+
+// warnedDiveTargets keeps the warning to one line per field.
+var warnedDiveTargets sync.Map
+
+func warnDiveOnNonCollection(typeName, fieldName, fieldType string) {
+	key := typeName + "\x00" + fieldName
+	if _, loaded := warnedDiveTargets.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	slog.Warn("kruda: `dive` on a field that is not a slice, array or map — the rules after it are ignored",
+		"type", typeName, "field", fieldName, "field_type", fieldType)
 }
 
 // formatMessage generates a human-readable message from templates.

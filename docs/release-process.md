@@ -41,7 +41,20 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 - [ ] Every released submodule's `go.mod` requires a compatible published core version; bump it only when the submodule needs newer core APIs or behavior
 - [ ] Every changed nested module has an independently incremented prefixed tag
       planned; unchanged nested modules are not retagged
-- [ ] Public API surface diff reviewed — additions OK; removals require a major bump or an accepted ADR (see docs/decisions/0001-break-api-in-v1-minor.md for the v1.3.0 exception)
+- [ ] Public API surface diff reviewed. Additions are fine at any level — a patch may add
+      exported API, and `gorelease`/`apidiff` will flag it; expected, not a stop. Removals
+      may ship in a v1 minor per docs/decisions/0001-break-api-in-v1-minor.md, whose premise
+      (no external users) still holds
+- [ ] For each **behaviour** change in this release — one that compiles fine and shows up at
+      runtime — per docs/decisions/0002-breaking-changes-after-adoption.md:
+  - [ ] The CHANGELOG says concretely what changed: what to grep for, and what you see if you
+        do nothing (v1.7.0's before/after byte table is the standard)
+  - [ ] An escape hatch ships with it if a cheap one exists (build tag, option). If one would
+        be expensive, note that fixing forward is the plan
+  - [ ] It is the **only** behaviour change in this release, so a production problem has a
+        single suspect — a change plus its prerequisites counts as one
+  - [ ] The previous behaviour change is already running in Rianhub. Exception: a fix for a
+        real vulnerability ships immediately and does not wait
 
 ## Tagging
 

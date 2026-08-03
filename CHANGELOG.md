@@ -15,9 +15,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   but is now only for registering custom rules or messages.
 
   `(*kruda.Validator).RuleNames()` reports the rules a validator recognises —
-  the 20 built in, plus anything registered. The tag syntax resembles `go-playground/validator`, which has far
-  more, and tags carried over from it are the likely surprise here — `omitempty`,
-  `dive`, `eq`, `ne`, `datetime`, `required_if` and others do not exist.
+  the 20 built in, plus anything registered. The tag syntax resembles
+  `go-playground/validator`, which has far more, and tags carried over from it are
+  the likely surprise here: `eq`, `ne`, `datetime`, `required_if`, `hexcolor` and
+  others do not exist and are skipped with a startup warning.
+
+### Added
+
+- **The `omitempty` and `dive` validation modifiers.** `omitempty` skips a field's
+  rules when its value is the zero value; `dive` applies every rule after it to each
+  element of a slice, array or map instead of to the container, and names the failing
+  element — `tags[2]`, `limits[free]` — rather than just the field.
+
+  These had to land with validation-by-default rather than after it. A *modifier* is
+  not a constraint: skipping an unknown constraint only relaxes validation, but
+  skipping a modifier applies the rules around it in the wrong place. Measured before
+  the fix, `validate:"omitempty,min=10"` rejected an empty optional field, turning it
+  into a required one, and `validate:"omitempty,dive,uuid"` on a `[]string` rejected
+  **every** input including a slice of valid UUIDs, because `uuid` ran against the
+  slice itself. Both are common tags carried over from `go-playground/validator`, so
+  enabling validation without them would have broken working applications in a way no
+  warning explained.
+
+  Resolved entirely at route registration: `omitempty` becomes a flag and `dive`
+  splits the rule list, so nothing is re-parsed per request. Paired A/B on the typed
+  handler path shows no change — 56 B/op and 6 allocs/op identical, ns/op within
+  noise once run-order effects are controlled for. `dive` on a field that is not a
+  collection is inert and warns at startup.
+
+  They are deliberately absent from `RuleNames()`: they carry no `ValidatorFunc` and
+  cannot be added with `Register`.
 
 - An unknown validation rule no longer panics at route registration; it is skipped
   and reported once at startup with the rule, type, field and the list of rules
@@ -32,6 +59,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed the startup warning that fired when `validate` tags were found with no
   `Validator` configured. It existed to surface tags that silently did nothing;
   they no longer do.
+
+  **This is a patch release that changes behaviour.** Kruda's version numbers signal
+  how much attention a release needs rather than a semver guarantee, so read this
+  section before taking it — do not auto-merge it. Reasoning:
+  `docs/decisions/0002-breaking-changes-after-adoption.md`.
+
+  What to check before upgrading:
+
+  ```bash
+  grep -rn 'validate:"' --include='*.go' .
+  ```
+
+  - **Every tag that grep finds is now enforced.** Requests that did not satisfy one
+    were served before and get a 422 now. The ones to look at first are fields whose
+    tags were written aspirationally and never tested, since nothing has been
+    checking them.
+  - **Tags naming a rule Kruda does not have are skipped, not enforced** — so a field
+    you believe is validated may still not be. Kruda implements 20 rules plus the
+    `omitempty` and `dive` modifiers; `eq`, `ne`, `datetime`, `required_if` and
+    `hexcolor` are among the `go-playground/validator` tags that do not exist here.
+    Each one logs a warning at startup naming the rule, the type and the field: read
+    that log once after upgrading. Skipping these only relaxes validation, so none of
+    them can cause a rejection that did not happen before.
+  - **Tests that assert a 2xx for invalid input will start failing.** That is the
+    cheap way to find the affected endpoints — it happens at test time rather than in
+    production.
+  - **`kruda.WithValidator` no longer switches validation on**, because it is already
+    on. If you passed it only for that, it is now redundant; keep it only for custom
+    rules or messages.
 
 
 ## [1.7.0] — 2026-07-30
@@ -58,13 +114,23 @@ to keep the previous behaviour.
 
 What to check before upgrading:
 
-- **Anything that renders API strings as HTML.** Escaped output was masking `<`
-  and `&` for you. Text nodes in React, Vue and similar escape on their own and
-  are unaffected, but `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from
-  a response are not. Responses are served as `application/json`, which no browser
-  executes, so this is about your rendering, not the transport.
 - **Anything keyed on response bytes** — `contrib/etag`, response caches, snapshot
-  tests — will miss once as bodies change.
+  tests, anything diffing or signing a raw body — will miss once as bodies change.
+  This is the whole of the practical impact.
+- **Anything that consumes the body without parsing it as JSON.** A client calling
+  `res.json()` is unaffected — see the correction below.
+
+> **Correction (2026-07-31).** This section originally led with a warning about
+> `innerHTML`, `dangerouslySetInnerHTML` and `v-html` fed from a response, on the
+> grounds that "escaped output was masking `<` and `&` for you". That is wrong, and
+> it sent at least one upgrade pre-flight looking in the wrong place. The JSON
+> escape \u003c and a literal `<` are two encodings of the same character, so **every
+> conformant parser yields an identical value** — verified by marshalling the same
+> struct with `EscapeHTML` on and off and parsing both: the wire bytes differ, and
+> `JSON.parse` returns the same string. The escaping never survived to the DOM, so
+> it was never masking anything for a client that parses JSON, and the XSS posture
+> of a raw-HTML sink is exactly what it was before this release. Byte-level
+> consumers remain genuinely affected.
 
 If you would rather keep the escaping and the speed, `kruda.WithJSONEncoder` can
 supply a Sonic config with `EscapeHTML` on, at roughly 41% on responses containing

@@ -97,7 +97,30 @@ func krudaValidationRules(t *testing.T) map[string]bool {
 	if len(out) < 10 {
 		t.Fatalf("extracted only %d rules from core; the pattern is stale", len(out))
 	}
+
+	// The modifiers are legal in a tag but are not entries in the rules map —
+	// they carry no ValidatorFunc and are handled structurally by buildValidators.
+	// Without them here this guard rejects correct documentation, reporting that
+	// core does not implement a modifier it does implement.
+	for _, mod := range krudaValidationModifiers {
+		if !modifierIsHandled(t, string(b), mod) {
+			t.Fatalf("core no longer handles the %q modifier; this guard is stale", mod)
+		}
+		out[mod] = true
+	}
 	return out
+}
+
+// krudaValidationModifiers are the tag words that change how surrounding rules
+// apply rather than adding a check of their own.
+var krudaValidationModifiers = []string{"omitempty", "dive"}
+
+// modifierIsHandled pins the guard to core rather than to this list: if a
+// modifier is ever dropped, the guard must fail instead of quietly permitting a
+// tag word that no longer works.
+func modifierIsHandled(t *testing.T, validationSrc, mod string) bool {
+	t.Helper()
+	return regexp.MustCompile(`(?m)^\s*case "` + mod + `":`).MatchString(validationSrc)
 }
 
 var validateTagRe = regexp.MustCompile(`validate:\\?"([^"\\]+)`)

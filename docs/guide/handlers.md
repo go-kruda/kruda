@@ -118,11 +118,22 @@ Since v1.7.1 `validate` tags are enforced without any configuration. Opt out wit
 `kruda.WithValidator` is for registering custom rules or messages, not for
 switching validation on.
 
-Kruda implements 20 rules — `(*kruda.Validator).RuleNames()` lists them, plus any registered with `Register`. The tag
-syntax resembles `go-playground/validator`, which has far more, so a tag carried
-over from it may name a rule that does not exist here. Those are skipped with a
-startup warning naming the rule; the field's other rules still apply. The generated
-OpenAPI schema advertises the constraints regardless.
+Kruda implements 20 rules — `(*kruda.Validator).RuleNames()` lists them, plus any registered with `Register`.
+It also supports the two `go-playground/validator` modifiers that change how the
+rules around them apply: `omitempty` skips a field's rules when its value is the
+zero value, and `dive` applies every rule after it to each element of a slice,
+array or map rather than to the container. A `dive` failure names the element —
+`tags[2]`, `limits[free]` — not just the field.
+
+```go
+Bio  string   `validate:"omitempty,min=10"`  // optional, but ≥10 chars if present
+IDs  []string `validate:"omitempty,dive,uuid"` // every element must be a UUID
+```
+
+The tag syntax resembles `go-playground/validator`, which has far more rules, so a
+tag carried over from it may name one that does not exist here. Those are skipped
+with a startup warning naming the rule; the field's other rules still apply. The
+generated OpenAPI schema advertises the constraints regardless.
 :::
 
 When validation fails, Kruda returns a structured error response:

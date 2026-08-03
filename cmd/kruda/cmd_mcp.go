@@ -1091,12 +1091,17 @@ Kruda implements these rules and no others:
     alpha alphanum numeric contains startswith endswith
     max_size mime
 
+Two modifiers are also supported and are safe to generate: omitempty skips a
+field's rules when its value is the zero value, and dive applies every rule after
+it to each element of a slice, array or map instead of to the container. They are
+not in RuleNames() because they are not rules and cannot be registered.
+
 The tag syntax looks like go-playground/validator, which has far more. Do NOT
-generate tags using rules absent from the list above — omitempty, dive, eq, ne,
-datetime, required_if and the rest do not exist here. Kruda skips an unknown rule
+generate tags using rules absent from the lists above — eq, ne, datetime,
+required_if, hexcolor and the rest do not exist here. Kruda skips an unknown rule
 with a startup warning rather than failing, so the tag will simply not be
-enforced. (*kruda.Validator).RuleNames() returns the list at runtime, including
-any rule registered with Register.
+enforced. (*kruda.Validator).RuleNames() returns the rule list at runtime,
+including any rule registered with Register.
 
 ` + "```" + `go
 type CreateUser struct {

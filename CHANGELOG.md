@@ -15,9 +15,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   but is now only for registering custom rules or messages.
 
   `(*kruda.Validator).RuleNames()` reports the rules a validator recognises —
-  the 20 built in, plus anything registered. The tag syntax resembles `go-playground/validator`, which has far
-  more, and tags carried over from it are the likely surprise here — `omitempty`,
-  `dive`, `eq`, `ne`, `datetime`, `required_if` and others do not exist.
+  the 20 built in, plus anything registered. The tag syntax resembles
+  `go-playground/validator`, which has far more, and tags carried over from it are
+  the likely surprise here: `eq`, `ne`, `datetime`, `required_if`, `hexcolor` and
+  others do not exist and are skipped with a startup warning.
+
+### Added
+
+- **The `omitempty` and `dive` validation modifiers.** `omitempty` skips a field's
+  rules when its value is the zero value; `dive` applies every rule after it to each
+  element of a slice, array or map instead of to the container, and names the failing
+  element — `tags[2]`, `limits[free]` — rather than just the field.
+
+  These had to land with validation-by-default rather than after it. A *modifier* is
+  not a constraint: skipping an unknown constraint only relaxes validation, but
+  skipping a modifier applies the rules around it in the wrong place. Measured before
+  the fix, `validate:"omitempty,min=10"` rejected an empty optional field, turning it
+  into a required one, and `validate:"omitempty,dive,uuid"` on a `[]string` rejected
+  **every** input including a slice of valid UUIDs, because `uuid` ran against the
+  slice itself. Both are common tags carried over from `go-playground/validator`, so
+  enabling validation without them would have broken working applications in a way no
+  warning explained.
+
+  Resolved entirely at route registration: `omitempty` becomes a flag and `dive`
+  splits the rule list, so nothing is re-parsed per request. Paired A/B on the typed
+  handler path shows no change — 56 B/op and 6 allocs/op identical, ns/op within
+  noise once run-order effects are controlled for. `dive` on a field that is not a
+  collection is inert and warns at startup.
+
+  They are deliberately absent from `RuleNames()`: they carry no `ValidatorFunc` and
+  cannot be added with `Register`.
 
 - An unknown validation rule no longer panics at route registration; it is skipped
   and reported once at startup with the rule, type, field and the list of rules
@@ -49,11 +76,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     tags were written aspirationally and never tested, since nothing has been
     checking them.
   - **Tags naming a rule Kruda does not have are skipped, not enforced** — so a field
-    you believe is validated may still not be. Kruda implements 20 rules;
-    `omitempty`, `dive`, `eq`, `ne`, `datetime` and `required_if` are among the
-    `go-playground/validator` tags that do not exist here. Each one logs a warning at
-    startup naming the rule, the type and the field: read that log once after
-    upgrading.
+    you believe is validated may still not be. Kruda implements 20 rules plus the
+    `omitempty` and `dive` modifiers; `eq`, `ne`, `datetime`, `required_if` and
+    `hexcolor` are among the `go-playground/validator` tags that do not exist here.
+    Each one logs a warning at startup naming the rule, the type and the field: read
+    that log once after upgrading. Skipping these only relaxes validation, so none of
+    them can cause a rejection that did not happen before.
   - **Tests that assert a 2xx for invalid input will start failing.** That is the
     cheap way to find the affected endpoints — it happens at test time rather than in
     production.

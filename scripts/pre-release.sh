@@ -40,6 +40,32 @@ if [[ -n "$violations" ]]; then
 fi
 ok "no replace directives in released go.mod"
 
+section "lint (golangci-lint)"
+# CI blocks the merge on this and it catches what `go vet` does not — the
+# govet inline analyzer, among others. Absent from this script, a lint-only
+# failure costs a full CI round trip; that happened once already.
+#
+# The version is checked, not just the binary's presence: a v1 binary refuses a
+# v2 config and exits non-zero without linting anything, so "installed" is not
+# the same as "able to run this repo's config".
+want_major=$(sed -n 's/^version:[[:space:]]*"\{0,1\}\([0-9][0-9]*\).*/\1/p' .golangci.yml | head -1)
+[[ -n "$want_major" ]] || fail "cannot read the required major version from .golangci.yml"
+install_hint="go install github.com/golangci/golangci-lint/v${want_major}/cmd/golangci-lint@latest"
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+  fail "golangci-lint is not installed, and CI blocks on it. Install it with:
+    $install_hint"
+fi
+have_major=$(golangci-lint version 2>/dev/null | sed -n 's/.*has version \([0-9][0-9]*\).*/\1/p' | head -1)
+if [[ "$have_major" != "$want_major" ]]; then
+  fail "golangci-lint v${have_major:-unknown} is installed but .golangci.yml declares v${want_major}.
+    A mismatched binary refuses the config and lints nothing. Install the matching one:
+    $install_hint"
+fi
+# Same flags as .github/workflows/test.yml, so a pass here means a pass there.
+golangci-lint run --build-tags kruda_stdjson
+ok "golangci-lint clean (v$have_major, matching .golangci.yml)"
+
 section "tests (host platform)"
 go test -race -tags kruda_stdjson ./...
 ok "stdlib JSON tests passed"

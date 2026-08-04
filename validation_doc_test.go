@@ -87,7 +87,15 @@ var registerCallRe = regexp.MustCompile(`\.Register\(\s*"([a-zA-Z_][a-zA-Z0-9_]*
 
 // routeRegistrationRe matches the calls that compile validators. A custom rule
 // added after one of these does not apply to it.
-var routeRegistrationRe = regexp.MustCompile(`kruda\.(Get|Post|Put|Patch|Delete|Resource)\[`)
+//
+// The alternation covers the Group* and *X variants because they reach the same
+// place — GetX delegates to Get, GroupResource to registerResource — and an
+// example written against a Group would otherwise slip the ordering check
+// entirely. The kruda. qualifier is optional because doc comments inside this
+// package call these unqualified, and an importer may alias the package.
+// TestRouteRegistrationMatcherCoversEveryEntryPoint derives the real list from
+// the source so this pattern cannot fall behind a newly added entry point.
+var routeRegistrationRe = regexp.MustCompile(`(?:kruda\.)?(?:Group)?(?:Get|Post|Put|Patch|Delete|Resource)X?\[`)
 
 // registeredRuleNames returns the rule names a document registers for itself.
 //
@@ -139,6 +147,40 @@ func TestRegisteredRuleNamesRespectsOrdering(t *testing.T) {
 			t.Errorf("%s: accepted=%v, want %v", c.name, got, c.want)
 		}
 	}
+}
+
+// TestRouteRegistrationMatcherCoversEveryEntryPoint derives the set of exported
+// generic route registrars from handler.go and resource.go and requires the
+// ordering matcher to recognise each one.
+//
+// Hand-written, the pattern had already fallen behind: it listed five names and
+// missed eleven, so an example built on a Group or on the *X shorthand escaped
+// the ordering check silently. Reading the list from source means adding an
+// entry point fails this test instead.
+func TestRouteRegistrationMatcherCoversEveryEntryPoint(t *testing.T) {
+	declRe := regexp.MustCompile(`(?m)^func ([A-Z][A-Za-z]*)\[`)
+	var names []string
+	for _, f := range []string{"handler.go", "resource.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		for _, m := range declRe.FindAllStringSubmatch(string(b), -1) {
+			names = append(names, m[1])
+		}
+	}
+	if len(names) < 10 {
+		t.Fatalf("found only %d generic route registrars; the discovery pattern is stale", len(names))
+	}
+	for _, n := range names {
+		for _, call := range []string{n + "[", "kruda." + n + "["} {
+			if !routeRegistrationRe.MatchString(call) {
+				t.Errorf("routeRegistrationRe does not match %q — an example registering a custom "+
+					"rule after this call would escape the ordering check", call)
+			}
+		}
+	}
+	t.Logf("covered %d route registrars", len(names))
 }
 
 // TestValidationModifiersAreHandled pins validationModifiers to the parser. If a

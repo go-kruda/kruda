@@ -44,17 +44,28 @@ func TestDocumentedRulesExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		for _, m := range docValidateTagRe.FindAllStringSubmatch(string(b), -1) {
+		body := string(b)
+
+		// A document that registers a custom rule may then use it, and that
+		// documentation is correct. Register is a supported feature — RuleNames
+		// reports registered rules alongside the built-in ones — so a guard that
+		// only knew builtinRules would reject a valid page and blame the package
+		// for not implementing a rule the page itself supplies.
+		local := registeredRuleNames(body)
+
+		for _, m := range docValidateTagRe.FindAllStringSubmatch(body, -1) {
 			for _, rule := range strings.Split(m[1], ",") {
 				name, _, _ := strings.Cut(strings.TrimSpace(rule), "=")
 				if name == "" {
 					continue
 				}
 				checked++
-				if !known[name] {
-					t.Errorf("%s documents validate rule %q, which this package does not implement — "+
-						"a reader copying that tag gets a field that is never checked", f, name)
+				if known[name] || local[name] {
+					continue
 				}
+				t.Errorf("%s documents validate rule %q, which this package does not implement and "+
+					"the file does not Register — a reader copying that tag gets a field that is "+
+					"never checked", f, name)
 			}
 		}
 	}
@@ -62,6 +73,19 @@ func TestDocumentedRulesExist(t *testing.T) {
 		t.Fatal("matched files but extracted no rule names; the tag pattern is stale")
 	}
 	t.Logf("verified %d documented rule use(s)", checked)
+}
+
+// registerCallRe matches a custom rule being registered, in either the direct
+// form (v.Register("adult", ...)) or through the app (app.Validator().Register).
+var registerCallRe = regexp.MustCompile(`\.Register\(\s*"([a-zA-Z_][a-zA-Z0-9_]*)"`)
+
+// registeredRuleNames returns the rule names a document registers for itself.
+func registeredRuleNames(body string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range registerCallRe.FindAllStringSubmatch(body, -1) {
+		out[m[1]] = true
+	}
+	return out
 }
 
 // TestValidationModifiersAreHandled pins validationModifiers to the parser. If a

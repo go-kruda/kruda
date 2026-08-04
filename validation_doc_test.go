@@ -51,7 +51,13 @@ func TestDocumentedRulesExist(t *testing.T) {
 		// reports registered rules alongside the built-in ones — so a guard that
 		// only knew builtinRules would reject a valid page and blame the package
 		// for not implementing a rule the page itself supplies.
-		local := registeredRuleNames(body)
+		//
+		// The exception has to respect the ordering contract, though: validators
+		// are compiled at route registration, so a rule registered afterwards
+		// never takes effect (see buildTypedHandler). Accepting such a file
+		// would bless an example that silently does not validate — the same
+		// failure this guard exists to catch, arriving from the other side.
+		local := registeredRuleNames(body, strings.HasSuffix(f, ".go"))
 
 		for _, m := range docValidateTagRe.FindAllStringSubmatch(body, -1) {
 			for _, rule := range strings.Split(m[1], ",") {
@@ -79,13 +85,60 @@ func TestDocumentedRulesExist(t *testing.T) {
 // form (v.Register("adult", ...)) or through the app (app.Validator().Register).
 var registerCallRe = regexp.MustCompile(`\.Register\(\s*"([a-zA-Z_][a-zA-Z0-9_]*)"`)
 
+// routeRegistrationRe matches the calls that compile validators. A custom rule
+// added after one of these does not apply to it.
+var routeRegistrationRe = regexp.MustCompile(`kruda\.(Get|Post|Put|Patch|Delete|Resource)\[`)
+
 // registeredRuleNames returns the rule names a document registers for itself.
-func registeredRuleNames(body string) map[string]bool {
+//
+// ordered applies the "before route registration" half of the contract, and is
+// set only for Go files: there, text order is execution order, so a Register
+// call below the first route is provably too late. Markdown presents snippets
+// in teaching order rather than execution order — a guide may well show the
+// route first and the registration afterwards while the prose sequences them
+// correctly — so imposing source order there would fail correct pages.
+func registeredRuleNames(body string, ordered bool) map[string]bool {
+	limit := len(body)
+	if ordered {
+		if loc := routeRegistrationRe.FindStringIndex(body); loc != nil {
+			limit = loc[0]
+		}
+	}
 	out := map[string]bool{}
-	for _, m := range registerCallRe.FindAllStringSubmatch(body, -1) {
-		out[m[1]] = true
+	for _, m := range registerCallRe.FindAllStringSubmatchIndex(body, -1) {
+		if m[0] >= limit {
+			continue
+		}
+		out[body[m[2]:m[3]]] = true
 	}
 	return out
+}
+
+// TestRegisteredRuleNamesRespectsOrdering pins the half of the exception that is
+// easy to lose: a rule registered after route registration never applies, so
+// accepting it would let the guard bless an example that silently does not
+// validate.
+func TestRegisteredRuleNamesRespectsOrdering(t *testing.T) {
+	const route = "kruda.Post[In, Out](app, \"/x\", h)"
+	const reg = "v.Register(\"adult\", f)"
+
+	cases := []struct {
+		name    string
+		body    string
+		ordered bool
+		want    bool
+	}{
+		{"go, registered before the route", reg + "\n" + route, true, true},
+		{"go, registered after the route", route + "\n" + reg, true, false},
+		{"go, no route in the file", reg, true, true},
+		// Markdown sequences snippets for teaching, not execution.
+		{"markdown, order not meaningful", route + "\n" + reg, false, true},
+	}
+	for _, c := range cases {
+		if got := registeredRuleNames(c.body, c.ordered)["adult"]; got != c.want {
+			t.Errorf("%s: accepted=%v, want %v", c.name, got, c.want)
+		}
+	}
 }
 
 // TestValidationModifiersAreHandled pins validationModifiers to the parser. If a

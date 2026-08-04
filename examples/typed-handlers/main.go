@@ -105,7 +105,7 @@ func NewStore() *Store {
 //   - `param:"name"` → URL path parameter
 //   - `query:"name"` → query string parameter
 //   - `json:"name"`  → JSON request body field
-//   - `validate:"rules"` → validation rules
+//   - `validate:"required,min=2"` → validation rules, comma-separated
 // ---------------------------------------------------------------------------
 
 // GetProductInput binds the :id path parameter.

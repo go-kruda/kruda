@@ -104,6 +104,13 @@ type ruleEntry struct {
 	fn    ValidatorFunc // pre-looked-up function
 }
 
+// validationModifiers are the tag words that carry no ValidatorFunc and instead
+// change how the rules around them apply. They are handled structurally by
+// buildValidators, so they never appear in the rules map — this is the one place
+// that names them, so the parser, the unknown-rule warning and the documentation
+// guard cannot drift apart.
+var validationModifiers = [...]string{"omitempty", "dive"}
+
 // warnedUnknownRules keeps the warning to one line per rule per field, so a type
 // registered on many routes does not repeat it.
 var warnedUnknownRules sync.Map
@@ -122,7 +129,7 @@ func warnUnknownRule(v *Validator, rule, typeName, fieldName string) {
 	slog.Warn("kruda: unknown validation rule in a validate tag — that rule is ignored, the field's other rules still apply",
 		"rule", rule, "type", typeName, "field", fieldName,
 		"available", strings.Join(v.RuleNames(), ","),
-		"modifiers", "omitempty,dive")
+		"modifiers", strings.Join(validationModifiers[:], ","))
 }
 
 // RuleNames lists the validation rules this Validator recognises, sorted —
@@ -199,6 +206,8 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 			// omitempty makes an optional field behave as required; dropping
 			// dive runs an element rule against the container, which no slice
 			// can satisfy.
+			// The cases here are validationModifiers; a test pins the two lists
+			// together so a modifier cannot be dropped while docs still teach it.
 			switch ruleName {
 			case "omitempty":
 				fv.omitEmpty = true

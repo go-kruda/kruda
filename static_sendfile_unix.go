@@ -8,18 +8,9 @@ import (
 )
 
 func duplicateStaticFile(file *os.File) (int32, bool) {
-	fd, err := syscall.Dup(int(file.Fd()))
-	if err != nil {
+	fd, _, errno := syscall.Syscall(syscall.SYS_FCNTL, file.Fd(), uintptr(syscall.F_DUPFD_CLOEXEC), 3)
+	if errno != 0 {
 		return 0, false
 	}
-	if fd == 0 {
-		next, dupErr := syscall.Dup(int(file.Fd()))
-		_ = syscall.Close(fd)
-		if dupErr != nil {
-			return 0, false
-		}
-		fd = next
-	}
-	syscall.CloseOnExec(fd)
 	return int32(fd), true
 }

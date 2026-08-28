@@ -157,6 +157,11 @@ func TestDuplicateStaticFileSurvivesSourceDescriptorReuse(t *testing.T) {
 		syscall.Close(int(ownedFD))
 		t.Fatal("duplicated static file descriptor is not close-on-exec")
 	}
+	if ownedFD < 3 {
+		source.Close()
+		syscall.Close(int(ownedFD))
+		t.Fatalf("duplicated static file descriptor = %d, want at least 3", ownedFD)
+	}
 	owned := os.NewFile(uintptr(ownedFD), "owned-static")
 	if err := source.Close(); err != nil {
 		owned.Close()

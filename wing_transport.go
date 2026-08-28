@@ -881,6 +881,13 @@ func (w *worker) tryParse(c *conn) {
 			// Don't consume — leave data in readBuf for re-parse after handleDone.
 			break
 		}
+		if f.Dispatch == Takeover && (c.sendN < len(c.sendBuf) || c.sendFileFd > 0) {
+			// Keep the takeover request in readBuf until every earlier response is
+			// complete; detaching now would abandon the event loop's send state.
+			releaseRequest(req)
+			w.directSend(c)
+			return
+		}
 
 		// Consume parsed bytes.
 		remaining := c.readN - consumed

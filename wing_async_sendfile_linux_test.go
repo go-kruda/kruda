@@ -151,6 +151,7 @@ func TestWingAsyncPipelinePreservesSendfileResponseOrder(t *testing.T) {
 	}{
 		{name: "Pool", preset: Arrow},
 		{name: "Spawn", preset: Preset{Dispatch: Spawn}},
+		{name: "Takeover", preset: DB},
 	}
 	fileBody := bytes.Repeat([]byte("f"), 8<<20)
 	filePath := filepath.Join(t.TempDir(), "response.bin")

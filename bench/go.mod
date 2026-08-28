@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/bench
 
-go 1.25.10
+go 1.25.13
 
 replace github.com/go-kruda/kruda => ../
 

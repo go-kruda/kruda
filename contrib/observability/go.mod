@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/contrib/observability
 
-go 1.25.11
+go 1.25.13
 
 require (
 	github.com/go-kruda/kruda v1.4.0

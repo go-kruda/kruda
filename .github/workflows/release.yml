@@ -76,7 +76,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.25.13'
           
       - name: Run security scan (all modules)
         run: ./scripts/govulncheck-modules.sh

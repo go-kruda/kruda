@@ -1,6 +1,6 @@
 module coldstart-app
 
-go 1.25.11
+go 1.25.13
 
 replace github.com/go-kruda/kruda => ../../../..
 

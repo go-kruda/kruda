@@ -41,7 +41,7 @@ importing application. Make sure your `go.mod` can satisfy:
 
 | Dependency | Minimum |
 |---|---|
-| Go | 1.25 |
+| Go | 1.25.13 |
 | `go.opentelemetry.io/otel` (+ `sdk`, `metric`, `trace`) | v1.43.0 (this module pins v1.44.0) |
 | `go.opentelemetry.io/contrib/*` (otelhttp, otelgrpc, autoexport, exporters) | matching contrib train (v0.69.x for the v1.44.0 core) |
 | `google.golang.org/grpc` | v1.79.1 |

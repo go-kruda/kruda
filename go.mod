@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda
 
-go 1.25.11
+go 1.25.13
 
 require (
 	github.com/bytedance/sonic v1.15.0

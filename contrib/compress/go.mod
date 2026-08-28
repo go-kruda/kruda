@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/contrib/compress
 
-go 1.25.11
+go 1.25.13
 
 require github.com/go-kruda/kruda v1.2.0
 

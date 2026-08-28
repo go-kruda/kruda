@@ -1,3 +1,3 @@
 module jsonthroughput-app
 
-go 1.25.11
+go 1.25.13

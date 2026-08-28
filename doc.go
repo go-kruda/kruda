@@ -38,8 +38,10 @@
 //   - macOS:   fasthttp
 //   - Windows: net/http
 //
-// Override with the [WithTransport], [NetHTTP], or [FastHTTP] options. TLS
-// (via [WithTLS]) auto-falls back to net/http on every platform.
+// Override with the [WithTransport], [NetHTTP], or [FastHTTP] options. Named
+// transports auto-fall back to net/http for TLS. An explicit custom transport
+// used with [App.Listen] must implement transport.TLSServer; [App.Serve]
+// continues to use a caller-supplied listener as-is.
 //
 // Wing is built into core since v1.2.0; import github.com/go-kruda/kruda
 // directly and use the kruda.Wing option. The legacy

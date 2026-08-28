@@ -288,6 +288,14 @@ func (app *App) Listen(addr string) error {
 	if err := app.compile(); err != nil {
 		return err
 	}
+	var tlsServer transport.TLSServer
+	if app.config.TLSCertFile != "" {
+		var ok bool
+		tlsServer, ok = app.transport.(transport.TLSServer)
+		if !ok {
+			return fmt.Errorf("kruda: transport does not support configured TLS with Listen")
+		}
+	}
 
 	// Use optimized listener (TCP_DEFER_ACCEPT + TCP_FASTOPEN on Linux,
 	// plain net.Listen on other platforms), then hand it to the transport.
@@ -304,11 +312,9 @@ func (app *App) Listen(addr string) error {
 	errCh := make(chan error, 1)
 	go func() {
 		defer ln.Close()
-		if app.config.TLSCertFile != "" && app.config.TLSKeyFile != "" {
-			if tlsServer, ok := app.transport.(transport.TLSServer); ok {
-				errCh <- tlsServer.ServeTLS(ln, app)
-				return
-			}
+		if tlsServer != nil {
+			errCh <- tlsServer.ServeTLS(ln, app)
+			return
 		}
 		errCh <- app.transport.Serve(ln, app)
 	}()

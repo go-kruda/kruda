@@ -53,6 +53,36 @@ func TestListenUsesTLSServerForConfiguredTLS(t *testing.T) {
 	}
 }
 
+func TestListenRejectsConfiguredTLSWithoutTLSServer(t *testing.T) {
+	tr := &startupProbeTransport{}
+	app := New(WithTransport(tr), WithTLS("cert.pem", "key.pem"))
+
+	err := app.Listen("127.0.0.1:0")
+	if err == nil || !strings.Contains(err.Error(), "does not support configured TLS") {
+		t.Fatalf("Listen error = %v, want TLS capability error", err)
+	}
+	if tr.serveCalled {
+		t.Fatal("transport Serve was called with configured TLS")
+	}
+}
+
+func TestServeAllowsTLSConfiguredTransportWithoutTLSServer(t *testing.T) {
+	tr := &startupProbeTransport{}
+	app := New(WithTransport(tr), WithTLS("cert.pem", "key.pem"))
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = app.Serve(ln)
+	if !errors.Is(err, errStartupTransportDone) {
+		t.Fatalf("Serve error = %v, want %v", err, errStartupTransportDone)
+	}
+	if !tr.serveCalled {
+		t.Fatal("transport Serve was not called for caller-owned listener")
+	}
+}
+
 func TestListenReleasesListenerWhenTLSSetupFails(t *testing.T) {
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -237,24 +237,25 @@ type parserLimits struct {
 }
 
 type conn struct {
-	fd           int32
-	peerIP       netip.Addr // peer IP captured at accept (zero value if unknown)
-	readBuf      []byte
-	readN        int
-	sendBuf      []byte
-	sendN        int
-	keepAlive    bool
-	admitted     bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
-	pending      int    // in-flight handler goroutines
-	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
-	closePending bool   // close after async ownership returns; prevents fd reuse
-	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
-	lastActive   int64  // unix nano — updated on accept + each recv
-	readDeadline int64  // unix nano — set when first byte arrives, cleared on full request
-	ctx          context.Context
-	cancel       context.CancelFunc
-	sendFileFd   int32 // sendfile: source fd (0 = none)
-	sendFileSize int64 // sendfile: remaining bytes
+	fd             int32
+	peerIP         netip.Addr // peer IP captured at accept (zero value if unknown)
+	readBuf        []byte
+	readN          int
+	sendBuf        []byte
+	sendN          int
+	keepAlive      bool
+	admitted       bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
+	pending        int    // in-flight handler goroutines
+	takenOver      bool   // fd detached to a Takeover goroutine and owned by its *os.File
+	closePending   bool   // close after async ownership returns; prevents fd reuse
+	remoteAddr     string // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive     int64  // unix nano — updated on accept + each recv
+	readDeadline   int64  // unix nano — set when first byte arrives, cleared on full request
+	readSuppressed bool   // readiness arrived while pending; drain once ownership returns
+	ctx            context.Context
+	cancel         context.CancelFunc
+	sendFileFd     int32 // sendfile: source fd (0 = none)
+	sendFileSize   int64 // sendfile: remaining bytes
 	// Slow-path body accumulation (populated when a request body spans multiple recvs).
 	bodyNeed       int    // total Content-Length expected (0 = not accumulating)
 	headerSnapshot []byte // copy of header block for re-parse after body complete
@@ -265,6 +266,10 @@ type conn struct {
 // accepted connection. Tests set it to pin assertions to the accept path rather
 // than the lazy getpeername used by RemoteAddr/IP. Always nil in production.
 var testAcceptPeerHook func(ip netip.Addr, ok bool)
+
+// testSuppressedRecvHook lets Linux integration tests prove that an EPOLLIN
+// event reached the worker while an async handler still owned the connection.
+var testSuppressedRecvHook func(fd int32)
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -767,9 +772,17 @@ func (w *worker) handleRecv(ev event) {
 	} else {
 		c = w.conns[ev.Fd]
 	}
-	if c == nil || c.pending > 0 {
+	if c == nil {
 		return
 	}
+	if c.pending > 0 {
+		c.readSuppressed = true
+		if testSuppressedRecvHook != nil {
+			testSuppressedRecvHook(c.fd)
+		}
+		return
+	}
+	c.readSuppressed = false
 	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
 	if e != 0 || nr <= 0 {
 		w.closeConn(c.fd)
@@ -1327,6 +1340,8 @@ func (w *worker) handleDone(msg doneMsg) {
 		if c.keepAlive {
 			if c.readN > 0 {
 				w.tryParse(c)
+			} else if c.readSuppressed {
+				w.handleRecv(event{Fd: c.fd, ConnPtr: unsafe.Pointer(c)})
 			} else {
 				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
@@ -1398,6 +1413,7 @@ func (w *worker) directSend(c *conn) {
 		w.tryParse(c)
 		return
 	}
+	c.readSuppressed = false
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 	if e == 0 && r > 0 {
 		c.readN = int(r)

@@ -276,7 +276,9 @@ Wing's runtime implementation lives in the core module (`wing_*.go` at the repo 
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
-**Minimum Go patch release for zero known standard-library vulnerabilities:** go1.25.13+ or go1.26.4+
+**Tested security baseline (2026-08-29):** the repository's all-module scan has
+zero reachable `govulncheck` findings with go1.25.13+ or go1.26.4+. This does
+not mean the dependency graph contains no non-reachable advisories.
 
 ## Contributing
 

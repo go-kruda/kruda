@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -110,6 +111,69 @@ func TestWingTakeoverReadTimeoutBoundsPartialNextRequest(t *testing.T) {
 		t.Fatal("partial Takeover request unexpectedly produced data")
 	} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		t.Fatal("partial Takeover request was not closed by ReadTimeout")
+	}
+}
+
+func TestWingTakeoverReadTimeoutIsAbsoluteAcrossBodyTrickle(t *testing.T) {
+	const readTimeout = 250 * time.Millisecond
+	var calls atomic.Int32
+	cfg := WingConfig{
+		Workers:       1,
+		DefaultPreset: DB,
+		ReadTimeout:   readTimeout,
+		IdleTimeout:   2 * time.Second,
+	}
+	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, _ transport.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer stop()
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: test\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.ReadResponse(reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	started := time.Now()
+	if _, err := io.WriteString(conn, "POST / HTTP/1.1\r\nHost: test\r\nContent-Length: 4\r\n\r\na"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := io.WriteString(conn, "b"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := io.WriteString(conn, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.SetReadDeadline(started.Add(600 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	var one [1]byte
+	if _, err := conn.Read(one[:]); err == nil {
+		t.Fatal("incomplete trickled request unexpectedly produced a response")
+	} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		t.Fatal("trickled body extended the Takeover read deadline")
+	}
+	if elapsed := time.Since(started); elapsed >= 400*time.Millisecond {
+		t.Fatalf("connection closed after %v, want absolute %v deadline", elapsed, readTimeout)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("handler calls = %d, want only the complete initial request", got)
 	}
 }
 

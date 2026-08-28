@@ -4,11 +4,25 @@ package kruda
 
 import (
 	"net"
+	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
 	"unsafe"
 )
+
+func TestEpollEventABIOnArm64(t *testing.T) {
+	if runtime.GOARCH != "arm64" {
+		t.Skip("arm64 ABI assertion")
+	}
+	var ev epollEvent
+	if got := unsafe.Sizeof(ev); got != 16 {
+		t.Fatalf("epoll event size = %d, want 16 on linux/arm64", got)
+	}
+	if got := unsafe.Offsetof(ev.Fd); got != 8 {
+		t.Fatalf("epoll fd offset = %d, want 8 on linux/arm64", got)
+	}
+}
 
 func TestEpollWaitPreservesReadinessBeyondWorkerBatch(t *testing.T) {
 	epfd, err := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC)

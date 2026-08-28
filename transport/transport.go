@@ -18,6 +18,11 @@ type Transport interface {
 	Shutdown(ctx context.Context) error
 }
 
+// TLSServer is implemented by transports that can apply configured TLS to a listener.
+type TLSServer interface {
+	ServeTLS(ln net.Listener, handler Handler) error
+}
+
 // Handler is the core request handler interface that transports call.
 type Handler interface {
 	ServeKruda(w ResponseWriter, r Request)

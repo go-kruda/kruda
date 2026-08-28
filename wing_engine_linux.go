@@ -22,10 +22,7 @@ const (
 	epollCtlDel = 2
 )
 
-type epollEvent struct {
-	events uint32
-	data   [8]byte // fd packed as int32 in first 4 bytes
-}
+type epollEvent = syscall.EpollEvent
 
 type epollEngine struct {
 	epfd     int
@@ -41,7 +38,7 @@ type epollEngine struct {
 func newEngine() engine {
 	return &epollEngine{
 		connPtrs: make(map[int32]unsafe.Pointer, 1024),
-		epevs:    make([]epollEvent, 128),
+		epevs:    make([]epollEvent, maxEventsPerWait),
 	}
 }
 
@@ -64,7 +61,9 @@ func (e *epollEngine) PostWake() {
 
 func (e *epollEngine) SubmitAccept(listenFd int) {
 	e.listenFd = listenFd
-	e.epollAdd(int32(listenFd), epollin|epollet)
+	// Keep the listener level-triggered so a full worker batch leaves it ready
+	// for the next wait until accept4 drains the queue to EAGAIN.
+	e.epollAdd(int32(listenFd), epollin)
 	// Register eventfd for wake signaling
 	e.epollAdd(int32(e.evfd), epollin|epollet)
 }
@@ -124,7 +123,11 @@ func (e *epollEngine) WaitNonBlock(events []event) (int, error) {
 }
 
 func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
-	n, err := epollWait(e.epfd, e.epevs, msec, e.rawMode)
+	kernelEvents := e.epevs
+	if len(kernelEvents) > len(events) {
+		kernelEvents = kernelEvents[:len(events)]
+	}
+	n, err := epollWait(e.epfd, kernelEvents, msec, e.rawMode)
 	if err != nil {
 		if err == syscall.EINTR {
 			return 0, nil
@@ -132,21 +135,19 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 		return 0, err
 	}
 
-	// Elastic resize
-	if n == len(e.epevs) && len(e.epevs) < 1024 {
-		e.epevs = make([]epollEvent, len(e.epevs)*2)
-	} else if n < len(e.epevs)/4 && len(e.epevs) > 128 {
-		e.epevs = make([]epollEvent, len(e.epevs)/2)
-	}
-
 	count := 0
 	for i := 0; i < n && count < len(events); i++ {
 		ev := &e.epevs[i]
-		// All epoll_data stores fd as int32 in data[0:4].
-		fd := *(*int32)(unsafe.Pointer(&ev.data[0]))
+		fd := ev.Fd
 
 		if int(fd) == e.listenFd {
-			count += e.drainAccept(events[count:])
+			// One listener event can fan out into many accepts. Reserve one output
+			// slot for every kernel event still in this batch so their ET readiness
+			// is never consumed without reaching the worker.
+			acceptSlots := len(events) - count - (n - i - 1)
+			if acceptSlots > 0 {
+				count += e.drainAccept(events[count : count+acceptSlots])
+			}
 			continue
 		}
 
@@ -161,13 +162,13 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 		// Conn fd — look up pointer from connPtrs map.
 		ptr := e.connPtrs[fd]
 
-		if ev.events&epollout != 0 {
+		if ev.Events&epollout != 0 {
 			events[count] = event{Op: opSend, ConnPtr: ptr}
 			count++
 			continue
 		}
 
-		if ev.events&epollin != 0 {
+		if ev.Events&epollin != 0 {
 			events[count] = event{Op: opRecv, ConnPtr: ptr}
 			count++
 		}
@@ -176,7 +177,6 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 }
 
 func (e *epollEngine) drainAccept(events []event) int {
-	// Re-arm listen fd (ET, persistent — no need to re-add)
 	count := 0
 	for count < len(events) {
 		// Raw accept4 with a stack-allocated RawSockaddrAny so the peer address
@@ -240,15 +240,13 @@ func (e *epollEngine) Close() {
 // epoll helpers
 
 func (e *epollEngine) epollAdd(fd int32, events uint32) {
-	ev := epollEvent{events: events}
-	*(*int32)(unsafe.Pointer(&ev.data[0])) = fd
-	syscall.EpollCtl(e.epfd, epollCtlAdd, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+	ev := epollEvent{Events: events, Fd: fd}
+	syscall.EpollCtl(e.epfd, epollCtlAdd, int(fd), &ev)
 }
 
 func (e *epollEngine) epollMod(fd int32, events uint32) {
-	ev := epollEvent{events: events}
-	*(*int32)(unsafe.Pointer(&ev.data[0])) = fd
-	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), (*syscall.EpollEvent)(unsafe.Pointer(&ev)))
+	ev := epollEvent{Events: events, Fd: fd}
+	syscall.EpollCtl(e.epfd, epollCtlMod, int(fd), &ev)
 }
 
 func (e *epollEngine) epollModPtr(fd int32, events uint32) {

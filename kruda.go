@@ -104,6 +104,9 @@ func (app *App) Compile() {
 }
 
 func (app *App) compile() error {
+	if (app.config.TLSCertFile == "") != (app.config.TLSKeyFile == "") {
+		return fmt.Errorf("kruda: TLS certificate and key must both be configured")
+	}
 	if err := app.registerOpenAPI(); err != nil {
 		return err
 	}
@@ -300,6 +303,13 @@ func (app *App) Listen(addr string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer ln.Close()
+		if app.config.TLSCertFile != "" && app.config.TLSKeyFile != "" {
+			if tlsServer, ok := app.transport.(transport.TLSServer); ok {
+				errCh <- tlsServer.ServeTLS(ln, app)
+				return
+			}
+		}
 		errCh <- app.transport.Serve(ln, app)
 	}()
 

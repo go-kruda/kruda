@@ -899,6 +899,7 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
+				resp.sendFileEnabled = true
 				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
 				w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
@@ -909,6 +910,7 @@ func (w *worker) tryParse(c *conn) {
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
 					c.sendFileSize = resp.fileSize
+					resp.fileFd = 0
 					releaseResponse(resp)
 					releaseRequest(req)
 					w.directSend(c)

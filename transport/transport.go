@@ -74,7 +74,8 @@ type StaticResponder interface {
 }
 
 // FileSender is an optional interface for ResponseWriters that support
-// sendfile(2) zero-copy file transfer (e.g., Wing transport).
+// sendfile(2) zero-copy file transfer (e.g., Wing transport). SetSendFile
+// transfers ownership of fd to the ResponseWriter, which must close it.
 type FileSender interface {
 	SetSendFile(fd int32, size int64)
 }

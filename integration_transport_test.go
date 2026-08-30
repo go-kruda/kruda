@@ -382,6 +382,9 @@ func requireSecurityCookieGet(t *testing.T, url string) {
 		t.Fatalf("GET %s: %v", url, err)
 	}
 	defer resp.Body.Close()
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		t.Fatalf("GET %s body: %v", url, err)
+	}
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET %s status=%d want=200", url, resp.StatusCode)
 	}

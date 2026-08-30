@@ -311,7 +311,7 @@ func (app *App) Listen(addr string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		if tlsServer != nil {
 			errCh <- tlsServer.ServeTLS(ln, app)
 			return

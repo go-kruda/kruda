@@ -31,18 +31,45 @@ func startWingApp(t *testing.T, app *App) (string, func()) {
 		t.Fatalf("listen: %v", err)
 	}
 	addr := ln.Addr().String()
-	ln.Close() // let the transport bind so a successful dial means it is accepting
-	go func() { _ = app.transport.ListenAndServe(addr, app) }()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-		if derr == nil {
-			c.Close()
-			break
+	_ = ln.Close() // let the transport bind so a successful dial means it is accepting
+	serveErrCh := make(chan error, 1)
+	go func() { serveErrCh <- app.transport.ListenAndServe(addr, app) }()
+	stop := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := app.transport.Shutdown(ctx); err != nil {
+			t.Errorf("startWingApp: shutdown: %v", err)
 		}
+	}
+
+	var lastDialErr error
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case serveErr := <-serveErrCh:
+			stop()
+			t.Fatalf("startWingApp: server stopped before readiness at %s: %v (last dial: %v)", addr, serveErr, lastDialErr)
+		default:
+		}
+
+		c, dialErr := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if dialErr == nil {
+			_ = c.Close()
+			return addr, stop
+		}
+		lastDialErr = dialErr
 		time.Sleep(10 * time.Millisecond)
 	}
-	return addr, func() { _ = app.transport.Shutdown(context.Background()) }
+
+	serveEvidence := "still running at readiness deadline"
+	select {
+	case serveErr := <-serveErrCh:
+		serveEvidence = fmt.Sprintf("stopped: %v", serveErr)
+	default:
+	}
+	stop()
+	t.Fatalf("startWingApp: server did not become ready at %s: last dial: %v; serve: %s", addr, lastDialErr, serveEvidence)
+	return "", func() {}
 }
 
 // readSSEEvent reads from r until it has consumed one full SSE event

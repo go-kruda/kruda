@@ -311,12 +311,14 @@ func (app *App) Listen(addr string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		defer func() { _ = ln.Close() }()
+		var serveErr error
 		if tlsServer != nil {
-			errCh <- tlsServer.ServeTLS(ln, app)
-			return
+			serveErr = tlsServer.ServeTLS(ln, app)
+		} else {
+			serveErr = app.transport.Serve(ln, app)
 		}
-		errCh <- app.transport.Serve(ln, app)
+		_ = ln.Close()
+		errCh <- serveErr
 	}()
 
 	// Report the active JSON engine: it is chosen at build time by the

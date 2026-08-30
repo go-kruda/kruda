@@ -12,9 +12,10 @@
 //
 // Two exported names follow from that split, and confusing them is what this
 // package's callers have to avoid. EncoderName is the engine the build tag
-// selected, which fixes the frozen configuration and therefore the bytes.
-// ActiveEngine and EngineIsStdlib describe what is actually encoding, which fixes
-// the cost. Assert output against the first; choose a code path by the second.
+// selected, which fixes the frozen configuration. Exact bytes also depend on
+// the Go version used by encoding/json. ActiveEngine and EngineIsStdlib describe
+// what is actually encoding, which fixes the cost. Assert output against the
+// version-specific golden for the first; choose a code path by the second.
 package json
 
 import (
@@ -32,8 +33,8 @@ const EncoderName = "sonic"
 // encoding/json. A const, so the choice stays free on the hot path.
 //
 // This answers a question about cost, not about output. Anything asserting or
-// depending on byte-level behaviour must key on EncoderName instead, which
-// follows the build tag and therefore the frozen Config.
+// depending on byte-level behaviour must key on EncoderName's frozen Config and
+// the active Go version.
 //
 // Sonic's fallback honours EscapeHTML, so the HTML-escaping difference between
 // the engines does not appear on one. It does not implement SortMapKeys or

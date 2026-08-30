@@ -82,7 +82,7 @@ go1.25 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... 
 # Run with Go 1.26
 go1.26 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go126.txt
 
-# Compare (requires benchstat: go install golang.org/x/perf/cmd/benchstat@latest)
+# Compare (requires benchstat: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260813145340-fd4a688df892)
 benchstat go125.txt go126.txt
 ```
 

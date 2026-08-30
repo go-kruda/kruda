@@ -42,8 +42,8 @@ func TestParseGoVersion(t *testing.T) {
 		},
 		{
 			name:      "current secure baseline",
-			input:     "go version go1.25.11 linux/amd64",
-			wantMajor: 1, wantMinor: 25, wantPatch: 11, wantOK: true,
+			input:     "go version go1.25.13 linux/amd64",
+			wantMajor: 1, wantMinor: 25, wantPatch: 13, wantOK: true,
 		},
 		{
 			name:      "invalid string",
@@ -88,8 +88,8 @@ func TestMeetsMinimumGoVersion(t *testing.T) {
 		want                bool
 	}{
 		{name: "below minor", major: 1, minor: 24, patch: 99, want: false},
-		{name: "below patch", major: 1, minor: 25, patch: 10, want: false},
-		{name: "minimum patch", major: 1, minor: 25, patch: 11, want: true},
+		{name: "below patch", major: 1, minor: 25, patch: 12, want: false},
+		{name: "minimum patch", major: 1, minor: 25, patch: 13, want: true},
 		{name: "newer minor below secure patch", major: 1, minor: 26, patch: 3, want: false},
 		{name: "newer minor secure patch", major: 1, minor: 26, patch: 4, want: true},
 		{name: "future minor", major: 1, minor: 27, patch: 0, want: true},

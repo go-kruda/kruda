@@ -145,9 +145,17 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 		// Try sendfile zero-copy path (Wing transport).
 		if fs, ok := c.writer.(transport.FileSender); ok {
 			if osFile, ok := f.(*os.File); ok {
-				fs.SetSendFile(int32(osFile.Fd()), stat.Size())
-				c.contentType = ct
-				return c.send()
+				canSendFile := true
+				if capability, ok := c.writer.(interface{ supportsStaticSendfile() bool }); ok {
+					canSendFile = capability.supportsStaticSendfile()
+				}
+				if canSendFile {
+					if fd, ok := duplicateStaticFile(osFile); ok {
+						fs.SetSendFile(fd, stat.Size())
+						c.contentType = ct
+						return c.send()
+					}
+				}
 			}
 		}
 

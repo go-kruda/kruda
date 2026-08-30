@@ -6,13 +6,14 @@ import (
 )
 
 // The sonic and encoding/json engines are selected by build tag, so no single
-// test binary can run both. These tests instead pin exact bytes: each engine
-// build asserts against the same golden values, so an engine whose output
-// drifts from the other fails here rather than silently changing responses for
-// whichever build a user happens to compile.
+// test binary can run both. These tests instead pin exact bytes for each Go
+// version: each engine build asserts against the same version-selected golden
+// values, so an engine whose output drifts from the other fails here rather
+// than silently changing responses for whichever build a user happens to
+// compile.
 
-// goldenCases must encode identically on every engine. Multi-key maps belong
-// here only because both engines now sort map keys.
+// goldenCases must encode identically on every engine for a given Go version.
+// Multi-key maps belong here only because both engines now sort map keys.
 var goldenCases = []struct {
 	name string
 	val  any
@@ -38,7 +39,7 @@ var goldenCases = []struct {
 	{"slice", []int{1, 2, 3}, `[1,2,3]`},
 	{"unicode", "สวัสดี 🦅", `"สวัสดี 🦅"`},
 	{"escapes", "tab\there\nnewline\"quote\\slash", `"tab\there\nnewline\"quote\\slash"`},
-	{"invalidUTF8", string([]byte{0xff, 0xfe}), `"\ufffd\ufffd"`},
+	{"invalidUTF8", string([]byte{0xff, 0xfe}), invalidUTF8Golden},
 	{"singleKeyMap", map[string]int{"a": 1}, `{"a":1}`},
 	{"multiKeyMapSorted", map[string]int{"zebra": 1, "apple": 2, "mango": 3},
 		`{"apple":2,"mango":3,"zebra":1}`},
@@ -123,8 +124,8 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 // hand-embeds a response body into HTML can opt in with kruda.WithJSONEncoder.
 //
 // Invalid UTF-8 used to differ here too. The sonic engine now enables
-// ValidateString, so both engines substitute U+FFFD and that case has moved to
-// goldenCases.
+// ValidateString, so both engines substitute U+FFFD. Version-selected goldens
+// pin encoding/json's exact byte representation of those replacement runes.
 func TestKnownCrossEngineDivergences(t *testing.T) {
 	cases := []struct {
 		name      string

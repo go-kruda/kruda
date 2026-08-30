@@ -84,6 +84,16 @@ func (t *NetHTTPTransport) Serve(ln net.Listener, handler Handler) error {
 	return srv.Serve(ln)
 }
 
+// ServeTLS starts the HTTP server with configured TLS on an existing listener.
+func (t *NetHTTPTransport) ServeTLS(ln net.Listener, handler Handler) error {
+	t.mu.Lock()
+	t.server = t.newServer("", handler)
+	srv := t.server
+	t.mu.Unlock()
+
+	return srv.ServeTLS(ln, t.config.TLSCertFile, t.config.TLSKeyFile)
+}
+
 // Shutdown gracefully shuts down the server.
 func (t *NetHTTPTransport) Shutdown(ctx context.Context) error {
 	t.mu.Lock()

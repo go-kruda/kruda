@@ -1169,6 +1169,7 @@ func acquireResponse() *wingResponse {
 	r.buf = r.buf[:0]
 	r.staticResp = nil
 	r.jsonFast = false
+	r.sendFileEnabled = false
 	r.fileFd = 0
 	r.fileSize = 0
 	r.responseMode = responseGeneric
@@ -1179,6 +1180,9 @@ func acquireResponse() *wingResponse {
 }
 
 func releaseResponse(r *wingResponse) {
+	if r.fileFd > 0 {
+		closeFd(int(r.fileFd))
+	}
 	r.status = 0
 	r.staticResp = nil
 	r.jsonFast = false
@@ -1186,6 +1190,7 @@ func releaseResponse(r *wingResponse) {
 	r.stringFast = false
 	r.stringBody = ""
 	r.stringContentType = ""
+	r.sendFileEnabled = false
 	r.fileFd = 0
 	r.fileSize = 0
 	r.headers.reset()
@@ -1220,6 +1225,7 @@ type wingResponse struct {
 	stringFast        bool
 	stringBody        string
 	stringContentType string
+	sendFileEnabled   bool
 	fileFd            int32 // sendfile fd (0 = not a file response)
 	fileSize          int64 // sendfile byte count
 }
@@ -1249,9 +1255,13 @@ func (r *wingResponse) SetStringBody(status int, contentType, body string) {
 
 // SetSendFile configures the response to use sendfile(2) for zero-copy file transfer.
 func (r *wingResponse) SetSendFile(fd int32, size int64) {
+	if r.fileFd > 0 && r.fileFd != fd {
+		closeFd(int(r.fileFd))
+	}
 	r.fileFd = fd
 	r.fileSize = size
 }
+func (r *wingResponse) supportsStaticSendfile() bool { return r.sendFileEnabled }
 func (r *wingResponse) SetJSON(status int, data []byte) {
 	r.status = status
 	r.body = data

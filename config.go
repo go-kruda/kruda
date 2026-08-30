@@ -203,7 +203,9 @@ func WithLegacySecurityHeaders() Option {
 	}
 }
 
-// WithTransport sets a custom transport.
+// WithTransport sets a custom transport. When used with WithTLS, Listen
+// requires the transport to implement transport.TLSServer. Serve continues to
+// use the caller-supplied listener as-is.
 func WithTransport(t transport.Transport) Option {
 	return func(a *App) { a.config.Transport = t }
 }

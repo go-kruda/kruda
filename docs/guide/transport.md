@@ -43,6 +43,11 @@ KRUDA_TRANSPORT=fasthttp ./myapp   # force fasthttp
 - Wing on Windows → auto-falls back to net/http
 - Unsupported OS → defaults to fasthttp (macOS) or net/http (Windows)
 
+An explicit `WithTransport(custom)` is never replaced. With `WithTLS`,
+`App.Listen` requires that custom transport to implement
+`transport.TLSServer` and otherwise returns an error before binding. A caller
+that pre-wraps a listener with TLS can continue to pass it to `App.Serve`.
+
 ## Production TLS: terminate in front of Wing {#production-tls-terminate-in-front-of-wing}
 
 Wing does not implement TLS. When `WithTLS` is configured, Kruda automatically

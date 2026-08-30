@@ -237,23 +237,25 @@ type parserLimits struct {
 }
 
 type conn struct {
-	fd           int32
-	peerIP       netip.Addr // peer IP captured at accept (zero value if unknown)
-	readBuf      []byte
-	readN        int
-	sendBuf      []byte
-	sendN        int
-	keepAlive    bool
-	admitted     bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
-	pending      int    // in-flight handler goroutines
-	takenOver    bool   // fd detached to a Takeover goroutine and owned by its *os.File
-	remoteAddr   string // lazy peer address cache, filled only if Request.RemoteAddr is used
-	lastActive   int64  // unix nano — updated on accept + each recv
-	readDeadline int64  // unix nano — set when first byte arrives, cleared on full request
-	ctx          context.Context
-	cancel       context.CancelFunc
-	sendFileFd   int32 // sendfile: source fd (0 = none)
-	sendFileSize int64 // sendfile: remaining bytes
+	fd             int32
+	peerIP         netip.Addr // peer IP captured at accept (zero value if unknown)
+	readBuf        []byte
+	readN          int
+	sendBuf        []byte
+	sendN          int
+	keepAlive      bool
+	admitted       bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
+	pending        int    // in-flight handler goroutines
+	takenOver      bool   // fd detached to a Takeover goroutine and owned by its *os.File
+	closePending   bool   // close after async ownership returns; prevents fd reuse
+	remoteAddr     string // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive     int64  // unix nano — updated on accept + each recv
+	readDeadline   int64  // unix nano — set when first byte arrives, cleared on full request
+	readSuppressed bool   // readiness arrived while pending; drain once ownership returns
+	ctx            context.Context
+	cancel         context.CancelFunc
+	sendFileFd     int32 // sendfile: source fd (0 = none)
+	sendFileSize   int64 // sendfile: remaining bytes
 	// Slow-path body accumulation (populated when a request body spans multiple recvs).
 	bodyNeed       int    // total Content-Length expected (0 = not accumulating)
 	headerSnapshot []byte // copy of header block for re-parse after body complete
@@ -264,6 +266,10 @@ type conn struct {
 // accepted connection. Tests set it to pin assertions to the accept path rather
 // than the lazy getpeername used by RemoteAddr/IP. Always nil in production.
 var testAcceptPeerHook func(ip netip.Addr, ok bool)
+
+// testSuppressedRecvHook lets Linux integration tests prove that an EPOLLIN
+// event reached the worker while an async handler still owned the connection.
+var testSuppressedRecvHook func(fd int32)
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -343,6 +349,7 @@ type handlerJob struct {
 	fd           int32
 	keepAlive    bool
 	responseMode responseMode
+	directWrite  bool
 }
 
 type wingRouteHandler interface {
@@ -401,6 +408,11 @@ func (p *workerPool) loop(h transport.Handler) {
 		releaseResponse(resp)
 		releaseRequest(job.req)
 
+		if !job.directWrite {
+			p.done <- doneMsg{fd: job.fd, data: data, keepAlive: job.keepAlive}
+			p.wake()
+			continue
+		}
 		// Direct write from pool goroutine — skip doneCh data copy + SubmitSend round-trip.
 		if len(data) == 0 {
 			p.done <- doneMsg{fd: job.fd, keepAlive: job.keepAlive}
@@ -760,9 +772,17 @@ func (w *worker) handleRecv(ev event) {
 	} else {
 		c = w.conns[ev.Fd]
 	}
-	if c == nil || c.pending > 0 {
+	if c == nil {
 		return
 	}
+	if c.pending > 0 {
+		c.readSuppressed = true
+		if testSuppressedRecvHook != nil {
+			testSuppressedRecvHook(c.fd)
+		}
+		return
+	}
+	c.readSuppressed = false
 	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
 	if e != 0 || nr <= 0 {
 		w.closeConn(c.fd)
@@ -874,6 +894,13 @@ func (w *worker) tryParse(c *conn) {
 			// Don't consume — leave data in readBuf for re-parse after handleDone.
 			break
 		}
+		if f.Dispatch == Takeover && (c.sendN < len(c.sendBuf) || c.sendFileFd > 0) {
+			// Keep the takeover request in readBuf until every earlier response is
+			// complete; detaching now would abandon the event loop's send state.
+			releaseRequest(req)
+			w.directSend(c)
+			return
+		}
 
 		// Consume parsed bytes.
 		remaining := c.readN - consumed
@@ -892,6 +919,7 @@ func (w *worker) tryParse(c *conn) {
 			} else {
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
+				resp.sendFileEnabled = true
 				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
 				w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
@@ -902,9 +930,11 @@ func (w *worker) tryParse(c *conn) {
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
 					c.sendFileSize = resp.fileSize
+					resp.fileFd = 0
 					releaseResponse(resp)
 					releaseRequest(req)
-					break
+					w.directSend(c)
+					return
 				}
 				if resp.stringFast {
 					c.keepAlive = req.keepAlive
@@ -931,7 +961,13 @@ func (w *worker) tryParse(c *conn) {
 			// Dispatch to goroutine pool.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
+			job := handlerJob{
+				req:          req,
+				fd:           c.fd,
+				keepAlive:    req.keepAlive,
+				responseMode: f.ResponseMode,
+				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0,
+			}
 			select {
 			case w.pool.jobs <- job:
 			default:
@@ -962,8 +998,9 @@ func (w *worker) tryParse(c *conn) {
 			// New goroutine per request.
 			c.keepAlive = req.keepAlive
 			c.pending++
+			directWrite := c.sendN >= len(c.sendBuf) && c.sendFileFd == 0
 			w.dispatchWG.Add(1)
-			go func(req *wingRequest, fd int32, ka bool, f Preset) {
+			go func(req *wingRequest, fd int32, ka, directWrite bool, f Preset) {
 				defer w.dispatchWG.Done()
 				resp := acquireResponse()
 				resp.responseMode = f.ResponseMode
@@ -979,6 +1016,11 @@ func (w *worker) tryParse(c *conn) {
 				data := resp.buildZeroCopy()
 				releaseResponse(resp)
 				releaseRequest(req)
+				if !directWrite {
+					w.doneCh <- doneMsg{fd: fd, data: data, keepAlive: ka}
+					w.wake()
+					return
+				}
 				// Direct write from spawn goroutine.
 				if len(data) == 0 {
 					w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
@@ -996,7 +1038,10 @@ func (w *worker) tryParse(c *conn) {
 					w.doneCh <- doneMsg{fd: fd, data: data[written:], keepAlive: ka}
 				}
 				w.wake()
-			}(req, c.fd, req.keepAlive, f)
+			}(req, c.fd, req.keepAlive, directWrite, f)
+			if c.sendN < len(c.sendBuf) {
+				w.eng.SubmitSend(c.fd, nil)
+			}
 			return
 
 		case Takeover:
@@ -1023,7 +1068,13 @@ func (w *worker) tryParse(c *conn) {
 			// Persist or unknown — treat as Pool for now.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			job := handlerJob{req: req, fd: c.fd, keepAlive: req.keepAlive, responseMode: f.ResponseMode}
+			job := handlerJob{
+				req:          req,
+				fd:           c.fd,
+				keepAlive:    req.keepAlive,
+				responseMode: f.ResponseMode,
+				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0,
+			}
 			if w.pool != nil {
 				select {
 				case w.pool.jobs <- job:
@@ -1277,12 +1328,20 @@ func (w *worker) handleDone(msg doneMsg) {
 		return
 	}
 	c.pending--
+	if c.closePending {
+		if c.pending == 0 {
+			w.closeConn(c.fd)
+		}
+		return
+	}
 	c.keepAlive = msg.keepAlive
 	if len(msg.data) == 0 {
 		// Pool goroutine already wrote the response directly.
 		if c.keepAlive {
 			if c.readN > 0 {
 				w.tryParse(c)
+			} else if c.readSuppressed {
+				w.handleRecv(event{Fd: c.fd, ConnPtr: unsafe.Pointer(c)})
 			} else {
 				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
@@ -1306,7 +1365,7 @@ func (w *worker) directSend(c *conn) {
 				w.eng.SubmitSend(c.fd, nil)
 				return
 			}
-			w.closeConn(c.fd)
+			w.failSend(c)
 			return
 		}
 		c.sendN += int(r)
@@ -1317,24 +1376,33 @@ func (w *worker) directSend(c *conn) {
 	if c.sendFileFd > 0 {
 		for c.sendFileSize > 0 {
 			n, err := sendfile(c.fd, c.sendFileFd, nil, int(c.sendFileSize))
+			if n > 0 {
+				c.sendFileSize -= int64(n)
+			}
 			if err != nil {
 				if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 					// Socket buffer full — wait for writable notification.
 					w.eng.SubmitSend(c.fd, nil)
 					return
 				}
-				syscall.Close(int(c.sendFileFd))
-				c.sendFileFd = 0
-				w.closeConn(c.fd)
+				w.failSend(c)
 				return
 			}
-			c.sendFileSize -= int64(n)
+			if n == 0 {
+				w.failSend(c)
+				return
+			}
 		}
 		syscall.Close(int(c.sendFileFd))
 		c.sendFileFd = 0
 	}
 	if c.bodyNeed > 0 {
 		// Body accumulation owns receive arming; do not apply final-response handling.
+		return
+	}
+	if c.pending > 0 {
+		// An async handler still owns this physical connection. Keep the fd open
+		// until its completion is processed so the kernel cannot recycle its number.
 		return
 	}
 	if !c.keepAlive {
@@ -1345,6 +1413,7 @@ func (w *worker) directSend(c *conn) {
 		w.tryParse(c)
 		return
 	}
+	c.readSuppressed = false
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 	if e == 0 && r > 0 {
 		c.readN = int(r)
@@ -1357,6 +1426,21 @@ func (w *worker) directSend(c *conn) {
 	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
+func (w *worker) failSend(c *conn) {
+	c.sendBuf = c.sendBuf[:0]
+	c.sendN = 0
+	if c.sendFileFd > 0 {
+		syscall.Close(int(c.sendFileFd))
+		c.sendFileFd = 0
+		c.sendFileSize = 0
+	}
+	if c.pending > 0 {
+		c.closePending = true
+		return
+	}
+	w.closeConn(c.fd)
+}
+
 // takeoverSpinReads bounds the non-blocking read attempts a Takeover keep-alive
 // loop makes before parking on the runtime netpoller. A small spin can catch an
 // already-buffered next request without a netpoller wake hop; the fallback park
@@ -1365,6 +1449,21 @@ const takeoverSpinReads = 8
 
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
+
+func (w *worker) writeTakeover(f *os.File, data []byte) error {
+	if w.writeTimeout > 0 {
+		if err := f.SetWriteDeadline(time.Now().Add(time.Duration(w.writeTimeout))); err != nil {
+			return err
+		}
+	}
+	_, err := f.Write(data)
+	if w.writeTimeout > 0 {
+		if clearErr := f.SetWriteDeadline(time.Time{}); err == nil {
+			err = clearErr
+		}
+	}
+	return err
+}
 
 // takeoverLoop owns a connection fd: loops read→handle→write through an
 // *os.File so a blocked read parks the goroutine on the runtime netpoller
@@ -1427,6 +1526,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	connCtx := first.ctx // conn-level context — propagated to all pipelined requests.
 	req := first
 	keepAlive := req.keepAlive
+	requestStarted := false
 
 	for {
 		// Handle request.
@@ -1446,7 +1546,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 		// Write full response — os.File loops over partial writes and parks
 		// on EAGAIN via the runtime poller.
-		if _, werr := f.Write(data); werr != nil {
+		if werr := w.writeTakeover(f, data); werr != nil {
 			keepAlive = false
 			goto done
 		}
@@ -1454,9 +1554,26 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		if !keepAlive {
 			goto done
 		}
+		if readN == 0 && w.idleTimeout > 0 {
+			if err := f.SetReadDeadline(time.Now().Add(time.Duration(w.idleTimeout))); err != nil {
+				keepAlive = false
+				goto done
+			}
+		}
 
 		// Read next request — parks the goroutine until data arrives.
 		for {
+			if readN > 0 && !requestStarted {
+				requestStarted = true
+				deadline := time.Time{}
+				if w.readTimeout > 0 {
+					deadline = time.Now().Add(time.Duration(w.readTimeout))
+				}
+				if err := f.SetReadDeadline(deadline); err != nil {
+					keepAlive = false
+					goto done
+				}
+			}
 			if readN > 0 {
 				r, consumed, ok := parseHTTPRequest(buf[:readN], w.limits)
 				if ok {
@@ -1471,6 +1588,11 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					r.trustProxy = w.trustProxy
 					req = r
 					keepAlive = req.keepAlive
+					requestStarted = false
+					if err := f.SetReadDeadline(time.Time{}); err != nil {
+						keepAlive = false
+						goto done
+					}
 					goto next
 				}
 				// Classify the incomplete/rejected request.
@@ -1480,20 +1602,20 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					// Need more header bytes — keep reading.
 					if readN >= len(buf) {
 						// Buffer full but headers still incomplete: 431.
-						f.Write(wingStatusClose(431))
+						_ = w.writeTakeover(f, wingStatusClose(431))
 						keepAlive = false
 						goto done
 					}
 				case parseBadRequest:
-					f.Write(wingStatusClose(400))
+					_ = w.writeTakeover(f, wingStatusClose(400))
 					keepAlive = false
 					goto done
 				case parseChunked:
-					f.Write(wingStatusClose(501))
+					_ = w.writeTakeover(f, wingStatusClose(501))
 					keepAlive = false
 					goto done
 				case parseBodyTooLarge:
-					f.Write(wingStatusClose(413))
+					_ = w.writeTakeover(f, wingStatusClose(413))
 					keepAlive = false
 					goto done
 				case parseNeedBody:
@@ -1512,13 +1634,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if w.maxInflightBody > 0 {
 						if atomic.AddInt64(&w.inflightBody, int64(need)) > int64(w.maxInflightBody) {
 							atomic.AddInt64(&w.inflightBody, -int64(need))
-							f.Write(wingStatusClose(503))
+							_ = w.writeTakeover(f, wingStatusClose(503))
 							keepAlive = false
 							goto done
 						}
 					}
 					if expectContinue {
-						if _, werr := f.Write(wing100Continue); werr != nil {
+						if werr := w.writeTakeover(f, wing100Continue); werr != nil {
 							if w.maxInflightBody > 0 {
 								atomic.AddInt64(&w.inflightBody, -int64(need))
 							}
@@ -1535,11 +1657,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					}
 					readN = 0
 					// Read remaining body bytes, reusing buf as a temp chunk buffer.
-					// One absolute deadline bounds the whole body read so a slow
-					// client cannot extend it indefinitely by trickling bytes.
-					if w.readTimeout > 0 {
-						f.SetReadDeadline(time.Now().Add(time.Duration(w.readTimeout)))
-					}
+					// The request deadline was set when its first bytes arrived and is
+					// not refreshed here, so trickling cannot extend it indefinitely.
 					for len(bodyBuf) < need {
 						n, rerr := f.Read(buf)
 						if n > 0 {
@@ -1559,6 +1678,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if w.readTimeout > 0 {
 						f.SetReadDeadline(time.Time{})
 					}
+					requestStarted = false
 					// Body fully accumulated — release the budget reservation
 					// (mirrors finishBodyAccum). Any later exit on this iteration is
 					// post-accumulation, so it must not refund again.
@@ -1587,7 +1707,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					keepAlive = req.keepAlive
 					goto next
 				case parseHeaderTooLarge:
-					f.Write(wingStatusClose(431))
+					_ = w.writeTakeover(f, wingStatusClose(431))
 					keepAlive = false
 					goto done
 				default:

@@ -104,7 +104,9 @@ Sets a custom structured logger.
 func WithTransport(t transport.Transport) Option
 ```
 
-Sets a custom transport implementation.
+Sets a custom transport implementation. With `WithTLS`, `App.Listen` requires
+the transport to implement `transport.TLSServer`; `App.Serve` continues to use
+the caller-supplied listener as-is.
 
 ### FastHTTP
 

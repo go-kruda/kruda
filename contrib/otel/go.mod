@@ -3,7 +3,7 @@ module github.com/go-kruda/kruda/contrib/otel
 go 1.25.13
 
 require (
-	github.com/go-kruda/kruda v1.2.0
+	github.com/go-kruda/kruda v1.7.2
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0

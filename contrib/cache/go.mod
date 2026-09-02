@@ -2,7 +2,7 @@ module github.com/go-kruda/kruda/contrib/cache
 
 go 1.25.13
 
-require github.com/go-kruda/kruda v1.2.0
+require github.com/go-kruda/kruda v1.7.2
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect

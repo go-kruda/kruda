@@ -3,7 +3,7 @@ module github.com/go-kruda/kruda/contrib/observability
 go 1.25.13
 
 require (
-	github.com/go-kruda/kruda v1.4.0
+	github.com/go-kruda/kruda v1.7.2
 	github.com/prometheus/client_golang v1.23.2
 	go.opentelemetry.io/contrib/exporters/autoexport v0.69.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0

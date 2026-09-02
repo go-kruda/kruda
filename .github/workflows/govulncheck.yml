@@ -40,6 +40,9 @@ jobs:
           for mod in $(git ls-files '*go.mod' | grep -vE '^(examples|bench)/'); do
             dir=$(dirname "$mod")
             echo "==> govulncheck $dir"
+            if [[ "${{ github.event_name }}" == "pull_request" && "$dir" == contrib/* ]]; then
+              (cd "$dir" && go mod edit -replace github.com/go-kruda/kruda="$GITHUB_WORKSPACE")
+            fi
             if ! (cd "$dir" && govulncheck ./...); then
               fail=1
             fi

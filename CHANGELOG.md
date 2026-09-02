@@ -3,7 +3,7 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.7.2] — 2026-08-31
+## [1.7.2] — 2026-09-03
 
 ### Security
 
@@ -28,6 +28,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   through `RawRequest()` and serve an authorized filesystem path should use the
   v1.70 `SendFileLiteral`/`ServeFileLiteral` variants so a second URI decoding
   pass cannot reinterpret the checked path.
+- Every tagged contrib module now requires Kruda core v1.7.2 or newer, so Go's
+  minimum version selection cannot pair these updates with a core version that
+  predates the transport and toolchain hardening above.
 
 ### Changed
 

@@ -40,6 +40,10 @@ if [[ -n "$violations" ]]; then
 fi
 ok "no replace directives in released go.mod"
 
+section "contrib minimum core version"
+scripts/check-contrib-core-floor.sh
+ok "every contrib module selects the hardened core floor"
+
 section "lint (golangci-lint)"
 # CI blocks the merge on this and it catches what `go vet` does not — the
 # govet inline analyzer, among others. Absent from this script, a lint-only

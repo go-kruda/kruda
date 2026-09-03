@@ -3,6 +3,51 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.2] — 2026-09-03
+
+### Security
+
+- TLS now fails closed when a custom transport cannot consume Kruda's TLS
+  configuration. A transport used with `WithTLS` must implement
+  `transport.TLSServer`; Kruda no longer risks starting that transport without
+  the requested certificate and key.
+- Hardened Wing connection ownership across takeover, pending reads, queued
+  writes and static sendfile. Responses queued before `Takeover` remain ordered,
+  Linux reads suppressed by backpressure resume, and file descriptors remain
+  owned until asynchronous sendfile work completes instead of being eligible for
+  reuse while a response is still in flight.
+- Updated the released dependency graphs to clear newly published advisories:
+  `fasthttp` v1.70.0 (GO-2026-4950), `klauspost/compress` v1.18.7
+  (GO-2026-5841), `x/text` v0.39.0 (GO-2026-5970), `x/net` v0.56.0
+  (GO-2026-5942), `x/sys` v0.46.0 (GO-2026-5024), and OpenTelemetry
+  v1.44.0 (GO-2026-5158). The checked-in database benchmarks also use
+  `pgx/v5` v5.9.2, clearing GO-2026-5004.
+
+  Kruda does not call the affected fasthttp file-serving symbols or
+  `compress/s2` directly. Applications that obtain a `*fasthttp.RequestCtx`
+  through `RawRequest()` and serve an authorized filesystem path should use the
+  v1.70 `SendFileLiteral`/`ServeFileLiteral` variants so a second URI decoding
+  pass cannot reinterpret the checked path.
+- Every tagged contrib module now requires Kruda core v1.7.2 or newer, so Go's
+  minimum version selection cannot pair these updates with a core version that
+  predates the transport and toolchain hardening above.
+
+### Changed
+
+- Raised the minimum Go patch level from 1.25.11 to **1.25.13** across the core,
+  CLI, contrib modules, templates, examples, benchmarks, documentation and CI.
+- The FastHTTP transport inherits v1.70's stricter request parsing. Requests with
+  missing or duplicate `Host` headers, whitespace before a header colon, invalid
+  request targets, or malformed chunk extensions or trailers may now be rejected;
+  well-formed HTTP traffic is unchanged.
+
+### Documentation
+
+- Added a source-derived guard that rejects validation examples naming rules
+  Kruda does not implement or register, covering the README, site guides, API
+  pages, Go doc comments and runnable examples. The typed-handler tag legend now
+  uses the real `required,min=2` rules instead of a placeholder.
+
 ## [1.7.1] — 2026-08-03
 
 ### Breaking

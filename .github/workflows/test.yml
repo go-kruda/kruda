@@ -46,6 +46,11 @@ jobs:
           scripts/check-docs.sh
           scripts/check-godoc.sh
 
+      - name: Verify contrib core security floor
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        shell: bash
+        run: scripts/check-contrib-core-floor.sh
+
       - name: Go vet
         run: go vet -tags kruda_stdjson ./...
 

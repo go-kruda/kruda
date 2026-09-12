@@ -1,0 +1,1512 @@
+actix-latency-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   153.34us   59.86us   1.07ms   85.20%
+    Req/Sec   199.22k    38.07k  239.69k    73.84%
+  Latency Distribution
+     50%  127.00us
+     75%  173.00us
+     90%  272.00us
+     99%  344.00us
+  11965832 requests in 15.10s, 1.50GB read
+Requests/sec: 792426.82
+Transfer/sec:    102.02MB
+actix-latency-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   153.64us   60.94us   2.30ms   85.13%
+    Req/Sec   198.89k    38.40k  247.56k    60.53%
+  Latency Distribution
+     50%  127.00us
+     75%  172.00us
+     90%  274.00us
+     99%  346.00us
+  11927385 requests in 15.10s, 1.50GB read
+Requests/sec: 789914.39
+Transfer/sec:    101.70MB
+actix-latency-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   148.57us   63.15us   3.09ms   80.75%
+    Req/Sec   196.14k    39.56k  248.09k    67.22%
+  Latency Distribution
+     50%  126.00us
+     75%  169.00us
+     90%  271.00us
+     99%  347.00us
+  11782165 requests in 15.10s, 1.48GB read
+Requests/sec: 780292.93
+Transfer/sec:    100.46MB
+actix-latency-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   157.45us   61.78us   2.30ms   85.10%
+    Req/Sec   196.01k    37.91k  240.90k    66.39%
+  Latency Distribution
+     50%  130.00us
+     75%  173.00us
+     90%  277.00us
+     99%  341.00us
+  11770617 requests in 15.10s, 1.48GB read
+Requests/sec: 779493.77
+Transfer/sec:    100.36MB
+actix-latency-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   152.05us   69.28us   3.27ms   77.02%
+    Req/Sec   189.60k    39.92k  254.59k    63.68%
+  Latency Distribution
+     50%  128.00us
+     75%  165.00us
+     90%  279.00us
+     99%  344.00us
+  11368881 requests in 15.10s, 1.43GB read
+Requests/sec: 752919.94
+Transfer/sec:     96.94MB
+actix-latency-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   151.25us   63.25us   2.27ms   82.78%
+    Req/Sec   197.61k    39.59k  250.74k    60.47%
+  Latency Distribution
+     50%  126.00us
+     75%  172.00us
+     90%  272.00us
+     99%  346.00us
+  11828564 requests in 15.10s, 1.49GB read
+Requests/sec: 783368.95
+Transfer/sec:    100.86MB
+actix-latency-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   146.89us   62.00us   3.30ms   83.60%
+    Req/Sec   204.62k    41.14k  253.51k    73.63%
+  Latency Distribution
+     50%  120.00us
+     75%  173.00us
+     90%  264.00us
+     99%  343.00us
+  12270674 requests in 15.10s, 1.54GB read
+Requests/sec: 812630.11
+Transfer/sec:    104.62MB
+actix-latency-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   149.07us   60.99us   2.28ms   84.79%
+    Req/Sec   203.26k    39.71k  250.79k    74.67%
+  Latency Distribution
+     50%  122.00us
+     75%  174.00us
+     90%  265.00us
+     99%  343.00us
+  12211295 requests in 15.10s, 1.54GB read
+Requests/sec: 808677.36
+Transfer/sec:    104.11MB
+actix-latency-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   140.31us   60.67us   1.75ms   77.32%
+    Req/Sec   200.59k    44.60k  245.62k    71.26%
+  Latency Distribution
+     50%  121.00us
+     75%  139.00us
+     90%  258.00us
+     99%  337.00us
+  12008798 requests in 15.10s, 1.51GB read
+Requests/sec: 795299.28
+Transfer/sec:    102.39MB
+actix-latency-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   143.96us   61.74us   2.34ms   79.99%
+    Req/Sec   200.45k    43.37k  249.59k    69.27%
+  Latency Distribution
+     50%  121.00us
+     75%  165.00us
+     90%  265.00us
+     99%  344.00us
+  11999079 requests in 15.10s, 1.51GB read
+Requests/sec: 794651.26
+Transfer/sec:    102.31MB
+actix-latency-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   144.53us   61.79us   0.93ms   80.55%
+    Req/Sec   202.35k    43.63k  252.81k    68.55%
+  Latency Distribution
+     50%  122.00us
+     75%  163.00us
+     90%  267.00us
+     99%  339.00us
+  12092788 requests in 15.10s, 1.52GB read
+Requests/sec: 800879.61
+Transfer/sec:    103.11MB
+actix-latency-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   146.33us   59.87us   1.27ms   82.51%
+    Req/Sec   202.73k    40.88k  249.09k    70.93%
+  Latency Distribution
+     50%  122.00us
+     75%  170.00us
+     90%  263.00us
+     99%  342.00us
+  12136246 requests in 15.10s, 1.53GB read
+Requests/sec: 803735.87
+Transfer/sec:    103.48MB
+actix-latency-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   144.43us   60.90us   3.30ms   84.11%
+    Req/Sec   208.81k    42.14k  257.01k    67.88%
+  Latency Distribution
+     50%  121.00us
+     75%  164.00us
+     90%  256.00us
+     99%  331.00us
+  12542984 requests in 15.10s, 1.34GB read
+Requests/sec: 830659.16
+Transfer/sec:     91.10MB
+actix-latency-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   142.40us   59.55us   2.01ms   81.61%
+    Req/Sec   207.11k    43.11k  251.71k    73.09%
+  Latency Distribution
+     50%  118.00us
+     75%  163.00us
+     90%  258.00us
+     99%  333.00us
+  12400915 requests in 15.10s, 1.33GB read
+Requests/sec: 821249.44
+Transfer/sec:     90.07MB
+actix-latency-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   148.20us   58.58us   1.77ms   85.85%
+    Req/Sec   207.53k    41.61k  241.03k    75.25%
+  Latency Distribution
+     50%  120.00us
+     75%  176.00us
+     90%  260.00us
+     99%  340.00us
+  12428063 requests in 15.10s, 1.33GB read
+Requests/sec: 823084.54
+Transfer/sec:     90.27MB
+actix-latency-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   143.45us   60.00us   2.15ms   81.59%
+    Req/Sec   204.78k    43.46k  248.52k    73.00%
+  Latency Distribution
+     50%  119.00us
+     75%  166.00us
+     90%  258.00us
+     99%  339.00us
+  12219668 requests in 15.00s, 1.31GB read
+Requests/sec: 814629.00
+Transfer/sec:     89.34MB
+actix-latency-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   147.61us   61.04us   2.93ms   84.31%
+    Req/Sec   205.12k    41.20k  252.16k    73.51%
+  Latency Distribution
+     50%  121.00us
+     75%  171.00us
+     90%  264.00us
+     99%  339.00us
+  12320593 requests in 15.10s, 1.32GB read
+Requests/sec: 815917.05
+Transfer/sec:     89.48MB
+actix-latency-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   143.20us   55.95us   2.06ms   86.02%
+    Req/Sec   214.35k    43.62k  264.27k    72.59%
+  Latency Distribution
+     50%  121.00us
+     75%  157.00us
+     90%  251.00us
+     99%  322.00us
+  12833212 requests in 15.10s, 1.37GB read
+Requests/sec: 849901.29
+Transfer/sec:     93.21MB
+actix-throughput-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   295.38us  124.82us   3.04ms   79.87%
+    Req/Sec   197.21k    39.49k  253.69k    65.17%
+  Latency Distribution
+     50%  251.00us
+     75%  340.00us
+     90%  553.00us
+     99%  692.00us
+  11768465 requests in 15.02s, 1.48GB read
+Requests/sec: 783652.58
+Transfer/sec:    100.89MB
+actix-throughput-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   262.88us  123.69us   3.08ms   68.33%
+    Req/Sec   195.58k    46.14k  254.42k    50.25%
+  Latency Distribution
+     50%  246.00us
+     75%  266.00us
+     90%  398.00us
+     99%  682.00us
+  11693304 requests in 15.10s, 1.47GB read
+Requests/sec: 774403.66
+Transfer/sec:     99.70MB
+actix-throughput-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   254.26us  120.77us   2.40ms   68.82%
+    Req/Sec   195.48k    47.89k  255.06k    47.25%
+  Latency Distribution
+     50%  246.00us
+     75%  263.00us
+     90%  386.00us
+     99%  674.00us
+  11685301 requests in 15.10s, 1.47GB read
+Requests/sec: 773865.91
+Transfer/sec:     99.63MB
+actix-throughput-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   301.76us  122.35us   1.76ms   82.86%
+    Req/Sec   199.15k    39.21k  253.35k    71.38%
+  Latency Distribution
+     50%  250.00us
+     75%  348.00us
+     90%  550.00us
+     99%  695.00us
+  11902871 requests in 15.10s, 1.50GB read
+Requests/sec: 788263.49
+Transfer/sec:    101.49MB
+actix-throughput-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   309.63us  122.72us   3.51ms   84.59%
+    Req/Sec   197.97k    37.33k  252.51k    73.26%
+  Latency Distribution
+     50%  254.00us
+     75%  355.00us
+     90%  555.00us
+     99%  694.00us
+  11853833 requests in 15.10s, 1.49GB read
+Requests/sec: 785015.97
+Transfer/sec:    101.07MB
+actix-throughput-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   314.38us  131.04us   3.33ms   82.27%
+    Req/Sec   193.97k    37.81k  243.26k    71.59%
+  Latency Distribution
+     50%  252.00us
+     75%  356.00us
+     90%  559.00us
+     99%  696.00us
+  11612646 requests in 15.10s, 1.46GB read
+Requests/sec: 769038.40
+Transfer/sec:     99.01MB
+actix-throughput-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   282.92us  122.13us   1.58ms   79.60%
+    Req/Sec   204.21k    43.76k  255.80k    70.55%
+  Latency Distribution
+     50%  239.00us
+     75%  320.00us
+     90%  533.00us
+     99%  689.00us
+  12207895 requests in 15.10s, 1.53GB read
+Requests/sec: 808455.68
+Transfer/sec:    104.09MB
+actix-throughput-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   290.02us  121.24us   1.77ms   81.28%
+    Req/Sec   203.17k    42.78k  251.55k    71.43%
+  Latency Distribution
+     50%  242.00us
+     75%  340.00us
+     90%  536.00us
+     99%  688.00us
+  12164889 requests in 15.10s, 1.53GB read
+Requests/sec: 805634.70
+Transfer/sec:    103.72MB
+actix-throughput-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   296.77us  122.64us   3.13ms   84.11%
+    Req/Sec   204.68k    42.26k  248.90k    72.88%
+  Latency Distribution
+     50%  245.00us
+     75%  339.00us
+     90%  542.00us
+     99%  692.00us
+  12231305 requests in 15.10s, 1.54GB read
+Requests/sec: 810032.48
+Transfer/sec:    104.29MB
+actix-throughput-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   227.15us  110.14us   1.59ms   83.71%
+    Req/Sec   194.45k    51.81k  252.98k    48.09%
+  Latency Distribution
+     50%  233.00us
+     75%  252.00us
+     90%  360.00us
+     99%  622.00us
+  11621439 requests in 15.10s, 1.46GB read
+Requests/sec: 769631.01
+Transfer/sec:     99.09MB
+actix-throughput-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   294.21us  119.57us   2.07ms   83.62%
+    Req/Sec   205.00k    42.57k  254.79k    73.83%
+  Latency Distribution
+     50%  241.00us
+     75%  350.00us
+     90%  532.00us
+     99%  697.00us
+  12232447 requests in 15.01s, 1.54GB read
+Requests/sec: 814705.44
+Transfer/sec:    104.89MB
+actix-throughput-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   277.50us  120.15us   2.19ms   77.08%
+    Req/Sec   202.97k    44.27k  253.11k    67.22%
+  Latency Distribution
+     50%  240.00us
+     75%  267.00us
+     90%  522.00us
+     99%  681.00us
+  12134831 requests in 15.10s, 1.53GB read
+Requests/sec: 803643.75
+Transfer/sec:    103.47MB
+actix-throughput-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   295.77us  119.24us   1.49ms   85.12%
+    Req/Sec   206.68k    42.22k  249.62k    74.50%
+  Latency Distribution
+     50%  239.00us
+     75%  352.00us
+     90%  535.00us
+     99%  695.00us
+  12335436 requests in 15.01s, 1.32GB read
+Requests/sec: 821635.14
+Transfer/sec:     90.11MB
+actix-throughput-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   295.94us  116.11us   1.81ms   85.25%
+    Req/Sec   206.63k    43.21k  249.48k    74.67%
+  Latency Distribution
+     50%  245.00us
+     75%  336.00us
+     90%  526.00us
+     99%  675.00us
+  12331884 requests in 15.02s, 1.32GB read
+Requests/sec: 821115.74
+Transfer/sec:     90.05MB
+actix-throughput-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   288.83us  119.17us   1.63ms   82.50%
+    Req/Sec   206.11k    43.09k  254.15k    73.26%
+  Latency Distribution
+     50%  239.00us
+     75%  343.00us
+     90%  529.00us
+     99%  686.00us
+  12340872 requests in 15.10s, 1.32GB read
+Requests/sec: 817262.22
+Transfer/sec:     89.63MB
+actix-throughput-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   292.42us  120.14us   1.61ms   83.84%
+    Req/Sec   206.66k    43.74k  251.27k    74.04%
+  Latency Distribution
+     50%  237.00us
+     75%  355.00us
+     90%  532.00us
+     99%  693.00us
+  12355209 requests in 15.10s, 1.32GB read
+Requests/sec: 818243.64
+Transfer/sec:     89.74MB
+actix-throughput-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   252.80us  117.59us   2.48ms   69.48%
+    Req/Sec   200.17k    49.13k  253.05k    64.39%
+  Latency Distribution
+     50%  236.00us
+     75%  256.00us
+     90%  385.00us
+     99%  670.00us
+  11963974 requests in 15.10s, 1.28GB read
+Requests/sec: 792332.48
+Transfer/sec:     86.90MB
+actix-throughput-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18473/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   305.89us  126.56us  11.65ms   84.08%
+    Req/Sec   201.11k    41.04k  243.81k    74.17%
+  Latency Distribution
+     50%  246.00us
+     75%  349.00us
+     90%  541.00us
+     99%  686.00us
+  11998751 requests in 15.01s, 1.29GB read
+Requests/sec: 799269.11
+Transfer/sec:     87.66MB
+fiber-latency-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.02us   95.22us   4.71ms   85.58%
+    Req/Sec   204.28k    41.86k  249.33k    76.95%
+  Latency Distribution
+     50%  110.00us
+     75%  149.00us
+     90%  239.00us
+     99%  471.00us
+  12254690 requests in 15.10s, 1.71GB read
+Requests/sec: 811577.96
+Transfer/sec:    116.10MB
+fiber-latency-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   132.27us  100.21us   4.34ms   84.12%
+    Req/Sec   205.96k    37.93k  255.36k    78.24%
+  Latency Distribution
+     50%  113.00us
+     75%  164.00us
+     90%  252.00us
+     99%  486.00us
+  12333581 requests in 15.10s, 1.72GB read
+Requests/sec: 816805.34
+Transfer/sec:    116.84MB
+fiber-latency-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   125.44us   96.52us   5.20ms   86.47%
+    Req/Sec   200.56k    42.31k  251.18k    72.80%
+  Latency Distribution
+     50%  110.00us
+     75%  146.00us
+     90%  237.00us
+     99%  470.00us
+  12028439 requests in 15.10s, 1.68GB read
+Requests/sec: 796589.22
+Transfer/sec:    113.95MB
+fiber-latency-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   131.55us   99.37us   6.02ms   84.16%
+    Req/Sec   202.95k    39.93k  248.46k    77.48%
+  Latency Distribution
+     50%  112.00us
+     75%  161.00us
+     90%  251.00us
+     99%  483.00us
+  12189739 requests in 15.10s, 1.70GB read
+Requests/sec: 807273.15
+Transfer/sec:    115.48MB
+fiber-latency-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   132.91us   99.95us   3.24ms   84.00%
+    Req/Sec   202.28k    37.93k  259.44k    75.87%
+  Latency Distribution
+     50%  113.00us
+     75%  164.00us
+     90%  253.00us
+     99%  488.00us
+  12091873 requests in 15.10s, 1.69GB read
+Requests/sec: 800817.74
+Transfer/sec:    114.56MB
+fiber-latency-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   122.94us   94.04us   6.13ms   86.84%
+    Req/Sec   199.62k    45.16k  260.00k    69.98%
+  Latency Distribution
+     50%  108.00us
+     75%  143.00us
+     90%  231.00us
+     99%  456.00us
+  11971321 requests in 15.10s, 1.67GB read
+Requests/sec: 792801.93
+Transfer/sec:    113.41MB
+fiber-latency-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.40us   82.07us   6.16ms   78.06%
+    Req/Sec   210.05k    42.00k  251.55k    78.97%
+  Latency Distribution
+     50%  111.00us
+     75%  162.00us
+     90%  237.00us
+     99%  396.00us
+  12620303 requests in 15.10s, 1.76GB read
+Requests/sec: 835756.31
+Transfer/sec:    119.56MB
+fiber-latency-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   140.17us   88.45us   3.21ms   72.01%
+    Req/Sec   224.29k    12.45k  248.40k    93.21%
+  Latency Distribution
+     50%  122.00us
+     75%  186.00us
+     90%  259.00us
+     99%  422.00us
+  13475570 requests in 15.10s, 1.88GB read
+Requests/sec: 892429.89
+Transfer/sec:    127.66MB
+fiber-latency-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   133.46us   85.09us   5.99ms   74.58%
+    Req/Sec   212.57k    34.33k  254.65k    82.28%
+  Latency Distribution
+     50%  116.00us
+     75%  174.00us
+     90%  248.00us
+     99%  411.00us
+  12770577 requests in 15.10s, 1.78GB read
+Requests/sec: 845678.75
+Transfer/sec:    120.98MB
+fiber-latency-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.29us   82.46us   5.50ms   78.71%
+    Req/Sec   210.40k    40.94k  252.93k    80.60%
+  Latency Distribution
+     50%  111.00us
+     75%  161.00us
+     90%  236.00us
+     99%  395.00us
+  12620916 requests in 15.10s, 1.76GB read
+Requests/sec: 835839.74
+Transfer/sec:    119.57MB
+fiber-latency-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.22us   81.25us   5.97ms   77.97%
+    Req/Sec   210.81k    41.59k  253.44k    79.64%
+  Latency Distribution
+     50%  111.00us
+     75%  162.00us
+     90%  237.00us
+     99%  393.00us
+  12663546 requests in 15.10s, 1.77GB read
+Requests/sec: 838637.04
+Transfer/sec:    119.97MB
+fiber-latency-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   134.26us   86.35us   6.14ms   74.98%
+    Req/Sec   217.15k    30.24k  256.11k    88.69%
+  Latency Distribution
+     50%  117.00us
+     75%  176.00us
+     90%  250.00us
+     99%  412.00us
+  12983085 requests in 15.10s, 1.81GB read
+Requests/sec: 859839.07
+Transfer/sec:    123.00MB
+fiber-latency-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   119.38us   66.92us   3.44ms   75.30%
+    Req/Sec   220.18k    35.82k  254.08k    86.21%
+  Latency Distribution
+     50%  108.00us
+     75%  150.00us
+     90%  208.00us
+     99%  334.00us
+  13184375 requests in 15.10s, 1.60GB read
+Requests/sec: 873168.41
+Transfer/sec:    108.25MB
+fiber-latency-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   127.27us   72.58us   2.77ms   74.41%
+    Req/Sec   228.46k    17.75k  250.16k    96.01%
+  Latency Distribution
+     50%  113.00us
+     75%  164.00us
+     90%  223.00us
+     99%  360.00us
+  13683635 requests in 15.10s, 1.66GB read
+Requests/sec: 906200.63
+Transfer/sec:    112.35MB
+fiber-latency-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.29us   73.24us   3.24ms   74.45%
+    Req/Sec   224.29k    26.50k  252.17k    91.23%
+  Latency Distribution
+     50%  112.00us
+     75%  162.00us
+     90%  223.00us
+     99%  361.00us
+  13474922 requests in 15.10s, 1.63GB read
+Requests/sec: 892386.15
+Transfer/sec:    110.64MB
+fiber-latency-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   127.77us   71.84us   3.26ms   74.52%
+    Req/Sec   229.88k     9.79k  246.25k    96.19%
+  Latency Distribution
+     50%  114.00us
+     75%  164.00us
+     90%  222.00us
+     99%  356.00us
+  13814174 requests in 15.10s, 1.67GB read
+Requests/sec: 914840.57
+Transfer/sec:    113.42MB
+fiber-latency-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   123.63us   70.08us   4.12ms   74.94%
+    Req/Sec   220.32k    31.87k  249.55k    87.75%
+  Latency Distribution
+     50%  111.00us
+     75%  157.00us
+     90%  217.00us
+     99%  348.00us
+  13233027 requests in 15.10s, 1.60GB read
+Requests/sec: 876323.65
+Transfer/sec:    108.64MB
+fiber-latency-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   123.89us   69.49us   3.38ms   74.00%
+    Req/Sec   232.01k    19.53k  262.37k    93.50%
+  Latency Distribution
+     50%  111.00us
+     75%  159.00us
+     90%  216.00us
+     99%  343.00us
+  13848067 requests in 15.00s, 1.68GB read
+Requests/sec: 923183.36
+Transfer/sec:    114.45MB
+fiber-throughput-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   237.20us  174.72us   3.78ms   84.30%
+    Req/Sec   203.51k    43.08k  259.31k    75.25%
+  Latency Distribution
+     50%  188.00us
+     75%  279.00us
+     90%  461.00us
+     99%    0.90ms
+  12187377 requests in 15.10s, 1.70GB read
+Requests/sec: 807104.91
+Transfer/sec:    115.46MB
+fiber-throughput-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   232.12us  171.07us   3.86ms   85.06%
+    Req/Sec   204.53k    43.79k  257.71k    77.17%
+  Latency Distribution
+     50%  177.00us
+     75%  273.00us
+     90%  448.00us
+     99%    0.88ms
+  12209274 requests in 15.01s, 1.71GB read
+Requests/sec: 813360.56
+Transfer/sec:    116.35MB
+fiber-throughput-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   258.67us  196.15us   5.57ms   82.15%
+    Req/Sec   207.84k    35.90k  257.27k    80.33%
+  Latency Distribution
+     50%  213.00us
+     75%  326.00us
+     90%  513.00us
+     99%    0.96ms
+  12404042 requests in 15.01s, 1.73GB read
+Requests/sec: 826133.46
+Transfer/sec:    118.18MB
+fiber-throughput-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   242.81us  180.52us   6.02ms   83.58%
+    Req/Sec   205.45k    41.21k  259.29k    77.50%
+  Latency Distribution
+     50%  196.00us
+     75%  288.00us
+     90%  477.00us
+     99%    0.91ms
+  12258788 requests in 15.02s, 1.71GB read
+Requests/sec: 816411.19
+Transfer/sec:    116.79MB
+fiber-throughput-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   265.86us  201.21us   6.44ms   81.18%
+    Req/Sec   210.80k    33.70k  254.04k    80.50%
+  Latency Distribution
+     50%  219.00us
+     75%  345.00us
+     90%  530.00us
+     99%    0.98ms
+  12581139 requests in 15.01s, 1.76GB read
+Requests/sec: 838149.80
+Transfer/sec:    119.90MB
+fiber-throughput-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   232.42us  168.80us   6.12ms   85.10%
+    Req/Sec   200.35k    46.02k  258.40k    71.93%
+  Latency Distribution
+     50%  181.00us
+     75%  274.00us
+     90%  444.00us
+     99%    0.88ms
+  11999956 requests in 15.10s, 1.68GB read
+Requests/sec: 794697.02
+Transfer/sec:    113.68MB
+fiber-throughput-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   253.96us  172.70us   6.51ms   77.83%
+    Req/Sec   214.35k    39.34k  252.54k    83.19%
+  Latency Distribution
+     50%  215.00us
+     75%  332.00us
+     90%  489.00us
+     99%  832.00us
+  12814270 requests in 15.10s, 1.79GB read
+Requests/sec: 848632.27
+Transfer/sec:    121.40MB
+fiber-throughput-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   269.58us  180.18us   3.44ms   74.57%
+    Req/Sec   221.35k    26.56k  257.19k    88.54%
+  Latency Distribution
+     50%  231.00us
+     75%  361.00us
+     90%  513.00us
+     99%    0.85ms
+  13256306 requests in 15.10s, 1.85GB read
+Requests/sec: 877859.90
+Transfer/sec:    125.58MB
+fiber-throughput-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   277.46us  185.75us   6.48ms   73.38%
+    Req/Sec   222.41k    22.46k  249.18k    92.68%
+  Latency Distribution
+     50%  239.00us
+     75%  374.00us
+     90%  527.00us
+     99%    0.87ms
+  13297455 requests in 15.10s, 1.86GB read
+Requests/sec: 880639.05
+Transfer/sec:    125.98MB
+fiber-throughput-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   267.63us  180.34us   6.10ms   75.15%
+    Req/Sec   220.06k    30.37k  248.93k    90.52%
+  Latency Distribution
+     50%  229.00us
+     75%  358.00us
+     90%  511.00us
+     99%    0.85ms
+  13158491 requests in 15.10s, 1.84GB read
+Requests/sec: 871425.09
+Transfer/sec:    124.66MB
+fiber-throughput-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   232.69us  154.61us   7.65ms   81.23%
+    Req/Sec   207.64k    47.86k  255.10k    74.46%
+  Latency Distribution
+     50%  194.00us
+     75%  285.00us
+     90%  442.00us
+     99%  775.00us
+  12457569 requests in 15.10s, 1.74GB read
+Requests/sec: 824956.98
+Transfer/sec:    118.01MB
+fiber-throughput-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   256.25us  174.35us   5.29ms   77.82%
+    Req/Sec   214.30k    36.53k  248.34k    85.38%
+  Latency Distribution
+     50%  218.00us
+     75%  334.00us
+     90%  493.00us
+     99%  841.00us
+  12832689 requests in 15.10s, 1.79GB read
+Requests/sec: 849834.80
+Transfer/sec:    121.57MB
+fiber-throughput-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   249.16us  148.73us   3.93ms   75.45%
+    Req/Sec   223.42k    28.93k  249.51k    91.38%
+  Latency Distribution
+     50%  220.00us
+     75%  322.00us
+     90%  449.00us
+     99%  730.00us
+  13400273 requests in 15.10s, 1.62GB read
+Requests/sec: 887425.01
+Transfer/sec:    110.02MB
+fiber-throughput-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   245.18us  151.77us   6.24ms   76.93%
+    Req/Sec   220.71k    34.55k  255.86k    87.40%
+  Latency Distribution
+     50%  213.00us
+     75%  317.00us
+     90%  451.00us
+     99%  742.00us
+  13240530 requests in 15.10s, 1.60GB read
+Requests/sec: 876850.83
+Transfer/sec:    108.71MB
+fiber-throughput-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   246.30us  149.68us   5.98ms   76.98%
+    Req/Sec   220.44k    32.23k  248.18k    88.70%
+  Latency Distribution
+     50%  216.00us
+     75%  317.00us
+     90%  447.00us
+     99%  735.00us
+  13201343 requests in 15.10s, 1.60GB read
+Requests/sec: 874222.22
+Transfer/sec:    108.38MB
+fiber-throughput-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   238.30us  146.41us   5.98ms   78.75%
+    Req/Sec   212.80k    42.42k  261.58k    79.60%
+  Latency Distribution
+     50%  209.00us
+     75%  300.00us
+     90%  435.00us
+     99%  731.00us
+  12766285 requests in 15.10s, 1.55GB read
+Requests/sec: 845388.98
+Transfer/sec:    104.81MB
+fiber-throughput-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   258.46us  156.76us   5.37ms   74.11%
+    Req/Sec   227.78k    20.58k  253.14k    94.86%
+  Latency Distribution
+     50%  226.00us
+     75%  339.00us
+     90%  468.00us
+     99%  760.00us
+  13664628 requests in 15.10s, 1.65GB read
+Requests/sec: 904939.26
+Transfer/sec:    112.19MB
+fiber-throughput-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18472/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   260.45us  154.94us   4.57ms   73.46%
+    Req/Sec   230.69k     8.17k  256.72k    94.68%
+  Latency Distribution
+     50%  230.00us
+     75%  341.00us
+     90%  466.00us
+     99%  752.00us
+  13817357 requests in 15.10s, 1.67GB read
+Requests/sec: 915057.36
+Transfer/sec:    113.45MB
+kruda-latency-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   136.97us   64.86us   2.96ms   79.84%
+    Req/Sec   207.82k    43.58k  255.74k    73.47%
+  Latency Distribution
+     50%  114.00us
+     75%  167.00us
+     90%  233.00us
+     99%  334.00us
+  12459442 requests in 15.10s, 1.74GB read
+Requests/sec: 825147.19
+Transfer/sec:    118.04MB
+kruda-latency-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   130.43us   65.52us   2.28ms   75.92%
+    Req/Sec   205.28k    47.47k  255.48k    71.10%
+  Latency Distribution
+     50%  112.00us
+     75%  146.00us
+     90%  220.00us
+     99%  339.00us
+  12289514 requests in 15.10s, 1.72GB read
+Requests/sec: 813903.07
+Transfer/sec:    116.43MB
+kruda-latency-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   129.77us   60.90us   3.30ms   72.53%
+    Req/Sec   204.50k    47.18k  265.92k    67.61%
+  Latency Distribution
+     50%  114.00us
+     75%  148.00us
+     90%  218.00us
+     99%  316.00us
+  12243707 requests in 15.10s, 1.71GB read
+Requests/sec: 810869.55
+Transfer/sec:    116.00MB
+kruda-latency-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   126.72us   62.98us   3.19ms   75.48%
+    Req/Sec   204.37k    48.56k  255.93k    69.87%
+  Latency Distribution
+     50%  115.00us
+     75%  137.00us
+     90%  211.00us
+     99%  332.00us
+  12277454 requests in 15.10s, 1.72GB read
+Requests/sec: 813065.60
+Transfer/sec:    116.31MB
+kruda-latency-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   131.85us   70.34us   2.85ms   79.41%
+    Req/Sec   208.31k    47.38k  257.34k    73.47%
+  Latency Distribution
+     50%  112.00us
+     75%  149.00us
+     90%  238.00us
+     99%  353.00us
+  12491656 requests in 15.10s, 1.75GB read
+Requests/sec: 827262.37
+Transfer/sec:    118.34MB
+kruda-latency-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   133.75us   64.97us   3.38ms   75.97%
+    Req/Sec   203.50k    45.68k  261.19k    68.71%
+  Latency Distribution
+     50%  113.00us
+     75%  169.00us
+     90%  220.00us
+     99%  326.00us
+  12222141 requests in 15.10s, 1.71GB read
+Requests/sec: 809415.46
+Transfer/sec:    115.79MB
+kruda-latency-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   111.12us   53.16us   0.97ms   63.58%
+    Req/Sec   212.11k    44.92k  257.44k    78.28%
+  Latency Distribution
+     50%  109.00us
+     75%  139.00us
+     90%  179.00us
+     99%  268.00us
+  12722003 requests in 15.10s, 1.78GB read
+Requests/sec: 842514.36
+Transfer/sec:    120.52MB
+kruda-latency-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   101.69us   55.90us   4.14ms   79.95%
+    Req/Sec   214.65k    49.50k  264.59k    73.80%
+  Latency Distribution
+     50%  104.00us
+     75%  121.00us
+     90%  169.00us
+     99%  247.00us
+  12876248 requests in 15.10s, 1.80GB read
+Requests/sec: 852750.63
+Transfer/sec:    121.99MB
+kruda-latency-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   103.00us   54.89us   3.11ms   75.97%
+    Req/Sec   213.37k    48.19k  256.30k    75.25%
+  Latency Distribution
+     50%  106.00us
+     75%  124.00us
+     90%  166.00us
+     99%  250.00us
+  12775190 requests in 15.10s, 1.78GB read
+Requests/sec: 846068.55
+Transfer/sec:    121.03MB
+kruda-latency-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   114.88us   62.44us   2.28ms   70.71%
+    Req/Sec   207.40k    50.97k  263.16k    71.10%
+  Latency Distribution
+     50%  110.00us
+     75%  136.00us
+     90%  200.00us
+     99%  319.00us
+  12420172 requests in 15.10s, 1.74GB read
+Requests/sec: 822542.00
+Transfer/sec:    117.67MB
+kruda-latency-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   102.09us   54.61us   3.11ms   75.16%
+    Req/Sec   212.93k    50.99k  263.39k    71.93%
+  Latency Distribution
+     50%  102.00us
+     75%  120.00us
+     90%  181.00us
+     99%  265.00us
+  12749597 requests in 15.10s, 1.78GB read
+Requests/sec: 844369.28
+Transfer/sec:    120.79MB
+kruda-latency-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   107.58us   49.24us   2.45ms   62.82%
+    Req/Sec   214.54k    47.73k  257.01k    76.66%
+  Latency Distribution
+     50%  108.00us
+     75%  125.00us
+     90%  162.00us
+     99%  243.00us
+  12890853 requests in 15.10s, 1.80GB read
+Requests/sec: 853705.88
+Transfer/sec:    122.12MB
+kruda-latency-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   119.54us   59.48us   2.33ms   58.97%
+    Req/Sec   205.43k    44.04k  257.26k    78.74%
+  Latency Distribution
+     50%  113.00us
+     75%  152.00us
+     90%  210.00us
+     99%  263.00us
+  12300046 requests in 15.10s, 1.49GB read
+Requests/sec: 814588.39
+Transfer/sec:    100.99MB
+kruda-latency-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    99.72us   53.02us   2.15ms   75.63%
+    Req/Sec   213.86k    50.66k  259.74k    72.80%
+  Latency Distribution
+     50%  101.00us
+     75%  119.00us
+     90%  176.00us
+     99%  259.00us
+  12829122 requests in 15.10s, 1.55GB read
+Requests/sec: 849628.11
+Transfer/sec:    105.33MB
+kruda-latency-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   109.62us   54.28us   2.14ms   68.45%
+    Req/Sec   213.09k    50.51k  256.58k    73.26%
+  Latency Distribution
+     50%  107.00us
+     75%  129.00us
+     90%  166.00us
+     99%  285.00us
+  12761964 requests in 15.10s, 1.55GB read
+Requests/sec: 845186.97
+Transfer/sec:    104.78MB
+kruda-latency-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   111.43us   57.99us   2.82ms   69.70%
+    Req/Sec   212.33k    50.41k  262.12k    72.59%
+  Latency Distribution
+     50%  110.00us
+     75%  132.00us
+     90%  206.00us
+     99%  279.00us
+  12717468 requests in 15.10s, 1.54GB read
+Requests/sec: 842225.63
+Transfer/sec:    104.42MB
+kruda-latency-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   111.12us   53.55us   2.48ms   69.29%
+    Req/Sec   214.22k    49.77k  258.99k    73.96%
+  Latency Distribution
+     50%  110.00us
+     75%  126.00us
+     90%  168.00us
+     99%  300.00us
+  12851854 requests in 15.10s, 1.56GB read
+Requests/sec: 851105.56
+Transfer/sec:    105.52MB
+kruda-latency-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 128 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   107.28us   57.68us   3.17ms   74.04%
+    Req/Sec   210.47k    49.64k  255.34k    72.83%
+  Latency Distribution
+     50%  106.00us
+     75%  122.00us
+     90%  172.00us
+     99%  270.00us
+  12562342 requests in 15.00s, 1.52GB read
+Requests/sec: 837465.52
+Transfer/sec:    103.83MB
+kruda-throughput-json-serialize-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   265.61us  125.04us   3.35ms   74.48%
+    Req/Sec   205.32k    46.58k  257.49k    70.76%
+  Latency Distribution
+     50%  219.00us
+     75%  312.00us
+     90%  474.00us
+     99%  644.00us
+  12292901 requests in 15.10s, 1.72GB read
+Requests/sec: 814087.17
+Transfer/sec:    116.46MB
+kruda-throughput-json-serialize-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   260.39us  118.02us   3.04ms   73.81%
+    Req/Sec   209.13k    48.46k  262.38k    70.50%
+  Latency Distribution
+     50%  221.00us
+     75%  302.00us
+     90%  460.00us
+     99%  634.00us
+  12481222 requests in 15.01s, 1.74GB read
+Requests/sec: 831506.23
+Transfer/sec:    118.95MB
+kruda-throughput-json-serialize-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   267.98us  123.30us   2.32ms   74.18%
+    Req/Sec   204.51k    46.32k  265.13k    70.50%
+  Latency Distribution
+     50%  226.00us
+     75%  317.00us
+     90%  467.00us
+     99%  642.00us
+  12206440 requests in 15.01s, 1.71GB read
+Requests/sec: 813022.98
+Transfer/sec:    116.30MB
+kruda-throughput-json-serialize-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   255.17us  122.55us   3.20ms   73.30%
+    Req/Sec   208.00k    48.92k  260.82k    71.33%
+  Latency Distribution
+     50%  218.00us
+     75%  272.00us
+     90%  454.00us
+     99%  644.00us
+  12414240 requests in 15.01s, 1.73GB read
+Requests/sec: 826998.40
+Transfer/sec:    118.30MB
+kruda-throughput-json-serialize-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   281.56us  115.69us   2.34ms   76.83%
+    Req/Sec   206.16k    42.95k  257.28k    69.88%
+  Latency Distribution
+     50%  239.00us
+     75%  334.00us
+     90%  451.00us
+     99%  621.00us
+  12324181 requests in 15.10s, 1.72GB read
+Requests/sec: 816186.87
+Transfer/sec:    116.76MB
+kruda-throughput-json-serialize-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/json-serialize
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   252.45us  123.46us   3.69ms   72.10%
+    Req/Sec   203.87k    49.56k  262.12k    66.17%
+  Latency Distribution
+     50%  226.00us
+     75%  267.00us
+     90%  442.00us
+     99%  647.00us
+  12166009 requests in 15.02s, 1.70GB read
+Requests/sec: 810178.99
+Transfer/sec:    115.90MB
+kruda-throughput-json-static-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   193.00us  105.09us   3.45ms   80.43%
+    Req/Sec   218.44k    50.77k  258.88k    74.58%
+  Latency Distribution
+     50%  186.00us
+     75%  235.00us
+     90%  358.00us
+     99%  569.00us
+  13079048 requests in 15.10s, 1.83GB read
+Requests/sec: 866157.65
+Transfer/sec:    123.90MB
+kruda-throughput-json-static-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   201.90us  114.49us   3.05ms   81.66%
+    Req/Sec   216.29k    48.31k  257.33k    76.54%
+  Latency Distribution
+     50%  205.00us
+     75%  237.00us
+     90%  365.00us
+     99%  567.00us
+  12932785 requests in 15.10s, 1.81GB read
+Requests/sec: 856498.63
+Transfer/sec:    122.52MB
+kruda-throughput-json-static-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   194.01us  110.87us   1.65ms   82.92%
+    Req/Sec   214.57k    48.32k  259.00k    76.00%
+  Latency Distribution
+     50%  133.00us
+     75%  243.00us
+     90%  333.00us
+     99%  520.00us
+  12804243 requests in 15.01s, 1.79GB read
+Requests/sec: 852975.05
+Transfer/sec:    122.02MB
+kruda-throughput-json-static-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   210.79us  132.87us   1.62ms   83.84%
+    Req/Sec   212.55k    45.29k  255.99k    78.24%
+  Latency Distribution
+     50%  180.00us
+     75%  256.00us
+     90%  419.00us
+     99%  602.00us
+  12727607 requests in 15.10s, 1.78GB read
+Requests/sec: 842884.59
+Transfer/sec:    120.58MB
+kruda-throughput-json-static-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   216.10us  139.53us   2.12ms   82.15%
+    Req/Sec   212.71k    45.26k  257.32k    79.83%
+  Latency Distribution
+     50%  194.00us
+     75%  255.00us
+     90%  430.00us
+     99%  601.00us
+  12692648 requests in 15.01s, 1.77GB read
+Requests/sec: 845761.15
+Transfer/sec:    120.99MB
+kruda-throughput-json-static-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/json-static
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   194.63us  116.33us   1.57ms   82.70%
+    Req/Sec   214.07k    48.73k  255.43k    76.83%
+  Latency Distribution
+     50%  125.00us
+     75%  242.00us
+     90%  356.00us
+     99%  542.00us
+  12778173 requests in 15.01s, 1.79GB read
+Requests/sec: 851053.87
+Transfer/sec:    121.74MB
+kruda-throughput-plaintext-handler-round-1.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   206.21us  113.41us   1.62ms   74.90%
+    Req/Sec   214.91k    47.76k  257.08k    77.04%
+  Latency Distribution
+     50%  206.00us
+     75%  242.00us
+     90%  374.00us
+     99%  574.00us
+  12847971 requests in 15.10s, 1.56GB read
+Requests/sec: 850894.28
+Transfer/sec:    105.49MB
+kruda-throughput-plaintext-handler-round-2.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   196.62us  113.91us   3.11ms   85.17%
+    Req/Sec   214.11k    48.96k  260.25k    77.67%
+  Latency Distribution
+     50%  137.00us
+     75%  244.00us
+     90%  333.00us
+     99%  556.00us
+  12776449 requests in 15.02s, 1.55GB read
+Requests/sec: 850710.71
+Transfer/sec:    105.47MB
+kruda-throughput-plaintext-handler-round-3.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   226.20us  128.90us   1.61ms   66.87%
+    Req/Sec   210.14k    43.49k  270.66k    79.87%
+  Latency Distribution
+     50%  213.00us
+     75%  275.00us
+     90%  412.00us
+     99%  598.00us
+  12560921 requests in 15.10s, 1.52GB read
+Requests/sec: 831866.04
+Transfer/sec:    103.13MB
+kruda-throughput-plaintext-handler-round-4.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   180.59us   99.93us   2.17ms   84.25%
+    Req/Sec   216.12k    50.40k  257.98k    74.17%
+  Latency Distribution
+     50%  125.00us
+     75%  234.00us
+     90%  327.00us
+     99%  481.00us
+  12899950 requests in 15.01s, 1.56GB read
+Requests/sec: 859499.19
+Transfer/sec:    106.56MB
+kruda-throughput-plaintext-handler-round-5.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   187.32us  106.67us   2.30ms   85.53%
+    Req/Sec   215.26k    51.97k  256.14k    73.30%
+  Latency Distribution
+     50%  131.00us
+     75%  235.00us
+     90%  317.00us
+     99%  551.00us
+  12913425 requests in 15.10s, 1.56GB read
+Requests/sec: 855186.01
+Transfer/sec:    106.02MB
+kruda-throughput-plaintext-handler-warmup.txt
+Running 15s test @ http://127.0.0.1:18471/plaintext-handler
+  4 threads and 256 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   205.93us  173.36us  10.65ms   88.98%
+    Req/Sec   213.66k    47.27k  259.10k    76.95%
+  Latency Distribution
+     50%  200.00us
+     75%  247.00us
+     90%  394.00us
+     99%  590.00us
+  12815015 requests in 15.10s, 1.55GB read
+Requests/sec: 848671.66
+Transfer/sec:    105.22MB

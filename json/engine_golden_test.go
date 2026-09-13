@@ -6,13 +6,10 @@ import (
 )
 
 // The sonic and encoding/json engines are selected by build tag, so no single
-// test binary can run both. These tests instead pin exact bytes for each Go
-// version: each engine build asserts against the same version-selected golden
-// values, so an engine whose output drifts from the other fails here rather
-// than silently changing responses for whichever build a user happens to
-// compile.
+// test binary can run both. These tests pin exact bytes, accounting for the
+// engine and JSON experiment where replacement-rune escaping differs.
 
-// goldenCases must encode identically on every engine for a given Go version.
+// goldenCases share expected bytes except for the invalid UTF-8 representation.
 // Multi-key maps belong here only because both engines now sort map keys.
 var goldenCases = []struct {
 	name string
@@ -55,9 +52,8 @@ var goldenCases = []struct {
 	}{Name: "n"}, `{"name":"n"}`},
 }
 
-// TestGoldenBytesMatchAcrossEngines is the cross-engine regression guard: both
-// engine builds must produce these exact bytes, via Marshal and via
-// MarshalToBuffer.
+// TestGoldenBytesMatchAcrossEngines checks each build's expected bytes through
+// both Marshal and MarshalToBuffer.
 func TestGoldenBytesMatchAcrossEngines(t *testing.T) {
 	for _, tc := range goldenCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,8 +108,8 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestKnownCrossEngineDivergences pins the one byte-level difference that
-// remains between engines, so it cannot drift unnoticed and closing it is a
+// TestKnownCrossEngineDivergences pins HTML escaping differences between
+// engines, so they cannot drift unnoticed and closing them is a
 // deliberate, reviewed change rather than an accident.
 //
 // encoding/json escapes <, > and & so its output is safe to paste directly
@@ -124,8 +120,8 @@ func TestMapMarshalIsDeterministic(t *testing.T) {
 // hand-embeds a response body into HTML can opt in with kruda.WithJSONEncoder.
 //
 // Invalid UTF-8 used to differ here too. The sonic engine now enables
-// ValidateString, so both engines substitute U+FFFD. Version-selected goldens
-// pin encoding/json's exact byte representation of those replacement runes.
+// ValidateString, so both engines substitute U+FFFD. The golden accounts for
+// encoding/json with jsonv2 emitting literal runes while Sonic still escapes them.
 func TestKnownCrossEngineDivergences(t *testing.T) {
 	cases := []struct {
 		name      string

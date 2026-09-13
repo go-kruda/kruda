@@ -77,11 +77,36 @@ func buildTypedHandler[In any, Out any](
 	handler func(*C[In]) (*Out, error),
 	opts []RouteOption,
 ) HandlerFunc {
+	return buildTypedHandlerWithBinder(app, method, path, handler, opts, nil)
+}
+
+func buildTypedHandlerWithBinder[In any, Out any](
+	app *App,
+	method, path string,
+	handler func(*C[In]) (*Out, error),
+	opts []RouteOption,
+	binder func(*Ctx) (reflect.Value, error),
+) HandlerFunc {
+	return buildTypedHandlerWithValidation(app, method, path, handler, opts, binder, nil)
+}
+
+func buildTypedHandlerWithValidation[In any, Out any](
+	app *App,
+	method, path string,
+	handler func(*C[In]) (*Out, error),
+	opts []RouteOption,
+	binder func(*Ctx) (reflect.Value, error),
+	validatorFactory func([]fieldValidator) func(*In) bool,
+) HandlerFunc {
 	// Pre-compile at registration time
 	parser := buildInputParser[In]()
 	var validators []fieldValidator
 	if app.config.Validator != nil {
 		validators = buildValidators[In](app.config.Validator)
+	}
+	var validInput func(*In) bool
+	if validatorFactory != nil && len(validators) > 0 {
+		validInput = validatorFactory(validators)
 	}
 
 	// Apply route options
@@ -103,38 +128,51 @@ func buildTypedHandler[In any, Out any](
 		hasValidate: len(validators) > 0,
 	})
 
-	return func(c *Ctx) error {
-		val, err := parser.parse(c)
-		if err != nil {
-			return err
-		}
-
-		if len(app.hooks.OnParse) > 0 {
-			ptr := val.Addr().Interface()
-			for _, hook := range app.hooks.OnParse {
-				if err := hook(c, ptr); err != nil {
-					return err
-				}
+	if binder == nil {
+		return func(c *Ctx) error {
+			val, err := parser.parse(c)
+			if err != nil {
+				return err
 			}
+			return finishTypedHandler(app, validators, handler, c, val, validInput)
 		}
-
-		if len(validators) > 0 {
-			if ve := validate(validators, val, app.config.Validator.messages); ve != nil {
-				return ve
-			}
-		}
-
-		tc := &C[In]{Ctx: c, In: val.Interface().(In)}
-		result, err := handler(tc)
-		if err != nil {
-			return err
-		}
-
-		if result != nil {
-			return c.JSON(result)
-		}
-		return c.NoContent()
 	}
+	return func(c *Ctx) error {
+		val, err := binder(c)
+		if err != nil {
+			return err
+		}
+		return finishTypedHandler(app, validators, handler, c, val, validInput)
+	}
+}
+
+func finishTypedHandler[In any, Out any](app *App, validators []fieldValidator, handler func(*C[In]) (*Out, error), c *Ctx, val reflect.Value, validInput func(*In) bool) error {
+	if len(app.hooks.OnParse) > 0 {
+		ptr := val.Addr().Interface()
+		for _, hook := range app.hooks.OnParse {
+			if err := hook(c, ptr); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Generated predicates skip only successful checks; failures retain the original snapshots.
+	if len(validators) > 0 && (validInput == nil || !validInput(val.Addr().Interface().(*In))) {
+		if ve := validate(validators, val, app.config.Validator.messages); ve != nil {
+			return ve
+		}
+	}
+
+	tc := &C[In]{Ctx: c, In: val.Interface().(In)}
+	result, err := handler(tc)
+	if err != nil {
+		return err
+	}
+
+	if result != nil {
+		return c.JSON(result)
+	}
+	return c.NoContent()
 }
 
 // Get registers a typed GET handler with pre-compiled binding and validation.

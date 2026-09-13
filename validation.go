@@ -61,21 +61,24 @@ func (e *ValidationError) MarshalJSON() ([]byte, error) {
 // Validator holds registered rules and message templates.
 // Created once per App, configured at startup.
 type Validator struct {
-	rules    map[string]ValidatorFunc
-	messages map[string]string
+	rules       map[string]ValidatorFunc
+	messages    map[string]string
+	customRules map[string]bool
 }
 
 // NewValidator creates a Validator with built-in rules and default messages.
 func NewValidator() *Validator {
 	return &Validator{
-		rules:    builtinRules(),
-		messages: defaultMessages(),
+		rules:       builtinRules(),
+		messages:    defaultMessages(),
+		customRules: make(map[string]bool),
 	}
 }
 
 // Register adds a custom validation rule. Chainable.
 func (v *Validator) Register(name string, fn ValidatorFunc) *Validator {
 	v.rules[name] = fn
+	v.customRules[name] = true
 	return v
 }
 
@@ -95,6 +98,7 @@ type fieldValidator struct {
 	elemRules []ruleEntry // rules after `dive`, applied to each element
 	customMsg string      // from `message:"..."` tag, empty if not set
 	omitEmpty bool        // `omitempty`: a zero value skips the field's rules
+	checks    []func(reflect.Value) bool
 }
 
 // ruleEntry is a single parsed validation rule.
@@ -246,6 +250,18 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 		if len(fv.rules) == 0 && len(fv.elemRules) == 0 {
 			continue
 		}
+		for _, rule := range fv.rules {
+			if !field.IsExported() || v.customRules[rule.name] {
+				fv.checks = nil
+				break
+			}
+			check := compileMinMax(field.Type, rule.name, rule.param)
+			if check == nil {
+				fv.checks = nil
+				break
+			}
+			fv.checks = append(fv.checks, check)
+		}
 		validators = append(validators, fv)
 	}
 
@@ -270,7 +286,16 @@ func validate(validators []fieldValidator, v reflect.Value, messages map[string]
 			continue
 		}
 
-		if len(fv.rules) > 0 {
+		// Only pure built-in chains use the unboxed success path. Failures and
+		// custom rules retain the original value snapshot and error ordering.
+		valid := len(fv.checks) > 0
+		for _, check := range fv.checks {
+			if !check(fieldVal) {
+				valid = false
+				break
+			}
+		}
+		if len(fv.rules) > 0 && !valid {
 			value := fieldVal.Interface()
 			for _, rule := range fv.rules {
 				if rule.fn(value, rule.param) {
@@ -451,6 +476,52 @@ func validateRequired(value any, _ string) bool {
 	default:
 		return !v.IsZero()
 	}
+}
+
+func compileMinMax(t reflect.Type, name, param string) func(reflect.Value) bool {
+	if name != "min" && name != "max" {
+		return nil
+	}
+	n, err := strconv.ParseFloat(param, 64)
+	if err != nil {
+		return nil
+	}
+	minimum := name == "min"
+	switch t.Kind() {
+	case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
+		if minimum {
+			return func(v reflect.Value) bool { return float64(v.Len()) >= n }
+		}
+		return func(v reflect.Value) bool { return float64(v.Len()) <= n }
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if ni, err := strconv.ParseInt(param, 10, 64); err == nil {
+			if minimum {
+				return func(v reflect.Value) bool { return v.Int() >= ni }
+			}
+			return func(v reflect.Value) bool { return v.Int() <= ni }
+		}
+		if minimum {
+			return func(v reflect.Value) bool { return float64(v.Int()) >= n }
+		}
+		return func(v reflect.Value) bool { return float64(v.Int()) <= n }
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if nu, err := strconv.ParseUint(param, 10, 64); err == nil {
+			if minimum {
+				return func(v reflect.Value) bool { return v.Uint() >= nu }
+			}
+			return func(v reflect.Value) bool { return v.Uint() <= nu }
+		}
+		if minimum {
+			return func(v reflect.Value) bool { return float64(v.Uint()) >= n }
+		}
+		return func(v reflect.Value) bool { return float64(v.Uint()) <= n }
+	case reflect.Float32, reflect.Float64:
+		if minimum {
+			return func(v reflect.Value) bool { return v.Float() >= n }
+		}
+		return func(v reflect.Value) bool { return v.Float() <= n }
+	}
+	return nil
 }
 
 func validateMin(value any, param string) bool {

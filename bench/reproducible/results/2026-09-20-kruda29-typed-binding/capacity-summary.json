@@ -1,0 +1,428 @@
+{
+  "complete": true,
+  "measurements": 36,
+  "cells": [
+    {
+      "profile": 4,
+      "fields": 30,
+      "medians": {
+        "kruda": {
+          "rps": 527676.5800000001,
+          "p99_ms": 1.48,
+          "server_cpu_microseconds_per_request": 7.4029628726153005,
+          "server_system_cpu_microseconds_per_request": 3.832431323649257
+        },
+        "fiber": {
+          "rps": 259618.5,
+          "p99_ms": 3.1950000000000003,
+          "server_cpu_microseconds_per_request": 15.288803621004629,
+          "server_system_cpu_microseconds_per_request": 4.605934225833055
+        },
+        "actix": {
+          "rps": 521487.36,
+          "p99_ms": 0.759,
+          "server_cpu_microseconds_per_request": 7.63319331382253,
+          "server_system_cpu_microseconds_per_request": 3.3678396658000573
+        }
+      },
+      "comparisons": [
+        {
+          "a": "kruda",
+          "b": "fiber",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 551225.82,
+              "b_rps": 261602.32,
+              "b_over_a_rps": 0.4745828488222849,
+              "a_p99_ms": 1.44,
+              "b_p99_ms": 3.18
+            },
+            {
+              "round": 2,
+              "a_rps": 540395.72,
+              "b_rps": 260696.18,
+              "b_over_a_rps": 0.4824171812463652,
+              "a_p99_ms": 1.45,
+              "b_p99_ms": 3.12
+            },
+            {
+              "round": 3,
+              "a_rps": 518446.13,
+              "b_rps": 252823.97,
+              "b_over_a_rps": 0.4876571650751834,
+              "a_p99_ms": 1.5,
+              "b_p99_ms": 3.35
+            },
+            {
+              "round": 4,
+              "a_rps": 506685.97,
+              "b_rps": 259686.46,
+              "b_over_a_rps": 0.5125195394693878,
+              "a_p99_ms": 1.58,
+              "b_p99_ms": 3.21
+            },
+            {
+              "round": 5,
+              "a_rps": 529924.93,
+              "b_rps": 259550.54,
+              "b_over_a_rps": 0.4897873742229866,
+              "a_p99_ms": 1.46,
+              "b_p99_ms": 3.18
+            },
+            {
+              "round": 6,
+              "a_rps": 525428.23,
+              "b_rps": 256718.01,
+              "b_over_a_rps": 0.48858815598849725,
+              "a_p99_ms": 1.54,
+              "b_p99_ms": 3.22
+            }
+          ],
+          "median_rps_change_pct": -50.79969249345879,
+          "median_p99_change_pct": 115.87837837837841,
+          "b_rps_wins": 0,
+          "rps_ties": 0,
+          "b_p99_wins": 0,
+          "p99_ties": 0
+        },
+        {
+          "a": "kruda",
+          "b": "actix",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 551225.82,
+              "b_rps": 535256.61,
+              "b_over_a_rps": 0.971029640810367,
+              "a_p99_ms": 1.44,
+              "b_p99_ms": 0.521
+            },
+            {
+              "round": 2,
+              "a_rps": 540395.72,
+              "b_rps": 526112.87,
+              "b_over_a_rps": 0.9735696463325062,
+              "a_p99_ms": 1.45,
+              "b_p99_ms": 0.97
+            },
+            {
+              "round": 3,
+              "a_rps": 518446.13,
+              "b_rps": 529821.3,
+              "b_over_a_rps": 1.0219408909465677,
+              "a_p99_ms": 1.5,
+              "b_p99_ms": 0.529
+            },
+            {
+              "round": 4,
+              "a_rps": 506685.97,
+              "b_rps": 516861.85,
+              "b_over_a_rps": 1.0200832085403904,
+              "a_p99_ms": 1.58,
+              "b_p99_ms": 1.0
+            },
+            {
+              "round": 5,
+              "a_rps": 529924.93,
+              "b_rps": 510638.44,
+              "b_over_a_rps": 0.9636052412178456,
+              "a_p99_ms": 1.46,
+              "b_p99_ms": 0.548
+            },
+            {
+              "round": 6,
+              "a_rps": 525428.23,
+              "b_rps": 491729.77,
+              "b_over_a_rps": 0.9358647707223497,
+              "a_p99_ms": 1.54,
+              "b_p99_ms": 1.03
+            }
+          ],
+          "median_rps_change_pct": -1.1729192150237377,
+          "median_p99_change_pct": -48.71621621621621,
+          "b_rps_wins": 2,
+          "rps_ties": 0,
+          "b_p99_wins": 6,
+          "p99_ties": 0
+        },
+        {
+          "a": "fiber",
+          "b": "actix",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 261602.32,
+              "b_rps": 535256.61,
+              "b_over_a_rps": 2.0460698131423296,
+              "a_p99_ms": 3.18,
+              "b_p99_ms": 0.521
+            },
+            {
+              "round": 2,
+              "a_rps": 260696.18,
+              "b_rps": 526112.87,
+              "b_over_a_rps": 2.0181073232450126,
+              "a_p99_ms": 3.12,
+              "b_p99_ms": 0.97
+            },
+            {
+              "round": 3,
+              "a_rps": 252823.97,
+              "b_rps": 529821.3,
+              "b_over_a_rps": 2.0956134024792035,
+              "a_p99_ms": 3.35,
+              "b_p99_ms": 0.529
+            },
+            {
+              "round": 4,
+              "a_rps": 259686.46,
+              "b_rps": 516861.85,
+              "b_over_a_rps": 1.9903303776407903,
+              "a_p99_ms": 3.21,
+              "b_p99_ms": 1.0
+            },
+            {
+              "round": 5,
+              "a_rps": 259550.54,
+              "b_rps": 510638.44,
+              "b_over_a_rps": 1.9673950206383697,
+              "a_p99_ms": 3.18,
+              "b_p99_ms": 0.548
+            },
+            {
+              "round": 6,
+              "a_rps": 256718.01,
+              "b_rps": 491729.77,
+              "b_over_a_rps": 1.9154471086777278,
+              "a_p99_ms": 3.22,
+              "b_p99_ms": 1.03
+            }
+          ],
+          "median_rps_change_pct": 100.86679493179416,
+          "median_p99_change_pct": -76.24413145539907,
+          "b_rps_wins": 6,
+          "rps_ties": 0,
+          "b_p99_wins": 6,
+          "p99_ties": 0
+        }
+      ]
+    },
+    {
+      "profile": 8,
+      "fields": 30,
+      "medians": {
+        "kruda": {
+          "rps": 577700.5349999999,
+          "p99_ms": 1.24,
+          "server_cpu_microseconds_per_request": 12.76067893093926,
+          "server_system_cpu_microseconds_per_request": 6.482331673594332
+        },
+        "fiber": {
+          "rps": 389797.64,
+          "p99_ms": 3.4050000000000002,
+          "server_cpu_microseconds_per_request": 19.855741407276586,
+          "server_system_cpu_microseconds_per_request": 5.6616512724216
+        },
+        "actix": {
+          "rps": 677955.005,
+          "p99_ms": 0.6425000000000001,
+          "server_cpu_microseconds_per_request": 11.597640901155092,
+          "server_system_cpu_microseconds_per_request": 4.903045939869717
+        }
+      },
+      "comparisons": [
+        {
+          "a": "kruda",
+          "b": "fiber",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 582245.24,
+              "b_rps": 399888.41,
+              "b_over_a_rps": 0.6868040861957068,
+              "a_p99_ms": 1.18,
+              "b_p99_ms": 3.22
+            },
+            {
+              "round": 2,
+              "a_rps": 578308.1,
+              "b_rps": 386429.96,
+              "b_over_a_rps": 0.6682077598428935,
+              "a_p99_ms": 1.24,
+              "b_p99_ms": 3.48
+            },
+            {
+              "round": 3,
+              "a_rps": 571927.36,
+              "b_rps": 376016.35,
+              "b_over_a_rps": 0.6574547334122991,
+              "a_p99_ms": 1.24,
+              "b_p99_ms": 3.5
+            },
+            {
+              "round": 4,
+              "a_rps": 579153.98,
+              "b_rps": 389645.81,
+              "b_over_a_rps": 0.6727844812531548,
+              "a_p99_ms": 1.23,
+              "b_p99_ms": 3.41
+            },
+            {
+              "round": 5,
+              "a_rps": 577092.97,
+              "b_rps": 394173.31,
+              "b_over_a_rps": 0.6830325969834635,
+              "a_p99_ms": 1.26,
+              "b_p99_ms": 3.21
+            },
+            {
+              "round": 6,
+              "a_rps": 574014.7,
+              "b_rps": 389949.47,
+              "b_over_a_rps": 0.6793370796949973,
+              "a_p99_ms": 1.25,
+              "b_p99_ms": 3.4
+            }
+          ],
+          "median_rps_change_pct": -32.5260032864605,
+          "median_p99_change_pct": 174.5967741935484,
+          "b_rps_wins": 0,
+          "rps_ties": 0,
+          "b_p99_wins": 0,
+          "p99_ties": 0
+        },
+        {
+          "a": "kruda",
+          "b": "actix",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 582245.24,
+              "b_rps": 679193.43,
+              "b_over_a_rps": 1.1665074840285514,
+              "a_p99_ms": 1.18,
+              "b_p99_ms": 0.642
+            },
+            {
+              "round": 2,
+              "a_rps": 578308.1,
+              "b_rps": 673556.18,
+              "b_over_a_rps": 1.164701272556964,
+              "a_p99_ms": 1.24,
+              "b_p99_ms": 0.65
+            },
+            {
+              "round": 3,
+              "a_rps": 571927.36,
+              "b_rps": 685944.32,
+              "b_over_a_rps": 1.1993556664258902,
+              "a_p99_ms": 1.24,
+              "b_p99_ms": 0.624
+            },
+            {
+              "round": 4,
+              "a_rps": 579153.98,
+              "b_rps": 670181.75,
+              "b_over_a_rps": 1.1571736932551167,
+              "a_p99_ms": 1.23,
+              "b_p99_ms": 0.65
+            },
+            {
+              "round": 5,
+              "a_rps": 577092.97,
+              "b_rps": 677631.84,
+              "b_over_a_rps": 1.1742160712857064,
+              "a_p99_ms": 1.26,
+              "b_p99_ms": 0.637
+            },
+            {
+              "round": 6,
+              "a_rps": 574014.7,
+              "b_rps": 678278.17,
+              "b_over_a_rps": 1.18163902422708,
+              "a_p99_ms": 1.25,
+              "b_p99_ms": 0.643
+            }
+          ],
+          "median_rps_change_pct": 17.35405524594158,
+          "median_p99_change_pct": -48.18548387096774,
+          "b_rps_wins": 6,
+          "rps_ties": 0,
+          "b_p99_wins": 6,
+          "p99_ties": 0
+        },
+        {
+          "a": "fiber",
+          "b": "actix",
+          "pairs": [
+            {
+              "round": 1,
+              "a_rps": 399888.41,
+              "b_rps": 679193.43,
+              "b_over_a_rps": 1.6984574021537662,
+              "a_p99_ms": 3.22,
+              "b_p99_ms": 0.642
+            },
+            {
+              "round": 2,
+              "a_rps": 386429.96,
+              "b_rps": 673556.18,
+              "b_over_a_rps": 1.7430226683251993,
+              "a_p99_ms": 3.48,
+              "b_p99_ms": 0.65
+            },
+            {
+              "round": 3,
+              "a_rps": 376016.35,
+              "b_rps": 685944.32,
+              "b_over_a_rps": 1.8242406746408766,
+              "a_p99_ms": 3.5,
+              "b_p99_ms": 0.624
+            },
+            {
+              "round": 4,
+              "a_rps": 389645.81,
+              "b_rps": 670181.75,
+              "b_over_a_rps": 1.7199767912299635,
+              "a_p99_ms": 3.41,
+              "b_p99_ms": 0.65
+            },
+            {
+              "round": 5,
+              "a_rps": 394173.31,
+              "b_rps": 677631.84,
+              "b_over_a_rps": 1.7191215711687835,
+              "a_p99_ms": 3.21,
+              "b_p99_ms": 0.637
+            },
+            {
+              "round": 6,
+              "a_rps": 389949.47,
+              "b_rps": 678278.17,
+              "b_over_a_rps": 1.739400158692356,
+              "a_p99_ms": 3.4,
+              "b_p99_ms": 0.643
+            }
+          ],
+          "median_rps_change_pct": 73.92486137165942,
+          "median_p99_change_pct": -81.13069016152717,
+          "b_rps_wins": 6,
+          "rps_ties": 0,
+          "b_p99_wins": 6,
+          "p99_ties": 0
+        }
+      ]
+    }
+  ],
+  "scope": "Controlled DEV closed-loop 30-field validated HTTP comparison at exact Kruda commit 67c6727; profile-specific capacity evidence.",
+  "measured_requests": 142214065,
+  "warmup_requests": 35716575,
+  "recorded_errors": {
+    "connect": 0,
+    "read": 0,
+    "write": 0,
+    "timeout": 0,
+    "non2xx": 0
+  }
+}

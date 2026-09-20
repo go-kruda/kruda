@@ -36,8 +36,9 @@ Options (build args / env):
 1. Environment record: Go version, kernel, CPU/RAM, git SHA, package hashes.
 2. `go build ./...`
 3. `go vet ./...` (default and `kruda_stdjson`).
-4. Full race suite, default engine.
-5. Full race suite, `kruda_stdjson` engine.
+4. Full race suite, default engine, with `CI=1` so the existing performance
+   guard uses its race-detector-aware CI floor.
+5. Full race suite, `kruda_stdjson` engine, with the same CI setting.
 6. Linux-only `TestWingShortRead*` tests, explicitly (also inside 4–5).
 7. Six fuzz smokes: `FuzzValidateString`, `FuzzParserDifferential`,
    `FuzzBindJSON`, `FuzzParseHTTPRequest`, `FuzzRouterPattern`,

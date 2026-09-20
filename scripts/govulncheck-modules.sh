@@ -33,6 +33,7 @@ while IFS= read -r modfile; do
     scan_dir=$(mktemp -d)
     cp -R "$dir/." "$scan_dir"
     ( cd "$scan_dir" && go mod edit -replace github.com/go-kruda/kruda="$ROOT" )
+    ( cd "$scan_dir" && go mod tidy )
     exit_code=0
     ( cd "$scan_dir" && "$GOVULN" ./... ) || exit_code=$?
     rm -rf "$scan_dir"

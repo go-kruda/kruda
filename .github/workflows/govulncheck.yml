@@ -42,6 +42,7 @@ jobs:
             echo "==> govulncheck $dir"
             if [[ "${{ github.event_name }}" == "pull_request" && "$dir" == contrib/* ]]; then
               (cd "$dir" && go mod edit -replace github.com/go-kruda/kruda="$GITHUB_WORKSPACE")
+              (cd "$dir" && go mod tidy)
             fi
             if ! (cd "$dir" && govulncheck ./...); then
               fail=1

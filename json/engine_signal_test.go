@@ -10,12 +10,11 @@ import (
 
 // sonicConstraintPin is the sonic release whose build constraint sonic_accel.go
 // mirrors. Bump it only after re-reading that constraint.
-const sonicConstraintPin = "v1.15.0"
+const sonicConstraintPin = "v1.15.4"
 
 // TestSonicConstraintMirrorIsCurrent fails when the sonic dependency moves.
 //
-// sonic_accel.go copies sonic's own build constraint by hand, because sonic
-// exposes no way to ask whether its accelerated implementation compiled. A sonic
+// sonic_accel.go mirrors sonic's build constraint for Kruda's engine signal. A sonic
 // release that adds support for a newer Go version makes that copy wrong in the
 // direction that silently costs speed: Kruda would report and select
 // encoding/json's path while sonic was in fact accelerating. Pinning the version

@@ -31,7 +31,7 @@ jobs:
           go-version: '1.25.13'
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Scan every released module
         run: |
@@ -42,6 +42,7 @@ jobs:
             echo "==> govulncheck $dir"
             if [[ "${{ github.event_name }}" == "pull_request" && "$dir" == contrib/* ]]; then
               (cd "$dir" && go mod edit -replace github.com/go-kruda/kruda="$GITHUB_WORKSPACE")
+              (cd "$dir" && go mod tidy)
             fi
             if ! (cd "$dir" && govulncheck ./...); then
               fail=1

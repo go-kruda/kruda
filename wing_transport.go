@@ -252,6 +252,7 @@ type conn struct {
 	lastActive     int64  // unix nano — updated on accept + each recv
 	readDeadline   int64  // unix nano — set when first byte arrives, cleared on full request
 	readSuppressed bool   // readiness arrived while pending; drain once ownership returns
+	readDrained    bool   // socket input exhausted during synchronous inline dispatch
 	ctx            context.Context
 	cancel         context.CancelFunc
 	sendFileFd     int32 // sendfile: source fd (0 = none)
@@ -756,6 +757,7 @@ func (w *worker) handleAccept(ev event) {
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 	if e == 0 && r > 0 {
 		c.readN = int(r)
+		c.readDrained = int(r) < len(c.readBuf)
 		w.tryParse(c)
 		return
 	}
@@ -777,17 +779,21 @@ func (w *worker) handleRecv(ev event) {
 	}
 	if c.pending > 0 {
 		c.readSuppressed = true
+		c.readDrained = false
 		if testSuppressedRecvHook != nil {
 			testSuppressedRecvHook(c.fd)
 		}
 		return
 	}
 	c.readSuppressed = false
-	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
+	c.readDrained = false
+	requested := len(c.readBuf) - c.readN
+	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
 	if e != 0 || nr <= 0 {
 		w.closeConn(c.fd)
 		return
 	}
+	c.readDrained = c.bodyNeed == 0 && int(nr) < requested
 	c.readN += int(nr)
 	if w.hasTimeout {
 		now := w.now
@@ -829,7 +835,37 @@ func (w *worker) tryParse(c *conn) {
 				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)
 				switch st {
 				case parseNeedHeaderMore:
-					// Not enough data yet; wait for more recvs.
+					// Compaction can leave a partial header after a full read.
+					// EPOLLET will not notify again for bytes already in the socket.
+					if runtime.GOOS == "linux" && !c.readDrained && c.pending == 0 {
+						// Flush this batch before a refill can queue more responses.
+						if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 {
+							w.directSend(c)
+							return
+						}
+						requested := len(c.readBuf) - c.readN
+						c.readSuppressed = false
+						n, _, err := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
+						if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+							c.readDrained = true
+						} else if err != 0 {
+							w.closeConn(c.fd)
+							return
+						} else if n == 0 {
+							// A read half-close must not discard responses already queued.
+							c.keepAlive = false
+							if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 {
+								w.directSend(c)
+							} else {
+								w.closeConn(c.fd)
+							}
+							return
+						} else {
+							c.readDrained = int(n) < requested
+							c.readN += int(n)
+							continue
+						}
+					}
 				case parseBadRequest:
 					w.writeAndClose(c, wingStatusClose(400))
 					return
@@ -888,6 +924,9 @@ func (w *worker) tryParse(c *conn) {
 
 		f := w.lookupPreset(req.method, req.path)
 		finalizeRequestPath(req, f)
+		if f.Dispatch != Inline {
+			c.readDrained = false
+		}
 
 		// For async dispatch modes, only one in-flight handler per conn.
 		if f.Dispatch != Inline && c.pending > 0 {
@@ -950,9 +989,8 @@ func (w *worker) tryParse(c *conn) {
 					releaseRequest(req)
 					break
 				}
-				data := resp.buildZeroCopy()
 				c.keepAlive = req.keepAlive
-				c.sendBuf = append(c.sendBuf, data...)
+				c.sendBuf = resp.appendTo(c.sendBuf)
 				releaseResponse(resp)
 				releaseRequest(req)
 			}
@@ -1142,6 +1180,7 @@ func accumBody(bodyBuf, src []byte, need int) (out, surplus []byte) {
 // beginBodyAccum reserves and starts body accumulation for a connection.
 // Returns false if the per-worker in-flight budget would be exceeded.
 func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
+	c.readDrained = false
 	if w.maxInflightBody > 0 {
 		newTotal := atomic.AddInt64(&w.inflightBody, int64(need))
 		if newTotal > int64(w.maxInflightBody) {
@@ -1199,6 +1238,7 @@ func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
 // per event would stall a body that spans more than one read. Safe on kqueue too
 // (reads stop at EAGAIN). Returns true if the connection was closed.
 func (w *worker) drainBodyAccum(c *conn) bool {
+	c.readDrained = false
 	for len(c.bodyBuf) < c.bodyNeed {
 		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
@@ -1238,6 +1278,7 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 // single EAGAIN read. A pipelined burst exceeding the read buffer is bounded by
 // the same buffer-size limit as ordinary pipelining.
 func (w *worker) drainPipelinedAfterBody(c *conn) {
+	c.readDrained = false
 	for c.readN < len(c.readBuf) {
 		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
@@ -1284,6 +1325,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 // Accumulated bodies are always dispatched inline; non-inline presets
 // with large bodies are uncommon and correctness takes precedence here.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
+	c.readDrained = false
 	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
 	// inline accumulation, where c.ResponseWriter() is not an http.Hijacker — so
 	// reject it cleanly (400) rather than letting the upgrade fail opaquely.
@@ -1362,6 +1404,7 @@ func (w *worker) directSend(c *conn) {
 		r, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(c.fd), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 		if e != 0 {
 			if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+				c.readDrained = false
 				w.eng.SubmitSend(c.fd, nil)
 				return
 			}
@@ -1382,6 +1425,7 @@ func (w *worker) directSend(c *conn) {
 			if err != nil {
 				if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 					// Socket buffer full — wait for writable notification.
+					c.readDrained = false
 					w.eng.SubmitSend(c.fd, nil)
 					return
 				}
@@ -1413,10 +1457,17 @@ func (w *worker) directSend(c *conn) {
 		w.tryParse(c)
 		return
 	}
+	// A short stream read or EAGAIN exhausts the current EPOLLET input. This evidence
+	// survives only synchronous inline work; a later edge will deliver new data.
+	if runtime.GOOS == "linux" && c.readDrained && !c.readSuppressed {
+		return
+	}
 	c.readSuppressed = false
+	c.readDrained = false
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 	if e == 0 && r > 0 {
 		c.readN = int(r)
+		c.readDrained = int(r) < len(c.readBuf)
 		w.tryParse(c)
 		return
 	}
@@ -1813,6 +1864,10 @@ func (w *worker) handleSend(ev event) {
 		c = (*conn)(ev.ConnPtr)
 	} else {
 		c = w.conns[ev.Fd]
+	}
+	if c != nil {
+		// EPOLLOUT takes priority over a simultaneous EPOLLIN in the engine.
+		c.readDrained = false
 	}
 	if c == nil || (len(c.sendBuf) == 0 && c.sendFileFd == 0) {
 		// No pending data or sendfile — remove EPOLLOUT, listen for EPOLLIN.

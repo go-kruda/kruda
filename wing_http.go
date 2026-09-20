@@ -1132,6 +1132,8 @@ func (r *wingRequest) Header(key string) string {
 	return ""
 }
 
+func (r *wingRequest) bindingQuery() string { return r.query }
+
 func (r *wingRequest) QueryParam(name string) string {
 	q := r.query
 	for len(q) > 0 {
@@ -1419,6 +1421,19 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		return b
 	}
 
+	b = r.appendTo(b)
+
+	// Detach buf from response — caller owns this memory now.
+	r.buf = nil
+	return b
+}
+
+// appendTo appends a buffered response after the string, JSON, and sendfile
+// paths have been handled. The destination owns all serialized bytes.
+func (r *wingResponse) appendTo(b []byte) []byte {
+	if r.staticResp != nil {
+		return append(b, r.staticResp...)
+	}
 	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers)
 
 	// Auto-inject Content-Length when the user did not set it explicitly.
@@ -1430,8 +1445,6 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	b = append(b, "\r\n"...)
 	b = append(b, r.body...)
 
-	// Detach buf from response — caller owns this memory now.
-	r.buf = nil
 	return b
 }
 

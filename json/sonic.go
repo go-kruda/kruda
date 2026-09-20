@@ -7,15 +7,15 @@
 //
 // Compiling this file is not the same as Sonic doing the work. Sonic carries its
 // own build constraints — amd64/arm64, and only Go versions it has validated
-// (v1.15.0 excludes go1.27 and newer) — and transparently routes its API to
+// (v1.15.4 excludes go1.28 and newer) — and transparently routes its API to
 // encoding/json outside them, so this file stays correct everywhere.
 //
 // Two exported names follow from that split, and confusing them is what this
 // package's callers have to avoid. EncoderName is the engine the build tag
 // selected, which fixes the frozen configuration. Exact bytes also depend on
-// the Go version used by encoding/json. ActiveEngine and EngineIsStdlib describe
+// encoding/json's JSON experiment. ActiveEngine and EngineIsStdlib describe
 // what is actually encoding, which fixes the cost. Assert output against the
-// version-specific golden for the first; choose a code path by the second.
+// build-specific golden for the first; choose a code path by the second.
 package json
 
 import (
@@ -34,7 +34,7 @@ const EncoderName = "sonic"
 //
 // This answers a question about cost, not about output. Anything asserting or
 // depending on byte-level behaviour must key on EncoderName's frozen Config and
-// the active Go version.
+// the active JSON experiment.
 //
 // Sonic's fallback honours EscapeHTML, so the HTML-escaping difference between
 // the engines does not appear on one. It does not implement SortMapKeys or
@@ -89,11 +89,11 @@ func ActiveEngine() string {
 // string holding invalid UTF-8 — anything read from a legacy encoding, a
 // truncated multi-byte sequence, arbitrary binary put in a string field —
 // produced a response that was not valid UTF-8 and could be rejected by a strict
-// client or proxy. It costs about 8%, and makes this engine byte-identical to
-// encoding/json for those inputs.
+// client or proxy. It costs about 8%. Sonic escapes the replacement runes;
+// encoding/json emits them literally with GOEXPERIMENT=jsonv2, the Go 1.27 default.
 //
-// EscapeHTML stays off, which is the one byte-level difference from the
-// kruda_stdjson engine that remains: encoding/json emits < for '<' so its
+// EscapeHTML stays off, which also differs from the kruda_stdjson engine:
+// encoding/json escapes '<' so its
 // output is safe to paste directly inside an HTML <script> tag, and this engine
 // emits the character. It costs about 41% on every response containing a string,
 // which is a poor trade for the framework default — responses go out as

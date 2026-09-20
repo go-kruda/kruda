@@ -114,7 +114,7 @@ func TestNilBinderFallsBackToGeneric(t *testing.T) {
 	run := func(withBinder bool) (int, string) {
 		app := New()
 		if withBinder {
-			app.Get("/users/:id", buildTypedHandlerWithBinder[generatedBinderInput, generatedBinderOutput](app, "GET", "/users/:id", handler, nil, nil))
+			app.Get("/users/:id", buildTypedHandlerWithBinder[generatedBinderInput, generatedBinderOutput](app, "GET", "/users/:id", handler, nil, nil, nil))
 		} else {
 			app.Get("/users/:id", buildTypedHandler[generatedBinderInput, generatedBinderOutput](app, "GET", "/users/:id", handler, nil))
 		}

@@ -45,6 +45,73 @@ func AttestBinderShape[T any](want BinderShape) bool {
 	return attestBinderShapeType(reflect.TypeOf((*T)(nil)).Elem(), want)
 }
 
+// ValidatorRule is one parsed validation rule in a ValidatorDescriptor:
+// the rule name and its parameter exactly as buildValidators recorded them.
+type ValidatorRule struct {
+	Name  string
+	Param string
+}
+
+// ValidatorDescriptor is the exported mirror of the fields a generated
+// validator factory attests: struct index, the omitempty modifier, the
+// container rules in order, the count of compiled unboxed checks, and the
+// count of post-dive element rules. It carries no funcs, so generated code
+// in any package can attest against it; describeValidators builds it from
+// the registered validators once per route.
+//
+// Experimental API for generated binders; its shape may change before any
+// release.
+type ValidatorDescriptor struct {
+	Index        int
+	OmitEmpty    bool
+	Rules        []ValidatorRule
+	NumChecks    int
+	NumElemRules int
+}
+
+// describeValidators projects compiled validators onto their exported
+// descriptors. NumChecks is what rejects custom overrides and uncompilable
+// chains: buildValidators nils the checks for those, so a descriptor whose
+// NumChecks differs from the generated rule count declines the factory.
+func describeValidators(in []fieldValidator) []ValidatorDescriptor {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]ValidatorDescriptor, len(in))
+	for i, fv := range in {
+		d := ValidatorDescriptor{
+			Index:        fv.index,
+			OmitEmpty:    fv.omitEmpty,
+			NumChecks:    len(fv.checks),
+			NumElemRules: len(fv.elemRules),
+		}
+		if len(fv.rules) > 0 {
+			d.Rules = make([]ValidatorRule, len(fv.rules))
+			for j, r := range fv.rules {
+				d.Rules[j] = ValidatorRule{Name: r.name, Param: r.param}
+			}
+		}
+		out[i] = d
+	}
+	return out
+}
+
+// GeneratedPlan bundles one generated binder with its optional compiled
+// validator factory. The generator emits a Plan constructor per input; pass
+// it to a typed route with WithGeneratedPlan. Every field fails closed:
+// a nil Binder keeps the generic parser, a nil factory (or one that
+// declines) keeps generic validation, and a Shape that no longer matches
+// the route input drops the binder silently so stale generated code can
+// never bind an old shape.
+//
+// Experimental API for generated binders; its shape may change before any
+// release.
+type GeneratedPlan[In any] struct {
+	Shape            BinderShape
+	Binder           func(*Ctx) (reflect.Value, error)
+	ValidatorFactory func([]ValidatorDescriptor) func(*In) bool
+}
+
 func attestBinderShapeType(t reflect.Type, want BinderShape) bool {
 	if t.Kind() != reflect.Struct {
 		return false

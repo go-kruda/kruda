@@ -3,6 +3,19 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Generated binding is now usable from external applications (experimental).
+  The generator moved from `internal/bindgen` to the runnable
+  `github.com/go-kruda/kruda/cmd/bindgen`, emits a `GeneratedPlan` per input
+  with a descriptor-based validator factory, and no longer rejects validated
+  inputs outside the framework. Select the plan on any typed route with the
+  new `WithGeneratedPlan` route option. Stale shapes, custom rule overrides,
+  and unsupported rules all fail closed to the generic parser and validation.
+  See "Generated Binding" in the handlers guide.
+
 ## [1.7.2] — 2026-09-03
 
 ### Security

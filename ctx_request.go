@@ -52,7 +52,7 @@ func (c *Ctx) Query(name string, def ...string) string {
 // tokens are ignored, and no unescaping is applied. Callers must fall back
 // to per-field Query when ok is false.
 //
-// This is experimental API for generated binders (see internal/bindgen);
+// This is experimental API for generated binders (see cmd/bindgen);
 // its shape may change before any release.
 func (c *Ctx) RawQuery() (raw string, ok bool) {
 	if c.request == nil {

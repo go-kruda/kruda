@@ -482,7 +482,7 @@ func validateRequired(value any, _ string) bool {
 // (type, rule, param) it must return the same verdict the boxed originals
 // would, or nil to take the original path. A check that wrongly passes would
 // skip validation entirely, so any change to the min/max semantics here,
-// there, or in the generated predicates (internal/bindgen) must update all of
+// there, or in the generated predicates (cmd/bindgen) must update all of
 // them together. TestCompiledMinMaxParity is the drift guard: extend it when
 // the semantics change, never narrow it to fit an implementation.
 func compileMinMax(t reflect.Type, name, param string) func(reflect.Value) bool {
@@ -532,7 +532,7 @@ func compileMinMax(t reflect.Type, name, param string) func(reflect.Value) bool 
 }
 
 // validateMin is mirrored by compileMinMax (unboxed success path) and by the
-// generated predicates in internal/bindgen. See the contract there: all three
+// generated predicates in cmd/bindgen. See the contract there: all three
 // must agree, or validation is silently skipped.
 func validateMin(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)
@@ -563,7 +563,7 @@ func validateMin(value any, param string) bool {
 }
 
 // validateMax is mirrored by compileMinMax (unboxed success path) and by the
-// generated predicates in internal/bindgen. See the contract there: all three
+// generated predicates in cmd/bindgen. See the contract there: all three
 // must agree, or validation is silently skipped.
 func validateMax(value any, param string) bool {
 	n, err := strconv.ParseFloat(param, 64)

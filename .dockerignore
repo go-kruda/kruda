@@ -1,0 +1,9 @@
+# Build context for bench/kruda29-gates/Dockerfile (the only image in this
+# repo): keep the Go source and drop everything the gates never read.
+.git
+.worktrees
+docs/node_modules
+docs/dist
+docs/cache
+.playwright-cli
+.playwright-mcp

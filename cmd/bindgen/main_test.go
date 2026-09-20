@@ -225,19 +225,21 @@ func TestGenerateExternalBinder(t *testing.T) {
 		"kruda.BadRequest(",
 		"var bindSearchShape = kruda.BinderShape{",
 		"kruda.AttestBinderShape[Search](bindSearchShape)",
+		"func makeBindSearchValidator(validators []kruda.ValidatorDescriptor)",
+		"func SearchPlan() kruda.GeneratedPlan[Search]",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
 		}
 	}
-	for _, banned := range []string{"fieldValidator", "makeBindSearchValidator", "(*Ctx)"} {
+	for _, banned := range []string{"fieldValidator", "(*Ctx)"} {
 		if strings.Contains(text, banned) {
 			t.Errorf("external output must not contain %q:\n%s", banned, text)
 		}
 	}
 }
 
-func TestGenerateExternalValidatedIsRejected(t *testing.T) {
+func TestGenerateExternalValidatedIsSupported(t *testing.T) {
 	for _, tt := range []struct {
 		name, field string
 	}{
@@ -250,9 +252,21 @@ func TestGenerateExternalValidatedIsRejected(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			src := "package shop; type Search struct { " + tt.field + " }"
-			if _, err := generate("input.go", []byte(src), "Search", "bindSearch"); err == nil ||
-				!strings.Contains(err.Error(), "exported validator descriptor") {
-				t.Fatalf("expected white-box-only rejection, got %v", err)
+			got, err := generate("input.go", []byte(src), "Search", "bindSearch")
+			if err != nil {
+				t.Fatalf("external validated input rejected: %v", err)
+			}
+			text := string(got)
+			for _, want := range []string{
+				"func makeBindSearchValidator(validators []kruda.ValidatorDescriptor)",
+				"func SearchPlan() kruda.GeneratedPlan[Search]",
+			} {
+				if !strings.Contains(text, want) {
+					t.Errorf("missing %q in:\n%s", want, text)
+				}
+			}
+			if strings.Contains(text, "fieldValidator") {
+				t.Errorf("external output must not reference unexported fieldValidator:\n%s", text)
 			}
 		})
 	}
@@ -269,6 +283,7 @@ func TestGenerateEmitsAttestedBinder(t *testing.T) {
 		`{Name: "ID", Exported: true, Kind: "int64", Query: "id", Param: "id", Default: "7"}`,
 		"func bindInputAttested() func(*Ctx) (reflect.Value, error)",
 		"AttestBinderShape[Input](bindInputShape)",
+		"func InputPlan() GeneratedPlan[Input]",
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("missing %q in:\n%s", want, got)

@@ -175,8 +175,65 @@ func TestGenerateStringOnlyAndUnexportedFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(got), "strconv") || strings.Contains(string(got), "hidden") {
-		t.Fatalf("unused converter or unexported field emitted:\n%s", got)
+	if strings.Contains(string(got), "strconv") || strings.Contains(string(got), "input.hidden") {
+		t.Fatalf("unused converter or unexported field binding emitted:\n%s", got)
+	}
+	// The unexported name is recorded in the attestation shape so a later
+	// add/remove/rename fails closed; it must never be bound.
+	if !strings.Contains(string(got), `{Name: "hidden", Exported: false`) {
+		t.Fatalf("unexported field missing from attestation shape:\n%s", got)
+	}
+}
+
+func TestGenerateExternalBinder(t *testing.T) {
+	src := "package shop; type Search struct { Q string `query:\"q\" default:\"all\"`; Page int `query:\"page\" default:\"1\"` }"
+	got, err := generate("input.go", []byte(src), "Search", "bindSearch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	for _, want := range []string{
+		"package shop",
+		`"github.com/go-kruda/kruda"`,
+		"func bindSearch(c *kruda.Ctx)",
+		"kruda.BadRequest(",
+		"var bindSearchShape = kruda.BinderShape{",
+		"kruda.AttestBinderShape[Search](bindSearchShape)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	for _, banned := range []string{"fieldValidator", "makeBindSearchValidator", "(*Ctx)"} {
+		if strings.Contains(text, banned) {
+			t.Errorf("external output must not contain %q:\n%s", banned, text)
+		}
+	}
+}
+
+func TestGenerateExternalValidatedIsRejected(t *testing.T) {
+	src := "package shop; type Search struct { Q string `query:\"q\" validate:\"min=1\"` }"
+	if _, err := generate("input.go", []byte(src), "Search", "bindSearch"); err == nil ||
+		!strings.Contains(err.Error(), "exported validator descriptor") {
+		t.Fatalf("expected white-box-only rejection, got %v", err)
+	}
+}
+
+func TestGenerateEmitsAttestedBinder(t *testing.T) {
+	src := "package kruda; type Input struct { ID int64 `param:\"id\" query:\"id\" default:\"7\"` }"
+	got, err := generate("input.go", []byte(src), "Input", "bindInput")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"var bindInputShape = BinderShape{NumFields: 1",
+		`{Name: "ID", Exported: true, Kind: "int64", Query: "id", Param: "id", Default: "7"}`,
+		"func bindInputAttested() func(*Ctx) (reflect.Value, error)",
+		"AttestBinderShape[Input](bindInputShape)",
+	} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
 	}
 }
 

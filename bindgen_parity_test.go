@@ -14,7 +14,7 @@ import (
 func assertGeneratedBinderParity(t *testing.T, parser *inputParser, params, query map[string]string, wantError string) generatedBinderInput {
 	t.Helper()
 	want, wantErr := parser.parse(bindCtx("GET", "/users/42", params, query, nil))
-	got, gotErr := bindGeneratedBinderInput(bindCtx("GET", "/users/42", params, query, nil))
+	got, gotErr := mustBindGeneratedBinder(t)(bindCtx("GET", "/users/42", params, query, nil))
 	if wantError != "" {
 		for name, err := range map[string]error{"normal": wantErr, "generated": gotErr} {
 			var ke *KrudaError
@@ -114,7 +114,7 @@ func TestGeneratedBinderScalarParity(t *testing.T) {
 
 func generatedBinderParityHandler(app *App, generated bool, handler func(*C[generatedBinderInput]) (*generatedBinderInput, error)) HandlerFunc {
 	if generated {
-		return buildTypedHandlerWithBinder[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil, bindGeneratedBinderInput)
+		return buildTypedHandlerWithBinder[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil, bindGeneratedBinderInputAttested())
 	}
 	return buildTypedHandler[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil)
 }

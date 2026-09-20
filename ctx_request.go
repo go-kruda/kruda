@@ -46,6 +46,24 @@ func (c *Ctx) Query(name string, def ...string) string {
 	return ""
 }
 
+// RawQuery returns the raw query string for single-pass binding, and whether
+// the transport supports it. Only transports whose QueryParam matches the
+// scanner contract report true: first equals-bearing occurrence wins, bare
+// tokens are ignored, and no unescaping is applied. Callers must fall back
+// to per-field Query when ok is false.
+//
+// This is experimental API for generated binders (see internal/bindgen);
+// its shape may change before any release.
+func (c *Ctx) RawQuery() (raw string, ok bool) {
+	if c.request == nil {
+		return "", false
+	}
+	if q, bound := c.request.(interface{ bindingQuery() string }); bound {
+		return q.bindingQuery(), true
+	}
+	return "", false
+}
+
 // QueryInt returns a query parameter parsed as int.
 func (c *Ctx) QueryInt(name string, def ...int) int {
 	s := c.Query(name)

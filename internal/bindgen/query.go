@@ -23,14 +23,14 @@ func generateQueryCollection(out *bytes.Buffer, fields []field) map[string]strin
 	if len(tags) == 0 {
 		return names
 	}
-	fmt.Fprintln(out, "queryRequest, queryBound := c.request.(interface { bindingQuery() string })")
+	fmt.Fprintln(out, "rawQuery, queryBound := c.RawQuery()")
 	fmt.Fprintln(out, "if queryBound {")
 	fmt.Fprintf(out, "remaining := %d\n", len(tags))
 	for i := range tags {
 		fmt.Fprintf(out, "var seen%d bool\n", i)
 	}
 	// Collect first, so conversion errors still follow struct field order.
-	fmt.Fprintln(out, "for query := queryRequest.bindingQuery(); query != \"\" && remaining > 0; {")
+	fmt.Fprintln(out, "for query := rawQuery; query != \"\" && remaining > 0; {")
 	fmt.Fprintln(out, "var pair string\nif amp := strings.IndexByte(query, '&'); amp >= 0 { pair, query = query[:amp], query[amp+1:] } else { pair, query = query, \"\" }")
 	fmt.Fprintln(out, "if eq := strings.IndexByte(pair, '='); eq >= 0 {\nswitch pair[:eq] {")
 	for i, tag := range tags {

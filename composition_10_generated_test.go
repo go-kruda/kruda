@@ -30,7 +30,7 @@ func bindComposition10Input(c *Ctx) (reflect.Value, error) {
 	var query7 string
 	var query8 string
 	var query9 string
-	queryRequest, queryBound := c.request.(interface{ bindingQuery() string })
+	rawQuery, queryBound := c.RawQuery()
 	if queryBound {
 		remaining := 10
 		var seen0 bool
@@ -43,7 +43,7 @@ func bindComposition10Input(c *Ctx) (reflect.Value, error) {
 		var seen7 bool
 		var seen8 bool
 		var seen9 bool
-		for query := queryRequest.bindingQuery(); query != "" && remaining > 0; {
+		for query := rawQuery; query != "" && remaining > 0; {
 			var pair string
 			if amp := strings.IndexByte(query, '&'); amp >= 0 {
 				pair, query = query[:amp], query[amp+1:]
@@ -347,4 +347,24 @@ func makeBindComposition10InputValidator(validators []fieldValidator) func(*comp
 	return func(input *composition10Input) bool {
 		return int64(input.ID) >= 1 && int64(input.Page) >= 1 && int64(input.Page) <= 1000 && float64(input.Score) >= 0 && float64(input.Score) <= 100 && float64(len(input.Name)) >= 1 && float64(len(input.Name)) <= 64 && int64(input.ID2) >= 1 && int64(input.Page2) >= 1 && int64(input.Page2) <= 1000 && float64(input.Score2) >= 0 && float64(input.Score2) <= 100 && float64(len(input.Name2)) >= 1 && float64(len(input.Name2)) <= 64
 	}
+}
+
+var bindComposition10InputShape = BinderShape{NumFields: 10, Fields: []BinderFieldShape{
+	{Name: "ID", Exported: true, Kind: "int64", Query: "id", Param: "id", Default: "7"},
+	{Name: "Page", Exported: true, Kind: "int", Query: "page", Param: "", Default: "1"},
+	{Name: "Active", Exported: true, Kind: "bool", Query: "active", Param: "", Default: "true"},
+	{Name: "Score", Exported: true, Kind: "float64", Query: "score", Param: "", Default: "1.5"},
+	{Name: "Name", Exported: true, Kind: "string", Query: "name", Param: "", Default: "guest"},
+	{Name: "ID2", Exported: true, Kind: "int64", Query: "id2", Param: "", Default: "7"},
+	{Name: "Page2", Exported: true, Kind: "int", Query: "page2", Param: "", Default: "1"},
+	{Name: "Active2", Exported: true, Kind: "bool", Query: "active2", Param: "", Default: "true"},
+	{Name: "Score2", Exported: true, Kind: "float64", Query: "score2", Param: "", Default: "1.5"},
+	{Name: "Name2", Exported: true, Kind: "string", Query: "name2", Param: "", Default: "guest"},
+}}
+
+func bindComposition10InputAttested() func(*Ctx) (reflect.Value, error) {
+	if !AttestBinderShape[composition10Input](bindComposition10InputShape) {
+		return nil
+	}
+	return bindComposition10Input
 }

@@ -20,7 +20,7 @@ func bindComposition5Input(c *Ctx) (reflect.Value, error) {
 	var query2 string
 	var query3 string
 	var query4 string
-	queryRequest, queryBound := c.request.(interface{ bindingQuery() string })
+	rawQuery, queryBound := c.RawQuery()
 	if queryBound {
 		remaining := 5
 		var seen0 bool
@@ -28,7 +28,7 @@ func bindComposition5Input(c *Ctx) (reflect.Value, error) {
 		var seen2 bool
 		var seen3 bool
 		var seen4 bool
-		for query := queryRequest.bindingQuery(); query != "" && remaining > 0; {
+		for query := rawQuery; query != "" && remaining > 0; {
 			var pair string
 			if amp := strings.IndexByte(query, '&'); amp >= 0 {
 				pair, query = query[:amp], query[amp+1:]
@@ -196,4 +196,19 @@ func makeBindComposition5InputValidator(validators []fieldValidator) func(*compo
 	return func(input *composition5Input) bool {
 		return int64(input.ID) >= 1 && int64(input.Page) >= 1 && int64(input.Page) <= 1000 && float64(input.Score) >= 0 && float64(input.Score) <= 100 && float64(len(input.Name)) >= 1 && float64(len(input.Name)) <= 64
 	}
+}
+
+var bindComposition5InputShape = BinderShape{NumFields: 5, Fields: []BinderFieldShape{
+	{Name: "ID", Exported: true, Kind: "int64", Query: "id", Param: "id", Default: "7"},
+	{Name: "Page", Exported: true, Kind: "int", Query: "page", Param: "", Default: "1"},
+	{Name: "Active", Exported: true, Kind: "bool", Query: "active", Param: "", Default: "true"},
+	{Name: "Score", Exported: true, Kind: "float64", Query: "score", Param: "", Default: "1.5"},
+	{Name: "Name", Exported: true, Kind: "string", Query: "name", Param: "", Default: "guest"},
+}}
+
+func bindComposition5InputAttested() func(*Ctx) (reflect.Value, error) {
+	if !AttestBinderShape[composition5Input](bindComposition5InputShape) {
+		return nil
+	}
+	return bindComposition5Input
 }

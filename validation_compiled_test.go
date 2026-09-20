@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+// TestCompiledMinMaxParity is the drift guard for the compileMinMax mirror
+// contract: every (value, param) where compilation succeeds must agree with
+// the boxed originals. Extend the value/param tables when min/max semantics
+// change; a narrowing edit here must justify why the dropped case can no
+// longer occur.
 func TestCompiledMinMaxParity(t *testing.T) {
 	type signed int64
 	type unsigned uint64

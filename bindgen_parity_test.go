@@ -76,6 +76,48 @@ func TestGeneratedBinderDefaultsAndPrecedence(t *testing.T) {
 	}
 }
 
+func TestGeneratedValidatorParity(t *testing.T) {
+	v := NewValidator()
+	validators := buildValidators[generatedBinderInput](v)
+	generated := makeBindGeneratedBinderInputValidator(validators)
+	if generated == nil {
+		t.Fatal("generated validator was not selected")
+	}
+	boxed := append([]fieldValidator(nil), validators...)
+	for i := range boxed {
+		boxed[i].checks = nil
+	}
+
+	valid := generatedBinderInput{ID: 1, Page: 1, Score: 0, Name: "a"}
+	cases := []struct {
+		name  string
+		input generatedBinderInput
+	}{
+		{"minimums", valid},
+		{"maximums", generatedBinderInput{ID: math.MaxInt64, Page: 1000, Score: 100, Name: strings.Repeat("x", 64)}},
+		{"id_below_min", generatedBinderInput{ID: 0, Page: 1, Score: 0, Name: "a"}},
+		{"page_below_min", generatedBinderInput{ID: 1, Page: 0, Score: 0, Name: "a"}},
+		{"page_above_max", generatedBinderInput{ID: 1, Page: 1001, Score: 0, Name: "a"}},
+		{"score_below_min", generatedBinderInput{ID: 1, Page: 1, Score: -math.SmallestNonzeroFloat64, Name: "a"}},
+		{"score_above_max", generatedBinderInput{ID: 1, Page: 1, Score: 101, Name: "a"}},
+		{"score_nan", generatedBinderInput{ID: 1, Page: 1, Score: math.NaN(), Name: "a"}},
+		{"score_positive_inf", generatedBinderInput{ID: 1, Page: 1, Score: math.Inf(1), Name: "a"}},
+		{"score_negative_inf", generatedBinderInput{ID: 1, Page: 1, Score: math.Inf(-1), Name: "a"}},
+		{"name_empty", generatedBinderInput{ID: 1, Page: 1, Score: 0}},
+		{"name_multibyte_within_max", generatedBinderInput{ID: 1, Page: 1, Score: 0, Name: strings.Repeat("ก", 21)}},
+		{"name_multibyte_above_max", generatedBinderInput{ID: 1, Page: 1, Score: 0, Name: strings.Repeat("ก", 22)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := generated(&tc.input)
+			want := validate(boxed, reflect.ValueOf(&tc.input).Elem(), v.messages) == nil
+			if got != want {
+				t.Fatalf("generated validation = %t, boxed validation = %t for %+v", got, want, tc.input)
+			}
+		})
+	}
+}
+
 func TestGeneratedBinderScalarParity(t *testing.T) {
 	parser := buildInputParser[generatedBinderInput]()
 	maxInt := int(^uint(0) >> 1)

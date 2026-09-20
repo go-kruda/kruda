@@ -17,11 +17,9 @@ type validationField struct {
 	checks []string
 }
 
-// generateValidator emits the validator factory and whether it compiled to a
-// real predicate. A false ok means the caller gets a nil-returning stub
-// (white-box) or no validator at all (external packages, which cannot name
-// the unexported fieldValidator the stub signature needs).
-func generateValidator(typeName, binderName string, fields []field, supported bool) ([]byte, bool) {
+// generateValidator emits the validator factory. Unsupported rules get a
+// nil-returning stub so the runtime uses the regular validation path.
+func generateValidator(typeName, binderName string, fields []field, supported bool) []byte {
 	var compiled []validationField
 	for _, f := range fields {
 		if f.validate == "" {
@@ -45,7 +43,7 @@ func generateValidator(typeName, binderName string, fields []field, supported bo
 	fmt.Fprintf(&out, "\nfunc make%sValidator(validators []fieldValidator) func(*%s) bool {\n", string(name), typeName)
 	if !supported || len(compiled) == 0 {
 		fmt.Fprintln(&out, "return nil\n}")
-		return out.Bytes(), false
+		return out.Bytes()
 	}
 	fmt.Fprintf(&out, "if len(validators) != %d { return nil }\n", len(compiled))
 	fmt.Fprintf(&out, "inputType := reflect.TypeOf((*%s)(nil)).Elem()\n", typeName)
@@ -65,7 +63,7 @@ func generateValidator(typeName, binderName string, fields []field, supported bo
 	}
 	fmt.Fprintln(&out, strings.Join(checks, " && "))
 	fmt.Fprintln(&out, "}\n}")
-	return out.Bytes(), true
+	return out.Bytes()
 }
 
 func validationExpr(f field, name, param string) (string, bool) {

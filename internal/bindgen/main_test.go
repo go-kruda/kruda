@@ -9,21 +9,34 @@ import (
 )
 
 func TestFixtureOutputIsCurrent(t *testing.T) {
-	input := filepath.Join("..", "..", "bindgen_fixture_test.go")
-	src, err := os.ReadFile(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := generate(input, src, "generatedBinderInput", "bindGeneratedBinderInput")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err := os.ReadFile(filepath.Join("..", "..", "bindgen_generated_test.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatal("generated fixture output is stale")
+	root := filepath.Join("..", "..")
+	for _, fixture := range []struct {
+		name, input, typeName, funcName, output string
+	}{
+		{"binder", "bindgen_fixture_test.go", "generatedBinderInput", "bindGeneratedBinderInput", "bindgen_generated_test.go"},
+		{"composition_5", "composition_fixture_test.go", "composition5Input", "bindComposition5Input", "composition_5_generated_test.go"},
+		{"composition_10", "composition_fixture_test.go", "composition10Input", "bindComposition10Input", "composition_10_generated_test.go"},
+		{"composition_30", "composition_fixture_test.go", "composition30Input", "bindComposition30Input", "composition_30_generated_test.go"},
+		{"external", filepath.Join("externalbind", "input.go"), "searchInput", "bindSearchInput", filepath.Join("externalbind", "external_generated.go")},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			input := filepath.Join(root, fixture.input)
+			src, err := os.ReadFile(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := generate(input, src, fixture.typeName, fixture.funcName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := os.ReadFile(filepath.Join(root, fixture.output))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatal("generated fixture output is stale")
+			}
+		})
 	}
 }
 
@@ -212,10 +225,23 @@ func TestGenerateExternalBinder(t *testing.T) {
 }
 
 func TestGenerateExternalValidatedIsRejected(t *testing.T) {
-	src := "package shop; type Search struct { Q string `query:\"q\" validate:\"min=1\"` }"
-	if _, err := generate("input.go", []byte(src), "Search", "bindSearch"); err == nil ||
-		!strings.Contains(err.Error(), "exported validator descriptor") {
-		t.Fatalf("expected white-box-only rejection, got %v", err)
+	for _, tt := range []struct {
+		name, field string
+	}{
+		{"compiled", "Q string `query:\"q\" validate:\"min=1\"`"},
+		{"required", "Q string `query:\"q\" validate:\"required\"`"},
+		{"email", "Q string `query:\"q\" validate:\"email\"`"},
+		{"nan", "Q string `query:\"q\" validate:\"min=NaN\"`"},
+		{"infinity", "Q string `query:\"q\" validate:\"min=Inf\"`"},
+		{"unexported", "q string `validate:\"required\"`"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "package shop; type Search struct { " + tt.field + " }"
+			if _, err := generate("input.go", []byte(src), "Search", "bindSearch"); err == nil ||
+				!strings.Contains(err.Error(), "exported validator descriptor") {
+				t.Fatalf("expected white-box-only rejection, got %v", err)
+			}
+		})
 	}
 }
 

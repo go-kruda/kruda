@@ -88,6 +88,7 @@ func generate(filename string, src []byte, typeName, funcName string) ([]byte, e
 	var shapes []shapeField
 	fieldIndex := 0
 	validationSupported := true
+	hasValidation := false
 	for _, node := range input.Fields.List {
 		if len(node.Names) == 0 {
 			return nil, fmt.Errorf("%s: embedded fields are unsupported", typeName)
@@ -103,8 +104,10 @@ func generate(filename string, src []byte, typeName, funcName string) ([]byte, e
 		for _, name := range node.Names {
 			index := fieldIndex
 			fieldIndex++
+			validation := tag.Get("validate")
+			hasValidation = hasValidation || validation != ""
 			if !name.IsExported() {
-				if tag.Get("validate") != "" {
+				if validation != "" {
 					validationSupported = false
 				}
 				shapes = append(shapes, shapeField{name: name.Name})
@@ -127,7 +130,7 @@ func generate(filename string, src []byte, typeName, funcName string) ([]byte, e
 			default:
 				return nil, fmt.Errorf("%s: unsupported type %s", name.Name, id.Name)
 			}
-			fields = append(fields, field{name.Name, id.Name, kind, tag.Get("query"), tag.Get("param"), tag.Get("default"), tag.Get("validate"), index})
+			fields = append(fields, field{name.Name, id.Name, kind, tag.Get("query"), tag.Get("param"), tag.Get("default"), validation, index})
 			shapes = append(shapes, shapeField{name.Name, kind, tag.Get("query"), tag.Get("param"), tag.Get("default"), true})
 		}
 	}
@@ -140,6 +143,9 @@ func generate(filename string, src []byte, typeName, funcName string) ([]byte, e
 	qualifier := ""
 	external := f.Name.Name != "kruda"
 	if external {
+		if hasValidation {
+			return nil, fmt.Errorf("%s: validated inputs need the exported validator descriptor (white-box only for now)", typeName)
+		}
 		qualifier = "kruda."
 	}
 	var body bytes.Buffer
@@ -187,10 +193,7 @@ func generate(filename string, src []byte, typeName, funcName string) ([]byte, e
 		}
 	}
 	fmt.Fprintln(&body, "return reflect.ValueOf(input).Elem(), nil\n}")
-	validatorBytes, validatorOK := generateValidator(typeName, funcName, fields, validationSupported)
-	if external && validatorOK {
-		return nil, fmt.Errorf("%s: validated inputs need the exported validator descriptor (white-box only for now)", typeName)
-	}
+	validatorBytes := generateValidator(typeName, funcName, fields, validationSupported)
 	if !external {
 		body.Write(validatorBytes)
 	}

@@ -33,10 +33,23 @@ func TestFixtureOutputIsCurrent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(got, want) {
+			if !generatedFilesEqual(got, want) {
 				t.Fatal("generated fixture output is stale")
 			}
 		})
+	}
+}
+
+func generatedFilesEqual(got, want []byte) bool {
+	return bytes.Equal(got, bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n")))
+}
+
+func TestGeneratedFilesEqualNormalizesWindowsLineEndings(t *testing.T) {
+	if !generatedFilesEqual([]byte("package fixture\n"), []byte("package fixture\r\n")) {
+		t.Fatal("expected CRLF fixture to match generated LF output")
+	}
+	if generatedFilesEqual([]byte("package fixture\n"), []byte("package other\r\n")) {
+		t.Fatal("line-ending normalization must not hide content changes")
 	}
 }
 

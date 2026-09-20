@@ -17,7 +17,7 @@ if [[ $# -ne 0 ]]; then
   exit 2
 fi
 
-go install golang.org/x/vuln/cmd/govulncheck@latest
+go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 GOVULN=$(go env GOPATH)/bin/govulncheck
 export GOWORK=off
 

@@ -1,15 +1,15 @@
 <script setup lang="ts">
-const frameworks = ['Kruda v1.7.2', 'Fiber v3.5.0', 'Actix v4.15.0']
+const frameworks = ['Kruda v1.8.0', 'Fiber v3.5.0', 'Actix v4.15.0']
 const metrics = [
-  { title: 'Throughput', direction: 'Higher is better', unit: 'req/s', values: [816186.87, 816411.19, 783652.58], labels: ['816,187', '816,411', '783,653'] },
-  { title: 'p99 latency', direction: 'Lower is better', unit: 'ms', values: [0.642, 0.910, 0.692], labels: ['0.642', '0.910', '0.692'] },
+  { title: 'Throughput', direction: 'Higher is better', unit: 'req/s', values: [533209.91, 259169.96, 521983.89], labels: ['533,210', '259,170', '521,984'] },
+  { title: 'Corrected p99 at 129k req/s', direction: 'Lower is better', unit: 'ms', values: [1.970, 3.090, 1.880], labels: ['1.970', '3.090', '1.880'] },
 ]
 </script>
 
 <template>
   <section class="benchmark" aria-labelledby="benchmark-title">
-    <h2 id="benchmark-title">High throughput. Low tail latency.</h2>
-    <p class="intro">JSON throughput on par with Fiber, with 29.5% lower p99 in this run.</p>
+    <h2 id="benchmark-title">2.06x Fiber throughput on validated typed input.</h2>
+    <p class="intro">Bind 30 query fields, validate the typed input, and return 30-field JSON — with 36.2% lower p99 than Fiber at equal load.</p>
     <div class="charts">
       <div v-for="metric in metrics" :key="metric.title">
         <h3>{{ metric.title }} <small>{{ metric.direction }}</small></h3>
@@ -21,10 +21,10 @@ const metrics = [
       </div>
     </div>
     <footer>
-      <p>12 Sep 2026 · JSON serialization · Linux / Wing / HTTP/1.1 loopback · 256 connections · 5-round medians</p>
-      <p>Kruda throughput was 4.2% higher than Actix. Fiber led throughput on plaintext and static JSON.</p>
-      <p>Bars start at zero. p99 is the median of five per-round 99th percentiles. Lab results, not production, TLS or HTTP/2 guarantees.</p>
-      <a href="/benchmarks/2026-09-12-stable.html">See all results and test conditions →</a>
+      <p>21 Sep 2026 · 30-field typed binding + compiled validation · Linux / Wing / HTTP/1.1 loopback · 256 connections</p>
+      <p>Six balanced permutations per profile. Kruda and Actix were in the same P4 throughput range; Actix led at P8.</p>
+      <p>Bars start at zero. Capacity and common-load latency are separate measurements. Scoped lab results, not production, TLS or HTTP/2 guarantees.</p>
+      <a href="/benchmarks/2026-09-21-v1.8.0-typed-binding.html">See all results and test conditions →</a>
     </footer>
   </section>
 </template>

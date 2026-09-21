@@ -1,0 +1,290 @@
+[
+  {
+    "sequence": 1,
+    "profile": 4,
+    "fields": 30,
+    "round": 1,
+    "position": 1,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 2,
+    "profile": 4,
+    "fields": 30,
+    "round": 1,
+    "position": 2,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 3,
+    "profile": 4,
+    "fields": 30,
+    "round": 1,
+    "position": 3,
+    "arm": "actix"
+  },
+  {
+    "sequence": 4,
+    "profile": 4,
+    "fields": 30,
+    "round": 2,
+    "position": 1,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 5,
+    "profile": 4,
+    "fields": 30,
+    "round": 2,
+    "position": 2,
+    "arm": "actix"
+  },
+  {
+    "sequence": 6,
+    "profile": 4,
+    "fields": 30,
+    "round": 2,
+    "position": 3,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 7,
+    "profile": 4,
+    "fields": 30,
+    "round": 3,
+    "position": 1,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 8,
+    "profile": 4,
+    "fields": 30,
+    "round": 3,
+    "position": 2,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 9,
+    "profile": 4,
+    "fields": 30,
+    "round": 3,
+    "position": 3,
+    "arm": "actix"
+  },
+  {
+    "sequence": 10,
+    "profile": 4,
+    "fields": 30,
+    "round": 4,
+    "position": 1,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 11,
+    "profile": 4,
+    "fields": 30,
+    "round": 4,
+    "position": 2,
+    "arm": "actix"
+  },
+  {
+    "sequence": 12,
+    "profile": 4,
+    "fields": 30,
+    "round": 4,
+    "position": 3,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 13,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 1,
+    "arm": "actix"
+  },
+  {
+    "sequence": 14,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 2,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 15,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 3,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 16,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 1,
+    "arm": "actix"
+  },
+  {
+    "sequence": 17,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 2,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 18,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 3,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 19,
+    "profile": 8,
+    "fields": 30,
+    "round": 1,
+    "position": 1,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 20,
+    "profile": 8,
+    "fields": 30,
+    "round": 1,
+    "position": 2,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 21,
+    "profile": 8,
+    "fields": 30,
+    "round": 1,
+    "position": 3,
+    "arm": "actix"
+  },
+  {
+    "sequence": 22,
+    "profile": 8,
+    "fields": 30,
+    "round": 2,
+    "position": 1,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 23,
+    "profile": 8,
+    "fields": 30,
+    "round": 2,
+    "position": 2,
+    "arm": "actix"
+  },
+  {
+    "sequence": 24,
+    "profile": 8,
+    "fields": 30,
+    "round": 2,
+    "position": 3,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 25,
+    "profile": 8,
+    "fields": 30,
+    "round": 3,
+    "position": 1,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 26,
+    "profile": 8,
+    "fields": 30,
+    "round": 3,
+    "position": 2,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 27,
+    "profile": 8,
+    "fields": 30,
+    "round": 3,
+    "position": 3,
+    "arm": "actix"
+  },
+  {
+    "sequence": 28,
+    "profile": 8,
+    "fields": 30,
+    "round": 4,
+    "position": 1,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 29,
+    "profile": 8,
+    "fields": 30,
+    "round": 4,
+    "position": 2,
+    "arm": "actix"
+  },
+  {
+    "sequence": 30,
+    "profile": 8,
+    "fields": 30,
+    "round": 4,
+    "position": 3,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 31,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 1,
+    "arm": "actix"
+  },
+  {
+    "sequence": 32,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 2,
+    "arm": "kruda"
+  },
+  {
+    "sequence": 33,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 3,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 34,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 1,
+    "arm": "actix"
+  },
+  {
+    "sequence": 35,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 2,
+    "arm": "fiber"
+  },
+  {
+    "sequence": 36,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 3,
+    "arm": "kruda"
+  }
+]

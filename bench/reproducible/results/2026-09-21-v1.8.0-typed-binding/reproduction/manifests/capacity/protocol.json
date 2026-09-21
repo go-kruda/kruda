@@ -1,0 +1,234 @@
+{
+  "stage": "measure",
+  "scope": "Controlled DEV closed-loop 30-field validated HTTP comparison at exact Kruda v1.8.0 commit 5ff81f1c7d961f7aa71d74d426310987b5a96a19; profile-specific capacity evidence.",
+  "cases": 36,
+  "warmup_seconds": 2,
+  "measure_seconds": 8,
+  "wrk_threads": 4,
+  "connections": 256,
+  "wrk_binary": "/usr/bin/wrk",
+  "wrk_sha256": "b10e53769443c2bf3be2cdedec8ef6571aa5bfd1494796b247f3f9296e3af71d",
+  "profiles": {
+    "4": "Kruda W4/P4, Fiber P4, Actix workers4",
+    "8": "Kruda W8/P8, Fiber P8, Actix workers8"
+  },
+  "kruda_arguments": [
+    "-test.run=^TestCompositionBenchmarkServer$",
+    "-test.timeout=60s"
+  ],
+  "competitor_arguments": [],
+  "read_buffer_kruda": 8192,
+  "http_version": "HTTP/1.1",
+  "pipelining": false,
+  "load_model": "closed-loop",
+  "query_scope": "Unique unescaped keys only; native competitor decoding/duplicate behavior is not a Wing parity claim",
+  "contracts": {
+    "30": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "invalid_path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "invalid_body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "content_type": "application/json; charset=utf-8",
+      "benchmark_header": "bindgen"
+    }
+  },
+  "arms": {
+    "kruda": {
+      "path": "bin/kruda.test",
+      "sha256": "2c50a205ebaf76c3f4cc7605204dc7e02e22de6ff29b74160a057fcb7cdc2232",
+      "toolchain": {
+        "name": "go",
+        "version": "go1.27.1"
+      },
+      "sources": [
+        "sources/kruda/source.tar.gz",
+        "sources/kruda/go.mod",
+        "sources/kruda/commit.txt"
+      ]
+    },
+    "fiber": {
+      "path": "bin/fiber",
+      "sha256": "e1212e3aedffdaf1f8b8c14a1df705e15918478f1784535244a9b227754d5101",
+      "toolchain": {
+        "name": "go",
+        "version": "go1.27.1"
+      },
+      "sources": [
+        "sources/fiber/main.go",
+        "sources/fiber/go.mod",
+        "sources/fiber/go.sum"
+      ]
+    },
+    "actix": {
+      "path": "bin/actix",
+      "sha256": "6c81a0c70ebfa78e00a618803d23635b94456ef1a894027ae0642f84550e2815",
+      "toolchain": {
+        "name": "rustc",
+        "version": "rustc 1.98.1"
+      },
+      "sources": [
+        "sources/actix/src/main.rs",
+        "sources/actix/Cargo.toml",
+        "sources/actix/Cargo.lock",
+        "sources/actix/rust-version.txt",
+        "sources/actix/build.log"
+      ]
+    }
+  },
+  "controlled_environment": [
+    {
+      "entry": {
+        "sequence": 1,
+        "profile": 4,
+        "fields": 30,
+        "round": 1,
+        "position": 1,
+        "arm": "kruda"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "GOMAXPROCS": "4",
+        "KRUDA_COMPOSITION_SERVER": "1",
+        "KRUDA_COMPOSITION_FIELDS": "30",
+        "KRUDA_COMPOSITION_WORKERS": "4",
+        "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+      }
+    },
+    {
+      "entry": {
+        "sequence": 2,
+        "profile": 4,
+        "fields": 30,
+        "round": 1,
+        "position": 2,
+        "arm": "fiber"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "GOMAXPROCS": "4",
+        "PORT": "18373",
+        "BENCH_FIELDS": "30",
+        "BENCH_WORKERS": "4"
+      }
+    },
+    {
+      "entry": {
+        "sequence": 3,
+        "profile": 4,
+        "fields": 30,
+        "round": 1,
+        "position": 3,
+        "arm": "actix"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "PORT": "18373",
+        "BENCH_FIELDS": "30",
+        "BENCH_WORKERS": "4"
+      }
+    },
+    {
+      "entry": {
+        "sequence": 4,
+        "profile": 8,
+        "fields": 30,
+        "round": 1,
+        "position": 1,
+        "arm": "kruda"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "GOMAXPROCS": "8",
+        "KRUDA_COMPOSITION_SERVER": "1",
+        "KRUDA_COMPOSITION_FIELDS": "30",
+        "KRUDA_COMPOSITION_WORKERS": "8",
+        "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+      }
+    },
+    {
+      "entry": {
+        "sequence": 5,
+        "profile": 8,
+        "fields": 30,
+        "round": 1,
+        "position": 2,
+        "arm": "fiber"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "GOMAXPROCS": "8",
+        "PORT": "18373",
+        "BENCH_FIELDS": "30",
+        "BENCH_WORKERS": "8"
+      }
+    },
+    {
+      "entry": {
+        "sequence": 6,
+        "profile": 8,
+        "fields": 30,
+        "round": 1,
+        "position": 3,
+        "arm": "actix"
+      },
+      "values": {
+        "LC_ALL": "C",
+        "PORT": "18373",
+        "BENCH_FIELDS": "30",
+        "BENCH_WORKERS": "8"
+      }
+    }
+  ],
+  "removed_environment": [
+    "GODEBUG",
+    "GOEXPERIMENT",
+    "GOFLAGS",
+    "GOGC",
+    "GOMAXPROCS",
+    "GOMEMLIMIT",
+    "LD_LIBRARY_PATH",
+    "LD_PRELOAD",
+    "PORT",
+    "RUST_BACKTRACE",
+    "RUST_LOG",
+    "KRUDA_*",
+    "BENCH_*"
+  ],
+  "benchmark_lock": "/home/tiger/kruda-typed-comparison-20260912/benchmark.lock",
+  "source_manifest_sha256": "13d726ac66ae3385a3d25e84475f6b3c3633da72ffd1b2b2a55898fe1b0f25b7",
+  "parent_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "cpu_scope": "Approximate own-server thread-aggregate /proc/PID/stat deltas around wrk; excludes client/host services",
+  "affinity_scope": "Main-thread allowed sets observed only; no pinning or every-worker-thread proof",
+  "clock_ticks_per_second": 100,
+  "cpu_window_tolerance_seconds": [
+    -0.05,
+    0.5
+  ],
+  "duration_tolerance_seconds": [
+    -0.05,
+    0.5
+  ],
+  "readiness_deadline_seconds": 7,
+  "graceful_stop_timeout_seconds": 12,
+  "cleanup_term_timeout_seconds": 5,
+  "cleanup_kill_timeout_seconds": 3,
+  "ordering": "All six permutations per profile; each arm occupies each position twice and every pair order is 3/3",
+  "restoration": "Externally owned; measurement complete.json does not attest service restoration"
+}

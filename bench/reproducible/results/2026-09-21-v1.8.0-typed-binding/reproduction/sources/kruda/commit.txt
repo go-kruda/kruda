@@ -1,0 +1,7 @@
+tag v1.8.0
+Tagger: Adisorn <a.khaokom@gmail.com>
+
+Release v1.8.0
+5ff81f1c7d961f7aa71d74d426310987b5a96a19
+Prepare v1.8.0 (#199)
+

@@ -548,7 +548,7 @@ func TestPlaintextPerformanceGuard(t *testing.T) {
 	const iterations = 10_000
 	minReqPerSec := 50_000.0 // conservative floor — any modern machine should hit this
 	if os.Getenv("CI") != "" {
-		minReqPerSec = 5_000.0 // CI runners + race detector = 5-10x slower
+		minReqPerSec = 5_000.0 // shared CI runners have variable CPU capacity
 	}
 
 	start := time.Now()

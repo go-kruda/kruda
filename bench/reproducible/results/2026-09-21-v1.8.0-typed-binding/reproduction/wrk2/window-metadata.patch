@@ -1,0 +1,79 @@
+diff --git a/src/wrk.c b/src/wrk.c
+index 1f02df1..2f4bd72 100644
+--- a/src/wrk.c
++++ b/src/wrk.c
+@@ -244,6 +244,22 @@ int main(int argc, char **argv) {
+         script_done(L, latency_stats, statistics.requests);
+     }
+ 
++    for (uint64_t i = 0; i < cfg.threads; i++) {
++        thread *t = &threads[i];
++        bool valid = t->calibrations > 0 && t->calibrated_clock_valid &&
++            t->final_clock_valid && t->final_mono_ns >= t->calibrated_mono_ns &&
++            t->final_complete >= t->calibrated_complete;
++        printf("WRK2_THREAD_WINDOW thread=%"PRIu64" calibrations=%"PRIu64
++               " valid=%d start_complete=%"PRIu64" end_complete=%"PRIu64
++               " start_wall_us=%"PRIu64" end_wall_us=%"PRIu64
++               " start_mono_ns=%"PRIu64" end_mono_ns=%"PRIu64
++               " start_clock_valid=%d end_clock_valid=%d\n",
++               i, t->calibrations, valid, t->calibrated_complete, t->final_complete,
++               t->calibrated_wall_us, t->final_wall_us,
++               t->calibrated_mono_ns, t->final_mono_ns,
++               t->calibrated_clock_valid, t->final_clock_valid);
++    }
++
+     return 0;
+ }
+ 
+@@ -289,6 +305,14 @@ void *thread_main(void *arg) {
+     thread->start = time_us();
+     aeMain(loop);
+ 
++    struct timespec final_mono;
++    thread->final_complete = thread->complete;
++    thread->final_wall_us = time_us();
++    thread->final_clock_valid = clock_gettime(CLOCK_MONOTONIC, &final_mono) == 0;
++    if (thread->final_clock_valid) {
++        thread->final_mono_ns = (uint64_t) final_mono.tv_sec * 1000000000 + final_mono.tv_nsec;
++    }
++
+     aeDeleteEventLoop(loop);
+     zfree(thread->cs);
+ 
+@@ -355,6 +379,16 @@ static void calibrate(aeEventLoop *loop, long long id, void *data) {
+     hdr_reset(thread->latency_histogram);
+     hdr_reset(thread->u_latency_histogram);
+ 
++    struct timespec calibrated_mono;
++    thread->calibrations++;
++    thread->calibrated_complete = thread->complete;
++    thread->calibrated_wall_us = time_us();
++    thread->calibrated_clock_valid = clock_gettime(CLOCK_MONOTONIC, &calibrated_mono) == 0;
++    thread->calibrated_mono_ns = 0;
++    if (thread->calibrated_clock_valid) {
++        thread->calibrated_mono_ns = (uint64_t) calibrated_mono.tv_sec * 1000000000 + calibrated_mono.tv_nsec;
++    }
++
+     thread->start    = time_us();
+     thread->interval = interval;
+     thread->requests = 0;
+diff --git a/src/wrk.h b/src/wrk.h
+index 2c1d83e..a9330a4 100644
+--- a/src/wrk.h
++++ b/src/wrk.h
+@@ -36,6 +36,15 @@ typedef struct {
+     uint64_t requests;
+     uint64_t bytes;
+     uint64_t start;
++    uint64_t calibrations;
++    uint64_t calibrated_complete;
++    uint64_t calibrated_wall_us;
++    uint64_t calibrated_mono_ns;
++    uint64_t final_complete;
++    uint64_t final_wall_us;
++    uint64_t final_mono_ns;
++    bool calibrated_clock_valid;
++    bool final_clock_valid;
+     double throughput;
+     uint64_t mean;
+     struct hdr_histogram *latency_histogram;

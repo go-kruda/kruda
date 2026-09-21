@@ -1,0 +1,3346 @@
+[
+  {
+    "sequence": 1,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 1,
+    "arm": "fiber",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/fiber"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:42:49 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:42:49 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2685593,
+      "observed_monotonic": 26855.989337899
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 12.621261,
+      "system_cpu_seconds": 20.278046,
+      "cpu_seconds": 32.899307,
+      "observed_elapsed_seconds": 30.02428536500156,
+      "average_cpu_cores": 1.0957565384170564,
+      "fraction_of_four_worker_cores": 0.2739391346042641,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 4862,
+      "system_ticks": 2232,
+      "start_ticks": 2685593,
+      "observed_monotonic": 26886.014140573
+    },
+    "result": {
+      "rps": 129001.74295708559,
+      "full_invocation_rps": 128319.15,
+      "p50_ms": 1.15,
+      "p90_ms": 2.12,
+      "p99_ms": 3.05,
+      "requests": 3849596,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538750,
+      "corrected_histogram_count": 2538715,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327719,
+          "end_complete": 962388,
+          "start_wall_us": 1789998180171095,
+          "end_wall_us": 1789998199850924,
+          "start_mono_ns": 26866311251267,
+          "end_mono_ns": 26885991070806,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634669,
+          "monotonic_seconds": 19.679819539,
+          "wall_seconds": 19.679829,
+          "rate": 32249.736779458788,
+          "clock_delta_seconds": 9.46100000120964e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327700,
+          "end_complete": 962388,
+          "start_wall_us": 1789998180171118,
+          "end_wall_us": 1789998199850916,
+          "start_mono_ns": 26866311264958,
+          "end_mono_ns": 26885991063574,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634688,
+          "monotonic_seconds": 19.679798616,
+          "wall_seconds": 19.679798,
+          "rate": 32250.736523492076,
+          "clock_delta_seconds": -6.159999976773634e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327722,
+          "end_complete": 962436,
+          "start_wall_us": 1789998180171090,
+          "end_wall_us": 1789998199851589,
+          "start_mono_ns": 26866311249012,
+          "end_mono_ns": 26885991735917,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634714,
+          "monotonic_seconds": 19.680486905,
+          "wall_seconds": 19.680499,
+          "rate": 32250.929718550073,
+          "clock_delta_seconds": 1.2095000002432243e-05
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327705,
+          "end_complete": 962384,
+          "start_wall_us": 1789998180171149,
+          "end_wall_us": 1789998199850910,
+          "start_mono_ns": 26866311295763,
+          "end_mono_ns": 26885991057318,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634679,
+          "monotonic_seconds": 19.679761555,
+          "wall_seconds": 19.679761,
+          "rate": 32250.339935584652,
+          "clock_delta_seconds": -5.549999997356281e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.000013511295237,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 48.62,
+      "server_system_cpu_seconds": 22.32,
+      "server_cpu_seconds": 70.94,
+      "cpu_observed_elapsed_seconds": 30.024802674000966,
+      "average_server_cpu_cores": 2.362713279758813,
+      "server_cpu_microseconds_per_request": 18.427907759671406,
+      "server_system_cpu_microseconds_per_request": 5.798011012064642
+    },
+    "server_exit": {
+      "pid": 1171631,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 2,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 2,
+    "arm": "kruda",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/kruda.test",
+      "-test.run=^TestCompositionBenchmarkServer$",
+      "-test.timeout=60s"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "4",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:43:19 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "4",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:43:19 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 1,
+      "start_ticks": 2688605,
+      "observed_monotonic": 26886.110023791
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 9.359212,
+      "system_cpu_seconds": 21.785177,
+      "cpu_seconds": 31.144389,
+      "observed_elapsed_seconds": 30.008849099001964,
+      "average_cpu_cores": 1.0378401683200773,
+      "fraction_of_four_worker_cores": 0.2594600420800193,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 3293,
+      "system_ticks": 6168,
+      "start_ticks": 2688605,
+      "observed_monotonic": 26916.119231266
+    },
+    "result": {
+      "rps": 129006.34357219722,
+      "full_invocation_rps": 128321.34,
+      "p50_ms": 0.96,
+      "p90_ms": 1.61,
+      "p99_ms": 1.97,
+      "requests": 3849748,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538853,
+      "corrected_histogram_count": 2538723,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327728,
+          "end_complete": 962445,
+          "start_wall_us": 1789998210291569,
+          "end_wall_us": 1789998229971825,
+          "start_mono_ns": 26896431716455,
+          "end_mono_ns": 26916111972435,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634717,
+          "monotonic_seconds": 19.68025598,
+          "wall_seconds": 19.680256,
+          "rate": 32251.460582882115,
+          "clock_delta_seconds": 2.000000165480742e-08
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327725,
+          "end_complete": 962439,
+          "start_wall_us": 1789998210291413,
+          "end_wall_us": 1789998229971815,
+          "start_mono_ns": 26896431559937,
+          "end_mono_ns": 26916111962466,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634714,
+          "monotonic_seconds": 19.680402529,
+          "wall_seconds": 19.680402,
+          "rate": 32251.06798830558,
+          "clock_delta_seconds": -5.289999975843784e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327738,
+          "end_complete": 962419,
+          "start_wall_us": 1789998210291916,
+          "end_wall_us": 1789998229971022,
+          "start_mono_ns": 26896432062944,
+          "end_mono_ns": 26916111168841,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634681,
+          "monotonic_seconds": 19.679105897,
+          "wall_seconds": 19.679106,
+          "rate": 32251.516065918146,
+          "clock_delta_seconds": 1.0300000141683086e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327704,
+          "end_complete": 962445,
+          "start_wall_us": 1789998210291213,
+          "end_wall_us": 1789998229971710,
+          "start_mono_ns": 26896431369056,
+          "end_mono_ns": 26916111857609,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634741,
+          "monotonic_seconds": 19.680488553,
+          "wall_seconds": 19.680497,
+          "rate": 32252.29893509138,
+          "clock_delta_seconds": 8.446999999023319e-06
+        }
+      ],
+      "achieved_rate_fraction": 1.000049174978273,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 32.93,
+      "server_system_cpu_seconds": 61.67,
+      "server_cpu_seconds": 94.6,
+      "cpu_observed_elapsed_seconds": 30.00920747499913,
+      "average_server_cpu_cores": 3.1523658223500863,
+      "server_cpu_microseconds_per_request": 24.573036988395085,
+      "server_system_cpu_microseconds_per_request": 16.019230349622884
+    },
+    "server_exit": {
+      "pid": 1171680,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": true,
+      "final_pass": true
+    }
+  },
+  {
+    "sequence": 3,
+    "profile": 4,
+    "fields": 30,
+    "round": 5,
+    "position": 3,
+    "arm": "actix",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/actix"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "content-length",
+          "375"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:43:50 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "content-length",
+          "143"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:43:50 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2691618,
+      "observed_monotonic": 26916.239851767
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 7.014757,
+      "system_cpu_seconds": 18.606155,
+      "cpu_seconds": 25.620912,
+      "observed_elapsed_seconds": 30.026465586000995,
+      "average_cpu_cores": 0.8532776502321685,
+      "fraction_of_four_worker_cores": 0.21331941255804213,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 1938,
+      "system_ticks": 1451,
+      "start_ticks": 2691618,
+      "observed_monotonic": 26946.266673151
+    },
+    "result": {
+      "rps": 129006.0514349288,
+      "full_invocation_rps": 128318.9,
+      "p50_ms": 0.9,
+      "p90_ms": 1.47,
+      "p99_ms": 1.88,
+      "requests": 3849688,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538789,
+      "corrected_histogram_count": 2538700,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327737,
+          "end_complete": 962428,
+          "start_wall_us": 1789998240421986,
+          "end_wall_us": 1789998260101500,
+          "start_mono_ns": 26926562132723,
+          "end_mono_ns": 26946241646549,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634691,
+          "monotonic_seconds": 19.679513826,
+          "wall_seconds": 19.679514,
+          "rate": 32251.355679400207,
+          "clock_delta_seconds": 1.7400000018596984e-07
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327715,
+          "end_complete": 962432,
+          "start_wall_us": 1789998240421718,
+          "end_wall_us": 1789998260101778,
+          "start_mono_ns": 26926561875371,
+          "end_mono_ns": 26946241924620,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634717,
+          "monotonic_seconds": 19.680049249,
+          "wall_seconds": 19.68006,
+          "rate": 32251.79937150065,
+          "clock_delta_seconds": 1.0751000001363309e-05
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327725,
+          "end_complete": 962400,
+          "start_wall_us": 1789998240421752,
+          "end_wall_us": 1789998260100613,
+          "start_mono_ns": 26926561899148,
+          "end_mono_ns": 26946240760167,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634675,
+          "monotonic_seconds": 19.678861019,
+          "wall_seconds": 19.678861,
+          "rate": 32251.61249867151,
+          "clock_delta_seconds": -1.899999801935337e-08
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327722,
+          "end_complete": 962428,
+          "start_wall_us": 1789998240421759,
+          "end_wall_us": 1789998260101782,
+          "start_mono_ns": 26926561906068,
+          "end_mono_ns": 26946241928800,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634706,
+          "monotonic_seconds": 19.680022732,
+          "wall_seconds": 19.680023,
+          "rate": 32251.283885356435,
+          "clock_delta_seconds": 2.679999973054237e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000469103482852,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 19.38,
+      "server_system_cpu_seconds": 14.51,
+      "server_cpu_seconds": 33.89,
+      "cpu_observed_elapsed_seconds": 30.02682138399905,
+      "average_server_cpu_cores": 1.1286575947082962,
+      "server_cpu_microseconds_per_request": 8.803310813759452,
+      "server_system_cpu_microseconds_per_request": 3.7691366157465227
+    },
+    "server_exit": {
+      "pid": 1171791,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 4,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 1,
+    "arm": "actix",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/actix"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "content-length",
+          "375"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:44:20 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "content-length",
+          "143"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:44:20 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2694662,
+      "observed_monotonic": 26946.673249055
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 7.063252,
+      "system_cpu_seconds": 18.805106,
+      "cpu_seconds": 25.868358,
+      "observed_elapsed_seconds": 30.018390355999145,
+      "average_cpu_cores": 0.8617503368174515,
+      "fraction_of_four_worker_cores": 0.21543758420436288,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 1955,
+      "system_ticks": 1420,
+      "start_ticks": 2694662,
+      "observed_monotonic": 26976.69202982
+    },
+    "result": {
+      "rps": 129006.41112930962,
+      "full_invocation_rps": 128322.0,
+      "p50_ms": 0.9,
+      "p90_ms": 1.48,
+      "p99_ms": 1.92,
+      "requests": 3849680,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538846,
+      "corrected_histogram_count": 2538765,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327703,
+          "end_complete": 962416,
+          "start_wall_us": 1789998270854077,
+          "end_wall_us": 1789998290534195,
+          "start_mono_ns": 26956994230800,
+          "end_mono_ns": 26976674342125,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634713,
+          "monotonic_seconds": 19.680111325,
+          "wall_seconds": 19.680118,
+          "rate": 32251.494390365195,
+          "clock_delta_seconds": 6.675000001621356e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327704,
+          "end_complete": 962423,
+          "start_wall_us": 1789998270854130,
+          "end_wall_us": 1789998290534446,
+          "start_mono_ns": 26956994276947,
+          "end_mono_ns": 26976674592899,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634719,
+          "monotonic_seconds": 19.680315952,
+          "wall_seconds": 19.680316,
+          "rate": 32251.46392710718,
+          "clock_delta_seconds": 4.800000041882413e-08
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327729,
+          "end_complete": 962428,
+          "start_wall_us": 1789998270854756,
+          "end_wall_us": 1789998290534411,
+          "start_mono_ns": 26956994902836,
+          "end_mono_ns": 26976674557936,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634699,
+          "monotonic_seconds": 19.6796551,
+          "wall_seconds": 19.679655,
+          "rate": 32251.53066833981,
+          "clock_delta_seconds": -1.0000000116860974e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327698,
+          "end_complete": 962413,
+          "start_wall_us": 1789998270854196,
+          "end_wall_us": 1789998290534108,
+          "start_mono_ns": 26956994342726,
+          "end_mono_ns": 26976674255048,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634715,
+          "monotonic_seconds": 19.679912322,
+          "wall_seconds": 19.679912,
+          "rate": 32251.922143497442,
+          "clock_delta_seconds": -3.2199999822069003e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000496986768188,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 19.55,
+      "server_system_cpu_seconds": 14.2,
+      "server_cpu_seconds": 33.75,
+      "cpu_observed_elapsed_seconds": 30.018780764999974,
+      "average_server_cpu_cores": 1.1242961619330787,
+      "server_cpu_microseconds_per_request": 8.766962448826915,
+      "server_system_cpu_microseconds_per_request": 3.6886182747656946
+    },
+    "server_exit": {
+      "pid": 1171832,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 5,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 2,
+    "arm": "kruda",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/kruda.test",
+      "-test.run=^TestCompositionBenchmarkServer$",
+      "-test.timeout=60s"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "4",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:44:50 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "4",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:44:50 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2697704,
+      "observed_monotonic": 26977.098636906
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 9.63148,
+      "system_cpu_seconds": 21.388371,
+      "cpu_seconds": 31.019851,
+      "observed_elapsed_seconds": 30.007301142999495,
+      "average_cpu_cores": 1.0337434497082962,
+      "fraction_of_four_worker_cores": 0.25843586242707406,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 3262,
+      "system_ticks": 6186,
+      "start_ticks": 2697704,
+      "observed_monotonic": 27007.106304105
+    },
+    "result": {
+      "rps": 129007.45025696933,
+      "full_invocation_rps": 128322.17,
+      "p50_ms": 0.95,
+      "p90_ms": 1.6,
+      "p99_ms": 1.96,
+      "requests": 3849786,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538887,
+      "corrected_histogram_count": 2538711,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327726,
+          "end_complete": 962474,
+          "start_wall_us": 1789998301279308,
+          "end_wall_us": 1789998320960455,
+          "start_mono_ns": 26987419462659,
+          "end_mono_ns": 27007100601998,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634748,
+          "monotonic_seconds": 19.681139339,
+          "wall_seconds": 19.681147,
+          "rate": 32251.58813556022,
+          "clock_delta_seconds": 7.660999997938234e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327729,
+          "end_complete": 962438,
+          "start_wall_us": 1789998301281021,
+          "end_wall_us": 1789998320960769,
+          "start_mono_ns": 26987421167821,
+          "end_mono_ns": 27007100916013,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634709,
+          "monotonic_seconds": 19.679748192,
+          "wall_seconds": 19.679748,
+          "rate": 32251.886244053418,
+          "clock_delta_seconds": -1.9200000167529652e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327716,
+          "end_complete": 962434,
+          "start_wall_us": 1789998301280434,
+          "end_wall_us": 1789998320960432,
+          "start_mono_ns": 26987420581590,
+          "end_mono_ns": 27007100579322,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634718,
+          "monotonic_seconds": 19.679997732,
+          "wall_seconds": 19.679998,
+          "rate": 32251.93461114775,
+          "clock_delta_seconds": 2.6800000085813735e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327728,
+          "end_complete": 962440,
+          "start_wall_us": 1789998301280987,
+          "end_wall_us": 1789998320960733,
+          "start_mono_ns": 26987421134004,
+          "end_mono_ns": 27007100880621,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634712,
+          "monotonic_seconds": 19.679746617,
+          "wall_seconds": 19.679746,
+          "rate": 32252.041266207936,
+          "clock_delta_seconds": -6.169999977601037e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000577539299949,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 32.62,
+      "server_system_cpu_seconds": 61.86,
+      "server_cpu_seconds": 94.47999999999999,
+      "cpu_observed_elapsed_seconds": 30.007667198999115,
+      "average_server_cpu_cores": 3.1485286534753127,
+      "server_cpu_microseconds_per_request": 24.54162387208016,
+      "server_system_cpu_microseconds_per_request": 16.068425621580005
+    },
+    "server_exit": {
+      "pid": 1171931,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": true,
+      "final_pass": true
+    }
+  },
+  {
+    "sequence": 6,
+    "profile": 4,
+    "fields": 30,
+    "round": 6,
+    "position": 3,
+    "arm": "fiber",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/fiber"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:45:21 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "4",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "4"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:45:21 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "129000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2700718,
+      "observed_monotonic": 27007.232885671
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 12.827779,
+      "system_cpu_seconds": 20.406283,
+      "cpu_seconds": 33.234061999999994,
+      "observed_elapsed_seconds": 30.01289849999739,
+      "average_cpu_cores": 1.1073259718651594,
+      "fraction_of_four_worker_cores": 0.27683149296628984,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 4830,
+      "system_ticks": 2138,
+      "start_ticks": 2700718,
+      "observed_monotonic": 27037.246094351
+    },
+    "result": {
+      "rps": 128998.7294260716,
+      "full_invocation_rps": 128317.01,
+      "p50_ms": 1.15,
+      "p90_ms": 2.12,
+      "p99_ms": 3.06,
+      "requests": 3849616,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 2538736,
+      "corrected_histogram_count": 2538710,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327723,
+          "end_complete": 962402,
+          "start_wall_us": 1789998331414100,
+          "end_wall_us": 1789998351094621,
+          "start_mono_ns": 27017554255707,
+          "end_mono_ns": 27037234767882,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634679,
+          "monotonic_seconds": 19.680512175,
+          "wall_seconds": 19.680521,
+          "rate": 32249.109898990726,
+          "clock_delta_seconds": 8.824999998324756e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327724,
+          "end_complete": 962405,
+          "start_wall_us": 1789998331415022,
+          "end_wall_us": 1789998351094648,
+          "start_mono_ns": 27017555169403,
+          "end_mono_ns": 27037234794648,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634681,
+          "monotonic_seconds": 19.679625245,
+          "wall_seconds": 19.679626,
+          "rate": 32250.66494400107,
+          "clock_delta_seconds": 7.549999985201339e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327717,
+          "end_complete": 962406,
+          "start_wall_us": 1789998331414106,
+          "end_wall_us": 1789998351094732,
+          "start_mono_ns": 27017554255868,
+          "end_mono_ns": 27037234879383,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634689,
+          "monotonic_seconds": 19.680623515,
+          "wall_seconds": 19.680626,
+          "rate": 32249.435568759214,
+          "clock_delta_seconds": 2.4849999995524286e-06
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 327716,
+          "end_complete": 962403,
+          "start_wall_us": 1789998331414108,
+          "end_wall_us": 1789998351094619,
+          "start_mono_ns": 27017554255417,
+          "end_mono_ns": 27037234765992,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 634687,
+          "monotonic_seconds": 19.680510575,
+          "wall_seconds": 19.680511,
+          "rate": 32249.519014320595,
+          "clock_delta_seconds": 4.249999996375209e-07
+        }
+      ],
+      "achieved_rate_fraction": 0.9999901505897023,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 48.3,
+      "server_system_cpu_seconds": 21.38,
+      "server_cpu_seconds": 69.67999999999999,
+      "cpu_observed_elapsed_seconds": 30.01320868000039,
+      "average_server_cpu_cores": 2.3216444713701,
+      "server_cpu_microseconds_per_request": 18.100506647935795,
+      "server_system_cpu_microseconds_per_request": 5.5538006907701964
+    },
+    "server_exit": {
+      "pid": 1172001,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 7,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 1,
+    "arm": "fiber",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/fiber"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:45:51 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:45:51 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2703732,
+      "observed_monotonic": 27037.379252945
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 13.024152,
+      "system_cpu_seconds": 31.58759,
+      "cpu_seconds": 44.611742,
+      "observed_elapsed_seconds": 30.010705874999985,
+      "average_cpu_cores": 1.4865275807178935,
+      "fraction_of_four_worker_cores": 0.37163189517947337,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 9353,
+      "system_ticks": 4076,
+      "start_ticks": 2703732,
+      "observed_monotonic": 27067.39034553
+    },
+    "result": {
+      "rps": 198012.85602077024,
+      "full_invocation_rps": 196953.82,
+      "p50_ms": 1.27,
+      "p90_ms": 2.34,
+      "p99_ms": 3.4,
+      "requests": 5908809,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896933,
+      "corrected_histogram_count": 3896760,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502973,
+          "end_complete": 1477224,
+          "start_wall_us": 1789998361560736,
+          "end_wall_us": 1789998381241326,
+          "start_mono_ns": 27047700883493,
+          "end_mono_ns": 27067381472591,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974251,
+          "monotonic_seconds": 19.680589098,
+          "wall_seconds": 19.68059,
+          "rate": 49503.14216453035,
+          "clock_delta_seconds": 9.020000000248274e-07
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502962,
+          "end_complete": 1477204,
+          "start_wall_us": 1789998361560823,
+          "end_wall_us": 1789998381241095,
+          "start_mono_ns": 27047700969736,
+          "end_mono_ns": 27067381242306,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974242,
+          "monotonic_seconds": 19.68027257,
+          "wall_seconds": 19.680272,
+          "rate": 49503.481038423444,
+          "clock_delta_seconds": -5.700000009767336e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502968,
+          "end_complete": 1477208,
+          "start_wall_us": 1789998361560681,
+          "end_wall_us": 1789998381240989,
+          "start_mono_ns": 27047700835480,
+          "end_mono_ns": 27067381136181,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974240,
+          "monotonic_seconds": 19.680300701,
+          "wall_seconds": 19.680308,
+          "rate": 49503.30865373905,
+          "clock_delta_seconds": 7.2989999999606425e-06
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502973,
+          "end_complete": 1477173,
+          "start_wall_us": 1789998361560831,
+          "end_wall_us": 1789998381240476,
+          "start_mono_ns": 27047700978115,
+          "end_mono_ns": 27067380623640,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974200,
+          "monotonic_seconds": 19.679645525,
+          "wall_seconds": 19.679645,
+          "rate": 49502.92416407739,
+          "clock_delta_seconds": -5.250000008061306e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000649293978294,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 93.53,
+      "server_system_cpu_seconds": 40.76,
+      "server_cpu_seconds": 134.29,
+      "cpu_observed_elapsed_seconds": 30.01109258499855,
+      "average_server_cpu_cores": 4.474678808165973,
+      "server_cpu_microseconds_per_request": 22.72708425674277,
+      "server_system_cpu_microseconds_per_request": 6.898175249868459
+    },
+    "server_exit": {
+      "pid": 1172106,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 8,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 2,
+    "arm": "kruda",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/kruda.test",
+      "-test.run=^TestCompositionBenchmarkServer$",
+      "-test.timeout=60s"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "8",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:46:21 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "8",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:46:21 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 1,
+      "system_ticks": 1,
+      "start_ticks": 2706743,
+      "observed_monotonic": 27067.489802684
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 10.715038,
+      "system_cpu_seconds": 32.859166,
+      "cpu_seconds": 43.574204,
+      "observed_elapsed_seconds": 30.006250099999306,
+      "average_cpu_cores": 1.4521709262165021,
+      "fraction_of_four_worker_cores": 0.36304273155412553,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 7639,
+      "system_ticks": 12078,
+      "start_ticks": 2706743,
+      "observed_monotonic": 27097.496352322
+    },
+    "result": {
+      "rps": 198006.26669251296,
+      "full_invocation_rps": 196951.97,
+      "p50_ms": 1.11,
+      "p90_ms": 1.86,
+      "p99_ms": 2.39,
+      "requests": 5908738,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896730,
+      "corrected_histogram_count": 3896527,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502998,
+          "end_complete": 1477243,
+          "start_wall_us": 1789998391670411,
+          "end_wall_us": 1789998411351723,
+          "start_mono_ns": 27077810564519,
+          "end_mono_ns": 27097491870447,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974245,
+          "monotonic_seconds": 19.681305928,
+          "wall_seconds": 19.681312,
+          "rate": 49501.03430961718,
+          "clock_delta_seconds": 6.07199999791419e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503006,
+          "end_complete": 1477174,
+          "start_wall_us": 1789998391671087,
+          "end_wall_us": 1789998411350845,
+          "start_mono_ns": 27077811233853,
+          "end_mono_ns": 27097490992685,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974168,
+          "monotonic_seconds": 19.679758832,
+          "wall_seconds": 19.679758,
+          "rate": 49501.01311282167,
+          "clock_delta_seconds": -8.320000013384288e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502995,
+          "end_complete": 1477170,
+          "start_wall_us": 1789998391671666,
+          "end_wall_us": 1789998411350908,
+          "start_mono_ns": 27077811812655,
+          "end_mono_ns": 27097491055306,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974175,
+          "monotonic_seconds": 19.679242651,
+          "wall_seconds": 19.679242,
+          "rate": 49502.667215219146,
+          "clock_delta_seconds": -6.510000005732763e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503009,
+          "end_complete": 1477151,
+          "start_wall_us": 1789998391671862,
+          "end_wall_us": 1789998411350881,
+          "start_mono_ns": 27077812008589,
+          "end_mono_ns": 27097491027924,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974142,
+          "monotonic_seconds": 19.679019335,
+          "wall_seconds": 19.679019,
+          "rate": 49501.552054854976,
+          "clock_delta_seconds": -3.3499999929631485e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000316499621866,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 76.38,
+      "server_system_cpu_seconds": 120.77,
+      "server_cpu_seconds": 197.14999999999998,
+      "cpu_observed_elapsed_seconds": 30.00654963800116,
+      "average_server_cpu_cores": 6.570232245240336,
+      "server_cpu_microseconds_per_request": 33.36583886440725,
+      "server_system_cpu_microseconds_per_request": 20.439220693149704
+    },
+    "server_exit": {
+      "pid": 1172160,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": true,
+      "final_pass": true
+    }
+  },
+  {
+    "sequence": 9,
+    "profile": 8,
+    "fields": 30,
+    "round": 5,
+    "position": 3,
+    "arm": "actix",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/actix"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "content-length",
+          "375"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:46:51 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "content-length",
+          "143"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:46:51 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2709756,
+      "observed_monotonic": 27097.61886788
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 8.65161,
+      "system_cpu_seconds": 31.084056,
+      "cpu_seconds": 39.735666,
+      "observed_elapsed_seconds": 30.017399332002242,
+      "average_cpu_cores": 1.3237544518934021,
+      "fraction_of_four_worker_cores": 0.33093861297335053,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 3829,
+      "system_ticks": 2769,
+      "start_ticks": 2709756,
+      "observed_monotonic": 27127.636752668
+    },
+    "result": {
+      "rps": 198011.33533860123,
+      "full_invocation_rps": 196956.85,
+      "p50_ms": 1.04,
+      "p90_ms": 1.75,
+      "p99_ms": 2.27,
+      "requests": 5908719,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896741,
+      "corrected_histogram_count": 3896549,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503015,
+          "end_complete": 1477225,
+          "start_wall_us": 1789998421800972,
+          "end_wall_us": 1789998441480864,
+          "start_mono_ns": 27107941119193,
+          "end_mono_ns": 27127621011298,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974210,
+          "monotonic_seconds": 19.679892105,
+          "wall_seconds": 19.679892,
+          "rate": 49502.81204806433,
+          "clock_delta_seconds": -1.050000015823116e-07
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502988,
+          "end_complete": 1477205,
+          "start_wall_us": 1789998421800392,
+          "end_wall_us": 1789998441480595,
+          "start_mono_ns": 27107940548770,
+          "end_mono_ns": 27127620741982,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974217,
+          "monotonic_seconds": 19.680193212,
+          "wall_seconds": 19.680203,
+          "rate": 49502.410342494564,
+          "clock_delta_seconds": 9.787999999844033e-06
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503006,
+          "end_complete": 1477152,
+          "start_wall_us": 1789998421802008,
+          "end_wall_us": 1789998441480456,
+          "start_mono_ns": 27107942155037,
+          "end_mono_ns": 27127620602758,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974146,
+          "monotonic_seconds": 19.678447721,
+          "wall_seconds": 19.678448,
+          "rate": 49503.19323004491,
+          "clock_delta_seconds": 2.7899999821556776e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502969,
+          "end_complete": 1477137,
+          "start_wall_us": 1789998421801365,
+          "end_wall_us": 1789998441480365,
+          "start_mono_ns": 27107941511637,
+          "end_mono_ns": 27127620512503,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974168,
+          "monotonic_seconds": 19.679000866,
+          "wall_seconds": 19.679,
+          "rate": 49502.919717997436,
+          "clock_delta_seconds": -8.660000005988877e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000572491848547,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 38.29,
+      "server_system_cpu_seconds": 27.69,
+      "server_cpu_seconds": 65.98,
+      "cpu_observed_elapsed_seconds": 30.01788478800154,
+      "average_server_cpu_cores": 2.198022960844093,
+      "server_cpu_microseconds_per_request": 11.166548959258344,
+      "server_system_cpu_microseconds_per_request": 4.686294948194355
+    },
+    "server_exit": {
+      "pid": 1172222,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 10,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 1,
+    "arm": "actix",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/actix"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "content-length",
+          "375"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:47:21 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "content-length",
+          "143"
+        ],
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-benchmark",
+          "bindgen"
+        ],
+        [
+          "date",
+          "Mon, 21 Sep 2026 13:47:21 GMT"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2712799,
+      "observed_monotonic": 27128.046099062
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 8.372857,
+      "system_cpu_seconds": 33.293946,
+      "cpu_seconds": 41.666803,
+      "observed_elapsed_seconds": 30.013660521999554,
+      "average_cpu_cores": 1.3882612875380154,
+      "fraction_of_four_worker_cores": 0.34706532188450384,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 4053,
+      "system_ticks": 2923,
+      "start_ticks": 2712799,
+      "observed_monotonic": 27158.060111624
+    },
+    "result": {
+      "rps": 198007.6625904316,
+      "full_invocation_rps": 196954.56,
+      "p50_ms": 1.02,
+      "p90_ms": 1.68,
+      "p99_ms": 2.21,
+      "requests": 5908722,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896770,
+      "corrected_histogram_count": 3896540,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503012,
+          "end_complete": 1477181,
+          "start_wall_us": 1789998452228092,
+          "end_wall_us": 1789998471907258,
+          "start_mono_ns": 27138368239276,
+          "end_mono_ns": 27158047405167,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974169,
+          "monotonic_seconds": 19.679165891,
+          "wall_seconds": 19.679166,
+          "rate": 49502.55541295696,
+          "clock_delta_seconds": 1.089999983605594e-07
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502955,
+          "end_complete": 1477179,
+          "start_wall_us": 1789998452227182,
+          "end_wall_us": 1789998471907230,
+          "start_mono_ns": 27138367328863,
+          "end_mono_ns": 27158047377081,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974224,
+          "monotonic_seconds": 19.680048218,
+          "wall_seconds": 19.680048,
+          "rate": 49503.130744819195,
+          "clock_delta_seconds": -2.1800000027383248e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502963,
+          "end_complete": 1477161,
+          "start_wall_us": 1789998452227239,
+          "end_wall_us": 1789998471907150,
+          "start_mono_ns": 27138367386555,
+          "end_mono_ns": 27158047296936,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974198,
+          "monotonic_seconds": 19.679910381,
+          "wall_seconds": 19.679911,
+          "rate": 49502.1563177717,
+          "clock_delta_seconds": 6.190000014782981e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503022,
+          "end_complete": 1477201,
+          "start_wall_us": 1789998452227127,
+          "end_wall_us": 1789998471907590,
+          "start_mono_ns": 27138367281469,
+          "end_mono_ns": 27158047736827,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974179,
+          "monotonic_seconds": 19.680455358,
+          "wall_seconds": 19.680463,
+          "rate": 49499.82011488375,
+          "clock_delta_seconds": 7.64199999991888e-06
+        }
+      ],
+      "achieved_rate_fraction": 1.0000386999516748,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 40.53,
+      "server_system_cpu_seconds": 29.23,
+      "server_cpu_seconds": 69.76,
+      "cpu_observed_elapsed_seconds": 30.014012561998243,
+      "average_server_cpu_cores": 2.3242477111616027,
+      "server_cpu_microseconds_per_request": 11.80627553640195,
+      "server_system_cpu_microseconds_per_request": 4.946924224900071
+    },
+    "server_exit": {
+      "pid": 1172326,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  },
+  {
+    "sequence": 11,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 2,
+    "arm": "kruda",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/kruda.test",
+      "-test.run=^TestCompositionBenchmarkServer$",
+      "-test.timeout=60s"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "8",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:47:52 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "KRUDA_COMPOSITION_SERVER": "1",
+      "KRUDA_COMPOSITION_FIELDS": "30",
+      "KRUDA_COMPOSITION_WORKERS": "8",
+      "KRUDA_COMPOSITION_ADDR": "127.0.0.1:18373"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:47:52 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 1,
+      "start_ticks": 2715843,
+      "observed_monotonic": 27158.493210148
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 10.640422,
+      "system_cpu_seconds": 32.571153,
+      "cpu_seconds": 43.211575,
+      "observed_elapsed_seconds": 30.00529351899968,
+      "average_cpu_cores": 1.4401317211790634,
+      "fraction_of_four_worker_cores": 0.36003293029476585,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 7624,
+      "system_ticks": 12082,
+      "start_ticks": 2715843,
+      "observed_monotonic": 27188.498899802
+    },
+    "result": {
+      "rps": 198005.8151323234,
+      "full_invocation_rps": 196954.34,
+      "p50_ms": 1.11,
+      "p90_ms": 1.85,
+      "p99_ms": 2.39,
+      "requests": 5908871,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896875,
+      "corrected_histogram_count": 3896674,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502990,
+          "end_complete": 1477229,
+          "start_wall_us": 1789998482674449,
+          "end_wall_us": 1789998502355527,
+          "start_mono_ns": 27168814604639,
+          "end_mono_ns": 27188495674180,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974239,
+          "monotonic_seconds": 19.681069541,
+          "wall_seconds": 19.681078,
+          "rate": 49501.32399920877,
+          "clock_delta_seconds": 8.459000000016204e-06
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503011,
+          "end_complete": 1477206,
+          "start_wall_us": 1789998482675061,
+          "end_wall_us": 1789998502355102,
+          "start_mono_ns": 27168815207672,
+          "end_mono_ns": 27188495249163,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974195,
+          "monotonic_seconds": 19.680041491,
+          "wall_seconds": 19.680041,
+          "rate": 49501.674091770336,
+          "clock_delta_seconds": -4.910000015456717e-07
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502994,
+          "end_complete": 1477221,
+          "start_wall_us": 1789998482674503,
+          "end_wall_us": 1789998502355214,
+          "start_mono_ns": 27168814649769,
+          "end_mono_ns": 27188495361489,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974227,
+          "monotonic_seconds": 19.68071172,
+          "wall_seconds": 19.680711,
+          "rate": 49501.614263775205,
+          "clock_delta_seconds": -7.200000027296483e-07
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503001,
+          "end_complete": 1477215,
+          "start_wall_us": 1789998482674760,
+          "end_wall_us": 1789998502355373,
+          "start_mono_ns": 27168814907466,
+          "end_mono_ns": 27188495520165,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974214,
+          "monotonic_seconds": 19.680612699,
+          "wall_seconds": 19.680613,
+          "rate": 49501.20277756907,
+          "clock_delta_seconds": 3.010000000358559e-07
+        }
+      ],
+      "achieved_rate_fraction": 1.0000293693551687,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 76.24,
+      "server_system_cpu_seconds": 120.81,
+      "server_cpu_seconds": 197.05,
+      "cpu_observed_elapsed_seconds": 30.00568965400089,
+      "average_server_cpu_cores": 6.567087851411068,
+      "server_cpu_microseconds_per_request": 33.34816414167783,
+      "server_system_cpu_microseconds_per_request": 20.445530119036277
+    },
+    "server_exit": {
+      "pid": 1172380,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": true,
+      "final_pass": true
+    }
+  },
+  {
+    "sequence": 12,
+    "profile": 8,
+    "fields": 30,
+    "round": 6,
+    "position": 3,
+    "arm": "fiber",
+    "status": "passed",
+    "command": [
+      "/home/tiger/kruda180-balanced-20260921/bin/fiber"
+    ],
+    "environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "smoke": {
+      "path": "/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 200,
+      "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+      "body_hex": "7b224944223a34322c2250616765223a332c22416374697665223a66616c73652c2253636f7265223a322e352c224e616d65223a22616c696365222c22494432223a392c225061676532223a332c2241637469766532223a66616c73652c2253636f726532223a322e352c224e616d6532223a22616c696365222c22494433223a392c225061676533223a332c2241637469766533223a66616c73652c2253636f726533223a322e352c224e616d6533223a22616c696365222c22494434223a392c225061676534223a332c2241637469766534223a66616c73652c2253636f726534223a322e352c224e616d6534223a22616c696365222c22494435223a392c225061676535223a332c2241637469766535223a66616c73652c2253636f726535223a322e352c224e616d6535223a22616c696365222c22494436223a392c225061676536223a332c2241637469766536223a66616c73652c2253636f726536223a322e352c224e616d6536223a22616c696365227d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:48:22 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "375"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 200,
+        "body": "{\"ID\":42,\"Page\":3,\"Active\":false,\"Score\":2.5,\"Name\":\"alice\",\"ID2\":9,\"Page2\":3,\"Active2\":false,\"Score2\":2.5,\"Name2\":\"alice\",\"ID3\":9,\"Page3\":3,\"Active3\":false,\"Score3\":2.5,\"Name3\":\"alice\",\"ID4\":9,\"Page4\":3,\"Active4\":false,\"Score4\":2.5,\"Name4\":\"alice\",\"ID5\":9,\"Page5\":3,\"Active5\":false,\"Score5\":2.5,\"Name5\":\"alice\",\"ID6\":9,\"Page6\":3,\"Active6\":false,\"Score6\":2.5,\"Name6\":\"alice\"}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "375",
+          "x-benchmark": "bindgen"
+        },
+        "errors": []
+      }
+    },
+    "observed_environment": {
+      "LC_ALL": "C",
+      "GOMAXPROCS": "8",
+      "PORT": "18373",
+      "BENCH_FIELDS": "30",
+      "BENCH_WORKERS": "8"
+    },
+    "validation_smoke": {
+      "path": "/users/42?id=9&page=0&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice",
+      "status": 422,
+      "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+      "body_hex": "7b22636f6465223a3432322c226d657373616765223a2256616c69646174696f6e206661696c6564222c226572726f7273223a5b7b226669656c64223a2270616765222c2272756c65223a226d696e222c22706172616d223a2231222c226d657373616765223a2270616765206d757374206265206174206c656173742031222c2276616c7565223a2230227d5d7d",
+      "headers": [
+        [
+          "Date",
+          "Mon, 21 Sep 2026 13:48:22 GMT"
+        ],
+        [
+          "Content-Type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "Content-Length",
+          "143"
+        ],
+        [
+          "X-Benchmark",
+          "bindgen"
+        ]
+      ],
+      "expected": {
+        "status": 422,
+        "body": "{\"code\":422,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"page\",\"rule\":\"min\",\"param\":\"1\",\"message\":\"page must be at least 1\",\"value\":\"0\"}]}",
+        "headers": {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": "143",
+          "x-benchmark": "bindgen"
+        },
+        "errors": [
+          {
+            "field": "page",
+            "rule": "min",
+            "param": "1",
+            "message": "page must be at least 1",
+            "value": "0"
+          }
+        ]
+      }
+    },
+    "server_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "load_command": [
+      "/home/tiger/kruda180-balanced-20260921/tools/wrk2/wrk",
+      "--latency",
+      "-t4",
+      "-c256",
+      "-d30s",
+      "-R",
+      "198000",
+      "http://127.0.0.1:18373/users/42?id=9&page=3&active=false&score=2.5&name=alice&id2=9&page2=3&active2=false&score2=2.5&name2=alice&id3=9&page3=3&active3=false&score3=2.5&name3=alice&id4=9&page4=3&active4=false&score4=2.5&name4=alice&id5=9&page5=3&active5=false&score5=2.5&name5=alice&id6=9&page6=3&active6=false&score6=2.5&name6=alice"
+    ],
+    "server_cpu_before": {
+      "user_ticks": 0,
+      "system_ticks": 0,
+      "start_ticks": 2718856,
+      "observed_monotonic": 27188.618789458
+    },
+    "client_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "client_cpu": {
+      "returncode": 0,
+      "user_cpu_seconds": 13.189395,
+      "system_cpu_seconds": 31.767831,
+      "cpu_seconds": 44.957226,
+      "observed_elapsed_seconds": 30.012522451001132,
+      "average_cpu_cores": 1.4979489335958949,
+      "fraction_of_four_worker_cores": 0.3744872333989737,
+      "max_resident_kib": 56560
+    },
+    "server_cpu_after": {
+      "user_ticks": 9296,
+      "system_ticks": 4015,
+      "start_ticks": 2718856,
+      "observed_monotonic": 27218.631772226
+    },
+    "result": {
+      "rps": 197995.67020858492,
+      "full_invocation_rps": 195558.57,
+      "p50_ms": 1.26,
+      "p90_ms": 2.32,
+      "p99_ms": 3.38,
+      "requests": 5866699,
+      "elapsed_seconds": 30.0,
+      "post_calibration_completions": 3896460,
+      "corrected_histogram_count": 3896455,
+      "thread_windows": [
+        {
+          "thread": 0,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502982,
+          "end_complete": 1477111,
+          "start_wall_us": 1789998512800463,
+          "end_wall_us": 1789998532480280,
+          "start_mono_ns": 27198940609972,
+          "end_mono_ns": 27218620427430,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974129,
+          "monotonic_seconds": 19.679817458,
+          "wall_seconds": 19.679817,
+          "rate": 49498.88392404824,
+          "clock_delta_seconds": -4.5799999881523945e-07
+        },
+        {
+          "thread": 1,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 461271,
+          "end_complete": 1435352,
+          "start_wall_us": 1789998512801166,
+          "end_wall_us": 1789998532480337,
+          "start_mono_ns": 27198941312936,
+          "end_mono_ns": 27218620483982,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974081,
+          "monotonic_seconds": 19.679171046,
+          "wall_seconds": 19.679171,
+          "rate": 49498.070712586865,
+          "clock_delta_seconds": -4.600000025334339e-08
+        },
+        {
+          "thread": 2,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 502982,
+          "end_complete": 1477130,
+          "start_wall_us": 1789998512800450,
+          "end_wall_us": 1789998532480345,
+          "start_mono_ns": 27198940604457,
+          "end_mono_ns": 27218620492167,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974148,
+          "monotonic_seconds": 19.67988771,
+          "wall_seconds": 19.679895,
+          "rate": 49499.67267877262,
+          "clock_delta_seconds": 7.289999999215979e-06
+        },
+        {
+          "thread": 3,
+          "calibrations": 1,
+          "valid": 1,
+          "start_complete": 503004,
+          "end_complete": 1477106,
+          "start_wall_us": 1789998512801148,
+          "end_wall_us": 1789998532480357,
+          "start_mono_ns": 27198941294866,
+          "end_mono_ns": 27218620503656,
+          "start_clock_valid": 1,
+          "end_clock_valid": 1,
+          "completed": 974102,
+          "monotonic_seconds": 19.67920879,
+          "wall_seconds": 19.679209,
+          "rate": 49499.04289317721,
+          "clock_delta_seconds": 2.0999999961190952e-07
+        }
+      ],
+      "achieved_rate_fraction": 0.9999781323665905,
+      "connect": 0,
+      "read": 0,
+      "write": 0,
+      "timeout": 0,
+      "non2xx": 0
+    },
+    "server_cpu": {
+      "server_user_cpu_seconds": 92.96,
+      "server_system_cpu_seconds": 40.15,
+      "server_cpu_seconds": 133.10999999999999,
+      "cpu_observed_elapsed_seconds": 30.012982767999347,
+      "average_server_cpu_cores": 4.435080679216111,
+      "server_cpu_microseconds_per_request": 22.68907949768686,
+      "server_system_cpu_microseconds_per_request": 6.8437122818129925
+    },
+    "server_exit": {
+      "pid": 1172456,
+      "terminate_requested": true,
+      "forced_kill": false,
+      "returncode": 0,
+      "pass_required": false,
+      "final_pass": false
+    }
+  }
+]

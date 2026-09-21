@@ -1,0 +1,62 @@
+{
+  "benchmark_lock": "/home/tiger/kruda-typed-comparison-20260912/benchmark.lock",
+  "files": {
+    "harness/run_balanced.py": "207d4374c011a96f84c728c682d5df4a7d5e709587f2eceec2a04d2d42576f84",
+    "harness/wrk_helpers.py": "13e506b847ee877b4820c5b1a5c115bfca20834680f7e0dd75071d66e4ffa954",
+    "harness/PROTOCOL.md": "b021d41c69e22d10228806c1809b8a0e69969077b672e9ee66672db9b5eaf195",
+    "sources/kruda/source.tar.gz": "9d073c548a67e523980ae836541d815a7ae38307abcf4a6bb8534988e8eefa47",
+    "sources/kruda/go.mod": "a82e70ca3344b036980cd09929e44644a6db3a68c8abc54c183ca039a27d2916",
+    "sources/kruda/commit.txt": "8d187e2ad0e8f50ef3c5b9be9e56fdee6df65c23c06d8e6a044b3f75d2ac50ad",
+    "sources/fiber/main.go": "997f0875b5c8975ea3cabea6840f637ddb41cb1c98aef0fc79ea29116212f9db",
+    "sources/fiber/go.mod": "122063927efa860475aea646c5d1a24c37fa9189299f534f49cec66d7d60b3a5",
+    "sources/fiber/go.sum": "1b0f82147999b3eaf9e4ac3060aa9746bc7ba2bd01795404c830acb0cbce2996",
+    "sources/actix/src/main.rs": "24aa15fa379310c359333bc6852c0df9eb19840cf28e7d88578d8338fc831bc9",
+    "sources/actix/Cargo.toml": "f40097144959978ce844d7155387d1f07cc9c0765d6c59d13fb737ba4c5e2045",
+    "sources/actix/Cargo.lock": "16cb8b3ab838a62790144a720d0baebce9096425247b7b4c17f4947d5f188ad4",
+    "sources/actix/rust-version.txt": "2073de5abf149185c2f4d7473dc833bc921b99135560d24ae7b2293f33a9c376",
+    "sources/actix/build.log": "fd14463bec3cf1febc950cde4ea852401c197592b4f38b28cfb9412ebdd72da8"
+  },
+  "binaries": {
+    "kruda": {
+      "path": "bin/kruda.test",
+      "sha256": "2c50a205ebaf76c3f4cc7605204dc7e02e22de6ff29b74160a057fcb7cdc2232",
+      "toolchain": {
+        "name": "go",
+        "version": "go1.27.1"
+      },
+      "sources": [
+        "sources/kruda/source.tar.gz",
+        "sources/kruda/go.mod",
+        "sources/kruda/commit.txt"
+      ]
+    },
+    "fiber": {
+      "path": "bin/fiber",
+      "sha256": "e1212e3aedffdaf1f8b8c14a1df705e15918478f1784535244a9b227754d5101",
+      "toolchain": {
+        "name": "go",
+        "version": "go1.27.1"
+      },
+      "sources": [
+        "sources/fiber/main.go",
+        "sources/fiber/go.mod",
+        "sources/fiber/go.sum"
+      ]
+    },
+    "actix": {
+      "path": "bin/actix",
+      "sha256": "6c81a0c70ebfa78e00a618803d23635b94456ef1a894027ae0642f84550e2815",
+      "toolchain": {
+        "name": "rustc",
+        "version": "rustc 1.98.1"
+      },
+      "sources": [
+        "sources/actix/src/main.rs",
+        "sources/actix/Cargo.toml",
+        "sources/actix/Cargo.lock",
+        "sources/actix/rust-version.txt",
+        "sources/actix/build.log"
+      ]
+    }
+  }
+}

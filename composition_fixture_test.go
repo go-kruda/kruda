@@ -1,6 +1,6 @@
 package kruda
 
-//go:generate go run ./internal/bindgen -input composition_fixture_test.go -type composition5Input -output composition_5_generated_test.go -func bindComposition5Input
+//go:generate go run ./cmd/bindgen -input composition_fixture_test.go -type composition5Input -output composition_5_generated_test.go -func bindComposition5Input
 
 type composition5Input struct {
 	ID     int64   `param:"id" query:"id" default:"7" validate:"min=1"`
@@ -10,7 +10,7 @@ type composition5Input struct {
 	Name   string  `query:"name" default:"guest" validate:"min=1,max=64"`
 }
 
-//go:generate go run ./internal/bindgen -input composition_fixture_test.go -type composition10Input -output composition_10_generated_test.go -func bindComposition10Input
+//go:generate go run ./cmd/bindgen -input composition_fixture_test.go -type composition10Input -output composition_10_generated_test.go -func bindComposition10Input
 
 type composition10Input struct {
 	ID      int64   `param:"id" query:"id" default:"7" validate:"min=1"`
@@ -25,7 +25,7 @@ type composition10Input struct {
 	Name2   string  `query:"name2" default:"guest" validate:"min=1,max=64"`
 }
 
-//go:generate go run ./internal/bindgen -input composition_fixture_test.go -type composition30Input -output composition_30_generated_test.go -func bindComposition30Input
+//go:generate go run ./cmd/bindgen -input composition_fixture_test.go -type composition30Input -output composition_30_generated_test.go -func bindComposition30Input
 
 type composition30Input struct {
 	ID      int64   `param:"id" query:"id" default:"7" validate:"min=1"`

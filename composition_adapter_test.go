@@ -10,7 +10,7 @@ func compositionValidationEligible5(v *Validator) bool {
 	if v == nil {
 		return false
 	}
-	return makeBindComposition5InputValidator(buildValidators[composition5Input](v)) != nil
+	return makeBindComposition5InputValidator(describeValidators(buildValidators[composition5Input](v))) != nil
 }
 
 func compositionHandler10(app *App, handler func(*C[composition10Input]) (*composition10Input, error)) HandlerFunc {
@@ -21,7 +21,7 @@ func compositionValidationEligible10(v *Validator) bool {
 	if v == nil {
 		return false
 	}
-	return makeBindComposition10InputValidator(buildValidators[composition10Input](v)) != nil
+	return makeBindComposition10InputValidator(describeValidators(buildValidators[composition10Input](v))) != nil
 }
 
 func compositionHandler30(app *App, handler func(*C[composition30Input]) (*composition30Input, error)) HandlerFunc {
@@ -32,5 +32,5 @@ func compositionValidationEligible30(v *Validator) bool {
 	if v == nil {
 		return false
 	}
-	return makeBindComposition30InputValidator(buildValidators[composition30Input](v)) != nil
+	return makeBindComposition30InputValidator(describeValidators(buildValidators[composition30Input](v))) != nil
 }

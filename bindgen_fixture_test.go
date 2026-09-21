@@ -1,6 +1,6 @@
 package kruda
 
-//go:generate go run ./internal/bindgen -input bindgen_fixture_test.go -type generatedBinderInput -output bindgen_generated_test.go -func bindGeneratedBinderInput
+//go:generate go run ./cmd/bindgen -input bindgen_fixture_test.go -type generatedBinderInput -output bindgen_generated_test.go -func bindGeneratedBinderInput
 
 type generatedBinderInput struct {
 	ID     int64   `param:"id" query:"id" default:"7" validate:"min=1"`

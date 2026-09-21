@@ -18,8 +18,10 @@ type validationField struct {
 }
 
 // generateValidator emits the validator factory. Unsupported rules get a
-// nil-returning stub so the runtime uses the regular validation path.
-func generateValidator(typeName, binderName string, fields []field, supported bool) []byte {
+// nil-returning stub so the runtime uses the regular validation path. The
+// factory attests against exported ValidatorDescriptors, so the same output
+// compiles inside package kruda and in external packages.
+func generateValidator(typeName, binderName string, fields []field, supported bool, qualifier string) []byte {
 	var compiled []validationField
 	for _, f := range fields {
 		if f.validate == "" {
@@ -40,7 +42,7 @@ func generateValidator(typeName, binderName string, fields []field, supported bo
 	name := []rune(binderName)
 	name[0] = unicode.ToUpper(name[0])
 	var out bytes.Buffer
-	fmt.Fprintf(&out, "\nfunc make%sValidator(validators []fieldValidator) func(*%s) bool {\n", string(name), typeName)
+	fmt.Fprintf(&out, "\nfunc make%sValidator(validators []%sValidatorDescriptor) func(*%s) bool {\n", string(name), qualifier, typeName)
 	if !supported || len(compiled) == 0 {
 		fmt.Fprintln(&out, "return nil\n}")
 		return out.Bytes()
@@ -51,9 +53,9 @@ func generateValidator(typeName, binderName string, fields []field, supported bo
 	for i, f := range compiled {
 		kind := strings.ToUpper(f.kind[:1]) + f.kind[1:]
 		fmt.Fprintf(&out, "if inputType.NumField() <= %d || inputType.Field(%d).Name != %q || inputType.Field(%d).Type.Kind() != reflect.%s { return nil }\n", f.index, f.index, f.name, f.index, kind)
-		fmt.Fprintf(&out, "if validators[%d].index != %d || validators[%d].omitEmpty || len(validators[%d].elemRules) != 0 || len(validators[%d].rules) != %d || len(validators[%d].checks) != %d { return nil }\n", i, f.index, i, i, i, len(f.rules), i, len(f.rules))
+		fmt.Fprintf(&out, "if validators[%d].Index != %d || validators[%d].OmitEmpty || validators[%d].NumElemRules != 0 || len(validators[%d].Rules) != %d || validators[%d].NumChecks != %d { return nil }\n", i, f.index, i, i, i, len(f.rules), i, len(f.rules))
 		for j, rule := range f.rules {
-			fmt.Fprintf(&out, "if validators[%d].rules[%d].name != %q || validators[%d].rules[%d].param != %q { return nil }\n", i, j, rule[0], i, j, rule[1])
+			fmt.Fprintf(&out, "if validators[%d].Rules[%d].Name != %q || validators[%d].Rules[%d].Param != %q { return nil }\n", i, j, rule[0], i, j, rule[1])
 		}
 	}
 	fmt.Fprintf(&out, "return func(input *%s) bool {\nreturn ", typeName)

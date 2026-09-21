@@ -187,3 +187,40 @@ kruda.Post[CreateUserInput, User](app, "/users", handler,
     kruda.WithTags("users"),
 )
 ```
+
+## Generated Binding (experimental)
+
+For hot typed routes with many query fields, the generator pre-builds the
+binding loop and the `min`/`max` checks, so per-request reflection is gone
+from both paths. The output is ordinary Go that calls only the public API.
+
+1. Annotate the input and add a `go:generate` line:
+
+```go
+//go:generate go run github.com/go-kruda/kruda/cmd/bindgen -input input.go -type SearchInput -output search_generated.go -func bindSearchInput
+
+type SearchInput struct {
+    Q    string `query:"q" default:"all" validate:"min=1,max=64"`
+    Page int    `query:"page" default:"1" validate:"min=1,max=1000"`
+}
+```
+
+2. Run `go generate ./...` and pass the emitted plan to the route:
+
+```go
+kruda.Get[SearchInput, SearchOutput](app, "/search", handler,
+    kruda.WithGeneratedPlan(SearchInputPlan()),
+)
+```
+
+Scope: `query`/`param` scalar fields (string, bool, ints, uints, floats)
+with optional `default` tags, plus built-in `min`/`max` validation.
+`json`/`form` body fields are rejected at generation time.
+
+Everything fails closed. The plan carries the shape the code was generated
+for; if the struct drifts (added, removed, renamed, or retagged field),
+registration drops the stale binder silently and the route keeps the generic
+parser. Inputs whose rules the generator cannot compile — custom overrides,
+`dive`, `omitempty`, anything outside `min`/`max` — decline the compiled
+validator and keep generic validation. Regenerate after changing the input
+to stay on the fast path.

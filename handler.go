@@ -1,6 +1,10 @@
 package kruda
 
-import "reflect"
+import (
+	"log/slog"
+	"reflect"
+	"sync"
+)
 
 // C is the generic typed context that embeds *Ctx with a parsed input field.
 // c.In holds the input parsed from every source (param, query, body). It is
@@ -65,6 +69,73 @@ func WithOpenAPISecurity(name string, scopes ...string) RouteOption {
 	})
 }
 
+// generatedPlanMarker identifies plan options of any input type, so a plan
+// wired to a route for a different input can warn instead of passing
+// silently: the type assertion for the route's own input simply misses it.
+type generatedPlanMarker interface {
+	RouteOption
+	isGeneratedPlan()
+}
+
+type generatedPlanOption[In any] struct {
+	plan GeneratedPlan[In]
+}
+
+func (o generatedPlanOption[In]) applyRoute(*routeConfig) {}
+func (o generatedPlanOption[In]) isGeneratedPlan()        {}
+
+// warnedPlanMismatch keeps the crossed-plan warning to one line per route.
+var warnedPlanMismatch sync.Map
+
+// WithGeneratedPlan selects a generated binder (and its compiled validator,
+// when the generator emitted one) for a typed route. The plan's Shape is
+// attested against the route input at registration: a stale plan drops its
+// binder silently and the route keeps the generic parser, exactly as if no
+// plan had been passed. A plan generated for a different input type cannot
+// match the route and is ignored with a startup warning.
+//
+// Experimental API for generated binders; its shape may change before any
+// release.
+func WithGeneratedPlan[In any](plan GeneratedPlan[In]) RouteOption {
+	return generatedPlanOption[In]{plan: plan}
+}
+
+// selectGeneratedPlan resolves the effective binder and validator factory
+// from the route options. Later plans win, matching the other RouteOptions.
+// Every mismatch fails closed to the generic parser and validation.
+func selectGeneratedPlan[In any](method, path string, opts []RouteOption) (
+	binder func(*Ctx) (reflect.Value, error),
+	validatorFactory func([]ValidatorDescriptor) func(*In) bool,
+) {
+	var plan *GeneratedPlan[In]
+	sawPlan := false
+	for _, opt := range opts {
+		if _, ok := opt.(generatedPlanMarker); ok {
+			sawPlan = true
+		}
+		if p, ok := opt.(generatedPlanOption[In]); ok {
+			cp := p.plan
+			plan = &cp
+		}
+	}
+	if plan == nil {
+		if sawPlan {
+			key := method + "\x00" + path
+			if _, loaded := warnedPlanMismatch.LoadOrStore(key, struct{}{}); !loaded {
+				slog.Warn("kruda: generated plan for a different input type — the route keeps the generic parser",
+					"method", method, "path", path)
+			}
+		}
+		return nil, nil
+	}
+	if plan.Binder == nil || !AttestBinderShape[In](plan.Shape) {
+		// Stale or declined binder: silent, like the white-box path. The
+		// validator factory attests independently against the descriptors.
+		return nil, plan.ValidatorFactory
+	}
+	return plan.Binder, plan.ValidatorFactory
+}
+
 // buildTypedHandler creates the handler closure with pre-compiled parser and validators.
 // Called once at route registration time.
 //
@@ -77,7 +148,8 @@ func buildTypedHandler[In any, Out any](
 	handler func(*C[In]) (*Out, error),
 	opts []RouteOption,
 ) HandlerFunc {
-	return buildTypedHandlerWithBinder(app, method, path, handler, opts, nil)
+	binder, validatorFactory := selectGeneratedPlan[In](method, path, opts)
+	return buildTypedHandlerWithBinder(app, method, path, handler, opts, binder, validatorFactory)
 }
 
 func buildTypedHandlerWithBinder[In any, Out any](
@@ -86,8 +158,9 @@ func buildTypedHandlerWithBinder[In any, Out any](
 	handler func(*C[In]) (*Out, error),
 	opts []RouteOption,
 	binder func(*Ctx) (reflect.Value, error),
+	validatorFactory func([]ValidatorDescriptor) func(*In) bool,
 ) HandlerFunc {
-	return buildTypedHandlerWithValidation(app, method, path, handler, opts, binder, nil)
+	return buildTypedHandlerWithValidation(app, method, path, handler, opts, binder, validatorFactory)
 }
 
 func buildTypedHandlerWithValidation[In any, Out any](
@@ -96,7 +169,7 @@ func buildTypedHandlerWithValidation[In any, Out any](
 	handler func(*C[In]) (*Out, error),
 	opts []RouteOption,
 	binder func(*Ctx) (reflect.Value, error),
-	validatorFactory func([]fieldValidator) func(*In) bool,
+	validatorFactory func([]ValidatorDescriptor) func(*In) bool,
 ) HandlerFunc {
 	// Pre-compile at registration time
 	parser := buildInputParser[In]()
@@ -106,7 +179,7 @@ func buildTypedHandlerWithValidation[In any, Out any](
 	}
 	var validInput func(*In) bool
 	if validatorFactory != nil && len(validators) > 0 {
-		validInput = validatorFactory(validators)
+		validInput = validatorFactory(describeValidators(validators))
 	}
 
 	// Apply route options

@@ -1,8 +1,10 @@
 // Package externalbind proves that bindgen output works outside package
 // kruda: the committed generated file references only the public API, the
-// attested factory engages cross-package, and stale shapes decline.
+// attested plan engages cross-package through WithGeneratedPlan, and stale
+// shapes decline.
 //
-// Binder-only inputs (no validate tags) are supported. Inputs with
-// validatable rules are rejected for external packages until the exported
-// validator descriptor lands; see the generator note.
+// Validated inputs are supported. The generated validator factory attests
+// against exported ValidatorDescriptors; inputs whose rules the generator
+// cannot compile (custom overrides, unsupported rules, dive, omitempty)
+// decline the factory and the route keeps generic validation.
 package externalbind

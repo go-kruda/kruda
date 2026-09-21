@@ -159,6 +159,9 @@ func TestRegisteredRuleNamesRespectsOrdering(t *testing.T) {
 // entry point fails this test instead.
 func TestRouteRegistrationMatcherCoversEveryEntryPoint(t *testing.T) {
 	declRe := regexp.MustCompile(`(?m)^func ([A-Z][A-Za-z]*)\[`)
+	// Generic helpers that ride inside a registration call rather than
+	// performing one: the surrounding registrar is already matched.
+	nonRegistrar := map[string]bool{"WithGeneratedPlan": true}
 	var names []string
 	for _, f := range []string{"handler.go", "resource.go"} {
 		b, err := os.ReadFile(f)
@@ -166,6 +169,9 @@ func TestRouteRegistrationMatcherCoversEveryEntryPoint(t *testing.T) {
 			t.Fatalf("read %s: %v", f, err)
 		}
 		for _, m := range declRe.FindAllStringSubmatch(string(b), -1) {
+			if nonRegistrar[m[1]] {
+				continue
+			}
 			names = append(names, m[1])
 		}
 	}

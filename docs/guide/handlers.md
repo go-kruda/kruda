@@ -194,10 +194,14 @@ For hot typed routes with many query fields, the generator pre-builds the
 binding loop and the `min`/`max` checks, so per-request reflection is gone
 from both paths. The output is ordinary Go that calls only the public API.
 
+The CLI runs the generator from the Kruda core version selected by your
+project's module graph. It requires Go and the `kruda` CLI on `PATH`, and a
+core version that contains `cmd/bindgen`.
+
 1. Annotate the input and add a `go:generate` line:
 
 ```go
-//go:generate go run github.com/go-kruda/kruda/cmd/bindgen -input input.go -type SearchInput -output search_generated.go -func bindSearchInput
+//go:generate kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput
 
 type SearchInput struct {
     Q    string `query:"q" default:"all" validate:"min=1,max=64"`
@@ -205,7 +209,24 @@ type SearchInput struct {
 }
 ```
 
-2. Run `go generate ./...` and pass the emitted plan to the route:
+2. Run `go generate ./...`, or invoke the CLI directly:
+
+```sh
+kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput
+```
+
+All four flags are required. Paths are relative to the working directory,
+and the output directory must already exist. Successful generation replaces
+the requested output file. Go may download dependencies or update module
+bookkeeping under your project's normal module settings.
+
+The standalone command remains supported, including in `go:generate` lines:
+
+```sh
+go run github.com/go-kruda/kruda/cmd/bindgen -input input.go -type SearchInput -output search_generated.go -func bindSearchInput
+```
+
+3. Pass the emitted plan to the route manually:
 
 ```go
 kruda.Get[SearchInput, SearchOutput](app, "/search", handler,

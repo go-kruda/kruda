@@ -3,6 +3,43 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.1] — 2026-10-12
+
+### Security
+
+- Updated OpenTelemetry to v1.45.0 and the observability module's
+  instrumentation and auto-export packages to v0.70.0. Its dependency graph now
+  uses `golang.org/x/net` v0.60.0.
+- Updated gRPC to v1.83.2 in the observability module and example, clearing
+  GO-2026-6443. The affected server code was not reachable in Kruda.
+- Updated the docs dependency lockfile to Vue 3.5.42 and
+  `@vue/server-renderer` 3.5.42, fixing GHSA-g2v6-rqmx-r4w6, and
+  `source-map-js` 1.2.2, fixing GHSA-68fv-2mgg-jv7q. VitePress remains
+  1.6.4 with the existing Vite 6.4.3 override.
+
+### Fixed
+
+- Static directory requests now close each opened directory and index file
+  exactly once, including missing-index and directory-browse responses.
+- Added checksums for the published Kruda core dependency to contrib modules,
+  so standalone builds and vulnerability scans can use their published
+  dependency graphs without a local core replacement.
+
+### Changed
+
+- Raised the minimum Go version from 1.25.13 to **1.26.9** across modules,
+  templates, examples, benchmarks, documentation, and CI. The CLI also requires
+  at least **1.27.2** when using the Go 1.27 release line.
+- Separated the Wing performance guard from race tests in Linux CI and added
+  separate vulnerability scans for published dependencies and candidate-core
+  integration.
+
+### Documentation
+
+- Redesigned the docs homepage, benchmark page, 404 page, favicon, and social
+  preview. Published reproducible evidence for the existing v1.8.0 typed-binding
+  benchmark.
+
 ## [1.8.0] — 2026-09-21
 
 ### Added

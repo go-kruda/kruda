@@ -47,7 +47,7 @@ importing application. Make sure your `go.mod` can satisfy:
 | `go.opentelemetry.io/contrib/*` (otelhttp, autoexport, bridges) | v0.70.0 |
 | `go.opentelemetry.io/otel/exporters/prometheus` | v0.67.0 |
 | `golang.org/x/net` | v0.60.0 |
-| `google.golang.org/grpc` | v1.83.1 |
+| `google.golang.org/grpc` | v1.83.2 |
 | `google.golang.org/protobuf` | v1.36.11 |
 | `github.com/prometheus/client_golang` | v1.24.1 |
 
@@ -56,7 +56,7 @@ importing application. Make sure your `go.mod` can satisfy:
 Importing this package pulls in `autoexport` — the turnkey, env-driven exporter
 mechanism that lets `OTEL_EXPORTER_OTLP_PROTOCOL=grpc` work out of the box.
 `autoexport` links the OTLP/gRPC exporter, so **importing `contrib/observability`
-imposes the grpc-go (≥ v1.83.1) and protobuf (≥ v1.36.11) floors on your app
+imposes the grpc-go (≥ v1.83.2) and protobuf (≥ v1.36.11) floors on your app
 even if you never send a gRPC request.** There is no runtime cost when gRPC is
 unused — it is purely a compile-time/version constraint.
 

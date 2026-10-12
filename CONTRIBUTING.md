@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Kruda!
 
 ## Requirements
 
-- **Go 1.25.13+ or Go 1.26.4+** required
+- **Go 1.26.9+ or Go 1.27.2+** required on their respective release lines
 - All tests must pass: `go test ./...`
 - Code must be formatted: `gofmt -s -w .`
 - Code must pass vet: `go vet ./...`

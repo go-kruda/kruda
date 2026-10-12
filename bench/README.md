@@ -71,25 +71,22 @@ BenchmarkKruda_StaticGET-8    2853681    427.5 ns/op    1320 B/op    20 allocs/o
 | Echo v4 | v4.15.x | Standard net/http based |
 | Hertz | — | Skipped (complex dependency tree, deferred) |
 
-## Go Version Comparison (1.25 vs 1.26)
+## Go Version Comparison
 
-Go 1.26 introduces the Green Tea GC which reduces tail latency and GC pause times. To compare:
+Compare supported patched toolchains using the same benchmark configuration:
 
 ```bash
-# Run with Go 1.25
-go1.25 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go125.txt
+# Run with Go 1.26.9
+go1.26.9 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go1269.txt
 
-# Run with Go 1.26
-go1.26 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go126.txt
+# Run with Go 1.27.2
+go1.27.2 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go1272.txt
 
 # Compare (requires benchstat: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260813145340-fd4a688df892)
-benchstat go125.txt go126.txt
+benchstat go1269.txt go1272.txt
 ```
 
-Expected improvements with Go 1.26:
-- Lower P99 latency due to reduced GC pauses
-- Potentially fewer ns/op for allocation-heavy benchmarks (POSTJSON, JSONEncode)
-- Minimal difference for zero-alloc benchmarks (StaticGET with fasthttp transport)
+These microbenchmarks measure execution time and allocations; use the reproducible HTTP harness to measure P99 latency.
 
 ## Hardware
 

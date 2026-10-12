@@ -2,7 +2,7 @@
 
 Fast by default, type-safe by design.
 
-[![Go Version](https://img.shields.io/badge/Go-1.25.13+-00ADD8?logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.26.9+-00ADD8?logo=go)](https://go.dev)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-kruda/kruda.svg)](https://pkg.go.dev/github.com/go-kruda/kruda)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/go-kruda/kruda/graph/badge.svg?token=9HIGH8L2Q7)](https://codecov.io/gh/go-kruda/kruda)
@@ -276,9 +276,9 @@ Wing's runtime implementation lives in the core module (`wing_*.go` at the repo 
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
-**Tested security baseline (2026-08-29):** the repository's all-module scan has
-zero reachable `govulncheck` findings with go1.25.13+ or go1.26.4+. This does
-not mean the dependency graph contains no non-reachable advisories.
+Use Go 1.26.9+ on the Go 1.26 release line or Go 1.27.2+ on the Go 1.27 release line.
+Run `./scripts/govulncheck-modules.sh` to check all released modules against the
+current vulnerability database. A passing scan does not rule out non-reachable advisories.
 
 ## Contributing
 

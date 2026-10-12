@@ -7,7 +7,7 @@
 Kruda is a high-performance Go web framework that combines speed with type-safety through Go generics.
 
 - **Module**: `github.com/go-kruda/kruda`
-- **Go version**: 1.25.13+ or 1.26.4+
+- **Go version**: 1.26.9+ or 1.27.2+ on their respective release lines
 - **License**: MIT
 
 ## Architecture

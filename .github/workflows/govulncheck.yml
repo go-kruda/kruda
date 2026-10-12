@@ -12,6 +12,8 @@ on:
     paths:
       - '**/go.mod'
       - '**/go.sum'
+      - 'scripts/govulncheck-modules.sh'
+      - '.github/workflows/govulncheck.yml'
 
 permissions:
   contents: read
@@ -20,7 +22,7 @@ jobs:
   scan:
     name: Scan released modules
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -28,24 +30,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.13'
+          go-version: '1.26.9'
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - name: Scan published dependency graphs
+        run: ./scripts/govulncheck-modules.sh
 
-      - name: Scan every released module
-        run: |
-          set -euo pipefail
-          fail=0
-          for mod in $(git ls-files '*go.mod' | grep -vE '^(examples|bench)/'); do
-            dir=$(dirname "$mod")
-            echo "==> govulncheck $dir"
-            if [[ "${{ github.event_name }}" == "pull_request" && "$dir" == contrib/* ]]; then
-              (cd "$dir" && go mod edit -replace github.com/go-kruda/kruda="$GITHUB_WORKSPACE")
-              (cd "$dir" && go mod tidy)
-            fi
-            if ! (cd "$dir" && govulncheck ./...); then
-              fail=1
-            fi
-          done
-          exit $fail
+      - name: Scan candidate core integration
+        if: github.event_name == 'pull_request'
+        run: ./scripts/govulncheck-modules.sh --local-core

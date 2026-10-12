@@ -23,11 +23,15 @@ export GOWORK=off
 
 echo "== govulncheck (root) =="
 "$GOVULN" ./...
+"$GOVULN" -tags kruda_stdjson ./...
 
 # Every released module resolves against its own go.mod rather than a local
 # go.work, including the root scan above.
 while IFS= read -r modfile; do
   dir=$(dirname "$modfile")
+  echo "== published dependency checks ($dir) =="
+  ( cd "$dir" && go list -mod=readonly -deps ./... >/dev/null )
+  ( cd "$dir" && go list -mod=readonly -deps -tags kruda_stdjson ./... >/dev/null )
   echo "== govulncheck ($dir) =="
   if [[ "$local_core" == true && "$dir" == contrib/* ]]; then
     scan_dir=$(mktemp -d)
@@ -35,12 +39,12 @@ while IFS= read -r modfile; do
     ( cd "$scan_dir" && go mod edit -replace github.com/go-kruda/kruda="$ROOT" )
     ( cd "$scan_dir" && go mod tidy )
     exit_code=0
-    ( cd "$scan_dir" && "$GOVULN" ./... ) || exit_code=$?
+    ( cd "$scan_dir" && "$GOVULN" ./... && "$GOVULN" -tags kruda_stdjson ./... ) || exit_code=$?
     rm -rf "$scan_dir"
     if ((exit_code != 0)); then
       exit "$exit_code"
     fi
   else
-    ( cd "$dir" && "$GOVULN" ./... )
+    ( cd "$dir" && "$GOVULN" ./... && "$GOVULN" -tags kruda_stdjson ./... )
   fi
 done < <(git ls-files 'cmd/kruda/go.mod' 'contrib/*/go.mod')

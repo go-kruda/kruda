@@ -107,7 +107,7 @@ The `listening` startup log line reports which engine a running binary got
 
 ## What Go version do I need?
 
-Go 1.25.13+ or Go 1.26.4+ is required for generic type aliases used by `C[T]` typed handlers and current stdlib security fixes. Go 1.26.4+ is recommended for the Green Tea GC and self-referential generics support.
+Kruda requires Go 1.26.9+ on the Go 1.26 release line or Go 1.27.2+ on the Go 1.27 release line. These versions include the standard-library security fixes in the current baseline.
 
 ## Is Kruda production-ready?
 

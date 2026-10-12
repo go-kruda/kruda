@@ -109,14 +109,13 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 				return c.Status(404).Text("Not Found")
 			}
 		}
-		defer func() { _ = f.Close() }()
+		defer func(file fs.File) { _ = file.Close() }(f)
 
 		stat, err := f.Stat()
 		if err != nil {
 			return c.Status(500).Text("Internal Server Error")
 		}
 		if stat.IsDir() {
-			_ = f.Close()
 			f, err = fsys.Open(pathpkg.Join(path, cfg.index))
 			if err != nil {
 				if cfg.browse {
@@ -124,7 +123,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 				}
 				return c.Status(404).Text("Not Found")
 			}
-			defer func() { _ = f.Close() }()
+			defer func(file fs.File) { _ = file.Close() }(f)
 			stat, err = f.Stat()
 			if err != nil {
 				return c.Status(500).Text("Internal Server Error")

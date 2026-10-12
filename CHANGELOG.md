@@ -10,6 +10,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated OpenTelemetry to v1.45.0 and the observability module's
   instrumentation and auto-export packages to v0.70.0. Its dependency graph now
   uses `golang.org/x/net` v0.60.0.
+- Updated gRPC to v1.83.2 in the observability module and example, clearing
+  GO-2026-6443. The affected server code was not reachable in Kruda.
 - Updated the docs dependency lockfile to Vue 3.5.42 and
   `@vue/server-renderer` 3.5.42, fixing GHSA-g2v6-rqmx-r4w6, and
   `source-map-js` 1.2.2, fixing GHSA-68fv-2mgg-jv7q. VitePress remains

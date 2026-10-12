@@ -56,13 +56,14 @@ jobs:
         run: npx vitepress build
         working-directory: docs
 
+      # The /benchmarks/ page is built by VitePress; only its data comes from gh-pages.
       - name: Copy benchmark data from gh-pages
         run: |
           git fetch origin gh-pages --depth=1 || true
-          if git show origin/gh-pages:benchmarks/index.html > /dev/null 2>&1; then
+          if git show origin/gh-pages:benchmarks/data.js > /dev/null 2>&1; then
             mkdir -p docs/.vitepress/dist/benchmarks
-            git show origin/gh-pages:benchmarks/index.html > docs/.vitepress/dist/benchmarks/index.html
             git show origin/gh-pages:benchmarks/data.js > docs/.vitepress/dist/benchmarks/data.js
+            node docs/scripts/condense-benchmarks.mjs docs/.vitepress/dist/benchmarks/data.js docs/.vitepress/dist/benchmarks/history.json
           fi
 
       - name: Upload artifact

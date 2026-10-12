@@ -33,6 +33,14 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Record Windows runtime environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          go version
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List
+          Get-CimInstance Win32_Processor | Select-Object Name | Format-List
+
       - name: Install revive
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         run: |

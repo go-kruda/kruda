@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/examples/ratelimit
 
-go 1.25.13
+go 1.26.9
 
 replace (
 	github.com/go-kruda/kruda => ../../

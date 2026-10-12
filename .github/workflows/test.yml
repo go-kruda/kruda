@@ -1,6 +1,5 @@
 # CI Test Pipeline — Kruda Framework
 # Runs tests, vet, lint, and coverage on every push/PR
-# Matrix: Go 1.25.13 + stable × {Linux, macOS, Windows}
 
 name: Tests
 
@@ -22,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.25.13', 'stable']
+        go-version: ['1.26.9', 'stable']
         os: [ubuntu-latest, macos-latest, windows-2025]
 
     steps:
@@ -35,19 +34,19 @@ jobs:
           go-version: ${{ matrix.go-version }}
 
       - name: Install revive
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         run: |
           go install github.com/mgechev/revive@v1.12.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check documentation
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         run: |
           scripts/check-docs.sh
           scripts/check-godoc.sh
 
       - name: Verify contrib core security floor
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         shell: bash
         run: scripts/check-contrib-core-floor.sh
 
@@ -55,7 +54,7 @@ jobs:
         run: go vet -tags kruda_stdjson ./...
 
       - name: Lint (golangci-lint)
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         uses: golangci/golangci-lint-action@v9
         with:
           args: --build-tags kruda_stdjson
@@ -73,12 +72,12 @@ jobs:
           go test -v -race -tags kruda_stdjson $COVER_FLAG $SKIP_FLAG ./...
 
       - name: Run Wing performance guard
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         shell: bash
         run: go test -v -tags kruda_stdjson -run '^TestPlaintextPerformanceGuard$' -count=3 .
 
       - name: Run default JSON engine tests
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: CGO_ENABLED=1 go test -race -skip '^TestPlaintextPerformanceGuard$' ./...
 
@@ -88,7 +87,7 @@ jobs:
       # amd64 and arm64, so nothing else covers that path — this at least keeps it
       # compiling. Build-only: there is no runner for these.
       - name: Build the Sonic-fallback architectures
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.9'
         shell: bash
         run: |
           for arch in ppc64le s390x riscv64; do

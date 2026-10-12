@@ -19,7 +19,7 @@ var validateCmd = &cobra.Command{
 	Long: `Check Go version compatibility, required dependencies, and project setup.
 
 Validates:
-  • Go version is 1.25.13+ or 1.26.4+
+  • Go version is 1.26.9+ or 1.27.2+
   • go.mod exists and contains the kruda dependency
   • Project structure is correct
 
@@ -103,7 +103,7 @@ func checkGoVersion() validationResult {
 		return validationResult{
 			name:    "Go Version",
 			passed:  false,
-			message: fmt.Sprintf("Go %d.%d.%d found, but Kruda requires Go 1.25.13+ or 1.26.4+", major, minor, patch),
+			message: fmt.Sprintf("Go %d.%d.%d found, but Kruda requires Go 1.26.9+ or 1.27.2+", major, minor, patch),
 			suggest: "Upgrade Go: https://go.dev/dl/",
 		}
 	}
@@ -140,12 +140,12 @@ func meetsMinimumGoVersion(major, minor, patch int) bool {
 		return major > 1
 	}
 	switch minor {
-	case 25:
-		return patch >= 13
 	case 26:
-		return patch >= 4
+		return patch >= 9
+	case 27:
+		return patch >= 2
 	default:
-		return minor > 26
+		return minor > 27
 	}
 }
 

@@ -1,6 +1,6 @@
 module github.com/go-kruda/kruda/contrib/prometheus
 
-go 1.25.13
+go 1.26.9
 
 require (
 	github.com/go-kruda/kruda v1.7.2

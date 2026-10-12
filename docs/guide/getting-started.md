@@ -2,7 +2,7 @@
 
 ## Installation
 
-Requires Go 1.25.13+ or Go 1.26.4+.
+Requires Go 1.26.9+ or Go 1.27.2+ on their respective release lines.
 
 ```bash
 go get github.com/go-kruda/kruda

@@ -110,6 +110,7 @@ node_modules/
 
 # Playwright MCP
 .playwright-mcp/
+.playwright-cli/
 
 # Screenshots
 *.screenshot.png

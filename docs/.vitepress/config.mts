@@ -24,12 +24,12 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    logo: '/hero/mascot.webp',
+    logo: { src: '/hero/mascot.webp', width: 24, height: 24, alt: '' },
 
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'API', link: '/api/app' },
-      { text: 'Benchmarks', link: 'https://kruda.dev/benchmarks/' },
+      { text: 'Benchmarks', link: '/benchmarks/' },
       { text: 'GitHub', link: 'https://github.com/go-kruda/kruda' },
     ],
 

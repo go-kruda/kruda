@@ -23,6 +23,7 @@
   --vp-c-tip-soft: rgba(27, 117, 153, 0.12);
 
   --vp-code-color: var(--vp-c-tip-2);
+  --vp-code-block-bg: #fafcfe;
 
   --vp-button-brand-border: transparent;
   --vp-button-brand-text: #ffffff;
@@ -74,6 +75,7 @@
 
   --kruda-bar-other: #6f93ad;
   --kruda-sky-top: #162131;
+  --vp-code-block-bg: var(--vp-c-bg-alt);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -381,6 +383,24 @@
 
 .vp-doc .custom-block {
   border-radius: 10px;
+}
+
+.vp-doc .custom-block.tip,
+.vp-doc .custom-block.info,
+.vp-doc .custom-block.warning,
+.vp-doc .custom-block.danger {
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 0 10px 10px 0;
+}
+
+.vp-doc .custom-block.tip { border-left-color: var(--vp-c-tip-1); }
+.vp-doc .custom-block.info { border-left-color: var(--vp-c-text-3); }
+.vp-doc .custom-block.warning { border-left-color: #d4a24a; }
+.vp-doc .custom-block.danger { border-left-color: var(--vp-c-brand-1); }
+
+.VPSidebarItem.level-1.is-active > .item > .indicator {
+  background-color: var(--vp-c-brand-1);
 }
 
 .VPFooter {

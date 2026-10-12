@@ -13,12 +13,13 @@ import (
 // generateCmd is the parent command for code generation subcommands.
 var generateCmd = &cobra.Command{
 	Use:   "generate",
-	Short: "Generate boilerplate code",
-	Long: `Generate handler or resource boilerplate code for a Kruda project.
+	Short: "Generate boilerplate and binding code",
+	Long: `Generate handler or resource boilerplate, or a typed input binder for a Kruda project.
 
 Subcommands:
   handler    Generate a route handler file
-  resource   Generate a ResourceService implementation`,
+  resource   Generate a ResourceService implementation
+  binder     Generate a typed query/path input binder`,
 	Aliases: []string{"gen", "g"},
 }
 
@@ -59,6 +60,7 @@ func init() {
 
 	generateCmd.AddCommand(handlerCmd)
 	generateCmd.AddCommand(resourceCmd)
+	generateCmd.AddCommand(binderCmd)
 }
 
 // handlerTemplate is the text/template for generating a basic handler file.

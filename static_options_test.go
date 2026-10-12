@@ -1,8 +1,11 @@
 package kruda
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,7 +128,8 @@ func TestStatic_SymlinkContainment(t *testing.T) {
 	mustSymlink(secretPath, filepath.Join(root, "sub", "index.html"))
 	mustSymlink(secretPath, filepath.Join(root, "index.html"))
 
-	app := New()
+	var logs bytes.Buffer
+	app := New(WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
 	app.Static("/files", root)
 	app.Static("/spa", root, WithSPA())
 	t.Cleanup(func() {
@@ -152,6 +156,7 @@ func TestStatic_SymlinkContainment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			logs.Reset()
 			resp, err := tc.Get(tt.path)
 			if err != nil {
 				t.Fatal(err)
@@ -164,6 +169,9 @@ func TestStatic_SymlinkContainment(t *testing.T) {
 			}
 			if strings.Contains(resp.BodyString(), secretBody) {
 				t.Errorf("response exposed outside-root content: %q", resp.BodyString())
+			}
+			if strings.Contains(logs.String(), "unrecovered panic") {
+				t.Errorf("static request panicked: %s", logs.String())
 			}
 		})
 	}
@@ -186,52 +194,98 @@ func TestStatic_InvalidRootPanics(t *testing.T) {
 
 // --- Static: directory + index handling ---
 
-func TestStatic_DirectoryIndex(t *testing.T) {
-	fs := fstest.MapFS{
-		"sub/index.html": {Data: []byte("<html>sub index</html>")},
+func TestStatic_DirectoryFileLifetime(t *testing.T) {
+	tests := []struct {
+		name       string
+		files      fstest.MapFS
+		opts       []StaticOption
+		wantStatus int
+		wantBody   string
+		wantOpened []string
+	}{
+		{
+			name:       "index exists",
+			files:      fstest.MapFS{"sub/index.html": {Data: []byte("<html>sub index</html>")}},
+			wantStatus: 200,
+			wantBody:   "<html>sub index</html>",
+			wantOpened: []string{"sub", "sub/index.html"},
+		},
+		{
+			name:       "missing index",
+			files:      fstest.MapFS{"sub/file.txt": {Data: []byte("hello")}},
+			wantStatus: 404,
+			wantBody:   "Not Found",
+			wantOpened: []string{"sub"},
+		},
+		{
+			name:       "missing index with browse",
+			files:      fstest.MapFS{"sub/file.txt": {Data: []byte("hello")}},
+			opts:       []StaticOption{WithBrowse()},
+			wantStatus: 200,
+			wantBody:   "Directory listing not implemented",
+			wantOpened: []string{"sub"},
+		},
 	}
-	app := New()
-	app.StaticFS("/", fs)
-	app.Compile()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fsys := &staticTrackingFS{FS: tt.files}
+			var logs bytes.Buffer
+			app := New(WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
+			app.StaticFS("/files", fsys, tt.opts...)
+			app.Compile()
 
-	tc := NewTestClient(app)
-	// Access a directory — should serve index.html inside it
-	resp, _ := tc.Get("/sub")
-	if resp.StatusCode() == 200 && !strings.Contains(resp.BodyString(), "sub index") {
-		t.Errorf("body = %q", resp.BodyString())
+			resp, err := NewTestClient(app).Get("/files/sub")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode() != tt.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode(), tt.wantStatus)
+			}
+			if resp.BodyString() != tt.wantBody {
+				t.Errorf("body = %q, want %q", resp.BodyString(), tt.wantBody)
+			}
+			if strings.Contains(logs.String(), "unrecovered panic") {
+				t.Errorf("static request panicked: %s", logs.String())
+			}
+			if len(fsys.opened) != len(tt.wantOpened) {
+				t.Fatalf("opened %d files, want %d", len(fsys.opened), len(tt.wantOpened))
+			}
+			for i, file := range fsys.opened {
+				if file.name != tt.wantOpened[i] {
+					t.Errorf("opened file = %q, want %q", file.name, tt.wantOpened[i])
+				}
+				if file.closes != 1 {
+					t.Errorf("file %q closed %d times, want 1", file.name, file.closes)
+				}
+			}
+		})
 	}
 }
 
-func TestStatic_DirectoryNoIndex_NoBrowse(t *testing.T) {
-	fs := fstest.MapFS{
-		"sub/file.txt": {Data: []byte("hello")},
-	}
-	app := New()
-	app.StaticFS("/", fs)
-	app.Compile()
-
-	tc := NewTestClient(app)
-	// Access a directory without index.html — should 404
-	resp, _ := tc.Get("/sub")
-	if resp.StatusCode() != 404 {
-		t.Errorf("status = %d, want 404 for directory without index", resp.StatusCode())
-	}
+type staticTrackingFS struct {
+	fs.FS
+	opened []*staticTrackedFile
 }
 
-func TestStatic_DirectoryNoIndex_BrowseEnabled(t *testing.T) {
-	fs := fstest.MapFS{
-		"sub/file.txt": {Data: []byte("hello")},
+func (s *staticTrackingFS) Open(name string) (fs.File, error) {
+	file, err := s.FS.Open(name)
+	if err != nil {
+		return nil, err
 	}
-	app := New()
-	app.StaticFS("/", fs, WithBrowse())
-	app.Compile()
+	tracked := &staticTrackedFile{File: file, name: name}
+	s.opened = append(s.opened, tracked)
+	return tracked, nil
+}
 
-	tc := NewTestClient(app)
-	// Access a directory without index.html but browse is enabled
-	resp, _ := tc.Get("/sub")
-	if resp.StatusCode() != 200 {
-		t.Errorf("status = %d, want 200 for browse mode", resp.StatusCode())
-	}
+type staticTrackedFile struct {
+	fs.File
+	name   string
+	closes int
+}
+
+func (f *staticTrackedFile) Close() error {
+	f.closes++
+	return f.File.Close()
 }
 
 // --- Static: SPA fallback when index.html doesn't exist ---

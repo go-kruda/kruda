@@ -72,7 +72,7 @@ import (
 
 // {{.FuncName}}Handler handles {{.Method}} {{.Path}} requests.
 func {{.FuncName}}Handler(c *kruda.Ctx) error {
-	return c.JSON(200, map[string]string{
+	return c.JSON(map[string]string{
 		"message": "{{.FuncName}} handler",
 	})
 }
@@ -98,13 +98,10 @@ type {{.FuncName}}Response struct {
 }
 
 // {{.FuncName}}Handler handles {{.Method}} {{.Path}} requests with typed input.
-func {{.FuncName}}Handler(c *kruda.C[{{.FuncName}}Request]) error {
-	req := c.Body()
-	_ = req // use req fields
-
-	return c.JSON(200, {{.FuncName}}Response{
+func {{.FuncName}}Handler(c *kruda.C[{{.FuncName}}Request]) (*{{.FuncName}}Response, error) {
+	return &{{.FuncName}}Response{
 		Message: "{{.FuncName}} handler",
-	})
+	}, nil
 }
 `
 

@@ -236,7 +236,13 @@ func finishTypedHandler[In any, Out any](app *App, validators []fieldValidator, 
 		}
 	}
 
-	tc := &C[In]{Ctx: c, In: val.Interface().(In)}
+	var input In
+	if val.CanAddr() {
+		input = *val.Addr().Interface().(*In)
+	} else {
+		input = val.Interface().(In)
+	}
+	tc := &C[In]{Ctx: c, In: input}
 	result, err := handler(tc)
 	if err != nil {
 		return err

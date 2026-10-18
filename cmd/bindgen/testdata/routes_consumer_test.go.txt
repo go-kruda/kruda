@@ -1,0 +1,237 @@
+package consumer
+
+import (
+	"bytes"
+	"fmt"
+	"log/slog"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/go-kruda/kruda"
+)
+
+var generatedBinds int
+
+type SearchOutput struct {
+	ID   int
+	Q    string
+	Page int
+}
+
+func search(c *kruda.C[SearchInput]) (*SearchOutput, error) {
+	return &SearchOutput{c.In.ID, c.In.Q, c.In.Page}, nil
+}
+
+func request(t *testing.T, client *kruda.TestClient, method, path string, status int) *kruda.TestResponse {
+	t.Helper()
+	resp, err := client.Request(method, path).Send()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode() != status {
+		t.Fatalf("%s %s = %d, want %d: %s", method, path, resp.StatusCode(), status, resp.BodyString())
+	}
+	return resp
+}
+
+func TestAllGeneratedRoutes(t *testing.T) {
+	app := kruda.New()
+	var events []string
+	app.OnRequest(func(c *kruda.Ctx) error { events = append(events, "request"); return nil })
+	app.OnResponse(func(c *kruda.Ctx) error { events = append(events, "response"); return nil })
+	app.OnParse(func(c *kruda.Ctx, input any) error {
+		events = append(events, "parse")
+		input.(*SearchInput).Q += "!"
+		return nil
+	})
+	app.Use(func(c *kruda.Ctx) error { events = append(events, "global"); return c.Next() })
+	outer := app.Group("/api").Use(func(c *kruda.Ctx) error { events = append(events, "outer"); return c.Next() })
+	g := outer.Group("/v1").Use(func(c *kruda.Ctx) error { events = append(events, "inner"); return c.Next() })
+	h := func(c *kruda.C[SearchInput]) (*SearchOutput, error) {
+		events = append(events, "handler")
+		return search(c)
+	}
+	methods := []struct {
+		method string
+		app    func(*kruda.App, string, func(*kruda.C[SearchInput]) (*SearchOutput, error), ...kruda.RouteOption)
+		group  func(*kruda.Group, string, func(*kruda.C[SearchInput]) (*SearchOutput, error), ...kruda.RouteOption)
+	}{
+		{"GET", SearchInputGet[SearchOutput], SearchInputGroupGet[SearchOutput]},
+		{"POST", SearchInputPost[SearchOutput], SearchInputGroupPost[SearchOutput]},
+		{"PUT", SearchInputPut[SearchOutput], SearchInputGroupPut[SearchOutput]},
+		{"DELETE", SearchInputDelete[SearchOutput], SearchInputGroupDelete[SearchOutput]},
+		{"PATCH", SearchInputPatch[SearchOutput], SearchInputGroupPatch[SearchOutput]},
+	}
+	for _, m := range methods {
+		path := "/" + strings.ToLower(m.method) + "/:id"
+		m.app(app, path, h)
+		m.group(g, path, h)
+	}
+	app.Compile()
+	client := kruda.NewTestClient(app)
+	for _, m := range methods {
+		for _, prefix := range []string{"", "/api/v1"} {
+			path := prefix + "/" + strings.ToLower(m.method) + "/42"
+			for _, tc := range []struct {
+				query string
+				want  SearchOutput
+			}{
+				{"", SearchOutput{42, "all!", 1}},
+				{"?id=99&q=go&page=3", SearchOutput{42, "go!", 3}},
+			} {
+				events = nil
+				before := generatedBinds
+				resp := request(t, client, m.method, path+tc.query, 200)
+				var got SearchOutput
+				if err := resp.JSON(&got); err != nil {
+					t.Fatal(err)
+				}
+				if got != tc.want {
+					t.Fatalf("output = %+v, want %+v", got, tc.want)
+				}
+				if generatedBinds != before+1 {
+					t.Fatalf("automatic binder was not selected: %d -> %d", before, generatedBinds)
+				}
+				wantEvents := []string{"request", "global", "parse", "handler", "response"}
+				if prefix != "" {
+					wantEvents = []string{"request", "global", "outer", "inner", "parse", "handler", "response"}
+				}
+				if !reflect.DeepEqual(events, wantEvents) {
+					t.Fatalf("events = %v, want %v", events, wantEvents)
+				}
+			}
+			bad := request(t, client, m.method, path+"?page=bad", 400)
+			if !strings.Contains(bad.BodyString(), "page") {
+				t.Fatalf("parse detail lost: %s", bad.BodyString())
+			}
+			invalid := request(t, client, m.method, path+"?page=0", 422)
+			if !strings.Contains(invalid.BodyString(), `"field":"page"`) || !strings.Contains(invalid.BodyString(), `"rule":"min"`) {
+				t.Fatalf("validation detail lost: %s", invalid.BodyString())
+			}
+			request(t, client, m.method, strings.TrimSuffix(path, "42")+"bad", 400)
+		}
+	}
+}
+
+func TestPlanPrecedenceAndOptionOwnership(t *testing.T) {
+	app := kruda.New(kruda.WithOpenAPIInfo("routes", "1", ""))
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+	var overrideCalls int
+	first := SearchInputPlan()
+	first.Binder = func(*kruda.Ctx) (reflect.Value, error) {
+		t.Fatal("earlier matching plan selected")
+		return reflect.Value{}, nil
+	}
+	last := SearchInputPlan()
+	last.Binder = func(*kruda.Ctx) (reflect.Value, error) {
+		overrideCalls++
+		return reflect.ValueOf(&SearchInput{ID: 91, Q: "override", Page: 9}).Elem(), nil
+	}
+	visible := []kruda.RouteOption{
+		kruda.WithDescription("first"), kruda.WithTags("first"), kruda.WithGeneratedPlan(first),
+		kruda.WithOpenAPISecurity("first", "read"), kruda.WithDescription("last"), kruda.WithTags("last"),
+		kruda.WithGeneratedPlan(last), kruda.WithOpenAPISecurity("second", "write"),
+	}
+	backing := append(visible, kruda.WithDescription("sentinel-one"), kruda.WithDescription("sentinel-two"))
+	before := append([]kruda.RouteOption(nil), backing...)
+	opts := backing[:len(visible)]
+	SearchInputGet(app, "/override", search, opts...)
+	SearchInputGet(app, "/again", search, opts...)
+	for i := range backing {
+		if reflect.ValueOf(backing[i]) != reflect.ValueOf(before[i]) {
+			t.Fatalf("caller backing array changed at %d", i)
+		}
+	}
+	other := kruda.WithGeneratedPlan(kruda.GeneratedPlan[struct{}]{})
+	SearchInputGet(app, "/crossed", search, other)
+	SearchInputGet(app, "/empty", search, kruda.WithGeneratedPlan(kruda.GeneratedPlan[SearchInput]{}))
+	stale := SearchInputPlan()
+	stale.Shape.Fields = append([]kruda.BinderFieldShape(nil), stale.Shape.Fields...)
+	stale.Shape.Fields[0].Default = "stale"
+	stale.Binder = func(*kruda.Ctx) (reflect.Value, error) {
+		t.Fatal("stale explicit plan selected")
+		return reflect.Value{}, nil
+	}
+	SearchInputGroupGet(app.Group("/api"), "/stale", search, kruda.WithGeneratedPlan(stale))
+	app.Compile()
+	client := kruda.NewTestClient(app)
+	for _, path := range []string{"/override", "/again", "/crossed", "/empty", "/api/stale"} {
+		before := generatedBinds
+		resp := request(t, client, "GET", path+"?q=generic&page=2", 200)
+		var got SearchOutput
+		if err := resp.JSON(&got); err != nil {
+			t.Fatal(err)
+		}
+		want := SearchOutput{7, "generic", 2}
+		if path == "/override" || path == "/again" {
+			want = SearchOutput{91, "override", 9}
+		}
+		if got != want {
+			t.Fatalf("%s = %+v, want %+v", path, got, want)
+		}
+		increment := 0
+		if path == "/crossed" {
+			increment = 1
+		}
+		if generatedBinds != before+increment {
+			t.Fatalf("%s selected default binder unexpectedly: %d -> %d", path, before, generatedBinds)
+		}
+	}
+	if overrideCalls != 2 || strings.Contains(logs.String(), "different input type") {
+		t.Fatalf("override calls = %d, logs = %s", overrideCalls, logs.String())
+	}
+	resp := request(t, client, "GET", "/openapi.json", 200)
+	var spec struct {
+		Paths map[string]map[string]struct {
+			Description string
+			Tags        []string
+			Security    []map[string][]string
+		}
+	}
+	if err := resp.JSON(&spec); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/override", "/again"} {
+		op := spec.Paths[path]["get"]
+		if op.Description != "last" || !reflect.DeepEqual(op.Tags, []string{"last"}) || !reflect.DeepEqual(op.Security, []map[string][]string{{"first": {"read"}}, {"second": {"write"}}}) {
+			t.Fatalf("metadata order changed: %+v", op)
+		}
+	}
+}
+
+func TestStaleAndValidationFallback(t *testing.T) {
+	app := kruda.New()
+	StaleInputGet(app, "/stale", func(c *kruda.C[StaleInput]) (*StaleInput, error) { return &c.In, nil })
+	UnsupportedInputPost(app, "/required", func(c *kruda.C[UnsupportedInput]) (*UnsupportedInput, error) { return &c.In, nil })
+	ChangedValidationInputGet(app, "/changed", func(c *kruda.C[ChangedValidationInput]) (*ChangedValidationInput, error) { return &c.In, nil })
+	client := kruda.NewTestClient(app)
+	for _, tc := range []struct{ path, want string }{{"/stale", "fresh"}, {"/stale?q=ignored&fresh=current", "current"}} {
+		resp := request(t, client, "GET", tc.path, 200)
+		var got StaleInput
+		if err := resp.JSON(&got); err != nil || got.Q != tc.want {
+			t.Fatalf("stale output = %+v, %v, want %s", got, err, tc.want)
+		}
+	}
+	request(t, client, "POST", "/required", 422)
+	request(t, client, "POST", "/required?value=present", 200)
+	request(t, client, "GET", "/changed?page=2", 422)
+	request(t, client, "GET", "/changed?page=6", 200)
+	custom := kruda.New()
+	custom.Validator().Register("min", func(value any, param string) bool { return true })
+	SearchInputGet(custom, "/custom", search)
+	request(t, kruda.NewTestClient(custom), "GET", "/custom?page=0", 200)
+	nilValidator := kruda.New(kruda.WithValidator(nil))
+	SearchInputGet(nilValidator, "/nil", search)
+	request(t, kruda.NewTestClient(nilValidator), "GET", "/nil?page=0", 200)
+}
+
+func ExampleSearchInputGet() {
+	app := kruda.New()
+	SearchInputGet(app, "/search", search)
+	fmt.Println("registered")
+	// Output: registered
+}

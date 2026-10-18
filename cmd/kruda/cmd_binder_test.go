@@ -241,7 +241,7 @@ func TestRunBindgenCanceled(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
-	err := runBindgen(cmd, "input.go", "Input", "generated.go", "bindInput")
+	err := runBindgen(cmd, "input.go", "Input", "generated.go", "bindInput", false)
 	if !errors.Is(err, context.Canceled) || stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("err=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}

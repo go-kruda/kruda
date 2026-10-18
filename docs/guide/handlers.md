@@ -234,6 +234,70 @@ kruda.Get[SearchInput, SearchOutput](app, "/search", handler,
 )
 ```
 
+To generate registration helpers that select the plan automatically, add
+`--routes` to the same command:
+
+```sh
+kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput --routes
+```
+
+The standalone equivalent uses `-routes`:
+
+```sh
+go run github.com/go-kruda/kruda/cmd/bindgen -input input.go -type SearchInput -output search_generated.go -func bindSearchInput -routes
+```
+
+Keep the generated file beside `SearchInput` in the same package. Register app
+or group routes with an ordinary typed callback. Go infers the output type:
+
+```go
+type SearchOutput struct {
+    Q    string
+    Page int
+}
+
+func search(c *kruda.C[SearchInput]) (*SearchOutput, error) {
+    return &SearchOutput{Q: c.In.Q, Page: c.In.Page}, nil
+}
+
+func register(app *kruda.App) {
+    SearchInputGet(app, "/search", search,
+        kruda.WithDescription("Search the catalog"))
+    api := app.Group("/api/v1")
+    SearchInputGroupPost(api, "/search", search)
+}
+```
+
+For input `SearchInput`, the generated app helpers are `SearchInputGet`,
+`SearchInputPost`, `SearchInputPut`, `SearchInputDelete`, and `SearchInputPatch`.
+The group helpers are `SearchInputGroupGet`, `SearchInputGroupPost`,
+`SearchInputGroupPut`, `SearchInputGroupDelete`, and `SearchInputGroupPatch`.
+Group helpers preserve prefixes and inherited middleware. There are no generated
+HEAD, OPTIONS, arbitrary-method, or X/no-error callback helpers. POST and the
+other methods retain the same query/path binding scope below.
+
+Each helper prepends `WithGeneratedPlan(SearchInputPlan())` before caller options
+in a fresh slice. Caller option order and backing arrays are preserved. The last
+plan for the same input type wins, including an empty or stale caller plan that
+causes generic parsing. A plan for another input type leaves the generated
+default selected. Metadata follows the existing typed route option behavior.
+Typed registrars currently do not forward Wing presets to the transport;
+these helpers retain that limitation.
+
+Route helper generation is off by default. Omitting the switch or using
+`--routes=false` retains binder-only output. `--routes=true` also enables it.
+Standalone bindgen accepts the corresponding `-routes=false` and `-routes=true`.
+The module-selected core generator must support `-routes`; updating the installed
+CLI alone does not add that support. Repeating generation with the same input
+and flags produces the same bytes. Invalid flags, unsupported inputs, and
+collisions among the requested input and emitted declarations fail before
+replacing output. With routes enabled, the binder name and package declarations
+must not shadow `string`, `make`, `len`, or `append`, which the helpers use.
+The generator checks the input and same-package sibling Go files, including
+files for other build configurations. Receiver methods and local bindings are
+allowed. Other package declaration conflicts remain Go compiler errors.
+Output directories must already exist, and write errors are returned.
+
 Scope: `query`/`param` scalar fields (string, bool, ints, uints, floats)
 with optional `default` tags, plus built-in `min`/`max` validation.
 `json`/`form` body fields are rejected at generation time.
@@ -245,3 +309,10 @@ parser. Inputs whose rules the generator cannot compile — custom overrides,
 `dive`, `omitempty`, anything outside `min`/`max` — decline the compiled
 validator and keep generic validation. Regenerate after changing the input
 to stay on the fast path.
+
+The same checks apply through generated registration helpers. A validate-only
+tag change can retain generated binding while validation falls back separately.
+Validation tags stay inactive with `kruda.WithValidator(nil)`. Custom validation
+rules must be configured before registration. Runtime fallback requires the
+stale generated Go file to compile; removing or retyping fields can require
+regeneration before the application builds.

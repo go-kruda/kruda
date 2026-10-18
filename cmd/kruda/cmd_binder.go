@@ -20,6 +20,9 @@ paths are relative to the working directory; the output directory must exist.
 Successful generation replaces the requested output file.
 
 Register the emitted plan manually with kruda.WithGeneratedPlan(InputPlan()).
+Add --routes to emit InputGet/Post/Put/Delete/Patch and InputGroupGet/Post/Put/Delete/Patch
+helpers that select the plan automatically. The module-selected core generator must
+support -routes; updating the installed CLI alone does not add that support.
 
 Example:
   kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`,
@@ -32,6 +35,7 @@ func init() {
 	binderCmd.Flags().String("type", "", "input struct name")
 	binderCmd.Flags().String("output", "", "generated Go file (replaces existing output)")
 	binderCmd.Flags().String("func", "", "generated binder name")
+	binderCmd.Flags().Bool("routes", false, "also generate typed app and group route helpers")
 	for _, name := range []string{"input", "type", "output", "func"} {
 		binderCmd.MarkFlagRequired(name)
 	}
@@ -42,15 +46,20 @@ func runGenerateBinder(cmd *cobra.Command, args []string) error {
 	typeName, _ := cmd.Flags().GetString("type")
 	output, _ := cmd.Flags().GetString("output")
 	funcName, _ := cmd.Flags().GetString("func")
+	routes, _ := cmd.Flags().GetBool("routes")
 	if input == "" || typeName == "" || output == "" || funcName == "" {
 		return fmt.Errorf("--input, --type, --output, and --func must not be empty")
 	}
-	return runBindgen(cmd, input, typeName, output, funcName)
+	return runBindgen(cmd, input, typeName, output, funcName, routes)
 }
 
-func runBindgen(cmd *cobra.Command, input, typeName, output, funcName string) error {
-	process := exec.CommandContext(cmd.Context(), "go", "run", "github.com/go-kruda/kruda/cmd/bindgen",
-		"-input", input, "-type", typeName, "-output", output, "-func", funcName)
+func runBindgen(cmd *cobra.Command, input, typeName, output, funcName string, routes bool) error {
+	args := []string{"run", "github.com/go-kruda/kruda/cmd/bindgen",
+		"-input", input, "-type", typeName, "-output", output, "-func", funcName}
+	if routes {
+		args = append(args, "-routes")
+	}
+	process := exec.CommandContext(cmd.Context(), "go", args...)
 	var stderr bytes.Buffer
 	process.Stdout = cmd.OutOrStdout()
 	process.Stderr = &stderr

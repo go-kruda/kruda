@@ -131,6 +131,83 @@ func TestMemoryStore_SaveOverwrite(t *testing.T) {
 	}
 }
 
+func TestMemoryStore_SaveExisting(t *testing.T) {
+	store := NewMemoryStore()
+	defer store.Close()
+	data := &SessionData{Values: map[string]any{"user": "alice"}}
+	if saved, err := store.SaveExisting("missing", data, time.Hour); err != nil || saved {
+		t.Fatalf("missing session saved = %v, error = %v", saved, err)
+	}
+	if err := store.Save("expired", data, -time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := store.SaveExisting("expired", data, time.Hour); err != nil || saved {
+		t.Fatalf("expired session saved = %v, error = %v", saved, err)
+	}
+	if err := store.Save("id", data, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	store.mu.RLock()
+	before := store.entries["id"].expiresAt
+	store.mu.RUnlock()
+	data.Values["user"] = "bob"
+	if saved, err := store.SaveExisting("id", data, time.Hour); err != nil || !saved {
+		t.Fatalf("existing session saved = %v, error = %v", saved, err)
+	}
+	data.Values["user"] = "mallory"
+	got, err := store.Get("id")
+	if err != nil || got == nil || got.Values["user"] != "bob" {
+		t.Fatalf("saved session = %#v, error = %v", got, err)
+	}
+	store.mu.RLock()
+	after := store.entries["id"].expiresAt
+	store.mu.RUnlock()
+	if !after.After(before) {
+		t.Fatal("SaveExisting did not refresh expiration")
+	}
+	if err := store.Delete("id"); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := store.SaveExisting("id", data, time.Hour); err != nil || saved {
+		t.Fatalf("deleted session saved = %v, error = %v", saved, err)
+	}
+	if got, err := store.Get("id"); err != nil || got != nil {
+		t.Fatalf("deleted session recreated: %#v, %v", got, err)
+	}
+}
+
+func TestMemoryStore_Regenerate(t *testing.T) {
+	store := NewMemoryStore()
+	defer store.Close()
+	data := &SessionData{Values: map[string]any{"cart": "item"}}
+	if moved, err := store.Regenerate("missing", "new-missing", data, time.Hour); err != nil || moved {
+		t.Fatalf("missing session moved = %v, error = %v", moved, err)
+	}
+	if err := store.Save("expired", data, -time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if moved, err := store.Regenerate("expired", "new-expired", data, time.Hour); err != nil || moved {
+		t.Fatalf("expired session moved = %v, error = %v", moved, err)
+	}
+	if got, err := store.Get("new-expired"); err != nil || got != nil {
+		t.Fatalf("expired session recreated under new ID: %#v, %v", got, err)
+	}
+	if err := store.Save("old", data, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	data.Values["cart"] = "updated"
+	if moved, err := store.Regenerate("old", "new", data, time.Hour); err != nil || !moved {
+		t.Fatalf("existing session moved = %v, error = %v", moved, err)
+	}
+	data.Values["cart"] = "changed-after-rotation"
+	if got, err := store.Get("old"); err != nil || got != nil {
+		t.Fatalf("old ID remains: %#v, %v", got, err)
+	}
+	if got, err := store.Get("new"); err != nil || got == nil || got.Values["cart"] != "updated" {
+		t.Fatalf("rotated snapshot = %#v, %v", got, err)
+	}
+}
+
 func TestMemoryStore_Delete(t *testing.T) {
 	store := NewMemoryStore()
 	defer store.Close()

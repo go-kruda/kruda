@@ -18,17 +18,13 @@ func New(config ...Config) kruda.HandlerFunc {
 	}
 	cfg.defaults()
 
-	// Build trusted proxy set for O(1) lookup
-	trustedSet := make(map[string]struct{}, len(cfg.TrustedProxies))
-	for _, ip := range cfg.TrustedProxies {
-		trustedSet[ip] = struct{}{}
-	}
+	policy := newProxyPolicy(cfg.TrustedProxies)
 
 	// Default key function: client IP
 	keyFunc := cfg.KeyFunc
 	if keyFunc == nil {
 		keyFunc = func(c *kruda.Ctx) string {
-			return extractIP(c, trustedSet)
+			return extractIP(c, policy)
 		}
 	}
 
@@ -93,34 +89,13 @@ func New(config ...Config) kruda.HandlerFunc {
 	}
 }
 
-// extractIP extracts the client IP, respecting trusted proxies.
-func extractIP(c *kruda.Ctx, trusted map[string]struct{}) string {
-	remoteIP := c.IP()
-
-	// Only trust forwarded headers from trusted proxies (R11.14)
-	if len(trusted) > 0 {
-		if _, ok := trusted[remoteIP]; ok {
-			// X-Forwarded-For: client, proxy1, proxy2
-			if xff := c.Header("X-Forwarded-For"); xff != "" {
-				if ip := firstIP(xff); ip != "" {
-					return ip
-				}
-			}
-			if xri := c.Header("X-Real-IP"); xri != "" {
-				return strings.TrimSpace(xri)
-			}
-		}
+// extractIP uses the same trusted-hop policy as the framework.
+func extractIP(c *kruda.Ctx, policy proxyPolicy) string {
+	ip := policy.clientIP(requestWithPeer(c.Request()))
+	if ip == "" {
+		return "unknown"
 	}
-
-	return remoteIP
-}
-
-// firstIP extracts the first IP from a comma-separated X-Forwarded-For value.
-func firstIP(xff string) string {
-	if idx := strings.IndexByte(xff, ','); idx >= 0 {
-		return strings.TrimSpace(xff[:idx])
-	}
-	return strings.TrimSpace(xff)
+	return ip
 }
 
 // ForRoute creates a rate limiter scoped to specific routes with custom limits.

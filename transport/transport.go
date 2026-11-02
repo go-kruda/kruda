@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -51,6 +52,7 @@ type Request interface {
 	Header(key string) string
 	Body() ([]byte, error)
 	QueryParam(key string) string
+	// RemoteAddr is the socket peer unless PeerAddr exposes it separately.
 	RemoteAddr() string
 	Cookie(name string) string
 	RawRequest() any // underlying *http.Request or *fasthttp.RequestCtx
@@ -78,6 +80,13 @@ type StaticResponder interface {
 // transfers ownership of fd to the ResponseWriter, which must close it.
 type FileSender interface {
 	SetSendFile(fd int32, size int64)
+}
+
+// FileStreamer is an optional response capability for bounded-memory file delivery.
+// SetFileStream transfers ownership of file. The transport sends exactly size bytes
+// after the response headers and closes file on completion, replacement, or failure.
+type FileStreamer interface {
+	SetFileStream(file io.ReadCloser, size int64)
 }
 
 // JSONResponder is an optional interface for ResponseWriters that support

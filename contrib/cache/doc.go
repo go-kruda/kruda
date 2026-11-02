@@ -8,6 +8,7 @@
 //	app.Use(cache.New())
 //
 //	app.Get("/api/data", func(c *kruda.Ctx) error {
+//	    if hit, err := cache.Replay(c); hit { return err }
 //	    data := fetchExpensiveData()
 //	    return cache.CacheJSON(c, data)
 //	})
@@ -22,11 +23,13 @@
 //
 // # What it does
 //
-// The middleware looks up cached responses on incoming requests. On a HIT it
-// sets X-Cache: HIT and Age headers, replays the cached body, and short-
-// circuits the handler chain. On a MISS it sets X-Cache: MISS and stores
-// caching metadata in the request context — handlers must use [CacheJSON]
-// or [CacheBytes] to send a response that should also be persisted.
+// The middleware looks up cached responses but always runs middleware and the
+// handler. After authorization, call [Replay] before expensive work to send a
+// hit. [CacheJSON] and [CacheBytes] also replay matching cached responses, or
+// store and send the response on a miss.
+//
+// CacheJSON requires core EncodeJSON support to store responses. On older cores
+// it sends JSON without caching; CacheBytes remains available.
 //
 // # Configuration
 //

@@ -26,10 +26,11 @@ type NetHTTPConfig struct {
 	WriteTimeout   time.Duration
 	IdleTimeout    time.Duration
 	MaxBodySize    int
-	MaxHeaderBytes int    // maps to http.Server.MaxHeaderBytes
-	TrustProxy     bool   // only trust X-Forwarded-For/X-Real-IP when true
-	TLSCertFile    string // path to TLS certificate file
-	TLSKeyFile     string // path to TLS private key file
+	MaxHeaderBytes int      // maps to http.Server.MaxHeaderBytes
+	TrustedProxies []string // exact proxy IP allowlist; empty trusts no peer
+	TrustProxy     bool     // only trust X-Forwarded-For/X-Real-IP when true
+	TLSCertFile    string   // path to TLS certificate file
+	TLSKeyFile     string   // path to TLS private key file
 }
 
 // NewNetHTTP creates a new net/http transport.
@@ -41,7 +42,7 @@ func NewNetHTTP(cfg NetHTTPConfig) *NetHTTPTransport {
 func (t *NetHTTPTransport) newServer(addr string, handler Handler) *http.Server {
 	s := &http.Server{
 		Addr:    addr,
-		Handler: &netHTTPAdapter{handler: handler, maxBody: t.config.MaxBodySize, trustProxy: t.config.TrustProxy},
+		Handler: &netHTTPAdapter{handler: handler, maxBody: t.config.MaxBodySize, trustProxy: t.config.TrustProxy, proxyPolicy: NewProxyPolicy(t.config.TrustedProxies)},
 	}
 
 	if t.config.ReadTimeout > 0 {
@@ -107,26 +108,28 @@ func (t *NetHTTPTransport) Shutdown(ctx context.Context) error {
 
 // netHTTPAdapter adapts net/http to Kruda's transport interface.
 type netHTTPAdapter struct {
-	handler    Handler
-	maxBody    int
-	trustProxy bool
+	handler     Handler
+	maxBody     int
+	trustProxy  bool
+	proxyPolicy ProxyPolicy
 }
 
 func (a *netHTTPAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	req := &netHTTPRequest{r: r, maxBody: a.maxBody, trustProxy: a.trustProxy}
+	req := &netHTTPRequest{r: r, maxBody: a.maxBody, trustProxy: a.trustProxy, proxyPolicy: a.proxyPolicy}
 	resp := &netHTTPResponseWriter{w: w, statusCode: 200}
 	a.handler.ServeKruda(resp, req)
 }
 
 type netHTTPRequest struct {
-	r          *http.Request
-	maxBody    int
-	trustProxy bool
-	body       []byte
-	bodyErr    error
-	bodyRead   bool
-	queryVals  url.Values
-	queryDone  bool
+	r           *http.Request
+	maxBody     int
+	trustProxy  bool
+	proxyPolicy ProxyPolicy
+	body        []byte
+	bodyErr     error
+	bodyRead    bool
+	queryVals   url.Values
+	queryDone   bool
 }
 
 func (r *netHTTPRequest) Method() string { return r.r.Method }
@@ -185,20 +188,23 @@ func (r *netHTTPRequest) QueryParam(key string) string {
 
 // RemoteAddr returns the client IP. Only trusts proxy headers (X-Forwarded-For,
 // X-Real-IP) when TrustProxy is enabled. Strips port for consistent bare-IP format.
+func (r *netHTTPRequest) PeerAddr() string { return r.r.RemoteAddr }
+
+func (r *netHTTPRequest) ForwardedHeaders() (string, int, string, int) {
+	xff, xri := r.r.Header.Values("X-Forwarded-For"), r.r.Header.Values("X-Real-IP")
+	var a, b string
+	if len(xff) > 0 {
+		a = xff[0]
+	}
+	if len(xri) > 0 {
+		b = xri[0]
+	}
+	return a, len(xff), b, len(xri)
+}
+
 func (r *netHTTPRequest) RemoteAddr() string {
 	if r.trustProxy {
-		if ip := r.r.Header.Get("X-Forwarded-For"); ip != "" {
-			// Take the first IP in the chain (may have leading/trailing spaces).
-			for i := 0; i < len(ip); i++ {
-				if ip[i] == ',' {
-					return trimSpace(ip[:i])
-				}
-			}
-			return trimSpace(ip)
-		}
-		if ip := r.r.Header.Get("X-Real-Ip"); ip != "" {
-			return trimSpace(ip)
-		}
+		return r.proxyPolicy.ClientIP(r)
 	}
 	return stripPort(r.r.RemoteAddr)
 }
@@ -243,6 +249,8 @@ func (r *netHTTPRequest) AllHeaders() map[string]string {
 	}
 	return m
 }
+
+func (r *netHTTPRequest) RawQuery() string { return r.r.URL.RawQuery }
 
 func (r *netHTTPRequest) AllQuery() map[string]string {
 	q := r.r.URL.Query()
@@ -368,4 +376,9 @@ func NewNetHTTPRequestWithLimit(r *http.Request, maxBody int) Request {
 // NewNetHTTPResponseWriter wraps an http.ResponseWriter into a transport.ResponseWriter.
 func NewNetHTTPResponseWriter(w http.ResponseWriter) ResponseWriter {
 	return &netHTTPResponseWriter{w: w, statusCode: 200}
+}
+
+// ProxyConfig returns forwarding settings and an owned copy of the allowlist.
+func (t *NetHTTPTransport) ProxyConfig() (bool, []string) {
+	return t.config.TrustProxy, append([]string(nil), t.config.TrustedProxies...)
 }

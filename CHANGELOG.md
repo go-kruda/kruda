@@ -3,6 +3,34 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- Preserve configured JSON encoding on cache misses and hits, including fasthttp, and avoid double serialization.
+- Inherit direct transport proxy settings while preserving explicit application overrides; retain direct custom-request peer identities without trusting their forwarding headers.
+- Isolate nested session containers between requests and copy only visible slice elements.
+- Preserve existing Vary values when compressing responses on all adapters, and allow safe static filenames containing consecutive dots.
+
+- Clear pooled request state and inactive adapter references between net/http, fasthttp, and generic transport serving paths.
+
+- Preserve complete query strings in default response-cache keys and replay only after request authorization. Use `cache.Replay` after authorization to skip expensive work on a hit; cache helpers no longer skip the handler itself.
+- Prevent stale session updates from recreating logged-out sessions with atomic store updates. Add `Session.Regenerate` for login ID rotation. Custom stores must implement the documented atomic operations; unsupported loaded sessions fail before the handler runs.
+- Keep Wing fallback file reads and closes off the event loop, contain reader panics, and enforce write deadlines without unrelated socket activity. Limit open static files to 1024 per route by default with `WithMaxOpenFiles`; retain admission until cleanup completes.
+- Keep rate limiting buildable with the declared core dependency instead of calling an unreleased proxy API.
+
+- Stream static-file fallback responses instead of allocating the full file. Preserve Wing sendfile and bound fallback reads across net/http, fasthttp, and Wing. Close deferred files on completion, disconnect, and shutdown.
+
+- Require an explicit proxy IP allowlist for `WithTrustProxy(true)` and direct transport configs. Add `WithTrustedProxies` with exact-IP matching; an empty list now ignores forwarded addresses. Framework and rate limiter share canonical IP validation, right-to-left trusted-hop parsing, and duplicate-header fallback. Existing proxy deployments must add their proxy IPs.
+
+- Require explicit `WithDevMode(true)` for pprof routes; the development environment variable alone no longer exposes profiling endpoints. Log a development-mode warning at server startup.
+
+- Read headers and cookies on the fasthttp fast path and return owned request body bytes.
+- Avoid storing untouched new sessions, refresh existing in-memory sessions without overwriting values, make expiry removal atomic, and make session store Close safe to call repeatedly.
+
+- Rate limiting uses the socket peer for proxy trust, checks forwarded chains from right to left, and falls back to the peer for invalid or duplicate forwarding headers. Custom transports without peer address support share an `unknown` key unless a custom `KeyFunc` is provided.
+- Normalize client IP addresses across transports. Wing addresses such as `127.0.0.1:54869` now return `127.0.0.1`; the fasthttp fast path returns the peer IP instead of an empty string.
+
 ## [1.8.2] — 2026-11-09
 
 ### Security

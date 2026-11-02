@@ -29,3 +29,8 @@ compress.Compress(c, data, "application/json")
 | MinSize | int | 1024 | Minimum response size |
 | Types | []string | text/html, etc. | MIME types to compress |
 | Skip | func(*kruda.Ctx) bool | nil | Skip compression function |
+
+Upgrade core alongside this module for fasthttp `Vary` preservation. Older cores
+whose queued `AddHeader` overwrites direct fasthttp headers cannot preserve a
+`Vary` value previously written by `SetHeader`. The updated core merges both
+sources before writing the response.

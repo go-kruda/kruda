@@ -779,3 +779,50 @@ func TestWriteHeaders_ComplexCase(t *testing.T) {
 		t.Errorf("status = %d", resp.StatusCode())
 	}
 }
+
+type ipAddressRequest struct {
+	*mockRequest
+	address string
+}
+
+func (r *ipAddressRequest) RemoteAddr() string { return r.address }
+
+func TestCtxIPStripsPort(t *testing.T) {
+	for _, tc := range []struct{ address, want string }{
+		{"127.0.0.1:54869", "127.0.0.1"},
+		{"[::1]:1234", "::1"},
+		{"[::ffff:127.0.0.1]:1234", "127.0.0.1"},
+		{"2001:0db8:0:0:0:0:0:1", "2001:db8::1"},
+		{"2001:db8::1", "2001:db8::1"},
+		{"127.0.0.1", "127.0.0.1"},
+	} {
+		t.Run(tc.address, func(t *testing.T) {
+			c := newCtx(New())
+			c.request = &ipAddressRequest{mockRequest: &mockRequest{}, address: tc.address}
+			if got := c.IP(); got != tc.want {
+				t.Fatalf("IP() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBodyBytesOwnsTransportBytes(t *testing.T) {
+	app := New()
+	c := newCtx(app)
+	data := []byte("owned")
+	c.request = &mockRequest{body: data}
+	body, err := c.BodyBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range data {
+		data[i] = 'x'
+	}
+	if string(body) != "owned" {
+		t.Fatalf("body aliases transport: %q", body)
+	}
+	again, err := c.BodyBytes()
+	if err != nil || string(again) != "owned" {
+		t.Fatalf("cached body=%q err=%v", again, err)
+	}
+}

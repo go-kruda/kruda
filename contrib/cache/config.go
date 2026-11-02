@@ -3,12 +3,13 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"sort"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-kruda/kruda"
-	"github.com/go-kruda/kruda/transport"
+	"github.com/valyala/fasthttp"
+	"net/http"
 )
 
 // Config holds configuration for the cache middleware.
@@ -18,7 +19,7 @@ type Config struct {
 	TTL time.Duration
 
 	// KeyFunc generates the cache key from the request context.
-	// Default: method + ":" + path
+	// Default: method + path + raw query + auth/cookie hashes
 	KeyFunc func(c *kruda.Ctx) string
 
 	// Methods lists HTTP methods eligible for caching.
@@ -60,28 +61,15 @@ func defaultKeyFunc(c *kruda.Ctx) string {
 	var b strings.Builder
 	b.WriteString(c.Method())
 	b.WriteByte(':')
-	b.WriteString(c.Path())
+	b.WriteString(url.QueryEscape(c.Path()))
 
-	if req := c.Request(); req != nil {
-		if p, ok := req.(transport.AllQueryProvider); ok {
-			query := p.AllQuery()
-			if len(query) > 0 {
-				keys := make([]string, 0, len(query))
-				for k := range query {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				b.WriteByte('?')
-				for i, k := range keys {
-					if i > 0 {
-						b.WriteByte('&')
-					}
-					b.WriteString(k)
-					b.WriteByte('=')
-					b.WriteString(query[k])
-				}
-			}
-		}
+	raw, ok := requestRawQuery(c)
+	if !ok {
+		return ""
+	}
+	if raw != "" {
+		b.WriteByte('?')
+		b.WriteString(url.QueryEscape(raw))
 	}
 
 	appendHeaderHash(&b, "auth", c.Header("Authorization"))
@@ -98,4 +86,21 @@ func appendHeaderHash(b *strings.Builder, name, value string) {
 	b.WriteString(name)
 	b.WriteByte('=')
 	b.WriteString(hex.EncodeToString(sum[:8]))
+}
+
+func requestRawQuery(c *kruda.Ctx) (string, bool) {
+	r := c.Request()
+	if r == nil {
+		return "", false
+	}
+	if q, ok := r.(interface{ RawQuery() string }); ok {
+		return q.RawQuery(), true
+	}
+	switch raw := r.RawRequest().(type) {
+	case *http.Request:
+		return raw.URL.RawQuery, true
+	case *fasthttp.RequestCtx:
+		return string(raw.URI().QueryString()), true
+	}
+	return "", false
 }

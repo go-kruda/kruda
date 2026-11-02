@@ -25,14 +25,15 @@ const (
 type epollEvent = syscall.EpollEvent
 
 type epollEngine struct {
-	epfd     int
-	evfd     int // eventfd for wake (replaces pipe pair)
-	rawMode  bool
-	wakeup   int32
-	idle     int32
-	connPtrs map[int32]unsafe.Pointer
-	listenFd int
-	epevs    []epollEvent // elastic event list
+	waitTimeoutMillis int
+	epfd              int
+	evfd              int // eventfd for wake (replaces pipe pair)
+	rawMode           bool
+	wakeup            int32
+	idle              int32
+	connPtrs          map[int32]unsafe.Pointer
+	listenFd          int
+	epevs             []epollEvent // elastic event list
 }
 
 func newEngine() engine {
@@ -50,6 +51,7 @@ func (e *epollEngine) Init(cfg engineConfig) error {
 	e.epfd = epfd
 	e.evfd = cfg.EventFd
 	e.rawMode = cfg.RawMode
+	e.waitTimeoutMillis = cfg.WaitTimeoutMillis
 	return nil
 }
 
@@ -105,6 +107,9 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 	msec := 0
 	if e.idle > 64 {
 		msec = -1
+		if e.waitTimeoutMillis > 0 {
+			msec = e.waitTimeoutMillis
+		}
 	}
 	n, err := e.waitWithTimeout(events, msec)
 	if n > 0 {
@@ -281,3 +286,5 @@ func epollWait(epfd int, events []epollEvent, msec int, raw bool) (int, error) {
 	}
 	return int(n), nil
 }
+
+func (e *epollEngine) enableAsync() { e.rawMode = false }

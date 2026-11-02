@@ -3,8 +3,10 @@ package compress
 import (
 	"compress/flate"
 	"compress/gzip"
+	"github.com/go-kruda/kruda/middleware"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-kruda/kruda"
@@ -178,5 +180,28 @@ func TestAlreadyEncoded(t *testing.T) {
 
 	if w.Body.String() != "already compressed" {
 		t.Errorf("expected 'already compressed', got %s", w.Body.String())
+	}
+}
+
+func TestCompressionPreservesCORSVary(t *testing.T) {
+	app := kruda.New()
+	app.Use(middleware.CORS(middleware.CORSConfig{AllowOrigins: []string{"https://one.example", "https://two.example"}}), New(Config{MinSize: 1}))
+	app.Get("/", func(c *kruda.Ctx) error { return CompressText(c, "compressed response") })
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "https://one.example")
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	found := map[string]bool{}
+	for _, value := range rec.Header().Values("Vary") {
+		for _, part := range strings.Split(value, ",") {
+			found[strings.TrimSpace(part)] = true
+		}
+	}
+	if !found["Origin"] || !found["Accept-Encoding"] {
+		t.Fatalf("Vary=%v", rec.Header().Values("Vary"))
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") != "https://one.example" || rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("headers=%v", rec.Header())
 	}
 }

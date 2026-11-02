@@ -53,6 +53,33 @@ func (c *Ctx) Responded() bool {
 	return c.responded
 }
 
+// EncodeJSON encodes a value into owned bytes using the same configured encoder
+// that JSON would select for the current response, without sending it.
+func (c *Ctx) EncodeJSON(v any) ([]byte, error) {
+	enc := c.app.config.JSONEncoder
+	stream := c.app.config.JSONStreamEncoder
+	if c.fastHTTPResponseWriter() != nil && c.canBypassHeaderWrite(false) && enc != nil {
+		if data, err := enc(v); err == nil {
+			return bytes.Clone(data), nil
+		}
+	}
+	if _, ok := c.writer.(transport.JSONResponder); ok && c.canBypassHeaderWrite(true) {
+		if _, ok := c.writer.(jsonStreamResponder); !ok || stream == nil || !shouldUseWingJSONStream() {
+			data, err := enc(v)
+			return bytes.Clone(data), err
+		}
+	}
+	if stream != nil {
+		var buf bytes.Buffer
+		if err := stream(&buf, v); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
+	data, err := enc(v)
+	return bytes.Clone(data), err
+}
+
 // JSON sends a JSON response using the configured JSON encoder.
 // On the fasthttp path, uses SetBodyRaw for zero-copy response writing:
 // sonic.Marshal allocates a []byte, SetBodyRaw references it (no memcpy),
@@ -604,6 +631,9 @@ func (c *Ctx) AddHeader(key, value string) *Ctx {
 	case "Location":
 		c.location = value
 	default:
+		if c.tryAddHeaderFastHTTP(key, value) {
+			return c
+		}
 		key = internHeader(key)
 		c.dirty |= dirtyRespHdrs
 		c.respHeaders[key] = append(c.respHeaders[key], value)

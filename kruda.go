@@ -51,6 +51,7 @@ type App struct {
 	// transportType identifies the active transport: "nethttp", "fasthttp", or "wing".
 	// Set once during New() based on the resolved transport selection.
 	transportType string
+	proxyPolicy   transport.ProxyPolicy
 
 	startupMu         sync.Mutex
 	openAPIRegistered bool
@@ -74,13 +75,26 @@ func New(opts ...Option) *App {
 		opt(app)
 	}
 
+	if source, ok := app.config.Transport.(transport.ProxyConfigProvider); ok {
+		trust, ips := source.ProxyConfig()
+		if !app.config.trustProxySet {
+			app.config.TrustProxy = trust
+		}
+		if !app.config.trustedProxiesSet {
+			app.config.TrustedProxies = append([]string(nil), ips...)
+		}
+	}
+	app.proxyPolicy = transport.NewProxyPolicy(app.config.TrustedProxies)
+
 	if !app.config.devModeSet && os.Getenv("KRUDA_ENV") == "development" {
 		app.config.DevMode = true
 	}
 
 	if app.config.DevMode {
 		app.config.Security.XFrameOptions = "SAMEORIGIN"
-		app.registerPprofRoutes()
+		if app.config.devModeSet {
+			app.registerPprofRoutes()
+		}
 	}
 
 	app.transport, app.transportType = selectTransport(app.config, app.config.Logger)
@@ -324,6 +338,7 @@ func (app *App) Listen(addr string) error {
 	// Report the active JSON engine: it is chosen at build time by the
 	// kruda_stdjson tag, so this is the only way to confirm from a running
 	// binary which one a build actually got.
+	app.warnDevMode()
 	app.config.Logger.Info("listening", "addr", addr, "json", krudajson.ActiveEngine())
 
 	sigCh := make(chan os.Signal, 1)
@@ -360,6 +375,7 @@ func (app *App) Serve(ln net.Listener) error {
 	if err := app.startContainer(context.Background()); err != nil {
 		return err
 	}
+	app.warnDevMode()
 	return app.transport.Serve(ln, app)
 }
 

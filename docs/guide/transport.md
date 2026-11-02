@@ -62,7 +62,8 @@ servers. Two things to set:
 
 ```go
 app := kruda.New(
-    kruda.WithTrustProxy(true), // client IPs come from X-Forwarded-For
+    kruda.WithTrustProxy(true),
+    kruda.WithTrustedProxies("10.0.0.2"), // exact IP of the reverse proxy
 )
 ```
 

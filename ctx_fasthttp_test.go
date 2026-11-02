@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"net"
 	"net/http"
 	"testing"
 
@@ -965,5 +966,36 @@ func TestServeFast_SetBody_ContentLength(t *testing.T) {
 	cl := fctx.Response.Header.ContentLength()
 	if cl != 99 {
 		t.Errorf("ContentLength = %d, want 99", cl)
+	}
+}
+
+func TestCtxIPFastHTTPPeer(t *testing.T) {
+	c, fctx := newFastHTTPCtx(New())
+	fctx.Init(&fasthttp.Request{}, &net.TCPAddr{IP: net.ParseIP("192.0.2.7"), Port: 54869}, nil)
+	if got := c.IP(); got != "192.0.2.7" {
+		t.Fatalf("IP() = %q, want 192.0.2.7", got)
+	}
+}
+
+func TestFastHTTPRequestAccessors(t *testing.T) {
+	c, fctx := newFastHTTPCtx(New())
+	fctx.Request.Header.Set("Authorization", "Bearer token")
+	fctx.Request.Header.SetCookie("session", "existing")
+	fctx.Request.SetBodyString("owned")
+	if got := c.Header("Authorization"); got != "Bearer token" {
+		t.Fatalf("header=%q", got)
+	}
+	if got := c.Cookie("session"); got != "existing" {
+		t.Fatalf("cookie=%q", got)
+	}
+	body, err := c.BodyBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range fctx.PostBody() {
+		fctx.PostBody()[i] = 'x'
+	}
+	if string(body) != "owned" {
+		t.Fatalf("body aliases request: %q", body)
 	}
 }

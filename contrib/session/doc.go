@@ -9,6 +9,9 @@
 //
 //	app.Post("/login", func(c *kruda.Ctx) error {
 //	    sess := session.GetSession(c)
+//	    if err := sess.Regenerate(); err != nil {
+//	        return err
+//	    }
 //	    sess.Set("user_id", 42)
 //	    return c.JSON(kruda.Map{"ok": true})
 //	})

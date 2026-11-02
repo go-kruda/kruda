@@ -1,7 +1,10 @@
 package kruda
 
 import (
+	"bytes"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 )
 
@@ -90,8 +93,8 @@ func (c *Ctx) Header(name string) string {
 	if v, ok := c.headers[key]; ok {
 		return v
 	}
-	if c.request != nil {
-		v := c.request.Header(name)
+	if r := c.Request(); r != nil {
+		v := r.Header(name)
 		if v != "" {
 			c.dirty |= dirtyHeaders
 			c.headers[key] = v
@@ -103,16 +106,29 @@ func (c *Ctx) Header(name string) string {
 
 // Cookie returns the value of the named cookie via the transport interface.
 func (c *Ctx) Cookie(name string) string {
-	if c.request != nil {
-		return c.request.Cookie(name)
+	if r := c.Request(); r != nil {
+		return r.Cookie(name)
 	}
 	return ""
 }
 
 // IP returns the client's IP address.
 func (c *Ctx) IP() string {
-	if c.request != nil {
-		return c.request.RemoteAddr()
+	if r := c.Request(); r != nil {
+		if c.app.config.TrustProxy {
+			return c.app.proxyPolicy.ClientIP(r)
+		}
+		addr := r.RemoteAddr()
+		if peer, ok := r.(interface{ PeerAddr() string }); ok {
+			addr = peer.PeerAddr()
+		}
+		if host, _, err := net.SplitHostPort(addr); err == nil {
+			addr = host
+		}
+		if ip, err := netip.ParseAddr(addr); err == nil {
+			return ip.Unmap().String()
+		}
+		return addr
 	}
 	return ""
 }
@@ -122,11 +138,11 @@ func (c *Ctx) BodyBytes() ([]byte, error) {
 	if !c.bodyParsed {
 		if c.request != nil {
 			data, err := c.request.Body()
-			c.bodyBytes = data
+			c.bodyBytes = bytes.Clone(data)
 			c.bodyErr = err
 		} else if data, ok := c.tryBodyBytesFastHTTP(); ok {
 			// fasthttp path — PostBody() never returns an error
-			c.bodyBytes = data
+			c.bodyBytes = bytes.Clone(data)
 		}
 		c.dirty |= dirtyBodyBytes
 		c.bodyParsed = true

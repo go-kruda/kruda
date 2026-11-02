@@ -42,7 +42,8 @@ type Config struct {
 	MaxAge int
 
 	// IdleTimeout is the maximum time a session can be idle before expiring.
-	// The session's expiration is refreshed on each request.
+	// MemoryStore refreshes expiration on reads. Custom stores can implement
+	// Touch(string, time.Duration) error to refresh without replacing values.
 	// Default: 30 minutes
 	IdleTimeout time.Duration
 

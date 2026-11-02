@@ -20,24 +20,29 @@ const (
 
 // Session represents a user session with key-value storage.
 // It is attached to the request context and accessible via GetSession().
+// A Session must only be used during its request.
 type Session struct {
-	id       string
-	data     *SessionData
-	store    Store
-	config   *Config
-	modified bool
-	isNew    bool
-	destroy  bool
+	id        string
+	data      *SessionData
+	store     Store
+	config    *Config
+	modified  bool
+	isNew     bool
+	persisted bool
+	destroy   bool
+	ctx       *kruda.Ctx
+	cookie    *kruda.Cookie
 }
 
 // ID returns the session's unique identifier.
 func (s *Session) ID() string { return s.id }
 
-// IsNew returns true if this session was just created (no prior session cookie).
+// IsNew returns true if this session was just created or regenerated.
 func (s *Session) IsNew() bool { return s.isNew }
 
 // Get retrieves a value from the session by key.
 // Returns nil if the key does not exist.
+// Call Set after modifying a returned value to persist the change.
 func (s *Session) Get(key string) any {
 	if s.data == nil || s.data.Values == nil {
 		return nil
@@ -106,11 +111,69 @@ func (s *Session) Clear() {
 	s.modified = true
 }
 
+// Regenerate persists the session under a new ID, preserving its values.
+// New sessions require ExistingSessionStore; existing sessions are atomically
+// moved and require RegeneratingStore.
+// Call it after verifying credentials and before setting the authenticated identity
+// or sending a response. An error leaves the current ID and cookie unchanged.
+func (s *Session) Regenerate() error {
+	if s.ctx.Responded() {
+		return kruda.ErrAlreadyResponded
+	}
+	id := generateSessionID()
+	if !s.isNew || s.persisted {
+		store, ok := s.store.(RegeneratingStore)
+		if !ok {
+			return ErrAtomicStoreRequired
+		}
+		moved, err := store.Regenerate(s.id, id, s.data, s.config.IdleTimeout)
+		if err != nil {
+			return err
+		}
+		if !moved {
+			return ErrSessionNotFound
+		}
+	} else {
+		if _, ok := s.store.(ExistingSessionStore); !ok {
+			return ErrAtomicStoreRequired
+		}
+		if err := s.store.Save(id, s.data, s.config.IdleTimeout); err != nil {
+			return err
+		}
+	}
+	s.id = id
+	s.isNew = true
+	s.persisted = true
+	s.modified = false
+	s.destroy = false
+	s.setCookie(id, s.config.MaxAge)
+	return nil
+}
+
 // Destroy marks the session for deletion.
 // The session data will be removed from the store and the cookie will be expired.
+// Call it before sending the response so the expiration cookie can be written.
+// Deletion applies to this session ID, not IDs created by other requests.
 func (s *Session) Destroy() {
 	s.destroy = true
 	s.modified = true
+	s.setCookie("", -1)
+}
+
+func (s *Session) setCookie(id string, maxAge int) {
+	if s.cookie == nil {
+		s.cookie = &kruda.Cookie{
+			Name:     s.config.CookieName,
+			Path:     s.config.CookiePath,
+			Domain:   s.config.CookieDomain,
+			Secure:   s.config.CookieSecure,
+			HTTPOnly: s.config.CookieHTTPOnly,
+			SameSite: s.config.CookieSameSite,
+		}
+		s.ctx.SetCookie(s.cookie)
+	}
+	s.cookie.Value = id
+	s.cookie.MaxAge = maxAge
 }
 
 // save persists the session to the store (called by middleware after c.Next()).
@@ -118,8 +181,28 @@ func (s *Session) save() error {
 	if s.destroy {
 		return s.store.Delete(s.id)
 	}
-	if s.modified || s.isNew {
-		return s.store.Save(s.id, s.data, s.config.IdleTimeout)
+	if s.modified {
+		if !s.isNew || s.persisted {
+			store, ok := s.store.(ExistingSessionStore)
+			if !ok {
+				return ErrAtomicStoreRequired
+			}
+			_, err := store.SaveExisting(s.id, s.data, s.config.IdleTimeout)
+			return err
+		}
+		if err := s.store.Save(s.id, s.data, s.config.IdleTimeout); err != nil {
+			return err
+		}
+		s.persisted = true
+		s.modified = false
+		return nil
+	}
+	if !s.isNew || s.persisted {
+		if store, ok := s.store.(interface {
+			Touch(string, time.Duration) error
+		}); ok {
+			return store.Touch(s.id, s.config.IdleTimeout)
+		}
 	}
 	return nil
 }
@@ -142,7 +225,9 @@ func GetSession(c *kruda.Ctx) *Session {
 //  3. Attaches the Session to the request context
 //  4. Calls the next handler
 //  5. Saves modified session data back to the store
-//  6. Sets/refreshes the session cookie
+//
+// Cookies are queued before a response is sent, including when Regenerate or
+// Destroy is called by a handler.
 func New(config ...Config) kruda.HandlerFunc {
 	var cfg Config
 	if len(config) > 0 {
@@ -154,19 +239,22 @@ func New(config ...Config) kruda.HandlerFunc {
 	if cfg.Store == nil {
 		cfg.Store = NewMemoryStore()
 	}
-
-	// HTTPOnly defaults to true for security. We use CookieHTTPOnly from
-	// config (set to true via defaults() if user didn't specify it).
-	httpOnly := cfg.CookieHTTPOnly
+	_, atomicStore := cfg.Store.(ExistingSessionStore)
 
 	return func(c *kruda.Ctx) error {
 		// Skip if custom skip function returns true.
 		if cfg.Skip != nil && cfg.Skip(c.Method(), c.Path()) {
 			return c.Next()
 		}
+		if !atomicStore {
+			return ErrAtomicStoreRequired
+		}
 
 		// Read session ID from cookie.
-		sessionID := c.Cookie(cfg.CookieName)
+		sessionID := ""
+		if request := c.Request(); request != nil {
+			sessionID = request.Cookie(cfg.CookieName)
+		}
 		isNew := sessionID == ""
 
 		var data *SessionData
@@ -199,22 +287,14 @@ func New(config ...Config) kruda.HandlerFunc {
 			config:   &cfg,
 			modified: false,
 			isNew:    isNew,
+			ctx:      c,
 		}
 		c.Set(sessionKey, sess)
 
 		// Pre-set cookie before handler runs — response headers must be
 		// set before the body is written (c.JSON flushes immediately).
 		if sess.isNew {
-			c.SetCookie(&kruda.Cookie{
-				Name:     cfg.CookieName,
-				Value:    sessionID,
-				Path:     cfg.CookiePath,
-				Domain:   cfg.CookieDomain,
-				MaxAge:   cfg.MaxAge,
-				Secure:   cfg.CookieSecure,
-				HTTPOnly: httpOnly,
-				SameSite: cfg.CookieSameSite,
-			})
+			sess.setCookie(sessionID, cfg.MaxAge)
 		}
 
 		// Call next handler.
@@ -223,19 +303,6 @@ func New(config ...Config) kruda.HandlerFunc {
 		// After handler: save session data to store.
 		if saveErr := sess.save(); saveErr != nil {
 			return saveErr
-		}
-
-		if sess.destroy {
-			c.SetCookie(&kruda.Cookie{
-				Name:     cfg.CookieName,
-				Value:    "",
-				Path:     cfg.CookiePath,
-				Domain:   cfg.CookieDomain,
-				MaxAge:   -1,
-				Secure:   cfg.CookieSecure,
-				HTTPOnly: httpOnly,
-				SameSite: cfg.CookieSameSite,
-			})
 		}
 
 		return err

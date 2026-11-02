@@ -135,6 +135,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	forwardedFor := ""
 	realIP := ""
 	forwardedForSeen := false // first header wins even if its value is empty (net/http Get)
+	forwardedForCount := 0
+	realIPCount := 0
 	realIPSeen := false
 	hostSeen := false
 	hostUnsafe := false
@@ -293,12 +295,14 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			acceptUnsafe = unsafePath && len(val) > 0
 			continue
 		case headerForwardedFor:
+			forwardedForCount++
 			if !forwardedForSeen {
 				forwardedForSeen = true
 				forwardedFor = string(val)
 			}
 			continue
 		case headerRealIP:
+			realIPCount++
 			if !realIPSeen {
 				realIPSeen = true
 				realIP = string(val)
@@ -361,11 +365,13 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 			accept = copyOrUnsafeString(val, unsafePath)
 			acceptUnsafe = unsafePath && len(val) > 0
 		case headerForwardedFor:
+			forwardedForCount++
 			if !forwardedForSeen {
 				forwardedForSeen = true
 				forwardedFor = string(val)
 			}
 		case headerRealIP:
+			realIPCount++
 			if !realIPSeen {
 				realIPSeen = true
 				realIP = string(val)
@@ -438,6 +444,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		r.accept = accept
 		r.connection = connection
 		r.forwardedFor = forwardedFor
+		r.forwardedForCount = forwardedForCount
+		r.realIPCount = realIPCount
 		r.realIP = realIP
 		r.hostUnsafe = hostUnsafe
 		r.acceptUnsafe = acceptUnsafe
@@ -464,6 +472,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	r.accept = accept
 	r.connection = connection
 	r.forwardedFor = forwardedFor
+	r.forwardedForCount = forwardedForCount
+	r.realIPCount = realIPCount
 	r.realIP = realIP
 	r.hostUnsafe = hostUnsafe
 	r.acceptUnsafe = acceptUnsafe
@@ -961,6 +971,8 @@ func releaseRequest(r *wingRequest) {
 	r.accept = ""
 	r.connection = ""
 	r.forwardedFor = ""
+	r.forwardedForCount = 0
+	r.realIPCount = 0
 	r.realIP = ""
 	r.hostUnsafe = false
 	r.acceptUnsafe = false
@@ -968,6 +980,7 @@ func releaseRequest(r *wingRequest) {
 	r.remoteAddr = ""
 	r.remoteAddrRef = nil
 	r.trustProxy = false
+	r.proxyPolicy = transport.ProxyPolicy{}
 	r.keepAlive = false
 	r.pathUnsafe = false
 	r.fd = 0
@@ -998,30 +1011,33 @@ func parseCookieValue(cookie, name string) string {
 
 // wingRequest implements transport.Request with safe-copied strings.
 type wingRequest struct {
-	method           string
-	path             string
-	query            string
-	body             []byte
-	contentType      string
-	cookie           string
-	host             string
-	accept           string
-	connection       string
-	forwardedFor     string
-	realIP           string
-	remoteAddr       string
-	remoteAddrRef    *string
-	trustProxy       bool
-	keepAlive        bool
-	pathUnsafe       bool
-	hostUnsafe       bool
-	acceptUnsafe     bool
-	connectionUnsafe bool
-	fd               int32 // connection fd — for RawRequest().Fd()
-	extraHdrs        [8]wingExtraHeader
-	extraN           int
-	extraOverflow    []wingExtraHeader
-	ctx              context.Context
+	method            string
+	path              string
+	query             string
+	body              []byte
+	contentType       string
+	cookie            string
+	host              string
+	accept            string
+	connection        string
+	forwardedFor      string
+	forwardedForCount int
+	realIPCount       int
+	realIP            string
+	remoteAddr        string
+	remoteAddrRef     *string
+	trustProxy        bool
+	proxyPolicy       transport.ProxyPolicy
+	keepAlive         bool
+	pathUnsafe        bool
+	hostUnsafe        bool
+	acceptUnsafe      bool
+	connectionUnsafe  bool
+	fd                int32 // connection fd — for RawRequest().Fd()
+	extraHdrs         [8]wingExtraHeader
+	extraN            int
+	extraOverflow     []wingExtraHeader
+	ctx               context.Context
 }
 
 func (r *wingRequest) Method() string        { return r.method }
@@ -1029,17 +1045,16 @@ func (r *wingRequest) Path() string          { return r.path }
 func (r *wingRequest) Body() ([]byte, error) { return r.body, nil }
 func (r *wingRequest) RemoteAddr() string {
 	if r.trustProxy {
-		if xff := r.forwardedFor; xff != "" {
-			// Take the first (leftmost) IP — the original client.
-			if i := strings.IndexByte(xff, ','); i >= 0 {
-				xff = xff[:i]
-			}
-			return strings.TrimSpace(xff)
-		}
-		if r.realIP != "" {
-			return strings.TrimSpace(r.realIP)
-		}
+		return r.proxyPolicy.ClientIP(r)
 	}
+	return r.PeerAddr()
+}
+
+func (r *wingRequest) ForwardedHeaders() (string, int, string, int) {
+	return r.forwardedFor, r.forwardedForCount, r.realIP, r.realIPCount
+}
+
+func (r *wingRequest) PeerAddr() string {
 	if r.remoteAddr != "" {
 		return r.remoteAddr
 	}
@@ -1132,6 +1147,8 @@ func (r *wingRequest) Header(key string) string {
 	return ""
 }
 
+func (r *wingRequest) RawQuery() string { return r.query }
+
 func (r *wingRequest) bindingQuery() string { return r.query }
 
 func (r *wingRequest) QueryParam(name string) string {
@@ -1174,6 +1191,7 @@ func acquireResponse() *wingResponse {
 	r.sendFileEnabled = false
 	r.fileFd = 0
 	r.fileSize = 0
+	r.fileStream = nil
 	r.responseMode = responseGeneric
 	r.stringFast = false
 	r.stringBody = ""
@@ -1182,8 +1200,13 @@ func acquireResponse() *wingResponse {
 }
 
 func releaseResponse(r *wingResponse) {
+	r.fileStream.close()
 	if r.fileFd > 0 {
 		closeFd(int(r.fileFd))
+	}
+	if r.sendFileRelease != nil {
+		r.sendFileRelease()
+		r.sendFileRelease = nil
 	}
 	r.status = 0
 	r.staticResp = nil
@@ -1195,6 +1218,7 @@ func releaseResponse(r *wingResponse) {
 	r.sendFileEnabled = false
 	r.fileFd = 0
 	r.fileSize = 0
+	r.fileStream = nil
 	r.headers.reset()
 	if cap(r.buf) > 65536 {
 		r.buf = make([]byte, 0, 2048)
@@ -1228,8 +1252,10 @@ type wingResponse struct {
 	stringBody        string
 	stringContentType string
 	sendFileEnabled   bool
+	sendFileRelease   func()
 	fileFd            int32 // sendfile fd (0 = not a file response)
-	fileSize          int64 // sendfile byte count
+	fileSize          int64 // file response byte count
+	fileStream        *fileStream
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -1255,10 +1281,95 @@ func (r *wingResponse) SetStringBody(status int, contentType, body string) {
 	r.stringContentType = contentType
 }
 
+type fileStream struct {
+	reader    io.ReadCloser
+	remaining int64
+	reading   bool
+	mu        sync.Mutex
+	active    bool
+	closing   bool
+	closeOnce sync.Once
+	done      chan struct{}
+}
+
+func (s *fileStream) closeReader() {
+	s.closeOnce.Do(func() {
+		defer func() {
+			_ = recover()
+		}()
+		_ = s.reader.Close()
+	})
+}
+
+func (s *fileStream) close() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return
+	}
+	s.closing = true
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
+	close(s.done)
+	active := s.active
+	s.mu.Unlock()
+	if !active {
+		go s.closeReader()
+	}
+}
+
+func (s *fileStream) beginRead() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing {
+		return false
+	}
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
+	s.active = true
+	return true
+}
+
+func (s *fileStream) finishRead() {
+	s.mu.Lock()
+	s.active = false
+	closing := s.closing
+	s.mu.Unlock()
+	if closing {
+		go s.closeReader()
+	}
+}
+
+// SetFileStream transfers file ownership to the response send path.
+func (r *wingResponse) SetFileStream(file io.ReadCloser, size int64) {
+	if r.fileFd > 0 {
+		closeFd(int(r.fileFd))
+		r.fileFd = 0
+	}
+	if r.sendFileRelease != nil {
+		r.sendFileRelease()
+		r.sendFileRelease = nil
+	}
+	r.fileStream.close()
+	r.fileStream = &fileStream{reader: file, remaining: size}
+	r.fileSize = size
+}
+
 // SetSendFile configures the response to use sendfile(2) for zero-copy file transfer.
 func (r *wingResponse) SetSendFile(fd int32, size int64) {
+	r.fileStream.close()
+	r.fileStream = nil
 	if r.fileFd > 0 && r.fileFd != fd {
 		closeFd(int(r.fileFd))
+		if r.sendFileRelease != nil {
+			r.sendFileRelease()
+			r.sendFileRelease = nil
+		}
 	}
 	r.fileFd = fd
 	r.fileSize = size
@@ -1395,7 +1506,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	}
 
 	// Sendfile path: build headers only, body sent via sendfile(2).
-	if r.fileFd > 0 {
+	if r.fileFd > 0 || r.fileStream != nil {
 		return r.buildHeadersOnly()
 	}
 	b := r.buf[:0]
@@ -1576,32 +1687,13 @@ func (r *wingResponse) build() []byte {
 
 // buildHeadersOnly builds HTTP headers without body (for sendfile responses).
 func (r *wingResponse) buildHeadersOnly() []byte {
-	b := r.buf[:0]
-	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
-		b = append(b, statusLines[r.status]...)
-	} else {
-		b = append(b, "HTTP/1.1 200 OK\r\n"...)
-	}
-	b = append(b, dateHdr()...)
-	for i := 0; i < r.headers.count; i++ {
-		b = append(b, r.headers.keys[i]...)
-		b = append(b, ": "...)
-		b = append(b, r.headers.vals[i]...)
-		b = append(b, "\r\n"...)
-	}
-	for i := 0; i < len(r.headers.extra); i++ {
-		b = append(b, r.headers.extra[i].key...)
-		b = append(b, ": "...)
-		b = append(b, r.headers.extra[i].val...)
-		b = append(b, "\r\n"...)
-	}
-	b = append(b, "Content-Length: "...)
-	if r.fileSize >= 0 && r.fileSize < int64(len(contentLengthStrings)) {
-		b = append(b, contentLengthStrings[int(r.fileSize)]...)
-	} else {
+	b, hasCL := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers)
+	if !hasCL {
+		b = append(b, "Content-Length: "...)
 		b = strconv.AppendInt(b, r.fileSize, 10)
+		b = append(b, "\r\n"...)
 	}
-	b = append(b, "\r\n\r\n"...)
+	b = append(b, "\r\n"...)
 	r.buf = nil
 	return b
 }
@@ -1699,3 +1791,5 @@ func (h *wingHeaders) Del(key string) {
 		}
 	}
 }
+
+func (r *wingResponse) setStaticSendfileRelease(release func()) { r.sendFileRelease = release }

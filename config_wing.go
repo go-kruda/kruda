@@ -61,6 +61,7 @@ func newWingTransport(cfg Config, logger *slog.Logger) transport.Transport {
 		BodyLimit:        bodyLimit,
 		HeaderLimit:      cfg.HeaderLimit,
 		TrustProxy:       cfg.TrustProxy,
+		TrustedProxies:   cfg.TrustedProxies,
 		MaxConns:         maxConns,
 		MaxConnsPerIP:    cfg.MaxConnsPerIP,
 		AcceptRatePerSec: cfg.AcceptRatePerSec,

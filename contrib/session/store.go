@@ -1,6 +1,16 @@
 package session
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrAtomicStoreRequired reports that a store lacks an atomic capability required
+// by the session middleware or session ID regeneration.
+var ErrAtomicStoreRequired = errors.New("session: store does not support the required atomic operation")
+
+// ErrSessionNotFound reports that the session being regenerated was deleted or expired.
+var ErrSessionNotFound = errors.New("session: session no longer exists")
 
 // SessionData holds the session's internal state.
 type SessionData struct {
@@ -16,6 +26,8 @@ type SessionData struct {
 
 // Store defines the interface for session storage backends.
 // Implementations must be safe for concurrent use.
+// Session middleware requires ExistingSessionStore before any session handler
+// runs. Regenerating existing sessions also requires RegeneratingStore.
 type Store interface {
 	// Get retrieves session data by ID.
 	// Returns nil, nil if the session does not exist or has expired.
@@ -27,4 +39,29 @@ type Store interface {
 
 	// Delete removes a session from the store.
 	Delete(id string) error
+}
+
+// ExistingSessionStore prevents an in-flight request from recreating a session
+// after another request deletes it. The middleware uses SaveExisting for loaded
+// sessions and Save for new sessions.
+// Without this capability, middleware rejects session requests with
+// ErrAtomicStoreRequired before invoking the handler.
+type ExistingSessionStore interface {
+	Store
+
+	// SaveExisting atomically replaces an existing, unexpired session and its TTL.
+	// It returns false without writing if the session was deleted or expired.
+	// The existence check and write must be atomic with respect to Delete.
+	SaveExisting(id string, data *SessionData, ttl time.Duration) (bool, error)
+}
+
+// RegeneratingStore atomically rotates existing sessions without reviving a
+// session deleted by another request.
+type RegeneratingStore interface {
+	ExistingSessionStore
+
+	// Regenerate atomically saves the supplied snapshot under newID and deletes oldID.
+	// It returns false without writing if oldID was deleted or expired.
+	// The source check, new entry, and deletion must be atomic with respect to Delete.
+	Regenerate(oldID, newID string, data *SessionData, ttl time.Duration) (bool, error)
 }

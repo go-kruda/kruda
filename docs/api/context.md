@@ -94,7 +94,15 @@ Returns a request cookie value by name.
 func (c *Ctx) IP() string
 ```
 
-Returns the client IP address. Respects `X-Forwarded-For` / `X-Real-IP` only when `WithTrustProxy(true)` is set.
+Returns the socket peer IP. With `WithTrustProxy(true)` and a matching
+`WithTrustedProxies` allowlist, reads X-Forwarded-For from right to left to
+find the nearest untrusted hop. Duplicate or malformed forwarding fields
+fall back to the peer; X-Real-IP is used only when X-Forwarded-For is absent.
+Custom transports need raw `PeerAddr() string` support when proxy trust is
+enabled; otherwise the result is empty rather than trusting a projected address.
+To accept forwarding fields, implement `ForwardedHeaders() (string, int, string, int)`,
+returning the first XFF value and its field count, then the first X-Real-IP
+value and its field count. Requests without that capability use the peer.
 
 ### Bind
 
@@ -344,3 +352,9 @@ return c.Status(200).
     SetHeader("Cache-Control", "no-cache").
     JSON(data)
 ```
+
+### EncodeJSON
+
+`c.EncodeJSON(value)` returns owned encoded bytes without sending a response.
+It follows `c.JSON`'s encoder selection for the current transport and response
+headers. `cache.CacheJSON` uses it to store and send identical bytes on a miss.

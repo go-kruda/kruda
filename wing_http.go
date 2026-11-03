@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -1395,21 +1396,13 @@ func (r *wingResponse) SetJSONStream(status int, enc func(buf *bytes.Buffer, v a
 var statusLines [600][]byte
 
 func init() {
-	codes := [][2]any{
-		{200, "OK"}, {201, "Created"}, {204, "No Content"},
-		{301, "Moved Permanently"}, {302, "Found"}, {304, "Not Modified"},
-		{400, "Bad Request"}, {401, "Unauthorized"}, {403, "Forbidden"},
-		{404, "Not Found"}, {405, "Method Not Allowed"}, {409, "Conflict"},
-		{413, "Content Too Large"}, {422, "Unprocessable Entity"},
-		{429, "Too Many Requests"}, {431, "Request Header Fields Too Large"},
-		{500, "Internal Server Error"}, {501, "Not Implemented"},
-		{502, "Bad Gateway"}, {503, "Service Unavailable"},
+	for code := range statusLines {
+		if text := http.StatusText(code); text != "" {
+			statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
+		}
 	}
-	for _, pair := range codes {
-		code := pair[0].(int)
-		text := pair[1].(string)
-		statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
-	}
+	// RFC 9110 renamed 413; http.StatusText keeps the older phrase.
+	statusLines[413] = []byte("HTTP/1.1 413 Content Too Large\r\n")
 
 	// Pre-build status-close responses to avoid any lazy-init races.
 	for _, code := range []int{400, 413, 431, 500, 501, 503} {
@@ -1432,11 +1425,7 @@ func wingStatusClose(status int) []byte {
 		return statusCloseCache[status]
 	}
 	// Fallback: build on the fly (won't be called in normal operation).
-	line := statusLines[200]
-	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
-		line = statusLines[status]
-	}
-	b := append([]byte{}, line...)
+	b := append([]byte{}, wingStatusLine(status)...)
 	b = append(b, "Content-Length: 0\r\nConnection: close\r\n\r\n"...)
 	return b
 }
@@ -1519,7 +1508,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 
 	// JSON fast path — status + Date + Content-Type:json + Content-Length + body
 	if r.jsonFast {
-		statusLine := jsonStatusLine(r.status)
+		statusLine := wingStatusLine(r.status)
 		date := dateHdr()
 		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
 		b = append(b, statusLine...)
@@ -1567,13 +1556,7 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 // a Content-Length header was already present in h, detected in the same walk
 // so buffered callers avoid a second scan.
 func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, hasCL bool) {
-	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
-		b = append(b, statusLines[status]...)
-	} else {
-		b = append(b, "HTTP/1.1 "...)
-		b = strconv.AppendInt(b, int64(status), 10)
-		b = append(b, " Unknown\r\n"...)
-	}
+	b = append(b, wingStatusLine(status)...)
 	b = append(b, dateHdr()...)
 	for i := 0; i < h.count; i++ {
 		b = append(b, h.keys[i]...)
@@ -1598,13 +1581,7 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, h
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {
 	b = growForAppend(b, 128+len(r.stringContentType)+len(r.stringBody))
-	if r.status > 0 && r.status < len(statusLines) && statusLines[r.status] != nil {
-		b = append(b, statusLines[r.status]...)
-	} else {
-		b = append(b, "HTTP/1.1 "...)
-		b = strconv.AppendInt(b, int64(r.status), 10)
-		b = append(b, " Unknown\r\n"...)
-	}
+	b = append(b, wingStatusLine(r.status)...)
 	b = append(b, dateHdr()...)
 	if r.stringContentType != "" {
 		b = append(b, "Content-Type: "...)
@@ -1619,7 +1596,7 @@ func (r *wingResponse) appendStringTo(b []byte) []byte {
 }
 
 func (r *wingResponse) appendJSONTo(b []byte) []byte {
-	statusLine := jsonStatusLine(r.status)
+	statusLine := wingStatusLine(r.status)
 	date := dateHdr()
 	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
 	b = append(b, statusLine...)
@@ -1631,11 +1608,17 @@ func (r *wingResponse) appendJSONTo(b []byte) []byte {
 	return b
 }
 
-func jsonStatusLine(status int) []byte {
+// wingStatusLine returns the status line for status. A code outside the table
+// keeps its number, so a custom status is never reported as success.
+func wingStatusLine(status int) []byte {
 	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
 		return statusLines[status]
 	}
-	return statusLines[200]
+	return unknownStatusLine(status)
+}
+
+func unknownStatusLine(status int) []byte {
+	return []byte("HTTP/1.1 " + strconv.Itoa(status) + " Unknown\r\n")
 }
 
 func growForAppend(b []byte, extra int) []byte {

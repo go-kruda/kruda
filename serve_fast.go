@@ -29,33 +29,21 @@ var (
 // avoiding unsafe.String allocation on every request. Falls back to
 // unsafe.String only for custom/non-standard methods.
 func internMethod(b []byte) string {
-	switch len(b) {
-	case 3:
-		if b[0] == 'G' {
-			return methodStringGET
-		}
-		if b[0] == 'P' {
-			return methodStringPUT
-		}
-	case 4:
-		if b[0] == 'P' {
-			return methodStringPOST
-		}
-		if b[0] == 'H' {
-			return methodStringHEAD
-		}
-	case 5:
-		if b[0] == 'P' {
-			return methodStringPATCH
-		}
-	case 6:
-		if b[0] == 'D' {
-			return methodStringDELETE
-		}
-	case 7:
-		if b[0] == 'O' {
-			return methodStringOPTIONS
-		}
+	switch string(b) {
+	case "GET":
+		return methodStringGET
+	case "PUT":
+		return methodStringPUT
+	case "POST":
+		return methodStringPOST
+	case "HEAD":
+		return methodStringHEAD
+	case "PATCH":
+		return methodStringPATCH
+	case "DELETE":
+		return methodStringDELETE
+	case "OPTIONS":
+		return methodStringOPTIONS
 	}
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

@@ -354,7 +354,7 @@ func (c *Ctx) SetBody(data []byte) *Ctx {
 //
 //	c.SetContentType("text/html; charset=utf-8").SetBody(html)
 func (c *Ctx) SetContentType(ct string) *Ctx {
-	c.contentType = ct
+	c.contentType = sanitizeHeaderValue(ct)
 	return c
 }
 
@@ -512,7 +512,7 @@ func (c *Ctx) Redirect(url string, code ...int) error {
 		status = code[0]
 	}
 	c.status = status
-	c.location = url // fixed slot — no map write
+	c.location = sanitizeHeaderValue(url) // fixed slot — no map write
 	return c.send()
 }
 

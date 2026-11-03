@@ -5,6 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Security
+
+- `c.Redirect` and `c.SetContentType` now remove CR and LF from their values.
+  On Wing, a redirect URL containing `\r\n` could add a response header.
+
 ### Fixed
 
 - Preserve configured JSON encoding on cache misses and hits, including fasthttp, and avoid double serialization.
@@ -30,6 +35,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Rate limiting uses the socket peer for proxy trust, checks forwarded chains from right to left, and falls back to the peer for invalid or duplicate forwarding headers. Custom transports without peer address support share an `unknown` key unless a custom `KeyFunc` is provided.
 - Normalize client IP addresses across transports. Wing addresses such as `127.0.0.1:54869` now return `127.0.0.1`; the fasthttp fast path returns the peer IP instead of an empty string.
+- Wing now sends the status code the handler set on every response path. A
+  JSON response with a code outside its short status list, such as 202 or 504,
+  was sent as 200. Text and header responses for those codes kept the number
+  but said `Unknown`: `HTTP/1.1 202 Unknown` is now `HTTP/1.1 202 Accepted`.
+  Codes with no standard name keep the `Unknown` label.
+- The fasthttp fast path now compares the whole HTTP method. It used to check
+  only the length and first letter, so `PUSH` ran as `POST` and `PURGE` as
+  `PATCH`. Those methods now reach the router unchanged and get a 405 unless a
+  route handles them.
 
 ## [1.8.2] — 2026-11-09
 

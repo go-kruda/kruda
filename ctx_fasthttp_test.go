@@ -404,6 +404,14 @@ func TestInternMethod(t *testing.T) {
 		{[]byte("OPTIONS"), "OPTIONS"},
 		{[]byte("XX"), "XX"},               // 2 bytes, no match in switch
 		{[]byte("ABCDEFGHI"), "ABCDEFGHI"}, // 9 bytes, no match in switch
+		{[]byte("GOT"), "GOT"},             // same length and first byte as GET
+		{[]byte("PAT"), "PAT"},
+		{[]byte("PUSH"), "PUSH"},
+		{[]byte("HACK"), "HACK"},
+		{[]byte("PURGE"), "PURGE"},
+		{[]byte("DELETED"), "DELETED"},
+		{[]byte("DEPLOY"), "DEPLOY"},
+		{[]byte("OPTIONZ"), "OPTIONZ"},
 	}
 
 	for _, tt := range tests {
@@ -411,6 +419,11 @@ func TestInternMethod(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("internMethod(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+
+	method := []byte("DELETE")
+	if allocs := testing.AllocsPerRun(100, func() { internMethod(method) }); allocs != 0 {
+		t.Errorf("internMethod allocated %v times", allocs)
 	}
 }
 

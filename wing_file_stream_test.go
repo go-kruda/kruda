@@ -44,6 +44,9 @@ func TestWingFileStreamOwnershipCleanup(t *testing.T) {
 				w.doneCh = make(chan doneMsg, 1)
 				w.doneCh <- doneMsg{fd: c.fd, stream: stream}
 				delete(w.conns, c.fd)
+				// cleanup closes evfd and listenFd; the test worker owns
+				// neither, and 0 would close the process's stdin.
+				w.evfd, w.listenFd = -1, -1
 				w.cleanup()
 			}
 			waitStaticCloses(t, files, 1)

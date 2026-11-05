@@ -154,15 +154,13 @@ type staticEntry struct {
 var staticStatusLines [600][]byte
 
 func init() {
-	codes := [][2]any{
-		{200, "OK"}, {204, "No Content"}, {301, "Moved Permanently"},
-		{304, "Not Modified"}, {400, "Bad Request"}, {404, "Not Found"},
-		{500, "Internal Server Error"},
+	for code := range staticStatusLines {
+		if text := http.StatusText(code); text != "" {
+			staticStatusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
+		}
 	}
-	for _, p := range codes {
-		c := p[0].(int)
-		staticStatusLines[c] = []byte("HTTP/1.1 " + strconv.Itoa(c) + " " + p[1].(string) + "\r\n")
-	}
+	// RFC 9110 renamed 413; http.StatusText keeps the older phrase.
+	staticStatusLines[413] = []byte("HTTP/1.1 413 Content Too Large\r\n")
 }
 
 // GetStaticResponse returns a cached pre-built HTTP response.
@@ -196,7 +194,7 @@ func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
 	} else {
 		b = append(b, "HTTP/1.1 "...)
 		b = strconv.AppendInt(b, int64(status), 10)
-		b = append(b, " OK\r\n"...)
+		b = append(b, " Unknown\r\n"...)
 	}
 	b = append(b, "Date: "...)
 	b = append(b, time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")...)

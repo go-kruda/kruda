@@ -1399,6 +1399,8 @@ func init() {
 	for code := range statusLines {
 		if text := http.StatusText(code); text != "" {
 			statusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
+		} else if code >= 200 {
+			statusLines[code] = unknownStatusLine(code)
 		}
 	}
 	// RFC 9110 renamed 413; http.StatusText keeps the older phrase.
@@ -1608,11 +1610,22 @@ func (r *wingResponse) appendJSONTo(b []byte) []byte {
 	return b
 }
 
-// wingStatusLine returns the status line for status. A code outside the table
-// keeps its number, so a custom status is never reported as success.
+// wingStatusLine returns the status line for status. A code without a standard
+// name keeps its number, so a custom status is never reported as success.
 func wingStatusLine(status int) []byte {
-	if status > 0 && status < len(statusLines) && statusLines[status] != nil {
+	if status >= 200 && status < len(statusLines) {
 		return statusLines[status]
+	}
+	return statusLineOutsideTable(status)
+}
+
+// statusLineOutsideTable sends codes that cannot head a final response (below
+// 200 or above 999) as 200, as net/http and fasthttp do for status 0.
+//
+//go:noinline
+func statusLineOutsideTable(status int) []byte {
+	if status < 200 || status > 999 {
+		return statusLines[200]
 	}
 	return unknownStatusLine(status)
 }

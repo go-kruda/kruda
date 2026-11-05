@@ -193,20 +193,34 @@ func TestHeaderInjectionCRLF(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode())
 	}
 
-	// The CRLF characters should be stripped, leaving only the safe part
+	// CR and LF become spaces, as in net/http, so the value stays one header.
 	xCustom := resp.Header("X-Custom")
-	if xCustom != "safeX-Injected: evil" {
-		t.Errorf("X-Custom: expected CRLF stripped value %q, got %q", "safeX-Injected: evil", xCustom)
+	if xCustom != "safe  X-Injected: evil" {
+		t.Errorf("X-Custom: expected CRLF replaced value %q, got %q", "safe  X-Injected: evil", xCustom)
 	}
 
 	xAnother := resp.Header("X-Another")
-	if xAnother != "okSet-Cookie: stolen=yes" {
-		t.Errorf("X-Another: expected CRLF stripped value %q, got %q", "okSet-Cookie: stolen=yes", xAnother)
+	if xAnother != "ok  Set-Cookie: stolen=yes" {
+		t.Errorf("X-Another: expected CRLF replaced value %q, got %q", "ok  Set-Cookie: stolen=yes", xAnother)
 	}
 
 	// Verify no injected headers appear
 	if v := resp.Header("X-Injected"); v != "" {
 		t.Errorf("X-Injected header should not exist, got %q", v)
+	}
+}
+
+func TestRedirectNewlineDoesNotLeaveSite(t *testing.T) {
+	app := New()
+	app.Get("/redirect", func(c *Ctx) error { return c.Redirect("/\n/evil.example") })
+	app.Compile()
+
+	resp, err := NewTestClient(app).Get("/redirect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.Header("Location"); got != "/ /evil.example" {
+		t.Fatalf("Location = %q, want %q", got, "/ /evil.example")
 	}
 }
 
@@ -276,10 +290,8 @@ func TestHeaderInjectionSetCookie(t *testing.T) {
 		t.Fatal("Set-Cookie header missing")
 	}
 
-	// The cookie value should have CRLF stripped.
-	// Value "abc\r\nX-Injected: evil" → "abcX-Injected: evil" (CRLF removed)
-	// Note: existing sanitizeCookieValue may also strip spaces, so check
-	// that the raw \r\n characters are not present.
+	// sanitizeCookieValue may also strip the spaces CR and LF became, so
+	// check only that no raw CR or LF remains.
 	if contains(setCookie, "\r") || contains(setCookie, "\n") {
 		t.Errorf("Set-Cookie should not contain CR or LF characters, got: %q", setCookie)
 	}

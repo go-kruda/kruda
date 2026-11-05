@@ -32,6 +32,20 @@ func TestStaticResponseCacheKeyIncludesStatus(t *testing.T) {
 	}
 }
 
+func TestStaticResponseStatusLineUsesStandardName(t *testing.T) {
+	for status, want := range map[int]string{
+		202: "HTTP/1.1 202 Accepted\r\n",
+		413: "HTTP/1.1 413 Content Too Large\r\n",
+		429: "HTTP/1.1 429 Too Many Requests\r\n",
+		503: "HTTP/1.1 503 Service Unavailable\r\n",
+		599: "HTTP/1.1 599 Unknown\r\n",
+	} {
+		if resp := GetStaticResponseString(status, "text/plain", "ok"); !bytes.HasPrefix(resp, []byte(want)) {
+			t.Errorf("status %d: response starts %q, want %q", status, resp[:min(len(resp), len(want))], want)
+		}
+	}
+}
+
 func BenchmarkGetStaticResponseStringCached(b *testing.B) {
 	staticCache.Clear()
 	want := GetStaticResponseString(200, "text/plain", "ok")

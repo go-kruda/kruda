@@ -7,8 +7,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
-- `c.Redirect` and `c.SetContentType` now remove CR and LF from their values.
-  On Wing, a redirect URL containing `\r\n` could add a response header.
+- `c.Redirect` and `c.SetContentType` now replace CR and LF in their values
+  with a space. On Wing, a redirect URL containing `\r\n` could add a response
+  header.
+- `c.SetHeader`, `c.AddHeader` and cookie fields also replace CR and LF with a
+  space instead of deleting them, as net/http does. Deleting joined the pieces:
+  `c.Redirect("/\n/evil.example")` would have sent `Location: //evil.example`,
+  a link to another site. It now sends `Location: / /evil.example`.
 
 ### Fixed
 
@@ -39,11 +44,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   JSON response with a code outside its short status list, such as 202 or 504,
   was sent as 200. Text and header responses for those codes kept the number
   but said `Unknown`: `HTTP/1.1 202 Unknown` is now `HTTP/1.1 202 Accepted`.
-  Codes with no standard name keep the `Unknown` label.
+  Codes with no standard name keep the `Unknown` label. `StaticText` and
+  `StaticJSON` routes now use the same names; they sent `503 OK` before.
+  A code that cannot start a final response (below 200 or above 999, such as
+  `c.Status(0)`) is sent as `200 OK`, the answer net/http and fasthttp give
+  for status 0. It used to produce `HTTP/1.1 0 Unknown`, which clients reject.
 - The fasthttp fast path now compares the whole HTTP method. It used to check
   only the length and first letter, so `PUSH` ran as `POST` and `PURGE` as
-  `PATCH`. Those methods now reach the router unchanged and get a 405 unless a
-  route handles them.
+  `PATCH`. Those methods now reach the router unchanged: a path with routes
+  for other methods answers 405, and a path with no route answers 404.
 
 ## [1.8.2] — 2026-11-09
 

@@ -516,21 +516,20 @@ func (c *Ctx) Redirect(url string, code ...int) error {
 	return c.send()
 }
 
-// sanitizeHeaderValue strips CR and LF characters from a header value to prevent
-// HTTP header injection (CRLF injection). Most values pass through unchanged via
-// the fast path check.
+// sanitizeHeaderValue replaces CR and LF with a space to prevent HTTP header
+// injection, as net/http does. Deleting them instead would join the pieces:
+// "/\n/evil.example" would become the protocol-relative "//evil.example".
 func sanitizeHeaderValue(value string) string {
 	if !strings.ContainsAny(value, "\r\n") {
 		return value
 	}
-	var b strings.Builder
-	b.Grow(len(value))
-	for i := 0; i < len(value); i++ {
-		if value[i] != '\r' && value[i] != '\n' {
-			b.WriteByte(value[i])
+	b := []byte(value)
+	for i, ch := range b {
+		if ch == '\r' || ch == '\n' {
+			b[i] = ' '
 		}
 	}
-	return b.String()
+	return string(b)
 }
 
 // isValidHeaderKey checks if key contains only valid token characters per RFC 7230.

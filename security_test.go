@@ -213,14 +213,19 @@ func TestHeaderInjectionCRLF(t *testing.T) {
 func TestRedirectNewlineDoesNotLeaveSite(t *testing.T) {
 	app := New()
 	app.Get("/redirect", func(c *Ctx) error { return c.Redirect("/\n/evil.example") })
+	app.Get("/set-header", func(c *Ctx) error {
+		return c.SetHeader("Location", "/\n/evil.example").Status(302).Text("")
+	})
 	app.Compile()
 
-	resp, err := NewTestClient(app).Get("/redirect")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := resp.Header("Location"); got != "/ /evil.example" {
-		t.Fatalf("Location = %q, want %q", got, "/ /evil.example")
+	for _, path := range []string{"/redirect", "/set-header"} {
+		resp, err := NewTestClient(app).Get(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resp.Header("Location"); got != "/ /evil.example" {
+			t.Errorf("%s: Location = %q, want %q", path, got, "/ /evil.example")
+		}
 	}
 }
 

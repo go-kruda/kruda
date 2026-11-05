@@ -405,7 +405,7 @@ func newWorkerPool(size int, h transport.Handler, done chan doneMsg, wake func()
 func (p *workerPool) loop(h transport.Handler) {
 	defer p.wg.Done()
 	for job := range p.jobs {
-		resp := acquireResponse()
+		resp := acquireResponseFor(job.req)
 		resp.responseMode = job.responseMode
 		func() {
 			defer func() {
@@ -979,7 +979,7 @@ func (w *worker) tryParse(c *conn) {
 				c.sendBuf = append(c.sendBuf, f.StaticResponse...)
 				releaseRequest(req)
 			} else {
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				resp.sendFileEnabled = true
 				start := time.Now().UnixNano()
@@ -1037,7 +1037,7 @@ func (w *worker) tryParse(c *conn) {
 			case w.pool.jobs <- job:
 			default:
 				// Pool saturated — run inline to avoid deadlock.
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1070,7 +1070,7 @@ func (w *worker) tryParse(c *conn) {
 			w.dispatchWG.Add(1)
 			go func(req *wingRequest, fd int32, ka, directWrite bool, f Preset) {
 				defer w.dispatchWG.Done()
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1153,7 +1153,7 @@ func (w *worker) tryParse(c *conn) {
 					w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
 				}
 			} else {
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1373,7 +1373,7 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 		return
 	}
 	finalizeRequestCommonHeaders(req)
-	resp := acquireResponse()
+	resp := acquireResponseFor(req)
 	resp.responseMode = f.ResponseMode
 	start := time.Now().UnixNano()
 	w.serveRoute(resp, req, f)
@@ -1742,7 +1742,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 	for {
 		// Handle request.
-		resp := acquireResponse()
+		resp := acquireResponseFor(req)
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -2000,6 +2000,7 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	first.ctx = ctx
 
 	sw := newWingStreamWriter(f, time.Duration(w.writeTimeout))
+	sw.head = first.method == "HEAD"
 
 	go watchStreamDisconnect(f, cancel)
 

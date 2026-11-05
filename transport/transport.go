@@ -172,7 +172,9 @@ func GetStaticResponse(status int, contentType string, body []byte) []byte {
 		return v.(*staticEntry).resp
 	}
 	b := buildStaticPrefix(status, contentType, len(body))
-	b = append(b, body...)
+	if status != 204 && status != 304 {
+		b = append(b, body...)
+	}
 	return storeStaticResponse(key, b)
 }
 
@@ -183,11 +185,16 @@ func GetStaticResponseString(status int, contentType, body string) []byte {
 		return v.(*staticEntry).resp
 	}
 	b := buildStaticPrefix(status, contentType, len(body))
-	b = append(b, body...)
+	if status != 204 && status != 304 {
+		b = append(b, body...)
+	}
 	return storeStaticResponse(key, b)
 }
 
 func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
+	if status < 200 || status > 999 {
+		status = 200 // cannot head a final response; Wing sends these as 200 too
+	}
 	var b []byte
 	if status > 0 && status < len(staticStatusLines) && staticStatusLines[status] != nil {
 		b = append(b, staticStatusLines[status]...)
@@ -203,6 +210,9 @@ func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
 		b = append(b, "Content-Type: "...)
 		b = append(b, contentType...)
 		b = append(b, "\r\n"...)
+	}
+	if status == 204 || status == 304 {
+		return append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
 	b = strconv.AppendInt(b, int64(bodyLen), 10)

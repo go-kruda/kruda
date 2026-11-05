@@ -10,6 +10,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -1197,6 +1198,14 @@ func acquireResponse() *wingResponse {
 	r.stringFast = false
 	r.stringBody = ""
 	r.stringContentType = ""
+	r.headRequest = false
+	return r
+}
+
+// acquireResponseFor is acquireResponse for req; a HEAD request gets no body.
+func acquireResponseFor(req *wingRequest) *wingResponse {
+	r := acquireResponse()
+	r.headRequest = req.method == "HEAD"
 	return r
 }
 
@@ -1210,6 +1219,7 @@ func releaseResponse(r *wingResponse) {
 		r.sendFileRelease = nil
 	}
 	r.status = 0
+	r.headRequest = false
 	r.staticResp = nil
 	r.jsonFast = false
 	r.responseMode = responseGeneric
@@ -1257,6 +1267,7 @@ type wingResponse struct {
 	fileFd            int32 // sendfile fd (0 = not a file response)
 	fileSize          int64 // file response byte count
 	fileStream        *fileStream
+	headRequest       bool // HEAD: send the headers and length a GET would, never the body
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
@@ -1443,6 +1454,9 @@ var cachedDateHdr atomic.Pointer[[]byte]
 
 const jsonHeaderContentLength = "Content-Type: application/json; charset=utf-8\r\nContent-Length: "
 
+// jsonHeaderContentType ends the JSON header block of a response with no body.
+const jsonHeaderContentType = "Content-Type: application/json; charset=utf-8\r\n\r\n"
+
 func init() {
 	updateDateHdr()
 	go func() {
@@ -1493,12 +1507,24 @@ func dateHdr() []byte {
 
 func (r *wingResponse) buildZeroCopy() []byte {
 	if r.staticResp != nil {
+		if r.headRequest {
+			return staticHeadersOnly(r.staticResp)
+		}
 		return r.staticResp
 	}
 
 	// Sendfile path: build headers only, body sent via sendfile(2).
 	if r.fileFd > 0 || r.fileStream != nil {
-		return r.buildHeadersOnly()
+		if r.fileFd > 0 && !r.sendFileEnabled {
+			// Only the inline path sends with sendfile(2); every path sends a stream.
+			r.fileStream = &fileStream{reader: os.NewFile(uintptr(r.fileFd), "sendfile"), remaining: r.fileSize}
+			r.fileFd = 0
+		}
+		b := r.buildHeadersOnly()
+		if r.omitBody() {
+			r.dropFileBody()
+		}
+		return b
 	}
 	b := r.buf[:0]
 
@@ -1515,10 +1541,16 @@ func (r *wingResponse) buildZeroCopy() []byte {
 		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
 		b = append(b, statusLine...)
 		b = append(b, date...)
-		b = append(b, jsonHeaderContentLength...)
-		b = appendContentLengthValue(b, len(r.body))
-		b = append(b, "\r\n\r\n"...)
-		b = append(b, r.body...)
+		if statusHasNoBody(r.status) {
+			b = append(b, jsonHeaderContentType...)
+		} else {
+			b = append(b, jsonHeaderContentLength...)
+			b = appendContentLengthValue(b, len(r.body))
+			b = append(b, "\r\n\r\n"...)
+			if !r.headRequest {
+				b = append(b, r.body...)
+			}
+		}
 		r.buf = nil
 		return b
 	}
@@ -1534,19 +1566,23 @@ func (r *wingResponse) buildZeroCopy() []byte {
 // paths have been handled. The destination owns all serialized bytes.
 func (r *wingResponse) appendTo(b []byte) []byte {
 	if r.staticResp != nil {
+		if r.headRequest {
+			return append(b, staticHeadersOnly(r.staticResp)...)
+		}
 		return append(b, r.staticResp...)
 	}
 	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers)
 
 	// Auto-inject Content-Length when the user did not set it explicitly.
-	if !hasCL {
+	if !hasCL && !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n"...)
 	}
 	b = append(b, "\r\n"...)
-	b = append(b, r.body...)
-
+	if !r.omitBody() {
+		b = append(b, r.body...)
+	}
 	return b
 }
 
@@ -1556,29 +1592,48 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 // for those (allowing both buffered responses and streaming writers to reuse
 // this helper without a Content-Length being injected). hasCL reports whether
 // a Content-Length header was already present in h, detected in the same walk
-// so buffered callers avoid a second scan.
+// so buffered callers avoid a second scan. A Content-Length in h is left out
+// for 204 and 304, which must not carry one. A Transfer-Encoding in h is always
+// left out: Wing never chunk-encodes, so the body would not match it.
 func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, hasCL bool) {
 	b = append(b, wingStatusLine(status)...)
 	b = append(b, dateHdr()...)
+	noBody := statusHasNoBody(status)
 	for i := 0; i < h.count; i++ {
+		if headerIs(h.keys[i], "Content-Length") {
+			hasCL = true
+			if noBody {
+				continue
+			}
+		} else if headerIs(h.keys[i], "Transfer-Encoding") {
+			continue
+		}
 		b = append(b, h.keys[i]...)
 		b = append(b, ": "...)
 		b = append(b, h.vals[i]...)
 		b = append(b, "\r\n"...)
-		if !hasCL && h.keys[i] == "Content-Length" {
-			hasCL = true
-		}
 	}
 	for i := 0; i < len(h.extra); i++ {
+		if headerIs(h.extra[i].key, "Content-Length") {
+			hasCL = true
+			if noBody {
+				continue
+			}
+		} else if headerIs(h.extra[i].key, "Transfer-Encoding") {
+			continue
+		}
 		b = append(b, h.extra[i].key...)
 		b = append(b, ": "...)
 		b = append(b, h.extra[i].val...)
 		b = append(b, "\r\n"...)
-		if !hasCL && h.extra[i].key == "Content-Length" {
-			hasCL = true
-		}
 	}
 	return b, hasCL
+}
+
+// headerIs matches a header key case-insensitively. Keys set through Ctx are
+// canonical, but ResponseWriter().Header() stores them as given.
+func headerIs(key, name string) bool {
+	return len(key) == len(name) && (key == name || strings.EqualFold(key, name))
 }
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {
@@ -1590,10 +1645,15 @@ func (r *wingResponse) appendStringTo(b []byte) []byte {
 		b = append(b, r.stringContentType...)
 		b = append(b, "\r\n"...)
 	}
+	if statusHasNoBody(r.status) {
+		return append(b, "\r\n"...)
+	}
 	b = append(b, "Content-Length: "...)
 	b = appendContentLengthValue(b, len(r.stringBody))
 	b = append(b, "\r\n\r\n"...)
-	b = append(b, r.stringBody...)
+	if !r.headRequest {
+		b = append(b, r.stringBody...)
+	}
 	return b
 }
 
@@ -1603,10 +1663,15 @@ func (r *wingResponse) appendJSONTo(b []byte) []byte {
 	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
 	b = append(b, statusLine...)
 	b = append(b, date...)
+	if statusHasNoBody(r.status) {
+		return append(b, jsonHeaderContentType...)
+	}
 	b = append(b, jsonHeaderContentLength...)
 	b = appendContentLengthValue(b, len(r.body))
 	b = append(b, "\r\n\r\n"...)
-	b = append(b, r.body...)
+	if !r.headRequest {
+		b = append(b, r.body...)
+	}
 	return b
 }
 
@@ -1620,7 +1685,7 @@ func wingStatusLine(status int) []byte {
 }
 
 // statusLineOutsideTable sends codes that cannot head a final response (below
-// 200 or above 999) as 200, as net/http and fasthttp do for status 0.
+// 200 or above 999) as 200, as fasthttp does for 0 and -1.
 //
 //go:noinline
 func statusLineOutsideTable(status int) []byte {
@@ -1684,7 +1749,7 @@ func (r *wingResponse) build() []byte {
 // buildHeadersOnly builds HTTP headers without body (for sendfile responses).
 func (r *wingResponse) buildHeadersOnly() []byte {
 	b, hasCL := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers)
-	if !hasCL {
+	if !hasCL && !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = strconv.AppendInt(b, r.fileSize, 10)
 		b = append(b, "\r\n"...)
@@ -1692,6 +1757,28 @@ func (r *wingResponse) buildHeadersOnly() []byte {
 	b = append(b, "\r\n"...)
 	r.buf = nil
 	return b
+}
+
+// statusHasNoBody reports the codes whose responses never carry a body or a
+// Content-Length (1xx never reaches here; wingStatusLine sends it as 200).
+func statusHasNoBody(status int) bool { return status == 204 || status == 304 }
+
+// omitBody reports whether the body must stay off the wire. Sending one would
+// make a keep-alive client read it as the start of the next response.
+func (r *wingResponse) omitBody() bool { return r.headRequest || statusHasNoBody(r.status) }
+
+// dropFileBody closes a pending sendfile or stream body without sending it.
+func (r *wingResponse) dropFileBody() {
+	r.fileStream.close()
+	r.fileStream = nil
+	if r.fileFd > 0 {
+		closeFd(int(r.fileFd))
+		r.fileFd = 0
+	}
+	if r.sendFileRelease != nil {
+		r.sendFileRelease()
+		r.sendFileRelease = nil
+	}
 }
 
 // ----------------------------- header adapter -----------------------------
@@ -1719,13 +1806,13 @@ func (h *wingHeaders) reset() {
 
 func (h *wingHeaders) Set(key, value string) {
 	for i := 0; i < h.count; i++ {
-		if h.keys[i] == key {
+		if headerIs(h.keys[i], key) {
 			h.vals[i] = value
 			return
 		}
 	}
 	for i := 0; i < len(h.extra); i++ {
-		if h.extra[i].key == key {
+		if headerIs(h.extra[i].key, key) {
 			h.extra[i].val = value
 			return
 		}
@@ -1753,12 +1840,12 @@ func (h *wingHeaders) Add(key, value string) {
 
 func (h *wingHeaders) Get(key string) string {
 	for i := 0; i < h.count; i++ {
-		if h.keys[i] == key {
+		if headerIs(h.keys[i], key) {
 			return h.vals[i]
 		}
 	}
 	for i := 0; i < len(h.extra); i++ {
-		if h.extra[i].key == key {
+		if headerIs(h.extra[i].key, key) {
 			return h.extra[i].val
 		}
 	}
@@ -1767,7 +1854,7 @@ func (h *wingHeaders) Get(key string) string {
 
 func (h *wingHeaders) Del(key string) {
 	for i := 0; i < h.count; {
-		if h.keys[i] == key {
+		if headerIs(h.keys[i], key) {
 			h.count--
 			h.keys[i] = h.keys[h.count]
 			h.vals[i] = h.vals[h.count]
@@ -1777,7 +1864,7 @@ func (h *wingHeaders) Del(key string) {
 		}
 	}
 	for i := 0; i < len(h.extra); {
-		if h.extra[i].key == key {
+		if headerIs(h.extra[i].key, key) {
 			last := len(h.extra) - 1
 			h.extra[i] = h.extra[last]
 			h.extra[last] = wingHeader{}

@@ -1,5 +1,7 @@
 package kruda
 
+import "bytes"
+
 // PresetTable maps method+path to a Preset for per-route dispatch decisions.
 // Lookup is two map reads (method → path → Preset), zero allocation.
 //
@@ -17,6 +19,7 @@ type PresetTable struct {
 	prefixes [mCount][]prefixPreset    // param routes: prefix before ':'
 	fallback map[string]Preset         // custom methods
 	def      Preset
+	defHead  Preset // def without a static body, for HEAD
 }
 
 type prefixPreset struct {
@@ -37,25 +40,19 @@ const (
 
 // methodIdx returns array index for standard methods. -1 for unknown.
 func methodIdx(m string) int {
-	switch len(m) {
-	case 3:
-		if m[0] == 'G' {
-			return mGet
-		}
-		if m[0] == 'P' && m[2] == 'T' {
-			return mPut
-		}
-	case 4:
-		if m[0] == 'P' {
-			return mPost
-		}
-		if m[0] == 'H' {
-			return mHead
-		}
-	case 5:
-		return mPatch
-	case 6:
+	switch m {
+	case "GET":
+		return mGet
+	case "POST":
+		return mPost
+	case "PUT":
+		return mPut
+	case "DELETE":
 		return mDelete
+	case "PATCH":
+		return mPatch
+	case "HEAD":
+		return mHead
 	}
 	return -1
 }
@@ -65,11 +62,15 @@ func methodIdx(m string) int {
 // Default preset is used for routes not in the table.
 func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 	def.defaults()
-	ft := PresetTable{def: def}
+	ft := PresetTable{def: def, defHead: def}
+	ft.defHead.StaticResponse = staticHeadersOnly(def.StaticResponse)
 	for key, f := range routes {
 		f.defaults()
 		f.explicit = true
 		method, path := splitKey(key)
+		if method == "HEAD" {
+			f.StaticResponse = staticHeadersOnly(f.StaticResponse)
+		}
 		idx := methodIdx(method)
 		if idx >= 0 {
 			// Param route: store as prefix match
@@ -120,6 +121,9 @@ func (ft *PresetTable) Lookup(method, path string) Preset {
 			return f
 		}
 	}
+	if idx == mHead {
+		return ft.defHead
+	}
 	return ft.def
 }
 
@@ -140,4 +144,14 @@ func wingIndexByte(s string, c byte) int {
 		}
 	}
 	return -1
+}
+
+// staticHeadersOnly cuts a prebuilt response down to its headers, so a HEAD
+// route sends the length a GET would and no body. The capped slice keeps the
+// shared cached bytes from being appended to.
+func staticHeadersOnly(resp []byte) []byte {
+	if i := bytes.Index(resp, []byte("\r\n\r\n")); i >= 0 {
+		return resp[: i+4 : i+4]
+	}
+	return resp
 }

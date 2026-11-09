@@ -452,6 +452,12 @@ func (p *workerPool) loop(h transport.Handler) {
 }
 
 func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Preset) {
+	if f.StaticResponse != nil {
+		// The inline branch sends these itself; a request whose body arrives
+		// after the headers reaches here, and the route may have no handler.
+		resp.SetStaticResponse(f.StaticResponse)
+		return
+	}
 	if len(f.handlers) > 0 && (f.pathClean || (f.path == "" && !containsDotPercent(req.path))) {
 		if len(f.handlers) == 1 {
 			if h, ok := w.handler.(wingFastSingleHandler); ok && h.serveWingSingleHandler(resp, req, f.handlers[0]) {

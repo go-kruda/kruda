@@ -73,8 +73,10 @@ func (w *wingStreamWriter) flushHeaders() error {
 	if w.headersSent {
 		return nil
 	}
-	w.headers.Set("Connection", "close") // the stream path never reuses the connection
-	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers)
+	// The stream path never reuses the connection, and the stream length is
+	// the handler's to state.
+	w.headers.Set("Connection", "close")
+	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers, true)
 	hdr = append(hdr, "\r\n"...) // blank line terminates the header section
 	if w.writeTimeout > 0 {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))

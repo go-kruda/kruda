@@ -1507,6 +1507,7 @@ func dateHdr() []byte {
 
 func (r *wingResponse) buildZeroCopy() []byte {
 	if r.staticResp != nil {
+		r.dropFileBody() // the static bytes are the whole response
 		if r.headRequest {
 			return staticHeadersOnly(r.staticResp)
 		}
@@ -1571,10 +1572,11 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 		}
 		return append(b, r.staticResp...)
 	}
-	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers)
-
-	// Auto-inject Content-Length when the user did not set it explicitly.
-	if !hasCL && !statusHasNoBody(r.status) {
+	// The body is buffered, so its length is known; a handler value only
+	// stands for a HEAD that wrote no body.
+	keepCL := r.headRequest && len(r.body) == 0
+	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers, keepCL)
+	if !(keepCL && hasCL) && !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = appendContentLengthValue(b, len(r.body))
 		b = append(b, "\r\n"...)
@@ -1592,17 +1594,19 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 // for those (allowing both buffered responses and streaming writers to reuse
 // this helper without a Content-Length being injected). hasCL reports whether
 // a Content-Length header was already present in h, detected in the same walk
-// so buffered callers avoid a second scan. A Content-Length in h is left out
-// for 204 and 304, which must not carry one. A Transfer-Encoding in h is always
-// left out: Wing never chunk-encodes, so the body would not match it.
-func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, hasCL bool) {
+// so buffered callers avoid a second scan. A Content-Length in h is sent only
+// when keepCL is set, and never for 204 and 304, which must not carry one; a
+// caller that knows the body length passes false and writes its own. A
+// Transfer-Encoding in h is always left out: Wing never chunk-encodes, so the
+// body would not match it.
+func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (out []byte, hasCL bool) {
 	b = append(b, wingStatusLine(status)...)
 	b = append(b, dateHdr()...)
 	noBody := statusHasNoBody(status)
 	for i := 0; i < h.count; i++ {
 		if headerIs(h.keys[i], "Content-Length") {
 			hasCL = true
-			if noBody {
+			if noBody || !keepCL {
 				continue
 			}
 		} else if headerIs(h.keys[i], "Transfer-Encoding") {
@@ -1616,7 +1620,7 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders) (out []byte, h
 	for i := 0; i < len(h.extra); i++ {
 		if headerIs(h.extra[i].key, "Content-Length") {
 			hasCL = true
-			if noBody {
+			if noBody || !keepCL {
 				continue
 			}
 		} else if headerIs(h.extra[i].key, "Transfer-Encoding") {
@@ -1748,8 +1752,8 @@ func (r *wingResponse) build() []byte {
 
 // buildHeadersOnly builds HTTP headers without body (for sendfile responses).
 func (r *wingResponse) buildHeadersOnly() []byte {
-	b, hasCL := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers)
-	if !hasCL && !statusHasNoBody(r.status) {
+	b, _ := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers, false)
+	if !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = strconv.AppendInt(b, r.fileSize, 10)
 		b = append(b, "\r\n"...)

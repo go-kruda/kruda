@@ -153,7 +153,8 @@ func (p Preset) applyRoute(rc *routeConfig) {
 }
 
 func (f *Preset) defaults() {
-	if f.Dispatch == 0 {
+	// A static response runs no handler, so there is nothing to hand off.
+	if f.Dispatch == 0 || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
 }

@@ -92,6 +92,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   connection was read as the body. Those routes now stream the file instead.
   `app.Static` was not affected, because it already streams off the inline
   path.
+- Wing static presets (`StaticText`, `StaticJSON`, or `Static(...)` on any
+  preset) now always run inline and answer every request with the static
+  response. A static preset on `Arrow` or `Spear`, and an inline one whose
+  request body did not arrive with the headers (such as a body larger than
+  the 8 KB read buffer), went to the route's handler instead. With no handler
+  that panicked into a 500. An inline route that also had a handler ran the
+  handler and its middleware when the body arrived late; it now sends the
+  static response, as it does for every other request. A HEAD request gets
+  the headers only.
+- A Wing handler that calls `SetStaticResponse` after attaching a file sends
+  only the static response. A file attached with `SetFileStream` was written
+  after the static bytes on every dispatch mode, and one attached with
+  `SetSendFile` on inline routes, so the next request on the connection read
+  the file as its response.
+- Wing sends the real length of a buffered body or a file as
+  `Content-Length`, replacing a value the handler set. Before,
+  `Header().Set("Content-Length", "10")` followed by `Write([]byte("body"))`
+  sent `Content-Length: 10` with 4 bytes, and the client read the next
+  response as the rest of the body. A HEAD handler that sets
+  `Content-Length` and writes no body keeps its value. `Stream` routes keep
+  the handler's value, since Wing does not know a stream's length.
 - The fasthttp fast path now compares the whole HTTP method. It used to check
   only the length and first letter, so `PUSH` ran as `POST` and `PURGE` as
   `PATCH`. Those methods now reach the router unchanged: a path with routes

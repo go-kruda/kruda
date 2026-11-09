@@ -485,6 +485,7 @@ func TestWingResponseHeaderNamesIgnoreCase(t *testing.T) {
 	t.Run("content-length", func(t *testing.T) {
 		raw := wingPipeline(t, addr, "GET /length HTTP/1.1\r\nHost: test\r\n\r\n"+nextReq)
 		first, _, _ := strings.Cut(strings.ToLower(raw), "\r\n\r\n")
+		first += "\r\n"
 		if n := strings.Count(first, "content-length:"); n != 1 || !strings.Contains(first, "content-length: 4\r\n") {
 			t.Errorf("want one Content-Length of 4:\n%s", raw)
 		}
@@ -727,5 +728,140 @@ func TestWingHeadDropsFileBody(t *testing.T) {
 	case <-file.closed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("HEAD response did not close its file body")
+	}
+}
+
+// TestWingStaticRouteAcceptsRequestBody covers static presets on every
+// dispatch mode, with and without a body that arrives after the headers.
+func TestWingStaticRouteAcceptsRequestBody(t *testing.T) {
+	static := transport.GetStaticResponseString(200, "text/plain", "staticbody")
+	handler := func(c *Ctx) error { return c.Text("handler") }
+	app := New(Wing())
+	app.Get("/next", func(c *Ctx) error { return c.Text("next") })
+	app.All("/inline", nil, StaticText(200, "text/plain", "staticbody"))
+	app.All("/pool", nil, Arrow.With(Static(static)))
+	app.All("/spawn", nil, Preset{Dispatch: Spawn}.With(Static(static)))
+	app.All("/takeover", nil, Spear.With(Static(static)))
+	app.All("/with-handler", handler, StaticText(200, "text/plain", "staticbody"))
+	addr, stop := startWingApp(t, app)
+	defer stop()
+
+	big := strings.Repeat("a", 64<<10)
+	for _, p := range []string{"/inline", "/pool", "/spawn", "/takeover", "/with-handler"} {
+		bare := " " + p + " HTTP/1.1\r\nHost: test\r\n\r\n"
+		withBody := " " + p + " HTTP/1.1\r\nHost: test\r\nContent-Length: " + strconv.Itoa(len(big)) + "\r\n\r\n" + big
+		t.Run("GET "+p, func(t *testing.T) { fileThenNext(t, addr, "GET"+bare, "GET", "10", "staticbody") })
+		t.Run("POST body "+p, func(t *testing.T) { fileThenNext(t, addr, "POST"+withBody, "POST", "10", "staticbody") })
+		t.Run("HEAD body "+p, func(t *testing.T) { fileThenNext(t, addr, "HEAD"+withBody, "HEAD", "10", "") })
+	}
+}
+
+func TestWingStaticResponseReplacesFileBody(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(path, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	static := transport.GetStaticResponseString(200, "text/plain", "static")
+	h := func(c *Ctx) error {
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fd, err := syscall.Dup(int(f.Fd()))
+		if err != nil {
+			return err
+		}
+		w := c.ResponseWriter()
+		w.(transport.FileSender).SetSendFile(int32(fd), 4)
+		w.(transport.StaticResponder).SetStaticResponse(static)
+		return nil
+	}
+	stream := func(c *Ctx) error {
+		w := c.ResponseWriter()
+		w.(transport.FileStreamer).SetFileStream(io.NopCloser(strings.NewReader("file")), 4)
+		w.(transport.StaticResponder).SetStaticResponse(static)
+		return nil
+	}
+	app := New(Wing())
+	app.Get("/next", func(c *Ctx) error { return c.Text("next") })
+	var paths []string
+	for _, d := range []struct {
+		name string
+		opts []RouteOption
+	}{
+		{"inline", nil},
+		{"pool", []RouteOption{Arrow}},
+		{"spawn", []RouteOption{Preset{Dispatch: Spawn}}},
+		{"takeover", []RouteOption{Spear}},
+	} {
+		app.All("/sendfile-"+d.name, h, d.opts...)
+		app.All("/stream-"+d.name, stream, d.opts...)
+		paths = append(paths, "/sendfile-"+d.name, "/stream-"+d.name)
+	}
+	addr, stop := startWingApp(t, app)
+	defer stop()
+
+	for _, p := range paths {
+		t.Run("GET "+p, func(t *testing.T) {
+			fileThenNext(t, addr, "GET "+p+" HTTP/1.1\r\nHost: test\r\n\r\n", "GET", "6", "static")
+		})
+		t.Run("HEAD "+p, func(t *testing.T) {
+			fileThenNext(t, addr, "HEAD "+p+" HTTP/1.1\r\nHost: test\r\n\r\n", "HEAD", "6", "")
+		})
+	}
+}
+
+func TestWingSendsRealLengthOverHandlerContentLength(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(path, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(Wing())
+	app.Get("/next", func(c *Ctx) error { return c.Text("next") })
+	raw := func(c *Ctx) error {
+		w := c.ResponseWriter()
+		w.Header().Set("Content-Length", "10")
+		w.WriteHeader(200)
+		_, err := w.Write([]byte("body"))
+		return err
+	}
+	app.All("/raw", raw)
+	app.All("/raw-pool", raw, Arrow)
+	app.Head("/head-only", func(c *Ctx) error {
+		w := c.ResponseWriter()
+		w.Header().Set("Content-Length", "1234")
+		w.WriteHeader(200)
+		return nil
+	})
+	app.Get("/sendfile", func(c *Ctx) error {
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fd, err := syscall.Dup(int(f.Fd()))
+		if err != nil {
+			return err
+		}
+		w := c.ResponseWriter()
+		w.Header().Set("Content-Length", "99")
+		w.(transport.FileSender).SetSendFile(int32(fd), 4)
+		w.WriteHeader(200)
+		return nil
+	})
+	addr, stop := startWingApp(t, app)
+	defer stop()
+
+	for _, c := range []struct{ req, method, length, body string }{
+		{"GET /raw", "GET", "4", "body"},
+		{"GET /raw-pool", "GET", "4", "body"},
+		{"HEAD /raw", "HEAD", "4", ""},
+		{"HEAD /head-only", "HEAD", "1234", ""},
+		{"GET /sendfile", "GET", "4", "file"},
+	} {
+		t.Run(c.req, func(t *testing.T) {
+			fileThenNext(t, addr, c.req+" HTTP/1.1\r\nHost: test\r\n\r\n", c.method, c.length, c.body)
+		})
 	}
 }

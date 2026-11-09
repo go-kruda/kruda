@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Wing `Shutdown` called right after the server became ready could return
+  before the workers had started, while their listening sockets were still
+  open. It now waits for every worker. The bug dates from v1.2.0.
 - Preserve configured JSON encoding on cache misses and hits, including fasthttp, and avoid double serialization.
 - Inherit direct transport proxy settings while preserving explicit application overrides; retain direct custom-request peer identities without trusting their forwarding headers.
 - Isolate nested session containers between requests and copy only visible slice elements.

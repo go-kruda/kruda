@@ -76,14 +76,14 @@ BenchmarkKruda_StaticGET-8    2853681    427.5 ns/op    1320 B/op    20 allocs/o
 Compare supported patched toolchains using the same benchmark configuration:
 
 ```bash
-# Run with Go 1.26.9
-go1.26.9 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go1269.txt
+# Run with Go 1.26.10
+go1.26.10 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go12610.txt
 
-# Run with Go 1.27.2
-go1.27.2 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go1272.txt
+# Run with Go 1.27.3
+go1.27.3 test -bench=BenchmarkKruda -benchmem -count=10 -tags kruda_stdjson ./... > go1273.txt
 
 # Compare (requires benchstat: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260813145340-fd4a688df892)
-benchstat go1269.txt go1272.txt
+benchstat go12610.txt go1273.txt
 ```
 
 These microbenchmarks measure execution time and allocations; use the reproducible HTTP harness to measure P99 latency.

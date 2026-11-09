@@ -41,7 +41,7 @@ importing application. Make sure your `go.mod` can satisfy:
 
 | Dependency | Minimum |
 |---|---|
-| Go | 1.26.9 |
+| Go | 1.26.10 |
 | `go.opentelemetry.io/otel` (+ `sdk`, `metric`, `trace`) | v1.45.0 |
 | `go.opentelemetry.io/otel/log` (+ `sdk/log`, log exporters) | v0.21.0 |
 | `go.opentelemetry.io/contrib/*` (otelhttp, autoexport, bridges) | v0.70.0 |

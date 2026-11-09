@@ -3,6 +3,21 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Security
+
+- Updated `github.com/andybalholm/brotli` to v1.2.8 and
+  `github.com/klauspost/compress` to v1.20.3 in every module, clearing
+  GO-2026-6888 (excessive memory allocation when decompressing crafted brotli
+  streams) and GO-2026-6865 (a panic on two-block frames). govulncheck reports
+  both as reachable from Kruda through fasthttp's dependencies.
+- Raised the minimum Go version to **1.26.10** on the Go 1.26 release line and
+  **1.27.3** on the Go 1.27 release line, which fix GO-2026-6809 (crypto/x509
+  trusting compromised intermediate certificates). The new floor applies to
+  modules, templates, examples, benchmarks, documentation, CI, and
+  `kruda validate`.
+
 ## [1.8.1] — 2026-10-12
 
 ### Security

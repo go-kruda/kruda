@@ -131,6 +131,8 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 		}
 		t.workers[i] = w
 	}
+	// Add before close(t.ready): a Shutdown that sees ready must not Wait on a zero counter.
+	t.wg.Add(len(t.workers))
 	close(t.ready)
 	// Startup banner: log the resolved connection cap once, at actual serve
 	// time (not at construction — see newWingTransport). Serve() routes through
@@ -146,7 +148,6 @@ func (t *Transport) ListenAndServe(addr string, handler transport.Handler) error
 		lg.Info("kruda/wing: connection cap", "max", t.config.MaxConns)
 	}
 	for _, w := range t.workers {
-		t.wg.Add(1)
 		go func(w *worker) {
 			defer t.wg.Done()
 			w.run(&t.shutdown)

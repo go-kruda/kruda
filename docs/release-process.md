@@ -16,8 +16,8 @@ Every release must go through the same guardrail:
 3. Wait for the PR test and benchmark checks to pass.
 4. Merge the PR.
 5. Wait for `main` to finish green `Tests` and `Benchmark` runs for the merge commit.
-6. Tag that green `main` commit only when the change justifies a new version.
-   Push the core tag plus a prefixed tag for each changed nested module.
+6. Tag that green `main` commit only when the change justifies a new version,
+   with `scripts/tag-release.sh` (see [Tagging](#tagging)).
 
 The release workflow refuses to publish if the tag is not on `origin/main` or if no successful `Tests` and `Benchmark` workflow runs exist for the tagged commit.
 
@@ -58,26 +58,27 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
 
 ## Tagging
 
+Tag with `scripts/tag-release.sh`, never by hand:
+
 ```bash
-# after the release PR is merged and main is green for Tests + Benchmark
-git fetch origin main --tags
-git switch main
-git pull --ff-only origin main
-
-export CORE_VERSION=vX.Y.Z
-# export WS_VERSION=vA.B.C # only when contrib/ws changed
-
-git tag "$CORE_VERSION" -m "Release $CORE_VERSION"
-TAGS=("$CORE_VERSION")
-
-if [[ -n "${WS_VERSION:-}" ]]; then
-  WS_TAG="contrib/ws/$WS_VERSION"
-  git tag "$WS_TAG" -m "contrib/ws $WS_VERSION"
-  TAGS+=("$WS_TAG")
-fi
-
-git push origin "${TAGS[@]}"
+# after the release PR is merged
+scripts/tag-release.sh vX.Y.Z          # dry run: checks, then prints the tags
+scripts/tag-release.sh vX.Y.Z --push   # creates, pushes, and verifies them
 ```
+
+The script tags `origin/main` and refuses to start until `Tests` and
+`Benchmark` have succeeded on `main` for that commit. It also refuses when the
+version is not newer than the last core tag or `CHANGELOG.md` has no section
+for it. Each nested module that changed since its last tag gets a patch bump;
+pass `--set contrib/ws=vA.B.C` for any other version.
+
+With `--push` it pushes the nested-module tags first and the core tag in a
+push of its own. GitHub sends no push event when more than three tags arrive
+in one push, so a single batch push silently skips `release.yml`. It then
+waits for `release.yml` to succeed, checks that `github-actions[bot]` created
+the GitHub release, and checks that proxy.golang.org serves every new tag at
+the tagged commit. If `release.yml` does not run, find out why. Do not create
+the GitHub release by hand.
 
 The release workflow and GitHub release are triggered by the core `v*` tag.
 Prefixed nested-module tags make those module versions available to the Go
@@ -87,9 +88,12 @@ nested-module tags do not change that comparison range.
 
 ## Verification
 
-After pushing the tag, wait ~30s for the proxy, then verify the new version is fetchable in a fresh module:
+`scripts/tag-release.sh --push` already checks the proxy. To check what a user receives, build a fresh module against the new version:
 
 ```bash
+export CORE_VERSION=vX.Y.Z
+# export WS_VERSION=vA.B.C # only when contrib/ws was tagged
+
 VERIFY_DIR="$(mktemp -d)"
 cd "$VERIFY_DIR"
 export GOWORK=off
@@ -120,11 +124,11 @@ For a patch release:
 5. Open a PR and wait for test + benchmark checks
 6. Merge the PR
 7. Wait for `main` checks to pass on the merge commit
-8. Tag the green `main` commit and push the core tag plus tags for changed
-   nested modules as above
+8. Run `scripts/tag-release.sh vX.Y.Z --push`
 
 ## NEVER do this
 
+- Don't tag by hand, push more than three tags in one push, or create a GitHub release with `gh release create`. Use `scripts/tag-release.sh`.
 - Don't force-push tags. The Go module proxy caches sums permanently — a re-tag with different content = permanent breakage. Use a `retract` directive in `go.mod` and ship a new patch version instead.
 - Don't release with a `replace` directive in any committed `go.mod`. The proxy honors local replaces only during `go mod tidy` in the user's project, not when downloading the module — but a stray `replace` in your own `go.mod` is a bug magnet.
 - Don't tag from a branch that hasn't been merged to `main`. Tag SHAs that aren't on `main` are confusing for `go get @latest`.

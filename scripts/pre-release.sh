@@ -40,6 +40,10 @@ if [[ -n "$violations" ]]; then
 fi
 ok "no replace directives in released go.mod"
 
+section "release tagging script"
+scripts/test-tag-release.sh
+ok "tag-release.sh guards pass"
+
 section "contrib minimum core version"
 scripts/check-contrib-core-floor.sh
 ok "every contrib module selects the hardened core floor"

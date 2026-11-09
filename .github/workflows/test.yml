@@ -58,6 +58,11 @@ jobs:
         shell: bash
         run: scripts/check-contrib-core-floor.sh
 
+      - name: Test release tagging script
+        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.10'
+        shell: bash
+        run: scripts/test-tag-release.sh
+
       - name: Go vet
         run: go vet -tags kruda_stdjson ./...
 

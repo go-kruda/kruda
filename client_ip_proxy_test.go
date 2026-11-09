@@ -2,7 +2,6 @@ package kruda
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -112,7 +111,7 @@ func TestDirectHTTPProxyPolicy(t *testing.T) {
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, req)
 	if rec.Body.String() != "192.0.2.1" {
-		t.Fatal(fmt.Sprintf("IP=%q", rec.Body.String()))
+		t.Fatalf("IP=%q", rec.Body.String())
 	}
 }
 

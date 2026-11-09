@@ -107,7 +107,7 @@ The `listening` startup log line reports which engine a running binary got
 
 ## What Go version do I need?
 
-Kruda requires Go 1.26.9+ on the Go 1.26 release line or Go 1.27.2+ on the Go 1.27 release line. These versions include the standard-library security fixes in the current baseline.
+Kruda requires Go 1.26.10+ on the Go 1.26 release line or Go 1.27.3+ on the Go 1.27 release line. These versions include the standard-library security fixes in the current baseline.
 
 ## Is Kruda production-ready?
 

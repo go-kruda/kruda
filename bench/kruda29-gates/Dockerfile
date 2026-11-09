@@ -1,4 +1,4 @@
-ARG GO_IMAGE=golang:1.26.9-bookworm
+ARG GO_IMAGE=golang:1.26.10-bookworm
 FROM ${GO_IMAGE}
 
 WORKDIR /src

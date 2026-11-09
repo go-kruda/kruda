@@ -3,7 +3,21 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## [1.8.3] — 2026-11-10
+
+### Upgrading
+
+Most changes below are security fixes, so this release carries several behaviour
+changes at once. Check these before upgrading:
+
+| Grep for | If you do nothing | Do this |
+| --- | --- | --- |
+| `WithTrustProxy(true)` | Forwarded headers are ignored and `c.IP()` returns the proxy's address, so rate limiting puts every client in one bucket | Add `WithTrustedProxies("<proxy IP>", ...)` |
+| `KRUDA_ENV=development` used for `/debug/pprof/` | Dev error pages stay on, but the pprof routes are not registered | Pass `WithDevMode(true)` where you want them |
+| `contrib/cache` helpers | The handler runs on every request, including cache hits | Call `cache.Replay` after authorization to skip work on a hit |
+| A custom `session.Store` | Requests with a loaded session fail before the handler | Implement the documented atomic operations |
+| Wing `c.IP()` parsing | Nothing breaks; the value is `127.0.0.1` instead of `127.0.0.1:54869` | Remove any port-stripping code |
+| Static routes serving many large files at once | Requests beyond 1024 open files per route get HTTP 503 | Raise it with `WithMaxOpenFiles` |
 
 ### Security
 

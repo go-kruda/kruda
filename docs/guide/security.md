@@ -64,6 +64,8 @@ GET /a/b/../c             -> normalized to /a/c, routed normally
 
 Enable via `WithPathTraversal()` or `WithSecurity()`. The `Static()` file server has its own built-in traversal check independent of this setting.
 
+`Static()` and `StaticFS()` stream fallback file responses on the built-in transports instead of allocating the full file body. Wing keeps its sendfile path where supported. Deferred files remain open until delivery finishes or the connection closes. Custom transports and response-writer middleware control their own buffering.
+
 ## Header Injection Prevention
 
 **Source:** `context.go` -- `sanitizeHeaderValue()`, `isValidHeaderKey()`
@@ -102,7 +104,8 @@ Body and header limits are enforced on all transports, including Wing:
 - Bodies exceeding `BodyLimit` return **HTTP 413** before the handler runs.
 - Headers exceeding `HeaderLimit` return **HTTP 431**.
 - Chunked transfer-encoded bodies are rejected with **HTTP 501** on Wing (Wing does not dechunk; use a proxy).
-- When `TrustProxy` is enabled, `X-Forwarded-For` and `X-Real-IP` are used for the client IP on all transports.
+- `WithTrustProxy(true)` requires an exact-IP allowlist via `WithTrustedProxies`. An empty list trusts no peer. The limiter uses the same parsing rules with its own `TrustedProxies` configuration. XFF is scanned from the nearest hop; malformed or repeated forwarding fields fall back to the socket peer. Proxies must append the actual sender address or overwrite incoming headers.
+- Migration: applications previously using only `WithTrustProxy(true)` must add their proxy IPs with `WithTrustedProxies`. Direct transport users must also set `TrustedProxies` in the transport config.
 
 Timeouts are enforced at the transport level and apply during body accumulation as well as idle connections.
 
@@ -466,7 +469,11 @@ In development mode (`WithDevMode(true)` or `KRUDA_ENV=development`):
 - Rich error pages are rendered with source context
 - Environment variables are filtered (no `SECRET`, `PASSWORD`, `TOKEN`, `KEY`, `CREDENTIAL`, `AUTH`)
 
-Dev mode defaults to `false` -- must be explicitly enabled.
+Dev mode defaults to `false`. `KRUDA_ENV=development` does not register pprof
+routes. Explicit `WithDevMode(true)` registers `/debug/pprof/*` on the
+application port; these endpoints require net/http and can expose process
+arguments and heap contents. Restrict them to trusted local access. `Listen`
+and `Serve` log a warning when development mode is enabled.
 
 ## Production Checklist
 
@@ -495,3 +502,14 @@ app.Use(middleware.CORS(middleware.CORSConfig{
     MaxAge:           86400,
 }))
 ```
+
+When `WithTransport` receives a built-in transport, `Ctx.IP` inherits that
+transport's proxy settings. Explicit `WithTrustProxy`, `WithTrustedProxies`, and
+a valid trust-proxy environment setting override the corresponding inherited
+setting regardless of option order. Custom transports can expose the same
+defaults through `transport.ProxyConfigProvider`.
+
+A custom request without `PeerAddr()` must return its socket peer from
+`RemoteAddr()`. Kruda canonicalizes that address and ignores forwarding headers
+for that request. Implement both `PeerAddr()` and `ForwardedHeaders()` to opt
+into trusted forwarding resolution.

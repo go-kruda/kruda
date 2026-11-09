@@ -20,7 +20,7 @@ configuration — you keep correctness, you are just not running Wing.
 | TLS / HTTPS | via net/http | `WithTLS` auto-falls back — see [Production TLS](/guide/transport#production-tls-terminate-in-front-of-wing) |
 | HTTP/2 | via net/http | Negotiated by net/http under TLS |
 | HTTP/3 | ❌ | Cancelled from the roadmap (v1.5.0) |
-| Proxy client IPs | ✅ | `X-Forwarded-For` / `X-Real-IP` honored only under `WithTrustProxy(true)` |
+| Proxy client IPs | ✅ | `X-Forwarded-For` / `X-Real-IP` require `WithTrustProxy(true)` and an exact peer match in `WithTrustedProxies` |
 | Accept-side DoS limits | ✅ | Connection cap, per-IP cap, accept-rate bucket (v1.4.0) |
 
 ## Deployment guidance
@@ -31,3 +31,19 @@ configuration — you keep correctness, you are just not running Wing.
   automatically.
 - Anything this table calls unsupported fails **loudly** (501/413/431), never
   silently.
+
+Static routes admit at most 1024 open files per route by default. Set
+`WithMaxOpenFiles(n)` on `Static` or `StaticFS` to change this limit; excess
+requests receive 503 before the filesystem is opened. Admission is retained
+until the file's `Close` returns (a panicking Close retains its admission), including empty files, canceled reads, and
+slow closes. Custom files whose `Read` never returns cannot be forcibly stopped;
+shutdown does not wait for them, and they retain their admission until cleanup
+can complete. Deferred body reads and closes run outside the Wing event loop and read
+chunks stay bounded to 32 KiB. Keep write timeouts enabled to expire stalled
+sources and clients.
+
+The admission limit applies to built-in static routes, including sendfile delivery.
+Handlers using `transport.FileStreamer` directly manage their own admission.
+Filesystem operations performed before body transfer (Open, Stat, directory
+handling, and error cleanup) follow the route's handler dispatch and recovery
+policy; use Pool or Spawn for filesystems that can block in those operations.

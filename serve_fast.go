@@ -5,6 +5,7 @@ package kruda
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"unsafe"
 
@@ -28,33 +29,21 @@ var (
 // avoiding unsafe.String allocation on every request. Falls back to
 // unsafe.String only for custom/non-standard methods.
 func internMethod(b []byte) string {
-	switch len(b) {
-	case 3:
-		if b[0] == 'G' {
-			return methodStringGET
-		}
-		if b[0] == 'P' {
-			return methodStringPUT
-		}
-	case 4:
-		if b[0] == 'P' {
-			return methodStringPOST
-		}
-		if b[0] == 'H' {
-			return methodStringHEAD
-		}
-	case 5:
-		if b[0] == 'P' {
-			return methodStringPATCH
-		}
-	case 6:
-		if b[0] == 'D' {
-			return methodStringDELETE
-		}
-	case 7:
-		if b[0] == 'O' {
-			return methodStringOPTIONS
-		}
+	switch string(b) {
+	case "GET":
+		return methodStringGET
+	case "PUT":
+		return methodStringPUT
+	case "POST":
+		return methodStringPOST
+	case "HEAD":
+		return methodStringHEAD
+	case "PATCH":
+		return methodStringPATCH
+	case "DELETE":
+		return methodStringDELETE
+	case "OPTIONS":
+		return methodStringOPTIONS
 	}
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
@@ -72,6 +61,9 @@ func (app *App) ServeFast(ctx *fasthttp.RequestCtx) {
 	// Only reset fields handlers actually read/write.
 	// Cold fields use dirty flags — only cleaned when actually touched.
 	c.app = app
+	c.request = &c.embeddedFHReq
+	c.writer = &c.embeddedFHResp
+	c.ctx = nil
 	c.method = internMethod(ctx.Method())
 	c.status = 200
 	c.responded = false
@@ -224,6 +216,9 @@ cleanup:
 	// Clear transport references — they're per-request from fasthttp.
 	c.embeddedFHResp.ctx = nil
 	c.embeddedFHReq.ctx = nil
+	c.request = nil
+	c.writer = nil
+	c.ctx = nil
 	c.handlers = nil
 
 	// Dirty-flag cleanup: only clear fields that were actually touched.
@@ -275,10 +270,30 @@ func (r *fhReqAdapter) Path() string                 { return string(r.ctx.Path(
 func (r *fhReqAdapter) Header(key string) string     { return string(r.ctx.Request.Header.Peek(key)) }
 func (r *fhReqAdapter) Body() ([]byte, error)        { return r.ctx.PostBody(), nil }
 func (r *fhReqAdapter) QueryParam(key string) string { return string(r.ctx.QueryArgs().Peek(key)) }
-func (r *fhReqAdapter) RemoteAddr() string           { return r.ctx.RemoteAddr().String() }
-func (r *fhReqAdapter) Cookie(name string) string    { return string(r.ctx.Request.Header.Cookie(name)) }
-func (r *fhReqAdapter) RawRequest() any              { return r.ctx }
-func (r *fhReqAdapter) Context() context.Context     { return r.ctx }
+func (r *fhReqAdapter) PeerAddr() string             { return r.ctx.RemoteAddr().String() }
+
+func (r *fhReqAdapter) ForwardedHeaders() (string, int, string, int) {
+	xff := r.ctx.Request.Header.PeekAll("X-Forwarded-For")
+	n := len(xff)
+	var a string
+	if n > 0 {
+		a = string(xff[0])
+	}
+	xri := r.ctx.Request.Header.PeekAll("X-Real-IP")
+	m := len(xri)
+	var b string
+	if m > 0 {
+		b = string(xri[0])
+	}
+	return a, n, b, m
+}
+
+func (r *fhReqAdapter) RemoteAddr() string        { return r.ctx.RemoteAddr().String() }
+func (r *fhReqAdapter) Cookie(name string) string { return string(r.ctx.Request.Header.Cookie(name)) }
+func (r *fhReqAdapter) RawQuery() string          { return string(r.ctx.URI().QueryString()) }
+
+func (r *fhReqAdapter) RawRequest() any          { return r.ctx }
+func (r *fhReqAdapter) Context() context.Context { return r.ctx }
 
 func (r *fhReqAdapter) MultipartForm(maxBytes int64) (*multipart.Form, error) {
 	if maxBytes > 0 {
@@ -287,6 +302,14 @@ func (r *fhReqAdapter) MultipartForm(maxBytes int64) (*multipart.Form, error) {
 		}
 	}
 	return r.ctx.Request.MultipartForm()
+}
+
+func (w *fhRespAdapter) SetFileStream(file io.ReadCloser, size int64) {
+	bodySize := int(size)
+	if int64(bodySize) != size {
+		bodySize = -1
+	}
+	w.ctx.SetBodyStream(file, bodySize)
 }
 
 type fhRespAdapter struct {

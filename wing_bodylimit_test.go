@@ -498,9 +498,10 @@ func TestWing_TrustProxy(t *testing.T) {
 	}
 	makeServer := func(trust bool) (string, func()) {
 		cfg := WingConfig{
-			Workers:     1,
-			ReadBufSize: 8192,
-			TrustProxy:  trust,
+			Workers:        1,
+			ReadBufSize:    8192,
+			TrustProxy:     trust,
+			TrustedProxies: []string{"127.0.0.1"},
 		}
 		addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 			ip := r.RemoteAddr()
@@ -520,8 +521,8 @@ func TestWing_TrustProxy(t *testing.T) {
 		defer conn.Close()
 		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 1.2.3.4, 5.6.7.8\r\n\r\n")
 		body := readHTTPBody(t, conn)
-		if body != "1.2.3.4" {
-			t.Fatalf("expected 1.2.3.4, got %q", body)
+		if body != "5.6.7.8" {
+			t.Fatalf("expected nearest untrusted hop 5.6.7.8, got %q", body)
 		}
 	})
 
@@ -582,7 +583,7 @@ func TestWing_TrustProxy_ManyHeaders(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Wing integration test in short mode")
 	}
-	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true, TrustedProxies: []string{"127.0.0.1"}}
 	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte(r.RemoteAddr()))
@@ -725,7 +726,7 @@ func TestWing_TrustProxy_EmptyFirstHeaderWins(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping Wing integration test in short mode")
 	}
-	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true}
+	cfg := WingConfig{Workers: 1, ReadBufSize: 8192, TrustProxy: true, TrustedProxies: []string{"127.0.0.1"}}
 	addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte(r.RemoteAddr()))
@@ -741,7 +742,7 @@ func TestWing_TrustProxy_EmptyFirstHeaderWins(t *testing.T) {
 	if body == "1.2.3.4" {
 		t.Fatalf("empty first XFF must win; second value must not override, got %q", body)
 	}
-	if !strings.HasPrefix(body, "127.0.0.1:") && !strings.HasPrefix(body, "[::1]:") {
+	if body != "127.0.0.1" && body != "::1" {
 		t.Fatalf("expected loopback fallback, got %q", body)
 	}
 }

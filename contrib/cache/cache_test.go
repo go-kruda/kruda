@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -33,10 +34,17 @@ func (r *mockRequest) QueryParam(key string) string {
 	}
 	return r.query[key]
 }
-func (r *mockRequest) RemoteAddr() string          { return "127.0.0.1" }
-func (r *mockRequest) RawRequest() any             { return nil }
-func (r *mockRequest) Context() context.Context    { return context.Background() }
-func (r *mockRequest) Cookie(name string) string   { return "" }
+func (r *mockRequest) RemoteAddr() string        { return "127.0.0.1" }
+func (r *mockRequest) RawRequest() any           { return nil }
+func (r *mockRequest) Context() context.Context  { return context.Background() }
+func (r *mockRequest) Cookie(name string) string { return "" }
+func (r *mockRequest) RawQuery() string {
+	q := url.Values{}
+	for k, v := range r.query {
+		q.Set(k, v)
+	}
+	return q.Encode()
+}
 func (r *mockRequest) AllQuery() map[string]string { return r.query }
 
 func (r *mockRequest) MultipartForm(int64) (*multipart.Form, error) {

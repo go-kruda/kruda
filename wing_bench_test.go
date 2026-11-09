@@ -166,6 +166,29 @@ func BenchmarkCPUHandlerInline(b *testing.B) {
 	}
 }
 
+// BenchmarkCPUHandlerGenericSecureHeaders covers the generic lane with a
+// populated header map, where every Set and Get compares header names.
+func BenchmarkCPUHandlerGenericSecureHeaders(b *testing.B) {
+	app := New(Wing(), WithSecureHeaders())
+	app.Get("/users/42", func(c *Ctx) error {
+		return c.SetHeader("X-Request-Id", "abc").SetHeader("Vary", "Origin").Text("Hello, World!")
+	})
+	app.Compile()
+	f := app.transport.(*Transport).config.Presets["GET /users/42"]
+
+	b.ReportAllocs()
+	for b.Loop() {
+		req, _, _ := parseHTTPRequestFast(rawGET, noLimits)
+		finalizeRequestPath(req, f)
+		resp := acquireResponse()
+		app.ServeKruda(resp, req)
+		_ = resp.buildZeroCopy()
+		resp.buf = nil
+		releaseResponse(resp)
+		releaseRequest(req)
+	}
+}
+
 func BenchmarkCPUHandlerPlaintextPreset(b *testing.B) {
 	app := New(Wing())
 	app.Get("/users/42", func(c *Ctx) error {

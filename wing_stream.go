@@ -33,6 +33,7 @@ type wingStreamWriter struct {
 	headers      wingHeaders
 	status       int
 	headersSent  bool
+	head         bool // HEAD: send the headers, never the body
 	writeTimeout time.Duration
 }
 
@@ -72,7 +73,10 @@ func (w *wingStreamWriter) flushHeaders() error {
 	if w.headersSent {
 		return nil
 	}
-	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers)
+	// The stream path never reuses the connection, and the stream length is
+	// the handler's to state.
+	w.headers.Set("Connection", "close")
+	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers, true)
 	hdr = append(hdr, "\r\n"...) // blank line terminates the header section
 	if w.writeTimeout > 0 {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
@@ -87,6 +91,9 @@ func (w *wingStreamWriter) flushHeaders() error {
 func (w *wingStreamWriter) Write(p []byte) (int, error) {
 	if err := w.flushHeaders(); err != nil {
 		return 0, err
+	}
+	if w.head || statusHasNoBody(w.status) {
+		return len(p), nil
 	}
 	if w.writeTimeout > 0 {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))

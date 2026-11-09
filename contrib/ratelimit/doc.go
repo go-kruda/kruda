@@ -29,7 +29,9 @@
 //
 // IPs are read from RemoteAddr by default. To honor X-Forwarded-For /
 // X-Real-IP, set TrustedProxies — only requests originating from a trusted
-// proxy IP are allowed to override the source IP. CIDR is not supported
+// proxy IP are allowed to override the source IP. Forwarded chains are read
+// from right to left, and malformed or repeated headers fall back to the peer.
+// CIDR is not supported
 // in v1; list each proxy IP individually.
 //
 // # Configuration

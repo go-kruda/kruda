@@ -30,7 +30,8 @@ type WingConfig struct {
 	IdleTimeout          time.Duration     // max time a keep-alive conn can be idle (0 = disabled)
 	BodyLimit            int               // max request body bytes (0 = disabled). Maps to a 413.
 	HeaderLimit          int               // max header bytes (0 = disabled). Maps to a 431.
-	TrustProxy           bool              // honor X-Forwarded-For / X-Real-IP
+	TrustedProxies       []string          // exact proxy IP allowlist; empty trusts no peer
+	TrustProxy           bool              // honor forwarding only from TrustedProxies
 	MaxInflightBodyBytes int               // per-worker cap on concurrently-accumulating body bytes (0 = derived)
 	MaxConns             int               // resolved absolute total cap (0 = unlimited)
 	MaxConnsPerIP        int               // concurrent connections per source IP (0 = off)
@@ -152,7 +153,8 @@ func (p Preset) applyRoute(rc *routeConfig) {
 }
 
 func (f *Preset) defaults() {
-	if f.Dispatch == 0 {
+	// A static response runs no handler, so there is nothing to hand off.
+	if f.Dispatch == 0 || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
 }

@@ -97,7 +97,7 @@ func TestRemoteAddr_TrustProxy_XForwardedFor(t *testing.T) {
 	r.RemoteAddr = "10.0.0.1:12345"
 	r.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
 
-	req := &netHTTPRequest{r: r, trustProxy: true}
+	req := &netHTTPRequest{r: r, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"10.0.0.1"})}
 	if got := req.RemoteAddr(); got != "1.2.3.4" {
 		t.Errorf("RemoteAddr() = %q, want 1.2.3.4 (first in chain)", got)
 	}
@@ -108,7 +108,7 @@ func TestRemoteAddr_TrustProxy_XForwardedFor_SingleIP(t *testing.T) {
 	r.RemoteAddr = "10.0.0.1:12345"
 	r.Header.Set("X-Forwarded-For", " 1.2.3.4 ")
 
-	req := &netHTTPRequest{r: r, trustProxy: true}
+	req := &netHTTPRequest{r: r, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"10.0.0.1"})}
 	if got := req.RemoteAddr(); got != "1.2.3.4" {
 		t.Errorf("RemoteAddr() = %q, want 1.2.3.4 (trimmed)", got)
 	}
@@ -119,7 +119,7 @@ func TestRemoteAddr_TrustProxy_XRealIP(t *testing.T) {
 	r.RemoteAddr = "10.0.0.1:12345"
 	r.Header.Set("X-Real-Ip", "5.6.7.8")
 
-	req := &netHTTPRequest{r: r, trustProxy: true}
+	req := &netHTTPRequest{r: r, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"10.0.0.1"})}
 	if got := req.RemoteAddr(); got != "5.6.7.8" {
 		t.Errorf("RemoteAddr() = %q, want 5.6.7.8", got)
 	}
@@ -129,7 +129,7 @@ func TestRemoteAddr_TrustProxy_NoHeaders(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "10.0.0.1:12345"
 
-	req := &netHTTPRequest{r: r, trustProxy: true}
+	req := &netHTTPRequest{r: r, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"10.0.0.1"})}
 	if got := req.RemoteAddr(); got != "10.0.0.1" {
 		t.Errorf("RemoteAddr() = %q, want 10.0.0.1 (fallback to RemoteAddr)", got)
 	}
@@ -733,7 +733,7 @@ func TestNetHTTPAdapter_TrustProxyTrue(t *testing.T) {
 		w.WriteHeader(200)
 	})
 
-	adapter := &netHTTPAdapter{handler: handler, trustProxy: true}
+	adapter := &netHTTPAdapter{handler: handler, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"10.0.0.1"})}
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Forwarded-For", "1.2.3.4")

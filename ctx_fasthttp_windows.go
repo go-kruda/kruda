@@ -26,3 +26,5 @@ func (c *Ctx) trySendBytesWithTypeBytesFastHTTP(_, _ []byte) bool   { return fal
 func (c *Ctx) trySendStaticWithTypeBytesFastHTTP(_, _ []byte) bool  { return false }
 func (c *Ctx) tryQueryFastHTTP(_ string) string                     { return "" }
 func (c *Ctx) tryBodyBytesFastHTTP() ([]byte, bool)                 { return nil, false }
+
+func (c *Ctx) tryAddHeaderFastHTTP(_, _ string) bool { return false }

@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 
 // Context keys for cache metadata stored in request locals.
 const (
+	cacheHitKey   = "_cache_hit"
 	cacheKeyKey   = "_cache_key"
 	cacheStoreKey = "_cache_store"
 	cacheTTLKey   = "_cache_ttl"
@@ -18,8 +18,8 @@ const (
 
 // New creates cache middleware with the given configuration.
 //
-// On cache HIT: sets X-Cache: HIT and Age headers, replays the cached response,
-// and does NOT call c.Next().
+// On cache HIT: calls the middleware and handler so authorization still runs.
+// CacheJSON or CacheBytes then replays the cached response.
 //
 // On cache MISS: sets X-Cache: MISS, stores caching metadata in the request
 // context, and calls c.Next(). Handlers should use CacheJSON or CacheBytes
@@ -54,18 +54,15 @@ func New(config ...Config) kruda.HandlerFunc {
 		}
 
 		key := cfg.KeyFunc(c)
+		if key == "" {
+			return c.Next()
+		}
 
 		// Check cache for a hit.
 		cached, err := cfg.Store.Get(key)
 		if err == nil && cached != nil {
-			// HIT -- replay cached response.
-			c.SetHeader("X-Cache", "HIT")
-			age := int(time.Since(cached.CachedAt).Seconds())
-			c.SetHeader("Age", strconv.Itoa(age))
-			for k, v := range cached.Headers {
-				c.SetHeader(k, v)
-			}
-			return c.Status(cached.StatusCode).SendBytes(cached.Body)
+			c.Set(cacheHitKey, cached)
+			return c.Next()
 		}
 
 		// MISS -- store caching metadata in context for helper functions.
@@ -85,7 +82,17 @@ func New(config ...Config) kruda.HandlerFunc {
 //
 // This is the recommended way to send cacheable JSON responses.
 func CacheJSON(c *kruda.Ctx, data any) error {
-	body, err := json.Marshal(data)
+	if hit, err := Replay(c); hit {
+		return err
+	}
+	if _, cacheable := c.Get(cacheKeyKey).(string); !cacheable {
+		return c.JSON(data)
+	}
+	encoder, ok := any(c).(interface{ EncodeJSON(any) ([]byte, error) })
+	if !ok {
+		return c.JSON(data)
+	}
+	body, err := encoder.EncodeJSON(data)
 	if err != nil {
 		return err
 	}
@@ -93,13 +100,16 @@ func CacheJSON(c *kruda.Ctx, data any) error {
 	// Store in cache if middleware is active.
 	storeCachedResponse(c, "application/json; charset=utf-8", body)
 
-	return c.JSON(data)
+	return c.SetContentType("application/json; charset=utf-8").SendBytes(body)
 }
 
 // CacheBytes stores raw bytes in the cache (if the cache middleware is active
 // and the status code is cacheable), then sends the bytes to the client with
 // the given content type.
 func CacheBytes(c *kruda.Ctx, contentType string, body []byte) error {
+	if hit, err := Replay(c); hit {
+		return err
+	}
 	// Store in cache if middleware is active.
 	storeCachedResponse(c, contentType, body)
 
@@ -162,4 +172,27 @@ func isAllowedStatus(status int, codes []int) bool {
 		}
 	}
 	return false
+}
+
+// Replay sends a cached response, if available, after the caller authorizes the request.
+// Call it before expensive work, and return when hit is true. It only replays a
+// response whose status matches the status selected by the current handler.
+func Replay(c *kruda.Ctx) (bool, error) {
+	cached, ok := c.Get(cacheHitKey).(*CachedResponse)
+	if !ok {
+		return false, nil
+	}
+	status := c.StatusCode()
+	if status == 0 {
+		status = 200
+	}
+	if status != cached.StatusCode {
+		return false, nil
+	}
+	c.SetHeader("X-Cache", "HIT")
+	c.SetHeader("Age", strconv.Itoa(int(time.Since(cached.CachedAt).Seconds())))
+	for k, v := range cached.Headers {
+		c.SetHeader(k, v)
+	}
+	return true, c.Status(cached.StatusCode).SendBytes(cached.Body)
 }

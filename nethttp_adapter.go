@@ -77,6 +77,8 @@ func (r *fastNetHTTPRequest) Body() ([]byte, error) {
 	return buf, nil
 }
 
+func (r *fastNetHTTPRequest) RawQuery() string { return r.r.URL.RawQuery }
+
 func (r *fastNetHTTPRequest) QueryParam(key string) string {
 	// Fast path: if no query string, return empty
 	if r.r.URL.RawQuery == "" {
@@ -87,6 +89,20 @@ func (r *fastNetHTTPRequest) QueryParam(key string) string {
 		r.queryDone = true
 	}
 	return r.queryVals.Get(key)
+}
+
+func (r *fastNetHTTPRequest) PeerAddr() string { return r.r.RemoteAddr }
+
+func (r *fastNetHTTPRequest) ForwardedHeaders() (string, int, string, int) {
+	xff, xri := r.r.Header.Values("X-Forwarded-For"), r.r.Header.Values("X-Real-IP")
+	var a, b string
+	if len(xff) > 0 {
+		a = xff[0]
+	}
+	if len(xri) > 0 {
+		b = xri[0]
+	}
+	return a, len(xff), b, len(xri)
 }
 
 func (r *fastNetHTTPRequest) RemoteAddr() string {

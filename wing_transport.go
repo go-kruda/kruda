@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -237,26 +238,28 @@ type parserLimits struct {
 }
 
 type conn struct {
-	fd             int32
-	peerIP         netip.Addr // peer IP captured at accept (zero value if unknown)
-	readBuf        []byte
-	readN          int
-	sendBuf        []byte
-	sendN          int
-	keepAlive      bool
-	admitted       bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
-	pending        int    // in-flight handler goroutines
-	takenOver      bool   // fd detached to a Takeover goroutine and owned by its *os.File
-	closePending   bool   // close after async ownership returns; prevents fd reuse
-	remoteAddr     string // lazy peer address cache, filled only if Request.RemoteAddr is used
-	lastActive     int64  // unix nano — updated on accept + each recv
-	readDeadline   int64  // unix nano — set when first byte arrives, cleared on full request
-	readSuppressed bool   // readiness arrived while pending; drain once ownership returns
-	readDrained    bool   // socket input exhausted during synchronous inline dispatch
-	ctx            context.Context
-	cancel         context.CancelFunc
-	sendFileFd     int32 // sendfile: source fd (0 = none)
-	sendFileSize   int64 // sendfile: remaining bytes
+	fd              int32
+	peerIP          netip.Addr // peer IP captured at accept (zero value if unknown)
+	readBuf         []byte
+	readN           int
+	sendBuf         []byte
+	sendN           int
+	keepAlive       bool
+	admitted        bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
+	pending         int    // in-flight handler goroutines
+	takenOver       bool   // fd detached to a Takeover goroutine and owned by its *os.File
+	closePending    bool   // close after async ownership returns; prevents fd reuse
+	remoteAddr      string // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive      int64  // unix nano — updated on accept + each recv
+	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
+	readSuppressed  bool   // readiness arrived while pending; drain once ownership returns
+	readDrained     bool   // socket input exhausted during synchronous inline dispatch
+	ctx             context.Context
+	cancel          context.CancelFunc
+	sendFileFd      int32 // sendfile: source fd (0 = none)
+	sendFileRelease func()
+	sendFileSize    int64 // sendfile: remaining bytes
+	fileStream      *fileStream
 	// Slow-path body accumulation (populated when a request body spans multiple recvs).
 	bodyNeed       int    // total Content-Length expected (0 = not accumulating)
 	headerSnapshot []byte // copy of header block for re-parse after body complete
@@ -275,9 +278,12 @@ var testSuppressedRecvHook func(fd int32)
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
 type doneMsg struct {
-	fd        int32
-	data      []byte
-	keepAlive bool
+	readStream *fileStream
+	readErr    error
+	stream     *fileStream
+	fd         int32
+	data       []byte
+	keepAlive  bool
 	// file is non-nil when a Takeover goroutine owned the fd through an
 	// *os.File on the runtime netpoller. The worker must finish conn
 	// bookkeeping first and then close through file (not SubmitClose), so
@@ -287,14 +293,18 @@ type doneMsg struct {
 }
 
 type worker struct {
-	id       int
-	listenFd int
-	eng      engine
-	handler  transport.Handler
-	config   WingConfig
-	limits   parserLimits
-	maxConns int
-	logger   *slog.Logger
+	fileReadOnce    sync.Once
+	fileReadMu      sync.Mutex
+	fileReadStopped bool
+	fileReadStop    chan struct{}
+	id              int
+	listenFd        int
+	eng             engine
+	handler         transport.Handler
+	config          WingConfig
+	limits          parserLimits
+	maxConns        int
+	logger          *slog.Logger
 	// connCount/rejectTotal/rejectIP/rejectRate point at the shared Transport
 	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
 	connCount    *int64
@@ -335,6 +345,7 @@ type worker struct {
 	maxInflightBody int   // per-worker budget (0 = unlimited)
 	inflightBody    int64 // current in-flight body bytes (atomic)
 	trustProxy      bool
+	proxyPolicy     transport.ProxyPolicy
 	sweepAt         int64 // next sweep unix nano
 	now             int64 // unix nano cached once per event batch
 	// dispatchWG tracks Spawn and Takeover goroutines so cleanup() can wait
@@ -394,7 +405,7 @@ func newWorkerPool(size int, h transport.Handler, done chan doneMsg, wake func()
 func (p *workerPool) loop(h transport.Handler) {
 	defer p.wg.Done()
 	for job := range p.jobs {
-		resp := acquireResponse()
+		resp := acquireResponseFor(job.req)
 		resp.responseMode = job.responseMode
 		func() {
 			defer func() {
@@ -406,11 +417,13 @@ func (p *workerPool) loop(h transport.Handler) {
 			h.ServeKruda(resp, job.req)
 		}()
 		data := resp.buildZeroCopy()
+		stream := resp.fileStream
+		resp.fileStream = nil
 		releaseResponse(resp)
 		releaseRequest(job.req)
 
-		if !job.directWrite {
-			p.done <- doneMsg{fd: job.fd, data: data, keepAlive: job.keepAlive}
+		if !job.directWrite || stream != nil {
+			p.done <- doneMsg{fd: job.fd, data: data, keepAlive: job.keepAlive, stream: stream}
 			p.wake()
 			continue
 		}
@@ -439,6 +452,12 @@ func (p *workerPool) loop(h transport.Handler) {
 }
 
 func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Preset) {
+	if f.StaticResponse != nil {
+		// The inline branch sends these itself; a request whose body arrives
+		// after the headers reaches here, and the route may have no handler.
+		resp.SetStaticResponse(f.StaticResponse)
+		return
+	}
 	if len(f.handlers) > 0 && (f.pathClean || (f.path == "" && !containsDotPercent(req.path))) {
 		if len(f.handlers) == 1 {
 			if h, ok := w.handler.(wingFastSingleHandler); ok && h.serveWingSingleHandler(resp, req, f.handlers[0]) {
@@ -501,7 +520,11 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		eng.Close()
 		return nil, err
 	}
-	if err := eng.Init(engineConfig{RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
+	waitMillis := 0
+	if cfg.ReadTimeout > 0 || cfg.WriteTimeout > 0 || cfg.IdleTimeout > 0 {
+		waitMillis = 1000
+	}
+	if err := eng.Init(engineConfig{WaitTimeoutMillis: waitMillis, RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
 		closeFd(wakeR)
 		if wakeW != wakeR {
 			closeFd(wakeW)
@@ -520,6 +543,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		lg = slog.Default()
 	}
 	w := &worker{
+		fileReadStop:    make(chan struct{}),
 		id:              id,
 		listenFd:        listenFd,
 		eng:             eng,
@@ -542,6 +566,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		idleTimeout:     int64(cfg.IdleTimeout),
 		maxInflightBody: cfg.MaxInflightBodyBytes,
 		trustProxy:      cfg.TrustProxy,
+		proxyPolicy:     transport.NewProxyPolicy(cfg.TrustedProxies),
 	}
 	if cfg.MaxConnsPerIP > 0 {
 		w.connsPerIP = make(map[netip.Addr]int, 64)
@@ -593,7 +618,6 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	w.eng.SubmitAccept(w.listenFd)
 	w.eng.Flush()
 
-	hasAsync := w.config.needsAsync()
 	hasTimeout := w.readTimeout > 0 || w.writeTimeout > 0 || w.idleTimeout > 0
 	w.hasTimeout = hasTimeout
 	// hasClock is true when any subsystem needs a fresh w.now per event batch.
@@ -605,7 +629,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	}
 
 	for !shutdown.Load() {
-		if hasAsync {
+		{
 		drain:
 			for {
 				select {
@@ -658,7 +682,7 @@ func (w *worker) sweepTimeouts(now int64) {
 			continue
 		}
 		// Write timeout: sendBuf stuck (partial send not draining).
-		if w.writeTimeout > 0 && len(c.sendBuf) > 0 && now-c.lastActive > w.writeTimeout {
+		if w.writeTimeout > 0 && (len(c.sendBuf) > 0 || c.fileStream != nil || c.sendFileFd > 0) && now-c.lastActive > w.writeTimeout {
 			w.closeConn(fd)
 		}
 	}
@@ -777,7 +801,7 @@ func (w *worker) handleRecv(ev event) {
 	if c == nil {
 		return
 	}
-	if c.pending > 0 {
+	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 {
 		c.readSuppressed = true
 		c.readDrained = false
 		if testSuppressedRecvHook != nil {
@@ -827,6 +851,10 @@ func (w *worker) handleRecv(ev event) {
 }
 
 func (w *worker) tryParse(c *conn) {
+	if c.fileStream != nil || c.sendFileFd > 0 {
+		w.directSend(c)
+		return
+	}
 	for c.readN > 0 {
 		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
@@ -839,7 +867,7 @@ func (w *worker) tryParse(c *conn) {
 					// EPOLLET will not notify again for bytes already in the socket.
 					if runtime.GOOS == "linux" && !c.readDrained && c.pending == 0 {
 						// Flush this batch before a refill can queue more responses.
-						if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 {
+						if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 || c.fileStream != nil {
 							w.directSend(c)
 							return
 						}
@@ -854,7 +882,7 @@ func (w *worker) tryParse(c *conn) {
 						} else if n == 0 {
 							// A read half-close must not discard responses already queued.
 							c.keepAlive = false
-							if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 {
+							if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 || c.fileStream != nil {
 								w.directSend(c)
 							} else {
 								w.closeConn(c.fd)
@@ -916,6 +944,7 @@ func (w *worker) tryParse(c *conn) {
 		req.ctx = c.ctx
 		req.remoteAddrRef = &c.remoteAddr
 		req.trustProxy = w.trustProxy
+		req.proxyPolicy = w.proxyPolicy
 		// Full request received — clear read deadline, update idle clock.
 		if w.hasTimeout {
 			c.readDeadline = 0
@@ -933,7 +962,7 @@ func (w *worker) tryParse(c *conn) {
 			// Don't consume — leave data in readBuf for re-parse after handleDone.
 			break
 		}
-		if f.Dispatch == Takeover && (c.sendN < len(c.sendBuf) || c.sendFileFd > 0) {
+		if f.Dispatch == Takeover && (c.sendN < len(c.sendBuf) || c.sendFileFd > 0 || c.fileStream != nil) {
 			// Keep the takeover request in readBuf until every earlier response is
 			// complete; detaching now would abandon the event loop's send state.
 			releaseRequest(req)
@@ -956,20 +985,24 @@ func (w *worker) tryParse(c *conn) {
 				c.sendBuf = append(c.sendBuf, f.StaticResponse...)
 				releaseRequest(req)
 			} else {
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				resp.sendFileEnabled = true
 				start := time.Now().UnixNano()
 				w.serveRoute(resp, req, f)
 				w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
-				if resp.fileFd > 0 {
+				if resp.fileFd > 0 || resp.fileStream != nil {
 					// Sendfile path: write headers, then sendfile for body.
 					hdr := resp.buildZeroCopy()
 					c.keepAlive = req.keepAlive
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
+					c.sendFileRelease = resp.sendFileRelease
+					resp.sendFileRelease = nil
 					c.sendFileSize = resp.fileSize
 					resp.fileFd = 0
+					c.fileStream = resp.fileStream
+					resp.fileStream = nil
 					releaseResponse(resp)
 					releaseRequest(req)
 					w.directSend(c)
@@ -1004,13 +1037,13 @@ func (w *worker) tryParse(c *conn) {
 				fd:           c.fd,
 				keepAlive:    req.keepAlive,
 				responseMode: f.ResponseMode,
-				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0,
+				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
 			}
 			select {
 			case w.pool.jobs <- job:
 			default:
 				// Pool saturated — run inline to avoid deadlock.
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1022,9 +1055,12 @@ func (w *worker) tryParse(c *conn) {
 					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
+				stream := resp.fileStream
+				resp.fileStream = nil
+				keepAlive := req.keepAlive
 				releaseResponse(resp)
 				releaseRequest(req)
-				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: req.keepAlive}
+				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: keepAlive, stream: stream}
 			}
 			// Send any buffered inline responses, then wait for pool completion.
 			if c.sendN < len(c.sendBuf) {
@@ -1036,11 +1072,11 @@ func (w *worker) tryParse(c *conn) {
 			// New goroutine per request.
 			c.keepAlive = req.keepAlive
 			c.pending++
-			directWrite := c.sendN >= len(c.sendBuf) && c.sendFileFd == 0
+			directWrite := c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil
 			w.dispatchWG.Add(1)
 			go func(req *wingRequest, fd int32, ka, directWrite bool, f Preset) {
 				defer w.dispatchWG.Done()
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1052,10 +1088,12 @@ func (w *worker) tryParse(c *conn) {
 					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
+				stream := resp.fileStream
+				resp.fileStream = nil
 				releaseResponse(resp)
 				releaseRequest(req)
-				if !directWrite {
-					w.doneCh <- doneMsg{fd: fd, data: data, keepAlive: ka}
+				if !directWrite || stream != nil {
+					w.doneCh <- doneMsg{fd: fd, data: data, keepAlive: ka, stream: stream}
 					w.wake()
 					return
 				}
@@ -1111,7 +1149,7 @@ func (w *worker) tryParse(c *conn) {
 				fd:           c.fd,
 				keepAlive:    req.keepAlive,
 				responseMode: f.ResponseMode,
-				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0,
+				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
 			}
 			if w.pool != nil {
 				select {
@@ -1121,7 +1159,7 @@ func (w *worker) tryParse(c *conn) {
 					w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
 				}
 			} else {
-				resp := acquireResponse()
+				resp := acquireResponseFor(req)
 				resp.responseMode = f.ResponseMode
 				func() {
 					defer func() {
@@ -1133,9 +1171,12 @@ func (w *worker) tryParse(c *conn) {
 					w.serveRoute(resp, req, f)
 				}()
 				data := resp.buildZeroCopy()
+				stream := resp.fileStream
+				resp.fileStream = nil
+				keepAlive := req.keepAlive
 				releaseResponse(resp)
 				releaseRequest(req)
-				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: req.keepAlive}
+				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: keepAlive, stream: stream}
 			}
 			return
 		}
@@ -1312,6 +1353,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 	req.ctx = c.ctx
 	req.remoteAddrRef = &c.remoteAddr
 	req.trustProxy = w.trustProxy
+	req.proxyPolicy = w.proxyPolicy
 	if w.hasTimeout {
 		c.readDeadline = 0
 		c.lastActive = time.Now().UnixNano()
@@ -1337,7 +1379,7 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 		return
 	}
 	finalizeRequestCommonHeaders(req)
-	resp := acquireResponse()
+	resp := acquireResponseFor(req)
 	resp.responseMode = f.ResponseMode
 	start := time.Now().UnixNano()
 	w.serveRoute(resp, req, f)
@@ -1345,6 +1387,8 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	data := resp.buildZeroCopy()
 	c.keepAlive = req.keepAlive
 	c.sendBuf = append(c.sendBuf, data...)
+	c.fileStream = resp.fileStream
+	resp.fileStream = nil
 	releaseResponse(resp)
 	releaseRequest(req)
 	if c.sendN < len(c.sendBuf) {
@@ -1355,6 +1399,21 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 }
 
 func (w *worker) handleDone(msg doneMsg) {
+	if msg.readStream != nil {
+		c := w.conns[msg.fd]
+		if c == nil || c.fileStream != msg.readStream {
+			return
+		}
+		msg.readStream.reading = false
+		if msg.readErr != nil {
+			w.failSend(c)
+			return
+		}
+		msg.readStream.remaining -= int64(len(msg.data))
+		c.sendBuf = msg.data
+		w.directSend(c)
+		return
+	}
 	if msg.file != nil {
 		// Takeover conn finished: clean bookkeeping before closing through
 		// the File so the fd number cannot be recycled mid-cleanup. The fd
@@ -1367,17 +1426,20 @@ func (w *worker) handleDone(msg doneMsg) {
 	}
 	c := w.conns[msg.fd] // async path — no ConnPtr available
 	if c == nil {
+		msg.stream.close()
 		return
 	}
 	c.pending--
 	if c.closePending {
+		msg.stream.close()
 		if c.pending == 0 {
 			w.closeConn(c.fd)
 		}
 		return
 	}
 	c.keepAlive = msg.keepAlive
-	if len(msg.data) == 0 {
+	c.fileStream = msg.stream
+	if len(msg.data) == 0 && msg.stream == nil {
 		// Pool goroutine already wrote the response directly.
 		if c.keepAlive {
 			if c.readN > 0 {
@@ -1415,6 +1477,39 @@ func (w *worker) directSend(c *conn) {
 	}
 	c.sendBuf = c.sendBuf[:0]
 	c.sendN = 0
+	if stream := c.fileStream; stream != nil {
+		if stream.remaining > 0 {
+			if !stream.reading {
+				stream.reading = true
+				// Raw epoll waits must release the scheduler once this worker reads asynchronously.
+				if engine, ok := w.eng.(interface{ enableAsync() }); ok {
+					engine.enableAsync()
+				}
+				n := min(int64(32*1024), stream.remaining)
+				chunk := make([]byte, int(n))
+				fd := c.fd
+
+				go func() {
+					err := w.readStreamChunk(stream, chunk)
+					w.fileReadMu.Lock()
+					if w.fileReadStopped {
+						stream.close()
+					} else {
+						select {
+						case w.doneCh <- doneMsg{fd: fd, data: chunk, readStream: stream, readErr: err}:
+							w.wake()
+						case <-w.fileReadStop:
+							stream.close()
+						}
+					}
+					w.fileReadMu.Unlock()
+				}()
+			}
+			return
+		}
+		stream.close()
+		c.fileStream = nil
+	}
 	// Sendfile: transfer file body after headers are written.
 	if c.sendFileFd > 0 {
 		for c.sendFileSize > 0 {
@@ -1439,6 +1534,10 @@ func (w *worker) directSend(c *conn) {
 		}
 		syscall.Close(int(c.sendFileFd))
 		c.sendFileFd = 0
+		if c.sendFileRelease != nil {
+			c.sendFileRelease()
+			c.sendFileRelease = nil
+		}
 	}
 	if c.bodyNeed > 0 {
 		// Body accumulation owns receive arming; do not apply final-response handling.
@@ -1478,11 +1577,17 @@ func (w *worker) directSend(c *conn) {
 }
 
 func (w *worker) failSend(c *conn) {
+	c.fileStream.close()
+	c.fileStream = nil
 	c.sendBuf = c.sendBuf[:0]
 	c.sendN = 0
 	if c.sendFileFd > 0 {
 		syscall.Close(int(c.sendFileFd))
 		c.sendFileFd = 0
+		if c.sendFileRelease != nil {
+			c.sendFileRelease()
+			c.sendFileRelease = nil
+		}
 		c.sendFileSize = 0
 	}
 	if c.pending > 0 {
@@ -1514,6 +1619,68 @@ func (w *worker) writeTakeover(f *os.File, data []byte) error {
 		}
 	}
 	return err
+}
+
+func readFileChunk(reader io.Reader, chunk []byte) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("file reader panic: %v", p)
+		}
+	}()
+	_, err = io.ReadFull(reader, chunk)
+	return err
+}
+
+func (w *worker) readStreamChunk(stream *fileStream, chunk []byte) error {
+	select {
+	case <-w.fileReadStop:
+		return io.ErrClosedPipe
+	default:
+	}
+	if !stream.beginRead() {
+		return io.ErrClosedPipe
+	}
+	result := make(chan error, 1)
+	go func() { err := readFileChunk(stream.reader, chunk); stream.finishRead(); result <- err }()
+	var timeout <-chan time.Time
+	var timer *time.Timer
+	if w.writeTimeout > 0 {
+		timer = time.NewTimer(time.Duration(w.writeTimeout))
+		timeout = timer.C
+		defer timer.Stop()
+	}
+	select {
+	case err := <-result:
+		return err
+	case <-stream.done:
+		return io.ErrClosedPipe
+	case <-w.fileReadStop:
+		stream.close()
+		return io.ErrClosedPipe
+	case <-timeout:
+		stream.close()
+		return os.ErrDeadlineExceeded
+	}
+}
+
+func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
+	if w.writeTimeout > 0 {
+		if err := f.SetWriteDeadline(time.Now().Add(time.Duration(w.writeTimeout))); err != nil {
+			return err
+		}
+		defer f.SetWriteDeadline(time.Time{})
+	}
+	for stream.remaining > 0 {
+		chunk := make([]byte, int(min(int64(32*1024), stream.remaining)))
+		if err := w.readStreamChunk(stream, chunk); err != nil {
+			return err
+		}
+		if _, err := f.Write(chunk); err != nil {
+			return err
+		}
+		stream.remaining -= int64(len(chunk))
+	}
+	return nil
 }
 
 // takeoverLoop owns a connection fd: loops read→handle→write through an
@@ -1581,7 +1748,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 	for {
 		// Handle request.
-		resp := acquireResponse()
+		resp := acquireResponseFor(req)
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -1592,14 +1759,25 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			w.handler.ServeKruda(resp, req)
 		}()
 		data := resp.buildZeroCopy()
+		stream := resp.fileStream
+		resp.fileStream = nil
 		releaseResponse(resp)
 		releaseRequest(req)
 
 		// Write full response — os.File loops over partial writes and parks
 		// on EAGAIN via the runtime poller.
 		if werr := w.writeTakeover(f, data); werr != nil {
+			stream.close()
 			keepAlive = false
 			goto done
+		}
+		if stream != nil {
+			err := w.writeFileStream(f, stream)
+			stream.close()
+			if err != nil {
+				keepAlive = false
+				goto done
+			}
 		}
 
 		if !keepAlive {
@@ -1637,6 +1815,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					r.ctx = connCtx
 					r.remoteAddrRef = remoteAddrRef
 					r.trustProxy = w.trustProxy
+					r.proxyPolicy = w.proxyPolicy
 					req = r
 					keepAlive = req.keepAlive
 					requestStarted = false
@@ -1754,6 +1933,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					r2.ctx = connCtx
 					r2.remoteAddrRef = remoteAddrRef
 					r2.trustProxy = w.trustProxy
+					r2.proxyPolicy = w.proxyPolicy
 					req = r2
 					keepAlive = req.keepAlive
 					goto next
@@ -1826,6 +2006,7 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	first.ctx = ctx
 
 	sw := newWingStreamWriter(f, time.Duration(w.writeTimeout))
+	sw.head = first.method == "HEAD"
 
 	go watchStreamDisconnect(f, cancel)
 
@@ -1869,7 +2050,7 @@ func (w *worker) handleSend(ev event) {
 		// EPOLLOUT takes priority over a simultaneous EPOLLIN in the engine.
 		c.readDrained = false
 	}
-	if c == nil || (len(c.sendBuf) == 0 && c.sendFileFd == 0) {
+	if c == nil || (len(c.sendBuf) == 0 && c.sendFileFd == 0 && c.fileStream == nil) {
 		// No pending data or sendfile — remove EPOLLOUT, listen for EPOLLIN.
 		if c != nil {
 			w.eng.SubmitRecv(c.fd, nil, 0)
@@ -1923,9 +2104,15 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	if c.cancel != nil {
 		c.cancel()
 	}
+	c.fileStream.close()
+	c.fileStream = nil
 	if c.sendFileFd > 0 {
 		syscall.Close(int(c.sendFileFd))
 		c.sendFileFd = 0
+		if c.sendFileRelease != nil {
+			c.sendFileRelease()
+			c.sendFileRelease = nil
+		}
 	}
 }
 
@@ -1938,6 +2125,16 @@ func (w *worker) closeConn(fd int32) {
 func (w *worker) wake() { w.eng.PostWake() }
 
 func (w *worker) cleanup() {
+	w.fileReadOnce.Do(func() {
+		if w.fileReadStop != nil {
+			close(w.fileReadStop)
+		}
+	})
+	w.fileReadMu.Lock()
+	if !w.fileReadStopped {
+		w.fileReadStopped = true
+	}
+	w.fileReadMu.Unlock()
 	w.advisor.flush()
 	if w.pool != nil {
 		close(w.pool.jobs)
@@ -1963,6 +2160,9 @@ func (w *worker) cleanup() {
 			}
 		}
 	}
+	for _, c := range w.conns {
+		c.fileStream.close()
+	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave
 	// of Spawn/Takeover goroutines completing simultaneously can fill the
 	// 4096-slot doneCh buffer; the next sender blocks on the channel send
@@ -1973,6 +2173,7 @@ func (w *worker) cleanup() {
 		for {
 			select {
 			case msg := <-w.doneCh:
+				msg.stream.close()
 				// A Takeover completion carries the fd's *os.File. Close it here
 				// to release the fd now; discarding it would leak the File to a
 				// finalizer that later closes a recycled fd. Non-Takeover
@@ -1995,6 +2196,7 @@ drainBuffered:
 	for {
 		select {
 		case msg := <-w.doneCh:
+			msg.stream.close()
 			if msg.file != nil {
 				msg.file.Close()
 			}

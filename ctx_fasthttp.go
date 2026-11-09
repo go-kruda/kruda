@@ -123,6 +123,9 @@ func (c *Ctx) trySendFastHTTP() bool {
 func (c *Ctx) trySetHeaderFastHTTP(key, value string) bool {
 	if c.embeddedFHResp.ctx != nil {
 		c.embeddedFHResp.ctx.Response.Header.Set(key, value)
+		if len(c.respHeaders) > 0 {
+			delete(c.respHeaders, internHeader(key))
+		}
 		return true
 	}
 	return false
@@ -133,6 +136,9 @@ func (c *Ctx) trySetHeaderFastHTTP(key, value string) bool {
 func (c *Ctx) trySetHeaderBytesFastHTTP(key string, value []byte) bool {
 	if c.embeddedFHResp.ctx != nil {
 		c.embeddedFHResp.ctx.Response.Header.SetBytesV(key, value)
+		if len(c.respHeaders) > 0 {
+			delete(c.respHeaders, internHeader(key))
+		}
 		return true
 	}
 	return false
@@ -204,4 +210,20 @@ func (c *Ctx) RawResponseHeader() interface {
 		return &c.embeddedFHResp.ctx.Response.Header
 	}
 	return nil
+}
+
+// Keep appends queued so the response encoding path stays unchanged.
+func (c *Ctx) tryAddHeaderFastHTTP(key, value string) bool {
+	if c.embeddedFHResp.ctx == nil {
+		return false
+	}
+	key = internHeader(key)
+	c.dirty |= dirtyRespHdrs
+	if _, pending := c.respHeaders[key]; !pending {
+		for _, existing := range c.embeddedFHResp.ctx.Response.Header.PeekAll(key) {
+			c.respHeaders[key] = append(c.respHeaders[key], string(existing))
+		}
+	}
+	c.respHeaders[key] = append(c.respHeaders[key], value)
+	return true
 }

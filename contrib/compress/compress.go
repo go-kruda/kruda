@@ -106,7 +106,7 @@ func Compress(c *kruda.Ctx, data []byte, contentType string) error {
 	// Set compression headers and send response
 	c.SetHeader("Content-Type", contentType)
 	c.SetHeader("Content-Encoding", encoding)
-	c.SetHeader("Vary", "Accept-Encoding")
+	c.AddHeader("Vary", "Accept-Encoding")
 	return c.SendBytes(compressed)
 }
 

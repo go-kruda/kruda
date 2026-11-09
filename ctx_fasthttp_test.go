@@ -3,6 +3,7 @@
 package kruda
 
 import (
+	"net"
 	"net/http"
 	"testing"
 
@@ -403,6 +404,14 @@ func TestInternMethod(t *testing.T) {
 		{[]byte("OPTIONS"), "OPTIONS"},
 		{[]byte("XX"), "XX"},               // 2 bytes, no match in switch
 		{[]byte("ABCDEFGHI"), "ABCDEFGHI"}, // 9 bytes, no match in switch
+		{[]byte("GOT"), "GOT"},             // same length and first byte as GET
+		{[]byte("PAT"), "PAT"},
+		{[]byte("PUSH"), "PUSH"},
+		{[]byte("HACK"), "HACK"},
+		{[]byte("PURGE"), "PURGE"},
+		{[]byte("DELETED"), "DELETED"},
+		{[]byte("DEPLOY"), "DEPLOY"},
+		{[]byte("OPTIONZ"), "OPTIONZ"},
 	}
 
 	for _, tt := range tests {
@@ -410,6 +419,11 @@ func TestInternMethod(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("internMethod(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+
+	method := []byte("DELETE")
+	if allocs := testing.AllocsPerRun(100, func() { internMethod(method) }); allocs != 0 {
+		t.Errorf("internMethod allocated %v times", allocs)
 	}
 }
 
@@ -965,5 +979,36 @@ func TestServeFast_SetBody_ContentLength(t *testing.T) {
 	cl := fctx.Response.Header.ContentLength()
 	if cl != 99 {
 		t.Errorf("ContentLength = %d, want 99", cl)
+	}
+}
+
+func TestCtxIPFastHTTPPeer(t *testing.T) {
+	c, fctx := newFastHTTPCtx(New())
+	fctx.Init(&fasthttp.Request{}, &net.TCPAddr{IP: net.ParseIP("192.0.2.7"), Port: 54869}, nil)
+	if got := c.IP(); got != "192.0.2.7" {
+		t.Fatalf("IP() = %q, want 192.0.2.7", got)
+	}
+}
+
+func TestFastHTTPRequestAccessors(t *testing.T) {
+	c, fctx := newFastHTTPCtx(New())
+	fctx.Request.Header.Set("Authorization", "Bearer token")
+	fctx.Request.Header.SetCookie("session", "existing")
+	fctx.Request.SetBodyString("owned")
+	if got := c.Header("Authorization"); got != "Bearer token" {
+		t.Fatalf("header=%q", got)
+	}
+	if got := c.Cookie("session"); got != "existing" {
+		t.Fatalf("cookie=%q", got)
+	}
+	body, err := c.BodyBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range fctx.PostBody() {
+		fctx.PostBody()[i] = 'x'
+	}
+	if string(body) != "owned" {
+		t.Fatalf("body aliases request: %q", body)
 	}
 }

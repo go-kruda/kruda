@@ -5,6 +5,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net"
 	"time"
@@ -20,12 +21,13 @@ type FastHTTPTransport struct {
 
 // FastHTTPConfig holds configuration for the fasthttp transport.
 type FastHTTPConfig struct {
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
-	MaxBodySize  int
-	Concurrency  int
-	TrustProxy   bool
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
+	MaxBodySize    int
+	Concurrency    int
+	TrustedProxies []string // exact proxy IP allowlist; empty trusts no peer
+	TrustProxy     bool
 }
 
 // NewFastHTTP creates a new fasthttp transport.
@@ -35,6 +37,7 @@ func NewFastHTTP(cfg FastHTTPConfig) *FastHTTPTransport {
 
 // newServer creates and configures a fasthttp.Server with the transport's config.
 func (t *FastHTTPTransport) newServer(handler Handler) *fasthttp.Server {
+	policy := NewProxyPolicy(t.config.TrustedProxies)
 	var fhHandler fasthttp.RequestHandler
 
 	// Fast path: if handler implements FastHTTPHandler, call ServeFast directly
@@ -45,7 +48,7 @@ func (t *FastHTTPTransport) newServer(handler Handler) *fasthttp.Server {
 		}
 	} else {
 		fhHandler = func(ctx *fasthttp.RequestCtx) {
-			req := &fasthttpRequest{ctx: ctx, trustProxy: t.config.TrustProxy}
+			req := &fasthttpRequest{ctx: ctx, trustProxy: t.config.TrustProxy, proxyPolicy: policy}
 			resp := &fasthttpResponseWriter{ctx: ctx}
 			handler.ServeKruda(resp, req)
 		}
@@ -93,8 +96,9 @@ func (t *FastHTTPTransport) Shutdown(ctx context.Context) error {
 }
 
 type fasthttpRequest struct {
-	ctx        *fasthttp.RequestCtx
-	trustProxy bool
+	ctx         *fasthttp.RequestCtx
+	trustProxy  bool
+	proxyPolicy ProxyPolicy
 }
 
 func (r *fasthttpRequest) Method() string {
@@ -121,19 +125,27 @@ func (r *fasthttpRequest) QueryParam(key string) string {
 	return string(r.ctx.QueryArgs().Peek(key))
 }
 
+func (r *fasthttpRequest) PeerAddr() string { return r.ctx.RemoteAddr().String() }
+
+func (r *fasthttpRequest) ForwardedHeaders() (string, int, string, int) {
+	xff := r.ctx.Request.Header.PeekAll("X-Forwarded-For")
+	n := len(xff)
+	var a string
+	if n > 0 {
+		a = string(xff[0])
+	}
+	xri := r.ctx.Request.Header.PeekAll("X-Real-IP")
+	m := len(xri)
+	var b string
+	if m > 0 {
+		b = string(xri[0])
+	}
+	return a, n, b, m
+}
+
 func (r *fasthttpRequest) RemoteAddr() string {
 	if r.trustProxy {
-		if ip := string(r.ctx.Request.Header.Peek("X-Forwarded-For")); ip != "" {
-			for i := 0; i < len(ip); i++ {
-				if ip[i] == ',' {
-					return trimSpace(ip[:i])
-				}
-			}
-			return trimSpace(ip)
-		}
-		if ip := string(r.ctx.Request.Header.Peek("X-Real-Ip")); ip != "" {
-			return trimSpace(ip)
-		}
+		return r.proxyPolicy.ClientIP(r)
 	}
 	return r.ctx.RemoteAddr().String()
 }
@@ -168,12 +180,22 @@ func (r *fasthttpRequest) AllHeaders() map[string]string {
 	return m
 }
 
+func (r *fasthttpRequest) RawQuery() string { return string(r.ctx.URI().QueryString()) }
+
 func (r *fasthttpRequest) AllQuery() map[string]string {
 	m := make(map[string]string)
 	for k, v := range r.ctx.QueryArgs().All() {
 		m[string(k)] = string(v)
 	}
 	return m
+}
+
+func (w *fasthttpResponseWriter) SetFileStream(file io.ReadCloser, size int64) {
+	bodySize := int(size)
+	if int64(bodySize) != size {
+		bodySize = -1
+	}
+	w.ctx.SetBodyStream(file, bodySize)
 }
 
 type fasthttpResponseWriter struct {
@@ -201,3 +223,8 @@ func (m *fasthttpHeaderMap) Set(key, value string) { m.ctx.Response.Header.Set(k
 func (m *fasthttpHeaderMap) Add(key, value string) { m.ctx.Response.Header.Add(key, value) }
 func (m *fasthttpHeaderMap) Get(key string) string { return string(m.ctx.Response.Header.Peek(key)) }
 func (m *fasthttpHeaderMap) Del(key string)        { m.ctx.Response.Header.Del(key) }
+
+// ProxyConfig returns forwarding settings and an owned copy of the allowlist.
+func (t *FastHTTPTransport) ProxyConfig() (bool, []string) {
+	return t.config.TrustProxy, append([]string(nil), t.config.TrustedProxies...)
+}

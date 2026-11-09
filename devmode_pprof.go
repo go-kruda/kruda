@@ -5,7 +5,7 @@ import (
 	"net/http/pprof"
 )
 
-// registerPprofRoutes adds pprof endpoints when DevMode is enabled.
+// registerPprofRoutes adds pprof endpoints for explicitly enabled DevMode.
 func (app *App) registerPprofRoutes() {
 	app.Get("/debug/pprof/", wrapPprofHandler(pprof.Index))
 	app.Get("/debug/pprof/cmdline", wrapPprofHandler(pprof.Cmdline))
@@ -20,10 +20,17 @@ func (app *App) registerPprofRoutes() {
 	app.Get("/debug/pprof/threadcreate", wrapPprofHandler(pprof.Handler("threadcreate").ServeHTTP))
 }
 
+func (app *App) warnDevMode() {
+	if app.config.DevMode {
+		app.config.Logger.Warn("development mode is enabled; do not expose development diagnostics publicly", "pprof", app.config.devModeSet)
+	}
+}
+
 // wrapPprofHandler adapts net/http pprof handlers to Kruda's handler signature.
 func wrapPprofHandler(h http.HandlerFunc) HandlerFunc {
 	return func(c *Ctx) error {
-		if req := c.request.RawRequest(); req != nil {
+		if request := c.Request(); request != nil {
+			req := request.RawRequest()
 			if r, ok := req.(*http.Request); ok {
 				if w := c.ResponseWriter(); w != nil {
 					if rw, ok := w.(httpResponseWriter); ok {

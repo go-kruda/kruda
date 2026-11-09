@@ -42,7 +42,7 @@ for module_file in "$ROOT"/contrib/*/go.mod; do
     GOWORK=off go mod init mvs-check >/dev/null 2>&1
     GOWORK=off go mod edit -require="${module_path}@v0.0.0"
     GOWORK=off go mod edit -replace="${module_path}=${module_dir}"
-    GOWORK=off go mod edit -replace="github.com/go-kruda/kruda=${ROOT}"
+
 
     selected=$(GOWORK=off go list -m -f '{{.Version}}' github.com/go-kruda/kruda)
     if ! version_at_least "$selected" "$MINIMUM_CORE_VERSION"; then
@@ -50,7 +50,8 @@ for module_file in "$ROOT"/contrib/*/go.mod; do
       exit 1
     fi
 
-    echo "==> $module_path selects Kruda core $selected"
+    GOWORK=off go build -mod=mod -tags kruda_stdjson "$module_path"
+    echo "==> $module_path builds with Kruda core $selected"
   ) || exit_code=$?
 
   rm -rf "$consumer_dir"

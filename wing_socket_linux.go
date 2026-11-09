@@ -5,6 +5,7 @@ package kruda
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"syscall"
 )
 
@@ -73,7 +74,7 @@ func getPeerAddr(fd int32) string {
 	case *syscall.SockaddrInet4:
 		return fmt.Sprintf("%d.%d.%d.%d:%d", v.Addr[0], v.Addr[1], v.Addr[2], v.Addr[3], v.Port)
 	case *syscall.SockaddrInet6:
-		return fmt.Sprintf("[%x]:%d", v.Addr, v.Port)
+		return netip.AddrPortFrom(netip.AddrFrom16(v.Addr), uint16(v.Port)).String()
 	}
 	return ""
 }

@@ -29,8 +29,11 @@ type Config struct {
 	TLSCertFile   string
 	TLSKeyFile    string
 
-	// TrustProxy enables trusting X-Forwarded-For/X-Real-IP headers. Default: false.
-	TrustProxy bool
+	// TrustProxy enables forwarding headers only from TrustedProxies. Default: false.
+	TrustProxy        bool
+	TrustedProxies    []string // exact proxy IP allowlist; empty trusts no peer
+	trustProxySet     bool
+	trustedProxiesSet bool
 
 	// MaxConns is the total accepted-connection cap for the Wing transport.
 	// <0 = unset (derive default from fd ulimit); 0 = unlimited; >0 = explicit total.
@@ -143,8 +146,9 @@ func WithHeaderLimit(limit int) Option {
 
 // WithDevMode enables or disables development mode.
 // When enabled, the framework relaxes X-Frame-Options to SAMEORIGIN
-// and activates the dev error page (when implemented).
-// Default: false (production mode). Also auto-detected via KRUDA_ENV=development.
+// and activates the dev error page and pprof routes (net/http only).
+// Default: false (production mode). KRUDA_ENV=development enables dev error
+// pages, but pprof requires WithDevMode(true).
 func WithDevMode(enabled bool) Option {
 	return func(a *App) {
 		a.config.DevMode = enabled
@@ -291,10 +295,21 @@ func WithShutdownTimeout(d time.Duration) Option {
 	return func(a *App) { a.config.ShutdownTimeout = d }
 }
 
-// WithTrustProxy enables trusting proxy headers (X-Forwarded-For, X-Real-IP).
-// Default is false — only the direct connection's remote address is used.
+// WithTrustProxy enables proxy headers only for peers in WithTrustedProxies.
+// Default is false. An empty allowlist trusts no proxy.
 func WithTrustProxy(trust bool) Option {
-	return func(a *App) { a.config.TrustProxy = trust }
+	return func(a *App) { a.config.TrustProxy = trust; a.config.trustProxySet = true }
+}
+
+// WithTrustedProxies sets exact proxy IPs allowed to supply forwarding headers.
+// Use WithTrustProxy(true) to enable the policy. CIDRs are not supported.
+func WithTrustedProxies(ips ...string) Option {
+	values := append([]string(nil), ips...)
+	return func(a *App) {
+		a.config.TrustedProxies = append([]string(nil), values...)
+		a.config.trustedProxiesSet = true
+		a.proxyPolicy = transport.NewProxyPolicy(values)
+	}
 }
 
 // WithMaxConns sets the total accepted-connection cap across the whole server
@@ -367,6 +382,7 @@ func applyEnvConfig(prefix string, cfg *Config) {
 	if v := os.Getenv(prefix + "_TRUST_PROXY"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.TrustProxy = b
+			cfg.trustProxySet = true
 		}
 	}
 	// Wing accept-side DoS limits — let K8s/ConfigMap deployments tune the safety
@@ -546,6 +562,7 @@ func selectTransport(cfg Config, logger *slog.Logger) (transport.Transport, stri
 		MaxBodySize:    cfg.BodyLimit,
 		MaxHeaderBytes: cfg.HeaderLimit,
 		TrustProxy:     cfg.TrustProxy,
+		TrustedProxies: cfg.TrustedProxies,
 		TLSCertFile:    cfg.TLSCertFile,
 		TLSKeyFile:     cfg.TLSKeyFile,
 	}

@@ -19,7 +19,7 @@ type Config struct {
 	Algorithm string
 
 	// KeyFunc extracts the client identifier from the request.
-	// Default: client IP from X-Forwarded-For / X-Real-IP / RemoteAddr.
+	// Default: socket peer IP, or a forwarded IP from a trusted proxy.
 	KeyFunc func(*kruda.Ctx) string
 
 	// Skip returns true to bypass rate limiting for this request.
@@ -28,7 +28,7 @@ type Config struct {
 
 	// TrustedProxies is the list of trusted proxy IPs.
 	// X-Forwarded-For is only used when the request comes from a trusted proxy.
-	// Empty = do not trust X-Forwarded-For (use RemoteAddr only).
+	// Empty = do not trust forwarded headers (use the socket peer only).
 	//
 	// NOTE: Only exact IP addresses are supported (e.g., "10.0.0.1").
 	// CIDR notation (e.g., "10.0.0.0/8") is NOT supported in v1.

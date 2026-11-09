@@ -93,9 +93,6 @@ var _ transport.HeaderMap = (*mockHeaderMap)(nil)
 // --- Test helpers ---
 
 // okBody is the lazy-send response body used by tests.
-// Session middleware sets cookies AFTER c.Next() returns, so handlers must use
-// lazy-send (c.SetBody) rather than eager-send (c.JSON) to ensure cookies are
-// included in the writeHeaders flush.
 var okBody = []byte(`{"ok":true}`)
 
 func newReq(method, path string, cookies map[string]string) *mockRequest {

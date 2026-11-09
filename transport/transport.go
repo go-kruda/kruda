@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -51,6 +52,7 @@ type Request interface {
 	Header(key string) string
 	Body() ([]byte, error)
 	QueryParam(key string) string
+	// RemoteAddr is the socket peer unless PeerAddr exposes it separately.
 	RemoteAddr() string
 	Cookie(name string) string
 	RawRequest() any // underlying *http.Request or *fasthttp.RequestCtx
@@ -78,6 +80,13 @@ type StaticResponder interface {
 // transfers ownership of fd to the ResponseWriter, which must close it.
 type FileSender interface {
 	SetSendFile(fd int32, size int64)
+}
+
+// FileStreamer is an optional response capability for bounded-memory file delivery.
+// SetFileStream transfers ownership of file. The transport sends exactly size bytes
+// after the response headers and closes file on completion, replacement, or failure.
+type FileStreamer interface {
+	SetFileStream(file io.ReadCloser, size int64)
 }
 
 // JSONResponder is an optional interface for ResponseWriters that support
@@ -145,15 +154,13 @@ type staticEntry struct {
 var staticStatusLines [600][]byte
 
 func init() {
-	codes := [][2]any{
-		{200, "OK"}, {204, "No Content"}, {301, "Moved Permanently"},
-		{304, "Not Modified"}, {400, "Bad Request"}, {404, "Not Found"},
-		{500, "Internal Server Error"},
+	for code := range staticStatusLines {
+		if text := http.StatusText(code); text != "" {
+			staticStatusLines[code] = []byte("HTTP/1.1 " + strconv.Itoa(code) + " " + text + "\r\n")
+		}
 	}
-	for _, p := range codes {
-		c := p[0].(int)
-		staticStatusLines[c] = []byte("HTTP/1.1 " + strconv.Itoa(c) + " " + p[1].(string) + "\r\n")
-	}
+	// RFC 9110 renamed 413; http.StatusText keeps the older phrase.
+	staticStatusLines[413] = []byte("HTTP/1.1 413 Content Too Large\r\n")
 }
 
 // GetStaticResponse returns a cached pre-built HTTP response.
@@ -165,7 +172,9 @@ func GetStaticResponse(status int, contentType string, body []byte) []byte {
 		return v.(*staticEntry).resp
 	}
 	b := buildStaticPrefix(status, contentType, len(body))
-	b = append(b, body...)
+	if status != 204 && status != 304 {
+		b = append(b, body...)
+	}
 	return storeStaticResponse(key, b)
 }
 
@@ -176,18 +185,23 @@ func GetStaticResponseString(status int, contentType, body string) []byte {
 		return v.(*staticEntry).resp
 	}
 	b := buildStaticPrefix(status, contentType, len(body))
-	b = append(b, body...)
+	if status != 204 && status != 304 {
+		b = append(b, body...)
+	}
 	return storeStaticResponse(key, b)
 }
 
 func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
+	if status < 200 || status > 999 {
+		status = 200 // cannot head a final response; Wing sends these as 200 too
+	}
 	var b []byte
 	if status > 0 && status < len(staticStatusLines) && staticStatusLines[status] != nil {
 		b = append(b, staticStatusLines[status]...)
 	} else {
 		b = append(b, "HTTP/1.1 "...)
 		b = strconv.AppendInt(b, int64(status), 10)
-		b = append(b, " OK\r\n"...)
+		b = append(b, " Unknown\r\n"...)
 	}
 	b = append(b, "Date: "...)
 	b = append(b, time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")...)
@@ -196,6 +210,9 @@ func buildStaticPrefix(status int, contentType string, bodyLen int) []byte {
 		b = append(b, "Content-Type: "...)
 		b = append(b, contentType...)
 		b = append(b, "\r\n"...)
+	}
+	if status == 204 || status == 304 {
+		return append(b, "\r\n"...)
 	}
 	b = append(b, "Content-Length: "...)
 	b = strconv.AppendInt(b, int64(bodyLen), 10)

@@ -103,7 +103,7 @@ func TestFasthttpRequest_QueryParam(t *testing.T) {
 func TestFasthttpRequest_RemoteAddr_TrustProxy_XForwardedFor(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
-	r := &fasthttpRequest{ctx: ctx, trustProxy: true}
+	r := &fasthttpRequest{ctx: ctx, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"0.0.0.0", "10.0.0.1"})}
 	if r.RemoteAddr() != "1.2.3.4" {
 		t.Errorf("expected 1.2.3.4, got %s", r.RemoteAddr())
 	}
@@ -112,7 +112,7 @@ func TestFasthttpRequest_RemoteAddr_TrustProxy_XForwardedFor(t *testing.T) {
 func TestFasthttpRequest_RemoteAddr_TrustProxy_XRealIP(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.Set("X-Real-Ip", "5.6.7.8")
-	r := &fasthttpRequest{ctx: ctx, trustProxy: true}
+	r := &fasthttpRequest{ctx: ctx, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"0.0.0.0", "10.0.0.1"})}
 	if r.RemoteAddr() != "5.6.7.8" {
 		t.Errorf("expected 5.6.7.8, got %s", r.RemoteAddr())
 	}
@@ -278,7 +278,7 @@ func TestFasthttpHeaderMap_Del(t *testing.T) {
 func TestFasthttpRequest_RemoteAddr_TrustProxy_SingleIP(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Request.Header.Set("X-Forwarded-For", " 1.2.3.4 ")
-	r := &fasthttpRequest{ctx: ctx, trustProxy: true}
+	r := &fasthttpRequest{ctx: ctx, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"0.0.0.0", "10.0.0.1"})}
 	if r.RemoteAddr() != "1.2.3.4" {
 		t.Errorf("expected 1.2.3.4 (trimmed), got %s", r.RemoteAddr())
 	}
@@ -286,7 +286,7 @@ func TestFasthttpRequest_RemoteAddr_TrustProxy_SingleIP(t *testing.T) {
 
 func TestFasthttpRequest_RemoteAddr_TrustProxy_NoHeaders(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
-	r := &fasthttpRequest{ctx: ctx, trustProxy: true}
+	r := &fasthttpRequest{ctx: ctx, trustProxy: true, proxyPolicy: NewProxyPolicy([]string{"0.0.0.0", "10.0.0.1"})}
 	// Should fallback to RemoteAddr when no proxy headers
 	addr := r.RemoteAddr()
 	if addr == "" {

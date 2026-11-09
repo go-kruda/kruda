@@ -43,7 +43,12 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		c.shrinkMaps()
+		c.cleanup()
+		c.embeddedReq.r = nil
+		c.embeddedReq.body = nil
+		c.embeddedReq.queryVals = nil
+		c.embeddedResp.w = nil
+		c.embeddedResp.headerMap = nil
 		app.ctxPool.Put(c)
 	}()
 

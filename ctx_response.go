@@ -53,6 +53,33 @@ func (c *Ctx) Responded() bool {
 	return c.responded
 }
 
+// EncodeJSON encodes a value into owned bytes using the same configured encoder
+// that JSON would select for the current response, without sending it.
+func (c *Ctx) EncodeJSON(v any) ([]byte, error) {
+	enc := c.app.config.JSONEncoder
+	stream := c.app.config.JSONStreamEncoder
+	if c.fastHTTPResponseWriter() != nil && c.canBypassHeaderWrite(false) && enc != nil {
+		if data, err := enc(v); err == nil {
+			return bytes.Clone(data), nil
+		}
+	}
+	if _, ok := c.writer.(transport.JSONResponder); ok && c.canBypassHeaderWrite(true) {
+		if _, ok := c.writer.(jsonStreamResponder); !ok || stream == nil || !shouldUseWingJSONStream() {
+			data, err := enc(v)
+			return bytes.Clone(data), err
+		}
+	}
+	if stream != nil {
+		var buf bytes.Buffer
+		if err := stream(&buf, v); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
+	data, err := enc(v)
+	return bytes.Clone(data), err
+}
+
 // JSON sends a JSON response using the configured JSON encoder.
 // On the fasthttp path, uses SetBodyRaw for zero-copy response writing:
 // sonic.Marshal allocates a []byte, SetBodyRaw references it (no memcpy),
@@ -327,7 +354,7 @@ func (c *Ctx) SetBody(data []byte) *Ctx {
 //
 //	c.SetContentType("text/html; charset=utf-8").SetBody(html)
 func (c *Ctx) SetContentType(ct string) *Ctx {
-	c.contentType = ct
+	c.contentType = sanitizeHeaderValue(ct)
 	return c
 }
 
@@ -485,25 +512,24 @@ func (c *Ctx) Redirect(url string, code ...int) error {
 		status = code[0]
 	}
 	c.status = status
-	c.location = url // fixed slot — no map write
+	c.location = sanitizeHeaderValue(url) // fixed slot — no map write
 	return c.send()
 }
 
-// sanitizeHeaderValue strips CR and LF characters from a header value to prevent
-// HTTP header injection (CRLF injection). Most values pass through unchanged via
-// the fast path check.
+// sanitizeHeaderValue replaces CR and LF with a space to prevent HTTP header
+// injection, as net/http does. Deleting them instead would join the pieces:
+// "/\n/evil.example" would become the protocol-relative "//evil.example".
 func sanitizeHeaderValue(value string) string {
 	if !strings.ContainsAny(value, "\r\n") {
 		return value
 	}
-	var b strings.Builder
-	b.Grow(len(value))
-	for i := 0; i < len(value); i++ {
-		if value[i] != '\r' && value[i] != '\n' {
-			b.WriteByte(value[i])
+	b := []byte(value)
+	for i, ch := range b {
+		if ch == '\r' || ch == '\n' {
+			b[i] = ' '
 		}
 	}
-	return b.String()
+	return string(b)
 }
 
 // isValidHeaderKey checks if key contains only valid token characters per RFC 7230.
@@ -604,6 +630,9 @@ func (c *Ctx) AddHeader(key, value string) *Ctx {
 	case "Location":
 		c.location = value
 	default:
+		if c.tryAddHeaderFastHTTP(key, value) {
+			return c
+		}
 		key = internHeader(key)
 		c.dirty |= dirtyRespHdrs
 		c.respHeaders[key] = append(c.respHeaders[key], value)

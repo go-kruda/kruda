@@ -138,7 +138,24 @@ Enables TLS with the given certificate and key files.
 func WithTrustProxy(trust bool) Option
 ```
 
-When true, trusts `X-Forwarded-For` / `X-Real-IP` headers. Default: `false`.
+When true, reads forwarding headers only from peers listed by
+`WithTrustedProxies`. Default: `false`. With an empty list, headers are ignored.
+
+### WithTrustedProxies
+
+```go
+func WithTrustedProxies(ips ...string) Option
+```
+
+Sets exact IPv4 or IPv6 proxy IPs. CIDRs, zones and invalid entries are not
+trusted. Enable with `WithTrustProxy(true)`. Example:
+
+```go
+app := kruda.New(
+    kruda.WithTrustProxy(true),
+    kruda.WithTrustedProxies("10.0.0.2", "::1"),
+)
+```
 
 ### WithShutdownTimeout
 
@@ -248,4 +265,5 @@ Adds a standard HTTP bearer security scheme. An empty name defaults to
 | DevMode | false |
 | SecurityHeaders | false |
 | TrustProxy | false |
+| TrustedProxies | nil (trust no peers) |
 | TransportName | "wing" (Linux), "fasthttp" (macOS), "nethttp" (Windows) |

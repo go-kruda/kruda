@@ -177,7 +177,7 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 		remote = *first.remoteAddrRef
 	}
 
-	resp := acquireResponse()
+	resp := acquireResponseFor(first)
 	hw := newWingHijackWriter(resp, f, fd, leftover, remote, ctx)
 
 	func() {

@@ -3,6 +3,125 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Security
+
+- `c.Redirect` and `c.SetContentType` now replace CR and LF in their values
+  with a space. On Wing, a redirect URL containing `\r\n` could add a response
+  header.
+- `c.SetHeader` and `c.AddHeader` also replace CR and LF with a space instead
+  of deleting them, as net/http does. On Wing and net/http, deleting joined
+  the pieces: `c.SetHeader("Location", "/\n/evil.example")` sent
+  `Location: //evil.example`, a link to another site. It now sends
+  `Location: / /evil.example`. The fasthttp fast path already replaced them
+  with a space.
+
+### Fixed
+
+- Preserve configured JSON encoding on cache misses and hits, including fasthttp, and avoid double serialization.
+- Inherit direct transport proxy settings while preserving explicit application overrides; retain direct custom-request peer identities without trusting their forwarding headers.
+- Isolate nested session containers between requests and copy only visible slice elements.
+- Preserve existing Vary values when compressing responses on all adapters, and allow safe static filenames containing consecutive dots.
+
+- Clear pooled request state and inactive adapter references between net/http, fasthttp, and generic transport serving paths.
+
+- Preserve complete query strings in default response-cache keys and replay only after request authorization. Use `cache.Replay` after authorization to skip expensive work on a hit; cache helpers no longer skip the handler itself.
+- Prevent stale session updates from recreating logged-out sessions with atomic store updates. Add `Session.Regenerate` for login ID rotation. Custom stores must implement the documented atomic operations; unsupported loaded sessions fail before the handler runs.
+- Keep Wing fallback file reads and closes off the event loop, contain reader panics, and enforce write deadlines without unrelated socket activity. Limit open static files to 1024 per route by default with `WithMaxOpenFiles`; retain admission until cleanup completes.
+- Keep rate limiting buildable with the declared core dependency instead of calling an unreleased proxy API.
+
+- Stream static-file fallback responses instead of allocating the full file. Preserve Wing sendfile and bound fallback reads across net/http, fasthttp, and Wing. Close deferred files on completion, disconnect, and shutdown.
+
+- Require an explicit proxy IP allowlist for `WithTrustProxy(true)` and direct transport configs. Add `WithTrustedProxies` with exact-IP matching; an empty list now ignores forwarded addresses. Framework and rate limiter share canonical IP validation, right-to-left trusted-hop parsing, and duplicate-header fallback. Existing proxy deployments must add their proxy IPs.
+
+- Require explicit `WithDevMode(true)` for pprof routes; the development environment variable alone no longer exposes profiling endpoints. Log a development-mode warning at server startup.
+
+- Read headers and cookies on the fasthttp fast path and return owned request body bytes.
+- Avoid storing untouched new sessions, refresh existing in-memory sessions without overwriting values, make expiry removal atomic, and make session store Close safe to call repeatedly.
+
+- Rate limiting uses the socket peer for proxy trust, checks forwarded chains from right to left, and falls back to the peer for invalid or duplicate forwarding headers. Custom transports without peer address support share an `unknown` key unless a custom `KeyFunc` is provided.
+- Normalize client IP addresses across transports. Wing addresses such as `127.0.0.1:54869` now return `127.0.0.1`; the fasthttp fast path returns the peer IP instead of an empty string.
+- Wing now sends the status code the handler set on every response path. A
+  JSON response with a code outside its short status list, such as 202 or 504,
+  was sent as 200. Text and header responses for those codes kept the number
+  but said `Unknown`: `HTTP/1.1 202 Unknown` is now `HTTP/1.1 202 Accepted`.
+  Codes with no standard name keep the `Unknown` label. `StaticText` and
+  `StaticJSON` routes now use the same names; they sent `503 OK` before.
+  A code that cannot start a final response (below 200 or above 999, such as
+  `c.Status(0)`) is sent as `200 OK`, on handler and `StaticText` routes
+  alike. Text and header responses used to send `HTTP/1.1 0 Unknown`, and
+  `StaticText` routes `HTTP/1.1 0 OK`, which clients reject. JSON responses
+  already sent `200 OK`.
+- Wing no longer sends a body after a HEAD request or with a 204 or 304
+  response. The stray bytes were read as the start of the next response on a
+  keep-alive connection, so a proxy that reuses connections could hand one
+  client's response to another. Before,
+  `c.Status(204).JSON(kruda.Map{"x": 1})` sent `Content-Length: 7` and the
+  JSON; now it sends neither. A HEAD response keeps the `Content-Length` a GET
+  would send. A 204 or 304 sends no `Content-Length`, even one the handler
+  set, as net/http does. `StaticText` and `StaticJSON` routes follow the same
+  rules: one registered for HEAD (`app.Head`, or `app.All`, which also
+  registers HEAD) sends its headers without the body, and one with 204 or 304
+  has no body to send. A static `WingConfig.DefaultPreset` also sends only
+  its headers for HEAD. A `Stream` route drops the body the same way and now
+  sends `Connection: close`, since Wing closes a stream's connection when the
+  handler returns; `c.SSE` used to say `keep-alive`. Hijack routes that
+  answer without hijacking, and handlers that call `SetStaticResponse`
+  directly, also send no body after HEAD.
+- Wing drops a `Transfer-Encoding` header the handler sets. Wing never
+  chunk-encodes, so `c.SetHeader("Transfer-Encoding", "chunked").Text("body")`
+  used to send `Content-Length: 4`, `Transfer-Encoding: chunked` and the plain
+  bytes `body`, which a client reads as a broken chunked body.
+- Wing now matches response header names case-insensitively, as net/http and
+  fasthttp do. `Set`, `Get` and `Del` on `c.ResponseWriter().Header()` treat
+  `content-length` and `Content-Length` as one header. Before,
+  `Header().Set("content-length", "10")` followed by `c.Text("body")` sent
+  both `content-length: 10` and `Content-Length: 4`, two lengths that
+  disagree. A lowercase `connection` header on a `Stream` route was sent next
+  to Wing's `Connection: close` the same way. Comparing names this way costs
+  about 2% (about 20 ns) on a generic response with secure headers and two
+  handler headers, measured on Linux (`BenchmarkCPUHandlerGenericSecureHeaders`).
+  The string and JSON fast paths do not use the header map.
+- On Wing routes that do not run inline, such as `Arrow`, `Spear` and spawn
+  routes, and on inline routes whose request body does not arrive with the
+  headers (larger than the 8 KB read buffer, sent after
+  `Expect: 100-continue`, or split across packets), a handler that called
+  `SetSendFile` through `c.ResponseWriter()` sent the headers and
+  `Content-Length` but never the file, so the next response on the
+  connection was read as the body. Those routes now stream the file instead.
+  `app.Static` was not affected, because it already streams off the inline
+  path.
+- Wing static presets (`StaticText`, `StaticJSON`, or `Static(...)` on any
+  preset) now always run inline and answer every request with the static
+  response. A static preset on `Arrow` or `Spear`, and an inline one whose
+  request body did not arrive with the headers (such as a body larger than
+  the 8 KB read buffer), went to the route's handler instead. With no handler
+  that panicked into a 500. An inline route that also had a handler ran the
+  handler and its middleware when the body arrived late; it now sends the
+  static response, as it does for every other request. A HEAD request gets
+  the headers only.
+- A Wing handler that calls `SetStaticResponse` after attaching a file sends
+  only the static response. A file attached with `SetFileStream` was written
+  after the static bytes on every dispatch mode, and one attached with
+  `SetSendFile` on inline routes, so the next request on the connection read
+  the file as its response.
+- Wing sends the real length of a buffered body or a file as
+  `Content-Length`, replacing a value the handler set. Before,
+  `Header().Set("Content-Length", "10")` followed by `Write([]byte("body"))`
+  sent `Content-Length: 10` with 4 bytes, and the client read the next
+  response as the rest of the body. A HEAD handler that sets
+  `Content-Length` and writes no body keeps its value. `Stream` routes keep
+  the handler's value, since Wing does not know a stream's length.
+- The fasthttp fast path now compares the whole HTTP method. It used to check
+  only the length and first letter, so `PUSH` ran as `POST` and `PURGE` as
+  `PATCH`. Those methods now reach the router unchanged: a path with routes
+  for other methods answers 405, and a path with no route answers 404.
+  Wing's per-route preset lookup had the same loose match, so a `StaticText`
+  route registered for `HEAD` or `POST` also answered `HACK` or `PUSH` with
+  its prebuilt response. It now compares the whole method, and those requests
+  answer 405.
+
 ## [1.8.2] — 2026-11-09
 
 ### Security

@@ -10,11 +10,12 @@ import (
 
 func newFastHTTPTransport(cfg Config, logger *slog.Logger) transport.Transport {
 	fasthttpCfg := transport.FastHTTPConfig{
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout:  cfg.IdleTimeout,
-		MaxBodySize:  cfg.BodyLimit,
-		TrustProxy:   cfg.TrustProxy,
+		ReadTimeout:    cfg.ReadTimeout,
+		WriteTimeout:   cfg.WriteTimeout,
+		IdleTimeout:    cfg.IdleTimeout,
+		MaxBodySize:    cfg.BodyLimit,
+		TrustProxy:     cfg.TrustProxy,
+		TrustedProxies: cfg.TrustedProxies,
 	}
 	logger.Debug("transport selected", "name", "fasthttp")
 	return transport.NewFastHTTP(fasthttpCfg)

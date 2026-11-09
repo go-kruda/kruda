@@ -10,9 +10,10 @@ import (
 )
 
 type kqueueEngine struct {
-	kqfd    int
-	changes []syscall.Kevent_t
-	kevents []syscall.Kevent_t
+	waitTimeout *syscall.Timespec
+	kqfd        int
+	changes     []syscall.Kevent_t
+	kevents     []syscall.Kevent_t
 
 	recvBufs map[int32]recvInfo
 	sendBufs map[int32][]byte
@@ -38,6 +39,10 @@ func newEngine() engine {
 }
 
 func (e *kqueueEngine) Init(cfg engineConfig) error {
+	if cfg.WaitTimeoutMillis > 0 {
+		ts := syscall.NsecToTimespec(int64(cfg.WaitTimeoutMillis) * 1000000)
+		e.waitTimeout = &ts
+	}
 	kqfd, err := syscall.Kqueue()
 	if err != nil {
 		return err
@@ -127,7 +132,7 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 		maxEvents = len(events)
 	}
 
-	n, err := syscall.Kevent(e.kqfd, changes, e.kevents[:maxEvents], nil)
+	n, err := syscall.Kevent(e.kqfd, changes, e.kevents[:maxEvents], e.waitTimeout)
 	if err != nil {
 		if err == syscall.EINTR {
 			return 0, nil

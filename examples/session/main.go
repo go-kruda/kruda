@@ -15,6 +15,9 @@ func main() {
 
 	app.Post("/login", func(c *kruda.Ctx) error {
 		sess := session.GetSession(c)
+		if err := sess.Regenerate(); err != nil {
+			return err
+		}
 		sess.Set("user", "Tiger")
 		sess.Set("role", "admin")
 		return c.JSON(kruda.Map{"message": "logged in", "session_id": sess.ID()})

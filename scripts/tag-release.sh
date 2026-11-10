@@ -51,7 +51,8 @@ section "core tag $CORE"
 LAST_CORE=$(latest_tag "")
 newer "$CORE" "$LAST_CORE" || fail "$CORE is not newer than $LAST_CORE"
 [[ -n $(git diff --name-only "$LAST_CORE" "$SHA") ]] || fail "nothing changed since $LAST_CORE"
-git show "$SHA:CHANGELOG.md" | grep -q "^## \[${CORE#v}\]" || fail "CHANGELOG.md has no '## [${CORE#v}]' section"
+# A here-string, not a pipe: grep -q stops at the first match and pipefail would report git show's SIGPIPE.
+grep -q "^## \[${CORE#v}\]" <<<"$(git show "$SHA:CHANGELOG.md")" || fail "CHANGELOG.md has no '## [${CORE#v}]' section"
 ok "$CORE follows $LAST_CORE and has a CHANGELOG section"
 
 section "main is green for $SHA"

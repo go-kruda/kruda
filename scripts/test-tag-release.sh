@@ -50,7 +50,9 @@ for t in v1.0.0 cmd/kruda/v1.0.0 contrib/a/v1.2.0 contrib/b/v1.0.0; do git tag -
 git push -q origin main --tags
 
 echo "// a" >>contrib/a/go.mod
-printf '# Changelog\n\n## [1.0.1]\n\n## [1.0.0]\n' >CHANGELOG.md
+# Larger than a pipe buffer, like the real CHANGELOG, so a reader that stops
+# at the first match leaves the writer with SIGPIPE.
+{ printf '# Changelog\n\n## [1.0.1]\n\n## [1.0.0]\n'; seq 1 20000 | sed 's/^/- entry /'; } >CHANGELOG.md
 git commit -qam two && git push -q origin main
 : >"$TMP/pushes"
 

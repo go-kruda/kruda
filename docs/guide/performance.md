@@ -273,7 +273,7 @@ kruda pgo strip                    # Disable PGO (backs up the profile)
 1. **Representative load** — Profile under realistic traffic patterns, not just `/`
 2. **Re-profile after major changes** — Update `default.pgo` when your hot paths change significantly
 3. **Commit to repo** — `default.pgo` should be in version control so CI/CD builds are optimized
-4. **Use a supported Go patch release**. Kruda requires Go 1.26.10+ or Go 1.27.3+ on their respective release lines.
+4. **Use a supported Go patch release**. Kruda requires Go 1.26.11+ or Go 1.27.4+ on their respective release lines.
 5. **Combine with Sonic** — PGO + Sonic JSON gives maximum throughput
 
 ### Verify PGO is Active

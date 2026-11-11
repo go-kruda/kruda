@@ -25,9 +25,9 @@ docker run --rm -v "$PWD/bench/kruda29-gates/results:/out" -e RESULTS_DIR=/out k
 
 Options (build args / env):
 
-- `GO_IMAGE` (build arg, default `golang:1.26.10-bookworm`, the repo floor —
+- `GO_IMAGE` (build arg, default `golang:1.26.11-bookworm`, the repo floor —
   same as CI): toolchain image. Rebuild with e.g.
-  `--build-arg GO_IMAGE=golang:1.27.3-bookworm` to repeat the gates on Go 1.27.3.
+  `--build-arg GO_IMAGE=golang:1.27.4-bookworm` to repeat the gates on Go 1.27.4.
 - `FUZZTIME` (env, default `30s`): per-target fuzz time for the six fuzz
   suites. `0` skips fuzzing (seed corpus still runs as unit tests).
 

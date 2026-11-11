@@ -3,6 +3,24 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.4] — 2026-11-11
+
+### Security
+
+- Raised the minimum Go version to **1.26.11** on the Go 1.26 release line and
+  **1.27.4** on the Go 1.27 release line, which fix GO-2026-6859
+  (CVE-2026-97054): an HTTP/1 server crash caused by a header race in
+  `net/http`'s `MaxBytesReader`. govulncheck reports it as reachable through
+  the net/http transport. The new floor applies to modules, templates,
+  examples, benchmarks, documentation, CI, and `kruda validate`.
+
+### Notes
+
+- v1.8.3 was tagged but has no GitHub release. The advisory was published on
+  the day of tagging, and the release workflow stopped at its security scan.
+  Upgrade from v1.8.2 straight to v1.8.4, and read the v1.8.3 Upgrading table
+  first: it lists the behaviour changes that v1.8.4 also contains.
+
 ## [1.8.3] — 2026-11-10
 
 ### Upgrading

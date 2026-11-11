@@ -1,6 +1,6 @@
 module kruda-soak
 
-go 1.26.10
+go 1.26.11
 
 require github.com/go-kruda/kruda v1.5.0
 

@@ -2,7 +2,7 @@
 
 Fast by default, type-safe by design.
 
-[![Go Version](https://img.shields.io/badge/Go-1.26.10+-00ADD8?logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.26.11+-00ADD8?logo=go)](https://go.dev)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-kruda/kruda.svg)](https://pkg.go.dev/github.com/go-kruda/kruda)
 [![CI](https://github.com/go-kruda/kruda/actions/workflows/test.yml/badge.svg)](https://github.com/go-kruda/kruda/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/go-kruda/kruda/graph/badge.svg?token=9HIGH8L2Q7)](https://codecov.io/gh/go-kruda/kruda)
@@ -276,7 +276,7 @@ Wing's runtime implementation lives in the core module (`wing_*.go` at the repo 
 
 Kruda core has minimal external dependencies (Sonic JSON, fasthttp). Use `kruda_stdjson` build tag to switch to stdlib JSON. Upgrade to the latest Go patch release for security fixes.
 
-Use Go 1.26.10+ on the Go 1.26 release line or Go 1.27.3+ on the Go 1.27 release line.
+Use Go 1.26.11+ on the Go 1.26 release line or Go 1.27.4+ on the Go 1.27 release line.
 Run `./scripts/govulncheck-modules.sh` to check all released modules against the
 current vulnerability database. A passing scan does not rule out non-reachable advisories.
 

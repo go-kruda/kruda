@@ -19,7 +19,9 @@ case "$1 $2" in
     wf=""
     while (($#)); do [[ $1 == --workflow ]] && wf=$2; shift; done
     case $wf in
-      test.yml | benchmark.yml) echo "${FAKE_GREEN:-1}" ;;
+      test.yml | benchmark.yml)
+        [[ -z ${FAKE_GH_FAIL:-} ]] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+        echo "${FAKE_GREEN:-1}" ;;
       release.yml) echo "${FAKE_RUN_ID:-}" ;;
     esac ;;
   "run watch") exit "${FAKE_WATCH_EXIT:-0}" ;;
@@ -45,6 +47,17 @@ git clone -q "$FAKE_ORIGIN" "$TMP/work" 2>/dev/null
 cd "$TMP/work"
 for d in . cmd/kruda contrib/a contrib/b; do mkdir -p "$d" && echo "module m/$d" >"$d/go.mod"; done
 printf '# Changelog\n\n## [1.0.0]\n' >CHANGELOG.md
+mkdir -p .github/workflows scripts
+printf "jobs:\n  test:\n    steps:\n      - with:\n          go-version: '9.9.9'\n  security:\n    steps:\n      - with:\n          go-version: '1.26.11'\n" >.github/workflows/release.yml
+# Stands in for the real scan: records the toolchain and the tree it was given.
+cat >scripts/govulncheck-modules.sh <<'EOF'
+#!/usr/bin/env bash
+[[ $1 == --local-core ]] || exit 2
+{ echo "$GOTOOLCHAIN"; cat contrib/a/go.mod; } >"$FAKE_SCAN_LOG"
+exit "${FAKE_VULN:-0}"
+EOF
+chmod +x scripts/govulncheck-modules.sh
+export FAKE_SCAN_LOG="$TMP/scan"
 git add -A && git commit -qm one
 for t in v1.0.0 cmd/kruda/v1.0.0 contrib/a/v1.2.0 contrib/b/v1.0.0; do git tag -a "$t" -m "$t"; done
 git push -q origin main --tags
@@ -65,6 +78,19 @@ expect_fail() {
 
 FAKE_GREEN=0 expect_fail "no successful test.yml run" v1.0.1
 check "refuses to tag before main is green"
+
+FAKE_GH_FAIL=1 expect_fail "gh run list failed for test.yml" v1.0.1
+check "reports a GitHub API failure as an error, not as red CI"
+
+FAKE_VULN=1 expect_fail "release security scan failed" v1.0.1
+check "refuses to tag when the release security scan fails"
+
+echo "// uncommitted" >>contrib/a/go.mod
+run v1.0.1 || { cat "$TMP/out"; die "dry run failed"; }
+git checkout -q -- contrib/a/go.mod
+[[ $(head -1 "$TMP/scan") == go1.26.11 ]] || die "scan ran with $(head -1 "$TMP/scan"), want release.yml's go1.26.11"
+! grep -q uncommitted "$TMP/scan" || die "scan saw the working tree instead of origin/main"
+check "scans origin/main with release.yml's security Go version"
 
 expect_fail "not newer than v1.0.0" v1.0.0
 check "refuses a core version that is not newer"

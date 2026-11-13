@@ -4,7 +4,8 @@
 # standalone module must be scanned in its own module context to catch a
 # regression to a vulnerable dependency.
 set -euo pipefail
-ROOT=$(git rev-parse --show-toplevel)
+# No git calls: tag-release.sh runs this on a `git archive` export of the release commit.
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 local_core=false
@@ -47,4 +48,4 @@ while IFS= read -r modfile; do
   else
     ( cd "$dir" && "$GOVULN" ./... && "$GOVULN" -tags kruda_stdjson ./... )
   fi
-done < <(git ls-files 'cmd/kruda/go.mod' 'contrib/*/go.mod')
+done < <(printf '%s\n' cmd/kruda/go.mod contrib/*/go.mod)

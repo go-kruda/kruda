@@ -41,9 +41,12 @@ green_runs() {
   gh run list --workflow "$1" --branch main --commit "$SHA" --status success \
     --limit 1 --json databaseId --jq length
 }
+# A dead connection must fail instead of hanging: ssh keepalive, and abort a stalled https transfer.
+export GIT_SSH_COMMAND=${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3}
+git_net() { git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 "$@"; }
 
 section "commit"
-git fetch --quiet origin main --tags
+git_net fetch --quiet origin main --tags
 SHA=$(git rev-parse origin/main)
 ok "origin/main is $SHA"
 
@@ -58,7 +61,8 @@ ok "$CORE follows $LAST_CORE and has a CHANGELOG section"
 section "main is green for $SHA"
 # release.yml rejects a tag without these, and the tag cannot be taken back.
 for wf in test.yml benchmark.yml; do
-  [[ $(green_runs "$wf") -ge 1 ]] || fail "no successful $wf run on main for $SHA yet; wait, then rerun"
+  n=$(green_runs "$wf") || fail "gh run list failed for $wf; check the network and gh auth, then rerun"
+  ((n >= 1)) || fail "no successful $wf run on main for $SHA yet; wait, then rerun"
   ok "$wf succeeded"
 done
 
@@ -87,13 +91,28 @@ done
 TAGS+=("$CORE")
 MSGS+=("Release $CORE")
 
-remote=$(git ls-remote --tags origin | awk '{print $2}')
+remote=$(git_net ls-remote --tags origin | awk '{print $2}')
 for t in "${TAGS[@]}"; do
   git rev-parse -q --verify "refs/tags/$t" >/dev/null && fail "tag $t already exists locally"
   grep -qx "refs/tags/$t" <<<"$remote" && fail "tag $t already exists on origin"
   echo "  $t"
 done
 ok "${#TAGS[@]} new tags on $SHA"
+
+section "release security scan"
+# The advisory database changes between PR CI and tagging; v1.8.3 was tagged
+# hours after a new advisory and release.yml stopped at this scan.
+GO_SCAN=$(awk '/^  security:/{s=1} s && /go-version:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' <<<"$(git show "$SHA:.github/workflows/release.yml")")
+[[ -n $GO_SCAN ]] || fail "cannot read the security job's go-version from release.yml"
+SCAN_DIR=$(mktemp -d)
+trap 'rm -rf "$SCAN_DIR"' EXIT
+git archive "$SHA" | tar -x -C "$SCAN_DIR"
+if ! (cd "$SCAN_DIR" && GOTOOLCHAIN=go$GO_SCAN scripts/govulncheck-modules.sh --local-core) >"$SCAN_DIR.log" 2>&1; then
+  tail -20 "$SCAN_DIR.log" >&2
+  fail "release security scan failed with go$GO_SCAN (full log: $SCAN_DIR.log); release.yml would stop here"
+fi
+rm -f "$SCAN_DIR.log"
+ok "govulncheck-modules.sh --local-core is clean with go$GO_SCAN"
 
 if ((PUSH == 0)); then
   echo
@@ -105,12 +124,12 @@ section "push"
 for i in "${!TAGS[@]}"; do git tag -a "${TAGS[$i]}" -m "${MSGS[$i]}" "$SHA"; done
 if ((${#TAGS[@]} > 1)); then
   NESTED=("${TAGS[@]:0:${#TAGS[@]}-1}")
-  git push --atomic origin "${NESTED[@]/#/refs/tags/}"
+  git_net push --atomic origin "${NESTED[@]/#/refs/tags/}"
   ok "pushed ${#NESTED[@]} nested module tags"
 fi
 # GitHub sends no push event when more than three tags arrive in one push,
 # so the core tag goes alone or release.yml never runs.
-git push origin "refs/tags/$CORE"
+git_net push origin "refs/tags/$CORE"
 ok "pushed $CORE on its own"
 
 section "release.yml"

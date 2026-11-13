@@ -72,6 +72,12 @@ version is not newer than the last core tag or `CHANGELOG.md` has no section
 for it. Each nested module that changed since its last tag gets a patch bump;
 pass `--set contrib/ws=vA.B.C` for any other version.
 
+Before creating any tag, the script runs release.yml's security scan
+(`scripts/govulncheck-modules.sh --local-core`) on a `git archive` export of
+that commit, with the Go version release.yml's security job uses. The
+vulnerability database can change between PR CI and tagging, and a tag whose
+release workflow fails that scan stays without a GitHub release, as v1.8.3 did.
+
 With `--push` it pushes the nested-module tags first and the core tag in a
 push of its own. GitHub sends no push event when more than three tags arrive
 in one push, so a single batch push silently skips `release.yml`. It then

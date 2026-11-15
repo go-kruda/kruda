@@ -3,6 +3,21 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- An `App` used directly as an `http.Handler` (`http.ListenAndServe(addr, app)`,
+  a mux, `httptest`) now reports request body read errors. It used to stop
+  reading at the first error and return what it had with no error. A client
+  that dropped the connection halfway through a body handed the handler a
+  truncated body: `c.BodyBytes()` returned the partial bytes with a nil error,
+  and `c.Bind` parsed them. Now `c.BodyBytes()` returns the partial bytes
+  together with the read error, and `c.Bind` answers 400 "failed to read
+  request body". A clean end of body is unchanged. The change is limited to
+  `App.ServeHTTP`; Wing, fasthttp, and Kruda's own NetHTTP transport use other
+  code. If your handler reads `c.BodyBytes()` and ignores its error, check it.
+
 ## [1.8.4] — 2026-11-11
 
 ### Security

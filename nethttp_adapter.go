@@ -3,6 +3,7 @@ package kruda
 import (
 	"context"
 	"errors"
+	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -70,11 +71,13 @@ func (r *fastNetHTTPRequest) Body() ([]byte, error) {
 			buf = append(buf, tmp[:n]...)
 		}
 		if err != nil {
-			break
+			r.body = buf
+			if err == io.EOF {
+				err = nil
+			}
+			return buf, err
 		}
 	}
-	r.body = buf
-	return buf, nil
 }
 
 func (r *fastNetHTTPRequest) RawQuery() string { return r.r.URL.RawQuery }

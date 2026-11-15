@@ -19,8 +19,10 @@ func containsDotPercent(s string) bool {
 	return false
 }
 
-// ServeHTTP implements http.Handler for net/http path (TLS, Windows, fallback).
-// Includes full lifecycle pipeline (matching ServeFast) and panic recovery.
+// ServeHTTP implements http.Handler so an App can be mounted on any net/http
+// server, mux, or httptest recorder. Kruda's own NetHTTP transport (TLS,
+// Windows, fallback) does not come through here. Includes the full lifecycle
+// pipeline (matching ServeFast) and panic recovery.
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := app.ctxPool.Get().(*Ctx)
 

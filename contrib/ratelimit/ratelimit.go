@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ func New(config ...Config) kruda.HandlerFunc {
 	keyFunc := cfg.KeyFunc
 	if keyFunc == nil {
 		keyFunc = func(c *kruda.Ctx) string {
-			return extractIP(c, policy)
+			return clientKey(extractIP(c, policy))
 		}
 	}
 
@@ -87,6 +88,17 @@ func New(config ...Config) kruda.HandlerFunc {
 
 		return c.Next()
 	}
+}
+
+// clientKey groups IPv6 clients by their /64 network. One subscriber usually
+// holds a whole /64 and can use a new address for every request, which would
+// otherwise give each request its own limit.
+func clientKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil || !addr.Is6() {
+		return ip
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
 // extractIP uses the same trusted-hop policy as the framework.

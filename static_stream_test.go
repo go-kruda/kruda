@@ -103,6 +103,9 @@ func TestStaticStreamTLS(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || n != files.size || err != nil {
 		t.Fatalf("status=%d bytes=%d error=%v", resp.StatusCode, n, err)
 	}
+	// The handler closes the file after its last write, which can land after
+	// the client has read every byte. Close waits for running handlers.
+	server.Close()
 	if files.maxRead.Load() > 64<<10 || files.closes.Load() != 1 {
 		t.Fatalf("max read=%d closes=%d", files.maxRead.Load(), files.closes.Load())
 	}

@@ -77,15 +77,23 @@ func CORS(config ...CORSConfig) kruda.HandlerFunc {
 	}
 
 	// Validate origin format at init to catch misconfigurations early.
-	for _, o := range cfg.AllowOrigins {
+	// A browser's Origin header never has a path, so "https://a.com/" would
+	// never match. Accept a lone trailing slash as the same origin and reject
+	// anything else after the host.
+	origins := make([]string, len(cfg.AllowOrigins))
+	for i, o := range cfg.AllowOrigins {
+		origins[i] = o
 		if o == "*" {
 			continue
 		}
 		u, err := url.Parse(o)
-		if err != nil || u.Scheme == "" || u.Host == "" {
+		if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil ||
+			(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery {
 			panic("kruda: CORS invalid origin: " + o + " (must be scheme://host[:port])")
 		}
+		origins[i] = u.Scheme + "://" + u.Host
 	}
+	cfg.AllowOrigins = origins
 
 	// Pre-build header values once at init time.
 	allowMethods := strings.Join(cfg.AllowMethods, ", ")

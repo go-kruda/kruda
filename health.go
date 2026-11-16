@@ -113,7 +113,7 @@ func runHealthChecks(ctx context.Context, checkers []namedChecker, timeout time.
 	ch := make(chan result, len(checkers))
 	for _, nc := range checkers {
 		go func(nc namedChecker) {
-			err := nc.checker.Check(ctx)
+			err := recoverTask(func() error { return nc.checker.Check(ctx) })
 			ch <- result{name: nc.name, err: err}
 		}(nc)
 	}

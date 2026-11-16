@@ -115,11 +115,9 @@ func buildInputParser[T any]() *inputParser {
 func selectFieldSetter(t reflect.Type) func(reflect.Value, string) error {
 	switch t.Kind() {
 	case reflect.String:
-		if t == reflect.TypeOf("") {
-			return func(dst reflect.Value, s string) error {
-				dst.SetString(s)
-				return nil
-			}
+		return func(dst reflect.Value, s string) error {
+			dst.SetString(s)
+			return nil
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		bits := t.Bits()
@@ -152,15 +150,13 @@ func selectFieldSetter(t reflect.Type) func(reflect.Value, string) error {
 			return nil
 		}
 	case reflect.Bool:
-		if t == reflect.TypeOf(false) {
-			return func(dst reflect.Value, s string) error {
-				b, err := strconv.ParseBool(s)
-				if err != nil {
-					return err
-				}
-				dst.SetBool(b)
-				return nil
+		return func(dst reflect.Value, s string) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
 			}
+			dst.SetBool(b)
+			return nil
 		}
 	}
 	conv := selectConverter(t)
@@ -180,7 +176,7 @@ func selectConverter(t reflect.Type) func(string) (reflect.Value, error) {
 	switch t.Kind() {
 	case reflect.String:
 		return func(s string) (reflect.Value, error) {
-			return reflect.ValueOf(s), nil
+			return reflect.ValueOf(s).Convert(t), nil
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		bits := t.Bits()
@@ -215,7 +211,7 @@ func selectConverter(t reflect.Type) func(string) (reflect.Value, error) {
 			if err != nil {
 				return reflect.Value{}, err
 			}
-			return reflect.ValueOf(b), nil
+			return reflect.ValueOf(b).Convert(t), nil
 		}
 	default:
 		panic(fmt.Sprintf("kruda: unsupported param/query type: %s", t.Kind()))

@@ -34,6 +34,8 @@ func TestSelectFieldSetterConverterParity(t *testing.T) {
 		{"named int", setterNamedInt(0), []string{"-32768", "32767", "32768", "invalid"}},
 		{"named uint", setterNamedUint(0), []string{"4294967295", "4294967296", "invalid"}},
 		{"named float", setterNamedFloat(0), []string{"1.00000006", "3.5e38", "invalid"}},
+		{"named string", setterNamedString(""), []string{"hello", ""}},
+		{"named bool", setterNamedBool(false), []string{"true", "0", "yes"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			typ := reflect.TypeOf(tc.value)
@@ -79,36 +81,26 @@ func TestSelectFieldSetterConverterParity(t *testing.T) {
 	}
 }
 
-func TestSelectFieldSetterNamedStringBoolLegacyPanic(t *testing.T) {
-	for _, tc := range []struct {
-		value any
-		raw   string
-	}{
-		{setterNamedString(""), "name"},
-		{setterNamedBool(false), "true"},
-	} {
-		t.Run(reflect.TypeOf(tc.value).String(), func(t *testing.T) {
-			typ := reflect.TypeOf(tc.value)
-			old := func() (panicked bool) {
-				defer func() { panicked = recover() != nil }()
-				value, err := selectConverter(typ)(tc.raw)
-				if err != nil {
-					t.Fatal(err)
-				}
-				reflect.New(typ).Elem().Set(value)
-				return false
-			}()
-			new := func() (panicked bool) {
-				defer func() { panicked = recover() != nil }()
-				if err := selectFieldSetter(typ)(reflect.New(typ).Elem(), tc.raw); err != nil {
-					t.Fatal(err)
-				}
-				return false
-			}()
-			if !old || !new {
-				t.Fatalf("legacy panic = %t, setter panic = %t; want both", old, new)
-			}
-		})
+func TestNamedStringAndBoolFieldsBind(t *testing.T) {
+	type input struct {
+		Status setterNamedString `query:"status"`
+		Kind   setterNamedString `param:"kind"`
+		Active setterNamedBool   `query:"active"`
+		Mode   setterNamedString `query:"mode" default:"auto"`
+		Strict setterNamedBool   `query:"strict" default:"true"`
+	}
+	p := buildInputParser[input]()
+	c := bindCtx("GET", "/items", map[string]string{"kind": "book"}, map[string]string{"status": "open", "active": "true"}, nil)
+	v, err := p.parse(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Interface().(input); got.Status != "open" || got.Kind != "book" || !bool(got.Active) || got.Mode != "auto" || !bool(got.Strict) {
+		t.Fatalf("input = %+v", got)
+	}
+	c = bindCtx("GET", "/items", nil, map[string]string{"active": "maybe"}, nil)
+	if _, err := p.parse(c); err == nil || err.Error() != `invalid query parameter "active": expected bool` {
+		t.Fatalf("error = %v", err)
 	}
 }
 

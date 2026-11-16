@@ -29,20 +29,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `kruda_stdjson`, 8 to 6 allocs/op and 426 to 384 ns/op with Sonic. These are
   in-process benchmarks, not HTTP throughput or process memory.
 
-### Fixed
-
-- A typed handler input field whose type is a named `string` or `bool`
-  (`type Status string`) with a `query`, `param` or `default` tag made the
-  request panic inside the binder.
-  Such fields now bind like plain `string` and `bool` fields. Named integer
-  and float types already worked.
-- `kruda generate handler` wrote code for an API that no longer exists
-  (`c.JSON(200, ...)`, and a typed handler without a return value), so the
-  generated file did not compile. It now emits `c.JSON(...)` and a typed
-  handler that returns `(*Response, error)`.
-
-### Changed
-
 - **`HealthHandler` no longer sends a checker's error text.** Before, a
   failed check answered with its error, for example
   `{"status":"unhealthy","checks":{"DB":"dial tcp 10.0.0.5:5432: connect: connection refused"}}`,
@@ -65,6 +51,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   handler's response, but `Timeout` still returned a 503 error, so logs and
   metrics recorded a 503 the client never saw. It now returns the handler's
   own result and logs `handler finished after the request timeout`.
+
+### Fixed
+
+- A typed handler input field whose type is a named `string` or `bool`
+  (`type Status string`) with a `query`, `param` or `default` tag made the
+  request panic inside the binder.
+  Such fields now bind like plain `string` and `bool` fields. Named integer
+  and float types already worked.
+- `kruda generate handler` wrote code for an API that no longer exists
+  (`c.JSON(200, ...)`, and a typed handler without a return value), so the
+  generated file did not compile. It now emits `c.JSON(...)` and a typed
+  handler that returns `(*Response, error)`.
 
 ## [1.8.5] — 2026-11-16
 

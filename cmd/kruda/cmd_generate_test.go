@@ -1,11 +1,114 @@
 package main
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestGenerateHandlerCLI(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if os.IsNotExist(err) || (err == nil && !bytes.HasPrefix(coreMod, []byte("module github.com/go-kruda/kruda\n"))) {
+		t.Skip("generator integration requires the parent Kruda core source checkout")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "kruda")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = filepath.Join(root, "cmd", "kruda")
+	build.Env = append(os.Environ(), "GOWORK=off")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	mod := []byte("module handler.test\n\n" + goDirective(t, root) + "\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"go.mod": mod, "go.sum": sum} {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{
+		{"generate", "handler", "--path=/users"},
+		{"generate", "handler", "--path=/products", "--typed"},
+	} {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GOWORK=off")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("generate handler %v: %v\n%s", args, err, out)
+		}
+	}
+	src := []byte(`package consumer
+
+import (
+	"encoding/json"
+	"mime"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/go-kruda/kruda"
+	"handler.test/handlers"
+)
+
+func TestGeneratedHandlers(t *testing.T) {
+	app := kruda.New()
+	app.Get("/users", handlers.UsersHandler)
+	kruda.Get[handlers.ProductsRequest, handlers.ProductsResponse](app, "/products", handlers.ProductsHandler)
+	for _, tc := range []struct{ path, message string }{
+		{"/users", "Users handler"},
+		{"/products", "Products handler"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
+			}
+			contentType, _, err := mime.ParseMediaType(rec.Header().Get("Content-Type"))
+			if err != nil || contentType != "application/json" {
+				t.Fatalf("Content-Type = %q, want application/json: %v", rec.Header().Get("Content-Type"), err)
+			}
+			var response struct{ Message string }
+			if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Message != tc.message {
+				t.Fatalf("message = %q, want %q", response.Message, tc.message)
+			}
+		})
+	}
+}
+`)
+	if err := os.WriteFile(filepath.Join(dir, "handlers_test.go"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	test := exec.Command("go", "test", "-mod=mod", "-tags", "kruda_stdjson", "-v", "./...")
+	test.Dir = dir
+	test.Env = append(os.Environ(), "GOWORK=off")
+	if out, err := test.CombinedOutput(); err != nil {
+		t.Fatalf("test generated handlers: %v\n%s", err, out)
+	} else {
+		t.Logf("generated consumer tests:\n%s", out)
+	}
+}
 
 func TestHandlerNameFromPath(t *testing.T) {
 	tests := []struct {
@@ -91,7 +194,7 @@ func TestGenerateHandler_TypedTemplate(t *testing.T) {
 	if !strings.Contains(content, "ProductsResponse") {
 		t.Error("typed handler should contain response struct")
 	}
-	if !strings.Contains(content, "func ProductsHandler(c *kruda.C[ProductsRequest]) error") {
+	if !strings.Contains(content, "func ProductsHandler(c *kruda.C[ProductsRequest]) (*ProductsResponse, error)") {
 		t.Error("typed handler should use C[T] pattern")
 	}
 }

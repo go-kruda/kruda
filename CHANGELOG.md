@@ -5,6 +5,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `kruda generate binder` runs the generated-binding tool from the CLI:
+  `kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`.
+  It runs `cmd/bindgen` from the Kruda version your project's `go.mod`
+  selects, so the generator always matches the runtime. The standalone
+  `go run github.com/go-kruda/kruda/cmd/bindgen` command still works.
+- `--routes` (`-routes` on standalone bindgen) also emits typed registration
+  helpers such as `SearchInputGet` and `SearchInputGroupPost`. Each helper
+  passes `WithGeneratedPlan` for you, so a route cannot be registered without
+  its plan. It is off by default; without it the output is unchanged. See
+  "Generated Binding" in the handlers guide.
+
 ### Changed
 
 - Typed handlers bind `query` and `param` fields with fewer allocations. The
@@ -23,6 +36,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request panic inside the binder.
   Such fields now bind like plain `string` and `bool` fields. Named integer
   and float types already worked.
+- `kruda generate handler` wrote code for an API that no longer exists
+  (`c.JSON(200, ...)`, and a typed handler without a return value), so the
+  generated file did not compile. It now emits `c.JSON(...)` and a typed
+  handler that returns `(*Response, error)`.
 
 ## [1.8.5] — 2026-11-16
 

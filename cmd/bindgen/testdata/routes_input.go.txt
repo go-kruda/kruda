@@ -1,0 +1,19 @@
+package consumer
+
+type SearchInput struct {
+	ID   int    `query:"id" param:"id" default:"7"`
+	Q    string `query:"q" default:"all" validate:"min=1,max=64"`
+	Page int    `query:"page" default:"1" validate:"min=1,max=1000"`
+}
+
+type StaleInput struct {
+	Q string `query:"q" default:"old"`
+}
+
+type UnsupportedInput struct {
+	Value string `query:"value" validate:"required"`
+}
+
+type ChangedValidationInput struct {
+	Page int `query:"page" validate:"min=1"`
+}

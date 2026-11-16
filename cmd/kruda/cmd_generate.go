@@ -13,12 +13,13 @@ import (
 // generateCmd is the parent command for code generation subcommands.
 var generateCmd = &cobra.Command{
 	Use:   "generate",
-	Short: "Generate boilerplate code",
-	Long: `Generate handler or resource boilerplate code for a Kruda project.
+	Short: "Generate boilerplate and binding code",
+	Long: `Generate handler or resource boilerplate, or a typed input binder for a Kruda project.
 
 Subcommands:
   handler    Generate a route handler file
-  resource   Generate a ResourceService implementation`,
+  resource   Generate a ResourceService implementation
+  binder     Generate a typed query/path input binder`,
 	Aliases: []string{"gen", "g"},
 }
 
@@ -59,6 +60,7 @@ func init() {
 
 	generateCmd.AddCommand(handlerCmd)
 	generateCmd.AddCommand(resourceCmd)
+	generateCmd.AddCommand(binderCmd)
 }
 
 // handlerTemplate is the text/template for generating a basic handler file.
@@ -70,7 +72,7 @@ import (
 
 // {{.FuncName}}Handler handles {{.Method}} {{.Path}} requests.
 func {{.FuncName}}Handler(c *kruda.Ctx) error {
-	return c.JSON(200, map[string]string{
+	return c.JSON(map[string]string{
 		"message": "{{.FuncName}} handler",
 	})
 }
@@ -96,13 +98,10 @@ type {{.FuncName}}Response struct {
 }
 
 // {{.FuncName}}Handler handles {{.Method}} {{.Path}} requests with typed input.
-func {{.FuncName}}Handler(c *kruda.C[{{.FuncName}}Request]) error {
-	req := c.Body()
-	_ = req // use req fields
-
-	return c.JSON(200, {{.FuncName}}Response{
+func {{.FuncName}}Handler(c *kruda.C[{{.FuncName}}Request]) (*{{.FuncName}}Response, error) {
+	return &{{.FuncName}}Response{
 		Message: "{{.FuncName}} handler",
-	})
+	}, nil
 }
 `
 

@@ -276,6 +276,12 @@ Group helpers preserve prefixes and inherited middleware. There are no generated
 HEAD, OPTIONS, arbitrary-method, or X/no-error callback helpers. POST and the
 other methods retain the same query/path binding scope below.
 
+Helper names are the input type name followed by the method, so two input
+types in one package where one name is the other plus `Group`, such as
+`Search` and `SearchGroup`, both produce `SearchGroupGet` and the package does
+not compile. Rename one of the types, or generate their routes in separate
+packages.
+
 Each helper prepends `WithGeneratedPlan(SearchInputPlan())` before caller options
 in a fresh slice. Caller option order and backing arrays are preserved. The last
 plan for the same input type wins, including an empty or stale caller plan that

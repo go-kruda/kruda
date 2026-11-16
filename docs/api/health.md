@@ -58,10 +58,19 @@ One or more unhealthy (HTTP 503):
 {
   "status": "unhealthy",
   "checks": {
-    "DBHealthChecker": "connection refused"
+    "DBHealthChecker": "unhealthy"
   }
 }
 ```
+
+A failed check shows `"unhealthy"`, and a check that runs past the timeout
+shows `"health check timed out"`. The checker's error text is not sent to the
+client, because it can name internal hosts and ports. It is logged on the
+server with the check name. A check that panics counts as failed.
+
+The endpoint runs every checker on each request. Expose it where only your
+orchestrator or monitoring can reach it, such as an internal port or a route
+behind authentication.
 
 No registered health checkers returns HTTP 200:
 

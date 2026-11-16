@@ -113,14 +113,17 @@ func TestHealthHandlerOneUnhealthy(t *testing.T) {
 		t.Fatalf("expected status unhealthy, got %v", body["status"])
 	}
 	checks := body["checks"].(map[string]any)
-	foundUnhealthy := false
+	unhealthy := 0
 	for _, v := range checks {
 		if v == "db connection lost" {
-			foundUnhealthy = true
+			t.Fatalf("checker error text leaked into the response: %v", checks)
+		}
+		if v == "unhealthy" {
+			unhealthy++
 		}
 	}
-	if !foundUnhealthy {
-		t.Fatalf("expected to find unhealthy checker with error message, checks: %v", checks)
+	if unhealthy != 1 {
+		t.Fatalf("expected one unhealthy checker, checks: %v", checks)
 	}
 }
 
@@ -142,7 +145,7 @@ func TestHealthHandlerTimeout(t *testing.T) {
 	checks := body["checks"].(map[string]any)
 	for name, v := range checks {
 		vs, _ := v.(string)
-		if vs != "health check timed out" && vs != "context deadline exceeded" {
+		if vs != "health check timed out" && vs != "unhealthy" {
 			t.Errorf("checker %q: expected timeout message, got %v", name, v)
 		}
 	}

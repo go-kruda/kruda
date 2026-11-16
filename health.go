@@ -28,6 +28,12 @@ func WithHealthTimeout(d time.Duration) HealthOption {
 	return func(cfg *healthConfig) { cfg.Timeout = d }
 }
 
+const (
+	healthOK        = "ok"
+	healthUnhealthy = "unhealthy"
+	healthTimedOut  = "health check timed out"
+)
+
 type namedChecker struct {
 	name    string
 	checker HealthChecker
@@ -46,6 +52,14 @@ func HealthHandler(opts ...HealthOption) HandlerFunc {
 			return c.JSON(Map{"status": "ok", "checks": Map{}})
 		}
 		results := runHealthChecks(c.Context(), checkers, cfg.Timeout)
+		for name, result := range results {
+			if result != healthOK && result != healthTimedOut {
+				// The checker's error can name internal hosts and ports, so it
+				// goes to the server log, not to whoever called the endpoint.
+				c.Log().Warn("health check failed", "check", name, "error", result)
+				results[name] = healthUnhealthy
+			}
+		}
 		return renderHealthResponse(c, results)
 	}
 }
@@ -126,7 +140,7 @@ loop:
 			if r.err != nil {
 				results[r.name] = r.err.Error()
 			} else {
-				results[r.name] = "ok"
+				results[r.name] = healthOK
 			}
 		case <-ctx.Done():
 			// Drain any results that arrived before we label them timed out.
@@ -136,7 +150,7 @@ loop:
 					if r.err != nil {
 						results[r.name] = r.err.Error()
 					} else {
-						results[r.name] = "ok"
+						results[r.name] = healthOK
 					}
 				default:
 					break loop
@@ -146,7 +160,7 @@ loop:
 	}
 	for _, nc := range checkers {
 		if _, ok := results[nc.name]; !ok {
-			results[nc.name] = "health check timed out"
+			results[nc.name] = healthTimedOut
 		}
 	}
 	return results

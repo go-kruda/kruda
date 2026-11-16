@@ -119,7 +119,7 @@ func main() {
 	//
 	// Response format:
 	//   200: {"status":"ok","checks":{"DatabaseService":"ok","CacheService":"ok"}}
-	//   503: {"status":"unhealthy","checks":{"DatabaseService":"database connection lost",...}}
+	//   503: {"status":"unhealthy","checks":{"DatabaseService":"unhealthy",...}}
 	// -----------------------------------------------------------------------
 	app.Get("/health", kruda.HealthHandler(
 		kruda.WithHealthTimeout(3*time.Second), // timeout for all checks

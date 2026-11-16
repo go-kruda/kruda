@@ -3,6 +3,19 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- Typed handlers bind `query` and `param` fields with fewer allocations. The
+  input parser now picks a setter per field when the route is registered and
+  writes scalar values straight into the input struct, and the handler no
+  longer boxes the parsed input. Parsed values, error messages and status
+  codes are unchanged. Measured on Linux amd64 (Go 1.26.11, 10 alternating
+  runs): `BenchmarkTypedHandler` 5 to 3 allocs/op and 331 to 276 ns/op with
+  `kruda_stdjson`, 8 to 6 allocs/op and 426 to 384 ns/op with Sonic. These are
+  in-process benchmarks, not HTTP throughput or process memory.
+
 ## [1.8.5] — 2026-11-16
 
 ### Fixed

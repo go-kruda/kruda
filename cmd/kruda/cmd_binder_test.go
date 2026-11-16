@@ -95,7 +95,7 @@ func TestGenerateBinderCLI(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mod := []byte("module binder.test\n\ngo 1.26.9\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+		mod := []byte("module binder.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
 		sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 		if err != nil {
 			t.Fatal(err)

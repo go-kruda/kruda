@@ -88,7 +88,7 @@ func TestRouteBuiltinInputNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.9\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	for _, name := range []string{"string", "make", "len", "append"} {
 		t.Run(name, func(t *testing.T) {
 			pkg := filepath.Join(dir, name)
@@ -174,7 +174,7 @@ func TestGeneratedRoutesCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.9\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatal(err)

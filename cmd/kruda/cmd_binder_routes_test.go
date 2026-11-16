@@ -22,7 +22,7 @@ func TestGenerateBinderRoutesCLI(t *testing.T) {
 		bin += ".exe"
 	}
 	runBinderCommand(t, "", true, "go", "build", "-o", bin, ".")
-	writeBinderFile(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.9\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeBinderFile(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	for _, name := range []string{"go.sum", "cmd/bindgen/testdata/routes_input.go.txt", "cmd/bindgen/testdata/routes_consumer_test.go.txt"} {
 		data, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
@@ -187,7 +187,7 @@ func TestGenerateBinderRoutesCLI(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(old, "cmd", "bindgen"), 0755); err != nil {
 			t.Fatal(err)
 		}
-		writeBinderFile(t, filepath.Join(old, "go.mod"), []byte("module github.com/go-kruda/kruda\ngo 1.26.9\n"))
+		writeBinderFile(t, filepath.Join(old, "go.mod"), []byte("module github.com/go-kruda/kruda\ngo 1.26.11\n"))
 		writeBinderFile(t, filepath.Join(old, "cmd", "bindgen", "main.go"), []byte(`package main
 import("flag"; "os")
 func main() {
@@ -200,7 +200,7 @@ func main() {
 		if err := os.Mkdir(consumer, 0755); err != nil {
 			t.Fatal(err)
 		}
-		writeBinderFile(t, filepath.Join(consumer, "go.mod"), []byte("module legacy.test\ngo 1.26.9\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(old))+"\n"))
+		writeBinderFile(t, filepath.Join(consumer, "go.mod"), []byte("module legacy.test\ngo 1.26.11\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(old))+"\n"))
 		args := []string{"generate", "binder", "--input=input.go", "--type=Input", "--output=generated.go", "--func=bindInput"}
 		for _, extra := range [][]string{nil, {"--routes=false"}} {
 			runBinderCommand(t, consumer, true, bin, append(args, extra...)...)

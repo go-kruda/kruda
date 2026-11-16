@@ -20,7 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - A typed handler input field whose type is a named `string` or `bool`
   (`type Status string`) with a `query`, `param` or `default` tag made the
-  request panic inside the binder, which the client saw as a failed request.
+  request panic inside the binder.
   Such fields now bind like plain `string` and `bool` fields. Named integer
   and float types already worked.
 

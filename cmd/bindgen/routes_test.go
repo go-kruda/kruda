@@ -88,7 +88,7 @@ func TestRouteBuiltinInputNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\n"+goDirective(t, root)+"\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	for _, name := range []string{"string", "make", "len", "append"} {
 		t.Run(name, func(t *testing.T) {
 			pkg := filepath.Join(dir, name)
@@ -174,7 +174,7 @@ func TestGeneratedRoutesCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeRouteFixture(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\n"+goDirective(t, root)+"\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatal(err)
@@ -309,4 +309,21 @@ func runRouteFixtureGo(t *testing.T, dir string, success bool, args ...string) {
 	if !success && (err == nil || !(bytes.Contains(out, []byte("does not match")) || bytes.Contains(out, []byte("cannot infer")) || bytes.Contains(out, []byte("cannot use")))) {
 		t.Fatalf("expected callback compilation error, got %v\n%s", err, out)
 	}
+}
+
+// goDirective returns the repository's go.mod "go" line, so fixture modules
+// always meet the current Go floor.
+func goDirective(t *testing.T, root string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "go ") {
+			return strings.TrimSpace(line)
+		}
+	}
+	t.Fatal("no go directive in " + root + "/go.mod")
+	return ""
 }

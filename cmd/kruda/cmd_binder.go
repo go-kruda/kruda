@@ -26,8 +26,9 @@ support -routes; updating the installed CLI alone does not add that support.
 
 Example:
   kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`,
-	Args: cobra.NoArgs,
-	RunE: runGenerateBinder,
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE:         runGenerateBinder,
 }
 
 func init() {

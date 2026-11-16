@@ -95,7 +95,7 @@ func TestGenerateBinderCLI(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mod := []byte("module binder.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+		mod := []byte("module binder.test\n\n" + goDirective(t, root) + "\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
 		sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 		if err != nil {
 			t.Fatal(err)
@@ -206,7 +206,7 @@ func TestGenerateBinderCLI(t *testing.T) {
 						}
 					}
 					out, stderr, err := run(workdir, "generate", "binder", "--input=input.go", "--type="+tc.typeName, "--output="+tc.output, "--func="+tc.funcName)
-					if err == nil || out != "" || !strings.Contains(stderr, tc.want) || strings.Count(stderr, "Error:") != 1 {
+					if err == nil || out != "" || !strings.Contains(stderr, tc.want) || strings.Count(stderr, "Error:") != 1 || strings.Contains(stderr, "Usage:") {
 						t.Fatalf("err=%v stdout=%q stderr=%q, want %q", err, out, stderr, tc.want)
 					}
 					if tc.output == "generated.go" {
@@ -245,4 +245,21 @@ func TestRunBindgenCanceled(t *testing.T) {
 	if !errors.Is(err, context.Canceled) || stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("err=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}
+}
+
+// goDirective returns the repository's go.mod "go" line, so fixture modules
+// always meet the current Go floor.
+func goDirective(t *testing.T, root string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "go ") {
+			return strings.TrimSpace(line)
+		}
+	}
+	t.Fatal("no go directive in " + root + "/go.mod")
+	return ""
 }

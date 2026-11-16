@@ -22,7 +22,7 @@ func TestGenerateBinderRoutesCLI(t *testing.T) {
 		bin += ".exe"
 	}
 	runBinderCommand(t, "", true, "go", "build", "-o", bin, ".")
-	writeBinderFile(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
+	writeBinderFile(t, filepath.Join(dir, "go.mod"), []byte("module routes.test\n\n"+goDirective(t, root)+"\n\nrequire github.com/go-kruda/kruda v0.0.0\nreplace github.com/go-kruda/kruda => "+strconv.Quote(filepath.ToSlash(root))+"\n"))
 	for _, name := range []string{"go.sum", "cmd/bindgen/testdata/routes_input.go.txt", "cmd/bindgen/testdata/routes_consumer_test.go.txt"} {
 		data, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {

@@ -34,7 +34,7 @@ func TestGenerateHandlerCLI(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build CLI: %v\n%s", err, out)
 	}
-	mod := []byte("module handler.test\n\ngo 1.26.11\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
+	mod := []byte("module handler.test\n\n" + goDirective(t, root) + "\n\nrequire github.com/go-kruda/kruda v0.0.0\n\nreplace github.com/go-kruda/kruda => " + strconv.Quote(filepath.ToSlash(root)) + "\n")
 	sum, err := os.ReadFile(filepath.Join(root, "go.sum"))
 	if err != nil {
 		t.Fatal(err)

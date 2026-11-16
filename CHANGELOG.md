@@ -18,8 +18,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its plan. It is off by default; without it the output is unchanged. See
   "Generated Binding" in the handlers guide.
 
+### Changed
+
+- Typed handlers bind `query` and `param` fields with fewer allocations. The
+  input parser now picks a setter per field when the route is registered and
+  writes scalar values straight into the input struct, and the handler no
+  longer boxes the parsed input. Parsed values, error messages and status
+  codes are unchanged. Measured on Linux amd64 (Go 1.26.11, 10 alternating
+  runs): `BenchmarkTypedHandler` 5 to 3 allocs/op and 331 to 276 ns/op with
+  `kruda_stdjson`, 8 to 6 allocs/op and 426 to 384 ns/op with Sonic. These are
+  in-process benchmarks, not HTTP throughput or process memory.
+
 ### Fixed
 
+- A typed handler input field whose type is a named `string` or `bool`
+  (`type Status string`) with a `query`, `param` or `default` tag made the
+  request panic inside the binder.
+  Such fields now bind like plain `string` and `bool` fields. Named integer
+  and float types already worked.
 - `kruda generate handler` wrote code for an API that no longer exists
   (`c.JSON(200, ...)`, and a typed handler without a return value), so the
   generated file did not compile. It now emits `c.JSON(...)` and a typed

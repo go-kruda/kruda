@@ -30,9 +30,9 @@ type formField struct {
 
 // fieldParser holds pre-compiled metadata for a single struct field.
 type fieldParser struct {
-	index     int
-	tag       string
-	converter func(string) (reflect.Value, error)
+	index int
+	tag   string
+	set   func(reflect.Value, string) error
 }
 
 // fieldDefault holds a pre-parsed default value for a field.
@@ -61,17 +61,17 @@ func buildInputParser[T any]() *inputParser {
 
 		// Check param tag
 		if tag := field.Tag.Get("param"); tag != "" {
-			conv := selectConverter(field.Type)
+			set := selectFieldSetter(field.Type)
 			p.paramFields = append(p.paramFields, fieldParser{
-				index: i, tag: tag, converter: conv,
+				index: i, tag: tag, set: set,
 			})
 		}
 
 		// Check query tag
 		if tag := field.Tag.Get("query"); tag != "" {
-			conv := selectConverter(field.Type)
+			set := selectFieldSetter(field.Type)
 			p.queryFields = append(p.queryFields, fieldParser{
-				index: i, tag: tag, converter: conv,
+				index: i, tag: tag, set: set,
 			})
 		}
 
@@ -112,13 +112,71 @@ func buildInputParser[T any]() *inputParser {
 	return p
 }
 
+func selectFieldSetter(t reflect.Type) func(reflect.Value, string) error {
+	switch t.Kind() {
+	case reflect.String:
+		return func(dst reflect.Value, s string) error {
+			dst.SetString(s)
+			return nil
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		bits := t.Bits()
+		return func(dst reflect.Value, s string) error {
+			n, err := strconv.ParseInt(s, 10, bits)
+			if err != nil {
+				return err
+			}
+			dst.SetInt(n)
+			return nil
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		bits := t.Bits()
+		return func(dst reflect.Value, s string) error {
+			n, err := strconv.ParseUint(s, 10, bits)
+			if err != nil {
+				return err
+			}
+			dst.SetUint(n)
+			return nil
+		}
+	case reflect.Float32, reflect.Float64:
+		bits := t.Bits()
+		return func(dst reflect.Value, s string) error {
+			f, err := strconv.ParseFloat(s, bits)
+			if err != nil {
+				return err
+			}
+			dst.SetFloat(f)
+			return nil
+		}
+	case reflect.Bool:
+		return func(dst reflect.Value, s string) error {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			dst.SetBool(b)
+			return nil
+		}
+	}
+	conv := selectConverter(t)
+	return func(dst reflect.Value, s string) error {
+		val, err := conv(s)
+		if err != nil {
+			return err
+		}
+		dst.Set(val)
+		return nil
+	}
+}
+
 // selectConverter returns a string→reflect.Value converter for the given type.
 // Selected once at build time, called many times at request time.
 func selectConverter(t reflect.Type) func(string) (reflect.Value, error) {
 	switch t.Kind() {
 	case reflect.String:
 		return func(s string) (reflect.Value, error) {
-			return reflect.ValueOf(s), nil
+			return reflect.ValueOf(s).Convert(t), nil
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		bits := t.Bits()
@@ -153,7 +211,7 @@ func selectConverter(t reflect.Type) func(string) (reflect.Value, error) {
 			if err != nil {
 				return reflect.Value{}, err
 			}
-			return reflect.ValueOf(b), nil
+			return reflect.ValueOf(b).Convert(t), nil
 		}
 	default:
 		panic(fmt.Sprintf("kruda: unsupported param/query type: %s", t.Kind()))
@@ -195,13 +253,11 @@ func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
 		if raw == "" {
 			continue
 		}
-		val, err := qf.converter(raw)
-		if err != nil {
+		if err := qf.set(v.Field(qf.index), raw); err != nil {
 			return reflect.Value{}, BadRequest(
 				fmt.Sprintf("invalid query parameter %q: expected %s",
 					qf.tag, v.Field(qf.index).Type().Kind()))
 		}
-		v.Field(qf.index).Set(val)
 	}
 
 	for _, pf := range p.paramFields {
@@ -209,13 +265,11 @@ func (p *inputParser) parse(c *Ctx) (reflect.Value, error) {
 		if raw == "" {
 			continue
 		}
-		val, err := pf.converter(raw)
-		if err != nil {
+		if err := pf.set(v.Field(pf.index), raw); err != nil {
 			return reflect.Value{}, BadRequest(
 				fmt.Sprintf("invalid path parameter %q: expected %s",
 					pf.tag, v.Field(pf.index).Type().Kind()))
 		}
-		v.Field(pf.index).Set(val)
 	}
 
 	return v, nil

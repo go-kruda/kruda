@@ -29,6 +29,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `kruda_stdjson`, 8 to 6 allocs/op and 426 to 384 ns/op with Sonic. These are
   in-process benchmarks, not HTTP throughput or process memory.
 
+- **`HealthHandler` no longer sends a checker's error text.** Before, a
+  failed check answered with its error, for example
+  `{"status":"unhealthy","checks":{"DB":"dial tcp 10.0.0.5:5432: connect: connection refused"}}`,
+  which shows internal hosts and ports to anyone who can reach the endpoint.
+  Now the same check answers `{"status":"unhealthy","checks":{"DB":"unhealthy"}}`
+  and the error is logged on the server (`health check failed`, with `check`
+  and `error`). Status codes, `"ok"` and `"health check timed out"` are
+  unchanged. If you read the error text from the response, read the server
+  log instead.
+- **`middleware.CORS` accepts an origin written with a trailing slash and
+  rejects an origin with a path.** `AllowOrigins: []string{"https://app.example.com/"}`
+  used to pass the startup check and then never match, because a browser's
+  `Origin` has no path. It now matches `https://app.example.com`. An origin
+  with a real path, a query, a fragment or user info, such as
+  `https://app.example.com/app`, now panics at startup with the existing
+  "CORS invalid origin" message, where before it silently matched nothing.
+  Check your `AllowOrigins` before upgrading.
+- **`middleware.Timeout` keeps a response that was already sent.** When a
+  handler ignored the deadline and responded late, the client got the
+  handler's response, but `Timeout` still returned a 503 error, so logs and
+  metrics recorded a 503 the client never saw. It now returns the handler's
+  own result and logs `handler finished after the request timeout`.
+
 ### Fixed
 
 - A typed handler input field whose type is a named `string` or `bool`

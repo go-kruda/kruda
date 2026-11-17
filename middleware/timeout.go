@@ -16,8 +16,9 @@ import (
 // via context cancellation — handlers should check c.Context().Done() or pass
 // c.Context() to I/O operations.
 //
-// If the handler returns and the context deadline has been exceeded,
-// a 503 Service Unavailable response is returned.
+// If the handler returns after the deadline without having responded,
+// a 503 Service Unavailable response is returned. If it already responded,
+// that response stands and a warning is logged.
 func Timeout(duration time.Duration) kruda.HandlerFunc {
 	return func(c *kruda.Ctx) error {
 		ctx, cancel := context.WithTimeout(c.Context(), duration)
@@ -27,6 +28,12 @@ func Timeout(duration time.Duration) kruda.HandlerFunc {
 		err := c.Next()
 
 		if ctx.Err() == context.DeadlineExceeded {
+			if c.Responded() {
+				// The handler ignored the deadline and already sent its response;
+				// a 503 now would only be recorded, never seen by the client.
+				c.Log().Warn("handler finished after the request timeout; its response was already sent")
+				return err
+			}
 			if err != nil {
 				c.Log().Warn("handler error discarded due to timeout",
 					"original_error", err.Error(),

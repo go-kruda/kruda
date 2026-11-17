@@ -579,7 +579,7 @@ func TestIntegrationHealthCheckWithServices(t *testing.T) {
 		if vs == "ok" {
 			foundOK = true
 		}
-		if vs == "database connection lost" {
+		if vs == "unhealthy" {
 			foundErr = true
 		}
 	}
@@ -587,6 +587,6 @@ func TestIntegrationHealthCheckWithServices(t *testing.T) {
 		t.Fatal("expected at least one healthy check result")
 	}
 	if !foundErr {
-		t.Fatal("expected at least one unhealthy check result with 'database connection lost'")
+		t.Fatal("expected at least one unhealthy check result")
 	}
 }

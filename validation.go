@@ -592,8 +592,20 @@ func validateMax(value any, param string) bool {
 	return false
 }
 
+// stringValue returns the string held by value, including a named string type
+// such as `type Email string`.
+func stringValue(value any) (string, bool) {
+	if s, ok := value.(string); ok {
+		return s, true
+	}
+	if v := reflect.ValueOf(value); v.Kind() == reflect.String {
+		return v.String(), true
+	}
+	return "", false
+}
+
 func validateEmail(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || s == "" {
 		return false
 	}
@@ -602,7 +614,7 @@ func validateEmail(value any, _ string) bool {
 }
 
 func validateURL(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || s == "" {
 		return false
 	}
@@ -736,7 +748,7 @@ func validateLTE(value any, param string) bool {
 
 // validateUUID checks for UUID format (8-4-4-4-12 hex).
 func validateUUID(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || len(s) != 36 {
 		return false
 	}
@@ -756,7 +768,7 @@ func validateUUID(value any, _ string) bool {
 }
 
 func validateAlpha(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || s == "" {
 		return false
 	}
@@ -769,7 +781,7 @@ func validateAlpha(value any, _ string) bool {
 }
 
 func validateAlphanum(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || s == "" {
 		return false
 	}
@@ -783,7 +795,7 @@ func validateAlphanum(value any, _ string) bool {
 
 // validateNumeric checks that string contains only digits (and optional leading minus).
 func validateNumeric(value any, _ string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok || s == "" {
 		return false
 	}
@@ -803,7 +815,7 @@ func validateNumeric(value any, _ string) bool {
 }
 
 func validateContains(value any, param string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok {
 		return false
 	}
@@ -811,7 +823,7 @@ func validateContains(value any, param string) bool {
 }
 
 func validateStartsWith(value any, param string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok {
 		return false
 	}
@@ -819,7 +831,7 @@ func validateStartsWith(value any, param string) bool {
 }
 
 func validateEndsWith(value any, param string) bool {
-	s, ok := value.(string)
+	s, ok := stringValue(value)
 	if !ok {
 		return false
 	}

@@ -339,7 +339,7 @@ func (p *inputParser) parseMultipart(c *Ctx, v reflect.Value) error {
 			// Text form field
 			vals := form.Value[ff.tag]
 			if len(vals) > 0 && vals[0] != "" {
-				v.Field(ff.index).Set(reflect.ValueOf(vals[0]))
+				v.Field(ff.index).SetString(vals[0])
 			}
 		}
 	}

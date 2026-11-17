@@ -36,6 +36,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request panic inside the binder.
   Such fields now bind like plain `string` and `bool` fields. Named integer
   and float types already worked.
+- The same named `string` types now also work as `form` fields, which
+  panicked the same way, and with the `email`, `url`, `uuid`, `alpha`,
+  `alphanum`, `numeric`, `contains`, `startswith` and `endswith` rules, which
+  rejected every named value with 422. Custom rules still receive the field's
+  own type.
+- A panic inside a task passed to `kruda.Parallel`, `kruda.Each` or
+  `kruda.Race`, or inside a `HealthChecker`, crashed the whole process: those
+  run in their own goroutines, where `middleware.Recovery` cannot catch it.
+  The panic now comes back as that task's error (`kruda: task panicked: ...`),
+  and a panicking health check reports as failed.
 - `kruda generate handler` wrote code for an API that no longer exists
   (`c.JSON(200, ...)`, and a typed handler without a return value), so the
   generated file did not compile. It now emits `c.JSON(...)` and a typed

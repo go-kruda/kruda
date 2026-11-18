@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"text/template"
 
 	"github.com/spf13/cobra"
 )
@@ -270,6 +269,7 @@ func allTools() []mcpTool {
 				"properties": map[string]any{
 					"path":  map[string]any{"type": "string", "description": "Route path, e.g. /users or /products/:id"},
 					"typed": map[string]any{"type": "boolean", "default": false, "description": "Generate typed C[T] handler"},
+					"force": map[string]any{"type": "boolean", "default": false, "description": "Overwrite the file if it already exists"},
 				},
 				"required": []string{"path"},
 			},
@@ -280,7 +280,8 @@ func allTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"name": map[string]any{"type": "string", "description": "Resource entity name in PascalCase, e.g. User, Product"},
+					"name":  map[string]any{"type": "string", "description": "Resource entity name in PascalCase, e.g. User, Product"},
+					"force": map[string]any{"type": "boolean", "default": false, "description": "Overwrite the file if it already exists"},
 				},
 				"required": []string{"name"},
 			},
@@ -400,44 +401,17 @@ func toolAddHandler(args map[string]any) (string, error) {
 		return "", fmt.Errorf("path is required")
 	}
 	typed, _ := args["typed"].(bool)
+	force, _ := args["force"].(bool)
 
-	funcName := handlerNameFromPath(routePath)
-	if funcName == "" {
-		return "", fmt.Errorf("cannot derive handler name from path %q", routePath)
-	}
-
-	tmplStr := handlerTemplate
-	if typed {
-		tmplStr = typedHandlerTemplate
-	}
-
-	tmpl, err := template.New("handler").Parse(tmplStr)
+	outPath, funcName, code, err := generateHandler(routePath, typed, force)
 	if err != nil {
 		return "", err
 	}
-
-	data := handlerData{FuncName: funcName, Path: routePath, Method: "GET"}
-
-	var sb strings.Builder
-	if err := tmpl.Execute(&sb, data); err != nil {
-		return "", err
-	}
-
-	fileName := strings.ToLower(funcName) + ".go"
-	outPath := filepath.Join("handlers", fileName)
-	if err := os.MkdirAll("handlers", 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(outPath, []byte(sb.String()), 0o644); err != nil {
-		return "", err
-	}
-
-	result := fmt.Sprintf("Generated handler: %s\nRoute: %s %s", outPath, data.Method, routePath)
+	result := fmt.Sprintf("Generated handler: %s\nRoute: GET %s", outPath, routePath)
 	if typed {
 		result += fmt.Sprintf("\nTyped handler with C[%sRequest] pattern", funcName)
 	}
-	result += "\n\n" + sb.String()
-	return result, nil
+	return result + "\n\n" + code, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -449,30 +423,13 @@ func toolAddResource(args map[string]any) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	name = strings.ToUpper(name[:1]) + name[1:]
+	force, _ := args["force"].(bool)
 
-	tmpl, err := template.New("resource").Parse(resourceTemplate)
+	outPath, name, code, err := generateResource(name, force)
 	if err != nil {
 		return "", err
 	}
-
-	data := resourceData{Name: name, LowerName: strings.ToLower(name)}
-
-	var sb strings.Builder
-	if err := tmpl.Execute(&sb, data); err != nil {
-		return "", err
-	}
-
-	fileName := strings.ToLower(name) + "_service.go"
-	outPath := filepath.Join("services", fileName)
-	if err := os.MkdirAll("services", 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(outPath, []byte(sb.String()), 0o644); err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("Generated resource service: %s\nType: %sService implements ResourceService[%s, string]\nMethods: List, Get, Create, Update, Delete\n\n%s", outPath, name, name, sb.String()), nil
+	return fmt.Sprintf("Generated resource service: %s\nType: %sService implements ResourceService[%s, string]\nMethods: List, Get, Create, Update, Delete\n\n%s", outPath, name, name, code), nil
 }
 
 // ---------------------------------------------------------------------------

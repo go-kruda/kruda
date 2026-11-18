@@ -96,6 +96,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   requests get `405 Method Not Allowed`, and custom methods keep their own
   routes. Standard methods route exactly as before.
 
+- **The `kruda mcp` generator tools no longer overwrite files or write outside
+  their folder.** Before, calling `kruda_add_handler` or `kruda_add_resource`
+  a second time replaced `handlers/users.go` or `services/product_service.go`
+  and any edits in it, and a resource `name` such as `../../evil` wrote
+  `../evil_service.go` outside `services/`. Now a second call fails with
+  "already exists" unless the new `force` argument is true, and names must be
+  Go identifiers. `kruda generate handler` and `kruda generate resource` share
+  the same code: they now reject a name that is not a Go identifier (an empty
+  `--name` used to panic) and create the file only if it is still absent when
+  writing, instead of checking first.
+
 ## [1.8.5] — 2026-11-16
 
 ### Fixed

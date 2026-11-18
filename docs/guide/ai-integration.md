@@ -32,8 +32,8 @@ kruda mcp --test      # verify it works
 | Tool | Description |
 |------|-------------|
 | `kruda_new` | Scaffold a new project (minimal, api, fullstack) |
-| `kruda_add_handler` | Generate a route handler with optional typed `C[T]` pattern |
-| `kruda_add_resource` | Generate a CRUD `ResourceService[T, string]` implementation |
+| `kruda_add_handler` | Generate a route handler with optional typed `C[T]` pattern. Refuses to replace an existing file unless `force` is true |
+| `kruda_add_resource` | Generate a CRUD `ResourceService[T, string]` implementation. `name` must be a Go identifier; refuses to replace an existing file unless `force` is true |
 | `kruda_list_routes` | Scan Go source files and list all registered routes |
 | `kruda_suggest_wing` | Suggest Wing route presets for routes |
 | `kruda_docs` | Look up Kruda docs and code examples by topic |

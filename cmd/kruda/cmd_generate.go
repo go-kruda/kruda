@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -219,55 +223,15 @@ func runGenerateHandler(cmd *cobra.Command, args []string) error {
 	typed, _ := cmd.Flags().GetBool("typed")
 	force, _ := cmd.Flags().GetBool("force")
 
-	funcName := handlerNameFromPath(routePath)
-	if funcName == "" {
-		return fmt.Errorf("cannot derive handler name from path %q", routePath)
-	}
-
-	fileName := strings.ToLower(funcName) + ".go"
-	outPath := filepath.Join("handlers", fileName)
-
-	if !force {
-		if _, err := os.Stat(outPath); err == nil {
-			return fmt.Errorf("file %s already exists (use --force to overwrite)", outPath)
-		}
-	}
-
-	tmplStr := handlerTemplate
-	if typed {
-		tmplStr = typedHandlerTemplate
-	}
-
-	tmpl, err := template.New("handler").Parse(tmplStr)
+	outPath, funcName, _, err := generateHandler(routePath, typed, force)
 	if err != nil {
-		return fmt.Errorf("parsing template: %w", err)
+		return err
 	}
-
-	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
-	}
-
-	f, err := os.Create(outPath)
-	if err != nil {
-		return fmt.Errorf("creating file: %w", err)
-	}
-	defer f.Close()
-
-	data := handlerData{
-		FuncName: funcName,
-		Path:     routePath,
-		Method:   "GET",
-	}
-
-	if err := tmpl.Execute(f, data); err != nil {
-		return fmt.Errorf("executing template: %w", err)
-	}
-
 	fmt.Printf("  ✅ Generated handler: %s\n", outPath)
 	if typed {
 		fmt.Printf("     Typed handler with C[%sRequest] pattern\n", funcName)
 	}
-	fmt.Printf("     Route: %s %s\n", data.Method, routePath)
+	fmt.Printf("     Route: GET %s\n", routePath)
 	return nil
 }
 
@@ -276,45 +240,80 @@ func runGenerateResource(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
 	force, _ := cmd.Flags().GetBool("force")
 
-	name = strings.ToUpper(name[:1]) + name[1:]
-
-	fileName := strings.ToLower(name) + "_service.go"
-	outPath := filepath.Join("services", fileName)
-
-	if !force {
-		if _, err := os.Stat(outPath); err == nil {
-			return fmt.Errorf("file %s already exists (use --force to overwrite)", outPath)
-		}
-	}
-
-	tmpl, err := template.New("resource").Parse(resourceTemplate)
+	outPath, name, _, err := generateResource(name, force)
 	if err != nil {
-		return fmt.Errorf("parsing template: %w", err)
+		return err
 	}
-
-	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
-	}
-
-	f, err := os.Create(outPath)
-	if err != nil {
-		return fmt.Errorf("creating file: %w", err)
-	}
-	defer f.Close()
-
-	data := resourceData{
-		Name:      name,
-		LowerName: strings.ToLower(name),
-	}
-
-	if err := tmpl.Execute(f, data); err != nil {
-		return fmt.Errorf("executing template: %w", err)
-	}
-
 	fmt.Printf("  ✅ Generated resource service: %s\n", outPath)
 	fmt.Printf("     Type: %sService implements ResourceService[%s, string]\n", name, name)
 	fmt.Printf("     Methods: List, Get, Create, Update, Delete\n")
 	return nil
+}
+
+var goIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// generateHandler writes handlers/<name>.go for routePath and returns the
+// path, the handler name and the generated code. The CLI and the MCP tool
+// share it.
+func generateHandler(routePath string, typed, force bool) (outPath, funcName, code string, err error) {
+	funcName = handlerNameFromPath(routePath)
+	if funcName == "" {
+		return "", "", "", fmt.Errorf("cannot derive handler name from path %q: the last static segment must be a Go identifier", routePath)
+	}
+	tmplStr := handlerTemplate
+	if typed {
+		tmplStr = typedHandlerTemplate
+	}
+	outPath = filepath.Join("handlers", strings.ToLower(funcName)+".go")
+	code, err = writeGenerated(outPath, tmplStr, handlerData{FuncName: funcName, Path: routePath, Method: "GET"}, force)
+	return outPath, funcName, code, err
+}
+
+// generateResource writes services/<name>_service.go and returns the path,
+// the capitalised name and the generated code.
+func generateResource(name string, force bool) (outPath, typeName, code string, err error) {
+	if !goIdentifier.MatchString(name) {
+		return "", "", "", fmt.Errorf("resource name %q must be a Go identifier, e.g. Product", name)
+	}
+	typeName = strings.ToUpper(name[:1]) + name[1:]
+	outPath = filepath.Join("services", strings.ToLower(typeName)+"_service.go")
+	code, err = writeGenerated(outPath, resourceTemplate, resourceData{Name: typeName, LowerName: strings.ToLower(typeName)}, force)
+	return outPath, typeName, code, err
+}
+
+// writeGenerated renders the template and writes it to outPath. Without
+// force it never replaces an existing file, even one created after a check.
+func writeGenerated(outPath, tmplStr string, data any, force bool) (string, error) {
+	tmpl, err := template.New("generated").Parse(tmplStr)
+	if err != nil {
+		return "", fmt.Errorf("parsing template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("executing template: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return "", fmt.Errorf("creating directory: %w", err)
+	}
+	flag := os.O_WRONLY | os.O_CREATE | os.O_EXCL
+	if force {
+		flag = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	}
+	f, err := os.OpenFile(outPath, flag, 0o644)
+	if errors.Is(err, fs.ErrExist) {
+		return "", fmt.Errorf("file %s already exists (use --force to overwrite)", outPath)
+	}
+	if err != nil {
+		return "", fmt.Errorf("creating file: %w", err)
+	}
+	if _, err := f.Write(buf.Bytes()); err != nil {
+		_ = f.Close()
+		return "", fmt.Errorf("writing file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("writing file: %w", err)
+	}
+	return buf.String(), nil
 }
 
 // handlerNameFromPath derives a PascalCase function name from a route path.
@@ -325,6 +324,9 @@ func handlerNameFromPath(routePath string) string {
 		seg := parts[i]
 		if seg == "" || strings.HasPrefix(seg, ":") || strings.HasPrefix(seg, "*") {
 			continue
+		}
+		if !goIdentifier.MatchString(seg) {
+			return ""
 		}
 		return strings.ToUpper(seg[:1]) + seg[1:]
 	}

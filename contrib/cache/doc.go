@@ -34,7 +34,9 @@
 // # Configuration
 //
 //   - TTL: time-to-live for cached responses (default 5 minutes)
-//   - KeyFunc: cache key generator (default: METHOD + ":" + path)
+//   - KeyFunc: cache key generator (default: method, path, raw query and a
+//     hash of the Authorization and Cookie headers; write your own when users
+//     are identified any other way)
 //   - Methods: HTTP methods eligible for caching (default ["GET"])
 //   - StatusCodes: response codes eligible for caching (default [200])
 //   - Store: backing storage (default in-memory store, capacity 1000)

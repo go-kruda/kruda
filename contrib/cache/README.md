@@ -39,6 +39,12 @@ including repeated keys. Reordering the query can produce a separate entry.
 On older Wing cores without raw-query access, default caching is bypassed; use
 the updated core or a lossless custom `KeyFunc`.
 
+The default key separates users only by the `Authorization` and `Cookie`
+headers. If your app identifies users another way, such as an `X-API-Key`
+header, a client certificate or a value set by earlier middleware, write a
+`KeyFunc` that includes that identity. Otherwise one user's cached response is
+replayed to another user who requests the same URL.
+
 Custom transports must expose `RawQuery() string` or a supported raw HTTP request;
 otherwise default caching is bypassed because query data cannot be recovered
 without loss. A custom `KeyFunc` can define a key for other transports.

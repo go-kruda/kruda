@@ -1661,7 +1661,7 @@ func TestMethodIndex_StandardMethods(t *testing.T) {
 // TestMethodIndex_UnknownMethods verifies methodIndex returns -1 for
 // custom/unknown methods so they fall back to the map.
 func TestMethodIndex_UnknownMethods(t *testing.T) {
-	unknowns := []string{"CUSTOM", "PROPFIND", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "TRACE", "CONNECT", ""}
+	unknowns := []string{"CUSTOM", "PROPFIND", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "TRACE", "CONNECT", "", "POLL", "POXX", "PUX", "GEX", "HEXX", "PAXXX", "DEXXXX", "OPXXXXX", "get"}
 	for _, m := range unknowns {
 		if got := methodIndex(m); got != -1 {
 			t.Errorf("methodIndex(%q) = %d, want -1", m, got)

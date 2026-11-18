@@ -86,6 +86,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   generated file did not compile. It now emits `c.JSON(...)` and a typed
   handler that returns `(*Response, error)`.
 
+### Security
+
+- **The router matches the whole HTTP method name.** Before, it checked only
+  the first two letters of 4- to 7-letter methods, so `POLL /users` or
+  `POXX /users` ran the `POST /users` handler and answered 200. A rule in
+  front of the app that blocks `POST` did not stop it. A route registered for
+  a custom method such as `POLL` also replaced the `POST` tree. Now those
+  requests get `405 Method Not Allowed`, and custom methods keep their own
+  routes. Standard methods route exactly as before.
+
 ## [1.8.5] — 2026-11-16
 
 ### Fixed

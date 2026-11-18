@@ -88,39 +88,27 @@ const (
 	mCOUNT // number of standard methods (array size)
 )
 
-// methodIndex returns the array index for a standard HTTP method using
-// first-byte + length dispatch for O(1) identification.
-// Returns -1 for custom/unknown methods (fallback to map).
+// methodIndex returns the array index for a standard HTTP method, or -1 for
+// any other method (served from the trees map). It compares the whole name,
+// so a method such as "POLL" never shares the POST tree.
 func methodIndex(method string) int {
-	switch len(method) {
-	case 3:
-		if method[0] == 'G' && method[1] == 'E' && method[2] == 'T' { // GET
-			return mGET
-		}
-		if method[0] == 'P' && method[1] == 'U' && method[2] == 'T' { // PUT
-			return mPUT
-		}
-	case 4:
-		if method[0] == 'P' && method[1] == 'O' { // POST
-			return mPOST
-		}
-		if method[0] == 'H' && method[1] == 'E' { // HEAD
-			return mHEAD
-		}
-	case 5:
-		if method[0] == 'P' && method[1] == 'A' { // PATCH
-			return mPATCH
-		}
-	case 6:
-		if method[0] == 'D' && method[1] == 'E' { // DELETE
-			return mDELETE
-		}
-	case 7:
-		if method[0] == 'O' && method[1] == 'P' { // OPTIONS
-			return mOPTIONS
-		}
+	switch method {
+	case "GET":
+		return mGET
+	case "POST":
+		return mPOST
+	case "PUT":
+		return mPUT
+	case "DELETE":
+		return mDELETE
+	case "PATCH":
+		return mPATCH
+	case "OPTIONS":
+		return mOPTIONS
+	case "HEAD":
+		return mHEAD
 	}
-	return -1 // custom method → fallback to map
+	return -1
 }
 
 // Router is a radix tree router with a separate tree per HTTP method.

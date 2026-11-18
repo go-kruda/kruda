@@ -23,6 +23,10 @@ jobs:
       matrix:
         go-version: ['1.26.11', 'stable']
         os: [ubuntu-latest, macos-latest, windows-2025]
+        # macOS runners queue the longest; Go stable is covered on Linux and Windows.
+        exclude:
+          - os: macos-latest
+            go-version: 'stable'
 
     steps:
       - name: Checkout code

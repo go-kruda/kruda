@@ -349,38 +349,6 @@ func TestWingHeadOnFallbackDispatchPaths(t *testing.T) {
 		headThenNext(t, addr, headReq, "4")
 	})
 
-	t.Run("pool saturated", func(t *testing.T) {
-		app := New(WithTransport(NewWingTransport(WingConfig{Workers: 1, HandlerPoolSize: 1})))
-		entered, release := make(chan struct{}, 8), make(chan struct{})
-		app.Get("/block", func(c *Ctx) error {
-			entered <- struct{}{}
-			<-release
-			return c.Text("ok")
-		}, Arrow)
-		app.Head("/head", text, Arrow)
-		app.Get("/next", next)
-		addr, stop := startWingApp(t, app)
-		defer stop()
-		defer close(release)
-		// One request runs in the single pool goroutine and two fill its queue
-		// (capacity 2), so the HEAD request is served inline.
-		for i := 0; i < 3; i++ {
-			conn, err := net.Dial("tcp", addr)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer conn.Close()
-			if _, err := io.WriteString(conn, "GET /block HTTP/1.1\r\nHost: test\r\n\r\n"); err != nil {
-				t.Fatal(err)
-			}
-			if i == 0 {
-				<-entered
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-		headThenNext(t, addr, headReq, "4")
-	})
-
 	t.Run("hijack route that does not hijack", func(t *testing.T) {
 		app := New(Wing())
 		app.Head("/head", text, Hijack)

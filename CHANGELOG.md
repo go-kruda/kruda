@@ -82,6 +82,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   of `405`. Middleware added only to a `Group` still does not run for them,
   so register `CORS` with `app.Use`.
 
+- **Wing answers `503` when an `Arrow` (Pool) route's handler pool is full.**
+  Before, the network loop ran the handler itself, so a handler waiting on
+  a database stopped that loop from serving its other connections, including
+  inline routes, until it returned. Now the request gets
+  `503 Service Unavailable` with `Connection: close`, as unknown dispatch
+  modes already did. Only routes with `kruda.Arrow` (or
+  `DefaultPreset: Arrow`) use the pool; `kruda.DB`, `Render` and `Spear`
+  routes are unchanged. If you see 503s on `Arrow` routes, raise
+  `WingConfig.HandlerPoolSize`.
+
 ### Fixed
 
 - A typed handler input field whose type is a named `string` or `bool`

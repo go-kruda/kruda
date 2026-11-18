@@ -156,7 +156,7 @@ func TestGeneratedBinderScalarParity(t *testing.T) {
 
 func generatedBinderParityHandler(app *App, generated bool, handler func(*C[generatedBinderInput]) (*generatedBinderInput, error)) HandlerFunc {
 	if generated {
-		return buildTypedHandlerWithBinder[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil, bindGeneratedBinderInputAttested(), nil)
+		return buildTypedHandlerWithValidation[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil, bindGeneratedBinderInputAttested(), nil)
 	}
 	return buildTypedHandler[generatedBinderInput, generatedBinderInput](app, "GET", "/users/:id", handler, nil)
 }

@@ -50,7 +50,6 @@ type staticConfig struct {
 	maxOpenFiles int
 	root         string
 	index        string
-	browse       bool
 	maxAge       int
 	spa          bool // serve index.html for missing files
 }
@@ -70,11 +69,6 @@ func WithMaxOpenFiles(n int) StaticOption {
 		panic("kruda: static max open files must be positive")
 	}
 	return func(c *staticConfig) { c.maxOpenFiles = n }
-}
-
-// WithBrowse enables directory listing.
-func WithBrowse() StaticOption {
-	return func(c *staticConfig) { c.browse = true }
 }
 
 // WithMaxAge sets Cache-Control max-age in seconds.
@@ -151,9 +145,6 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 			_ = f.Close()
 			f, err = fsys.Open(pathpkg.Join(path, cfg.index))
 			if err != nil {
-				if cfg.browse {
-					return c.Status(200).Text("Directory listing not implemented")
-				}
 				return c.Status(404).Text("Not Found")
 			}
 			stat, err = f.Stat()

@@ -86,11 +86,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Before, the network loop ran the handler itself, so a handler waiting on
   a database stopped that loop from serving its other connections, including
   inline routes, until it returned. Now the request gets
-  `503 Service Unavailable` with `Connection: close`, as unknown dispatch
-  modes already did. Only routes with `kruda.Arrow` (or
-  `DefaultPreset: Arrow`) use the pool; `kruda.DB`, `Render` and `Spear`
-  routes are unchanged. If you see 503s on `Arrow` routes, raise
-  `WingConfig.HandlerPoolSize`.
+  `503 Service Unavailable` with `Connection: close`. The 503 is written by
+  Wing before any middleware runs, so it has no CORS or security headers and
+  a browser on another origin reports a network error. Each worker logs
+  `Wing handler pool is full` once. The pool holds `HandlerPoolSize` running
+  handlers (default: the worker count) plus twice that many queued. Only
+  routes with `kruda.Arrow` (or `DefaultPreset: Arrow`) use the pool;
+  `kruda.DB`, `Render` and `Spear` routes are unchanged. If you see the
+  warning, raise `WingConfig.HandlerPoolSize` or move the route to
+  `kruda.DB`.
 
 ### Fixed
 

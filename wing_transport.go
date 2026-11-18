@@ -306,6 +306,8 @@ type worker struct {
 	limits          parserLimits
 	maxConns        int
 	logger          *slog.Logger
+	// poolFullWarned is touched only by this worker's ioLoop.
+	poolFullWarned bool
 	// connCount/rejectTotal/rejectIP/rejectRate point at the shared Transport
 	// atomics so caps are enforced server-wide (not per-worker). Set in newWorker.
 	connCount    *int64
@@ -1045,6 +1047,11 @@ func (w *worker) tryParse(c *conn) {
 			default:
 				// Pool saturated. Running the handler here would block this
 				// loop's other connections for as long as the handler waits.
+				if !w.poolFullWarned && w.logger != nil {
+					w.poolFullWarned = true
+					w.logger.Warn("kruda: Wing handler pool is full, answering 503; raise WingConfig.HandlerPoolSize if this repeats",
+						"worker", w.id, "pool_size", w.config.HandlerPoolSize)
+				}
 				releaseRequest(req)
 				w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
 			}

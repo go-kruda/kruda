@@ -12,9 +12,10 @@ import (
 )
 
 func TestWingFullPoolAnswers503AndKeepsTheLoopFree(t *testing.T) {
-	release := make(chan struct{})
+	release, entered := make(chan struct{}), make(chan struct{}, 8)
 	app := New(WithTransport(NewWingTransport(WingConfig{Workers: 1, HandlerPoolSize: 1})))
 	app.Get("/slow", func(c *Ctx) error {
+		entered <- struct{}{}
 		<-release
 		return c.Text("slow")
 	}, Arrow)
@@ -73,8 +74,11 @@ func TestWingFullPoolAnswers503AndKeepsTheLoopFree(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		c := send("/slow")
 		defer c.Close()
-		time.Sleep(30 * time.Millisecond)
+		if i == 0 {
+			<-entered // the pool goroutine holds job 1, so 2 and 3 fill the queue
+		}
 	}
+	time.Sleep(100 * time.Millisecond)
 	over := send("/slow")
 	defer over.Close()
 	if got := status(over); got != 503 {

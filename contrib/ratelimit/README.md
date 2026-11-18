@@ -41,6 +41,11 @@ from right to left and stops at the nearest untrusted IP. Invalid or repeated
 forwarding headers fall back to the socket peer. `X-Real-IP` is used only when
 `X-Forwarded-For` is absent. Only exact IPs are supported.
 
+The default key is the client IP. IPv6 clients are grouped by their /64
+network, written like `2001:db8:1:2::/64`, because one subscriber usually
+holds a whole /64 and could otherwise use a fresh address for every request.
+IPv4 clients keep one key per address.
+
 Custom transports must implement `PeerAddr() string` on their request to use
 the default per-IP key. To honor forwarded headers they must additionally
 implement `ForwardedHeaders() (string, int, string, int)`, returning the

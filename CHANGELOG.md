@@ -51,6 +51,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   handler's response, but `Timeout` still returned a 503 error, so logs and
   metrics recorded a 503 the client never saw. It now returns the handler's
   own result and logs `handler finished after the request timeout`.
+- **`contrib/ratelimit` keys IPv6 clients by their /64 network.** Before,
+  each IPv6 address had its own limit, and one subscriber usually holds a
+  whole /64, so a client could send every request from a new address and
+  never be limited, while each address added an entry to the in-memory
+  store. Now `2001:db8:1:2::1` and `2001:db8:1:2::ffff` share the key
+  `2001:db8:1:2::/64`. IPv4 keys and a custom `KeyFunc` are unchanged. Clients
+  behind one /64 now share one limit; raise `Max` if that is too tight.
+- `contrib/cache` documents that the default key separates users only by the
+  `Authorization` and `Cookie` headers. Apps that identify users another way
+  need their own `KeyFunc`, or one user's cached response is replayed to
+  another. The package doc's description of the default key was also out of
+  date.
 
 ### Fixed
 

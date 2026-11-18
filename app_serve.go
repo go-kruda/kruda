@@ -145,13 +145,9 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	{
 		handlers := app.router.find(c.method, c.path, &c.params)
 		if handlers == nil {
-			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
-				c.SetHeader("Allow", allowed)
-				app.handleError(c, NewError(405, "method not allowed"))
-			} else {
-				app.handleError(c, NotFound("not found"))
+			if handlers = app.unrouted(c); handlers == nil {
+				goto response
 			}
-			goto response
 		}
 
 		c.handlers = handlers
@@ -289,13 +285,9 @@ func (app *App) serveKruda(w transport.ResponseWriter, r transport.Request, rout
 			handlers = app.router.find(c.method, c.path, &c.params)
 		}
 		if handlers == nil {
-			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
-				c.SetHeader("Allow", allowed)
-				app.handleError(c, NewError(405, "method not allowed"))
-			} else {
-				app.handleError(c, NotFound("not found"))
+			if handlers = app.unrouted(c); handlers == nil {
+				goto response
 			}
-			goto response
 		}
 
 		c.handlers = handlers
@@ -465,6 +457,24 @@ func (app *App) writeProblem(c *Ctx, p ProblemDetails) {
 
 // buildChain creates a pre-built handler chain from global, group, and route-level handlers.
 // Called once at registration time — the slice is reused for every request (zero alloc on hot path).
+// unrouted handles a request that matched no route. For an OPTIONS request
+// to a path with other routes it returns optionsChain, so global middleware
+// such as CORS can answer the preflight. Otherwise it records the 404 or 405
+// error and returns nil.
+func (app *App) unrouted(c *Ctx) []HandlerFunc {
+	allowed := app.router.findAllowedMethods(c.path)
+	if allowed == "" {
+		app.handleError(c, NotFound("not found"))
+		return nil
+	}
+	c.SetHeader("Allow", allowed)
+	if c.method == "OPTIONS" && app.optionsChain != nil {
+		return app.optionsChain
+	}
+	app.handleError(c, NewError(405, "method not allowed"))
+	return nil
+}
+
 func buildChain(global, group []HandlerFunc, handler HandlerFunc) []HandlerFunc {
 	chain := make([]HandlerFunc, 0, len(global)+len(group)+1)
 	chain = append(chain, global...)

@@ -124,13 +124,9 @@ func (app *App) ServeFast(ctx *fasthttp.RequestCtx) {
 	{
 		handlers := app.router.find(c.method, c.path, &c.params)
 		if handlers == nil {
-			if allowed := app.router.findAllowedMethods(c.path); allowed != "" {
-				c.SetHeader("Allow", allowed)
-				app.handleError(c, NewError(405, "method not allowed"))
-			} else {
-				app.handleError(c, NotFound("not found"))
+			if handlers = app.unrouted(c); handlers == nil {
+				goto response
 			}
-			goto response
 		}
 
 		c.handlers = handlers

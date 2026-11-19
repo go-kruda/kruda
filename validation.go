@@ -344,9 +344,17 @@ func (fv *fieldValidator) validateElems(messages map[string]string, fieldVal ref
 			errs = fv.applyElemRules(messages, fieldVal.Index(i), i, reflect.Value{}, errs)
 		}
 	case reflect.Map:
+		// A key type with its own formatting runs user code, so its label is
+		// taken before the element rules run, as it always was.
+		eager := formatsItself(fieldVal.Type().Key())
 		iter := fieldVal.MapRange()
 		for iter.Next() {
-			errs = fv.applyElemRules(messages, iter.Value(), 0, iter.Key(), errs)
+			key := iter.Key()
+			if eager {
+				errs = fv.applyElemRulesNamed(messages, iter.Value(), fv.elemName(0, key), errs)
+				continue
+			}
+			errs = fv.applyElemRules(messages, iter.Value(), 0, key, errs)
 		}
 	}
 	return errs
@@ -370,6 +378,34 @@ func (fv *fieldValidator) applyElemRules(messages map[string]string, elem reflec
 		errs = append(errs, fv.fieldError(messages, rule, name, value))
 	}
 	return errs
+}
+
+// applyElemRulesNamed is applyElemRules with the label already built.
+func (fv *fieldValidator) applyElemRulesNamed(messages map[string]string, elem reflect.Value, name string, errs []FieldError) []FieldError {
+	if passesAll(fv.elemChecks, elem) {
+		return errs
+	}
+	value := elem.Interface()
+	for _, rule := range fv.elemRules {
+		if !rule.fn(value, rule.param) {
+			errs = append(errs, fv.fieldError(messages, rule, name, value))
+		}
+	}
+	return errs
+}
+
+// formatsItself reports whether fmt's %v might call a method while
+// formatting t: anything but a basic kind without its own formatting
+// (structs and arrays format their fields, interfaces their dynamic value).
+func formatsItself(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return t.Implements(formatterType) || t.Implements(stringerType) || t.Implements(errorType)
+	}
+	return true
 }
 
 func (fv *fieldValidator) elemName(idx int, key reflect.Value) string {
@@ -656,7 +692,7 @@ var (
 // compileOneOf covers string kinds only. validateOneOf compares fmt's %v
 // text, which is the string itself unless the type formats itself.
 func compileOneOf(t reflect.Type, param string) func(reflect.Value) bool {
-	if t.Kind() != reflect.String || t.Implements(formatterType) || t.Implements(stringerType) || t.Implements(errorType) {
+	if t.Kind() != reflect.String || formatsItself(t) {
 		return nil
 	}
 	opts := strings.Fields(param)

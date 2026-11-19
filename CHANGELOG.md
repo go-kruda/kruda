@@ -36,30 +36,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Fewer allocations and less retained memory on several paths. Responses,
   status codes and errors are unchanged. Measured with paired benchmarks
-  against `main` (6 alternating rounds, macOS arm64, Go 1.26, `kruda_stdjson`;
-  in-process, not HTTP throughput on Linux). Script and raw results:
-  `bench/reproducible/results/2026-11-20-alloc-fixes/`.
+  against `fba66a1` (6 alternating rounds, macOS arm64, Go 1.26,
+  `kruda_stdjson`; in-process, not HTTP throughput on Linux). Script and raw
+  results: `bench/reproducible/results/2026-11-20-alloc-fixes/`.
 
   | Path | Before | After |
   | --- | --- | --- |
-  | Validation, 6 fields with `required`/`oneof`/`len`/`gt`/`lte` | 376 ns, 8 allocs | 72 ns, 0 allocs |
-  | Validation, `dive` over 100 strings and a 10-key map | 9.8 µs, 230 allocs | 1.7 µs, 20 allocs |
-  | Typed handler with validation | 241 ns, 4 allocs | 197 ns, 3 allocs |
-  | `Use` of a transient service | 6.3 µs | 3.1 µs |
-  | net/http body read, 1 MiB | 435 µs, 5.0 MiB | 84 µs, 1.0 MiB |
-  | Wing POST, 256 KiB body across many reads | 1.75 MiB/req | 1.24 MiB/req |
-  | Wing JSON response on a Takeover route | 1308 B, 16 allocs | 831 B, 12 allocs |
+  | Validation, 6 fields with `required`/`oneof`/`len`/`gt`/`lte` | 380 ns, 8 allocs | 73 ns, 0 allocs |
+  | Validation, `dive` over 100 strings and a 10-key map | 9.7 µs, 230 allocs | 1.7 µs, 20 allocs |
+  | Typed handler with validation | 233 ns, 4 allocs | 196 ns, 3 allocs |
+  | `Use` of a transient service | 6.0 µs | 3.0 µs |
+  | net/http body read, 1 MiB | 397 µs, 5.0 MiB | 195 µs, 2.0 MiB |
+  | Wing POST, 256 KiB body across many reads, inline route | 1.75 MiB/req | 1.24 MiB/req |
+  | Wing POST, 256 KiB body, Takeover route | 524 KiB/req, 103 µs | 258 KiB/req, 87 µs |
+  | Wing JSON response on a Takeover route | 1306 B, 16 allocs | 834 B, 12 allocs |
   | Wing streamed (non-sendfile) body, 1 MiB | 1038 KiB/req | 41 KiB/req |
   | Wing `HEAD` for a 1 MiB string body | 1.06 MB reserved | 144 B |
-  | `contrib/session` `MemoryStore.Get`, 8 goroutines | 15.7 µs | 5.3 µs |
+  | `contrib/session` `MemoryStore.Get`, 8 goroutines | 14.1 µs | 5.1 µs |
 
   Built-in `gt`, `gte`, `lt`, `lte`, `len`, `oneof` and `required` are now
   checked without boxing the value, as `min` and `max` already were; a
-  failing or overridden rule still runs the original function. A pooled
-  Wing request no longer keeps the last POST body it carried, and the
-  pooled JSON buffer behind `c.JSON` on net/http drops buffers over 64 KiB:
-  after a burst of 1 MiB responses the pool held 2 MB before and about
-  10 KB after, at the cost of a new buffer for each response over 64 KiB.
+  failing or overridden rule still runs the original function. The net/http
+  body reader no longer grows in small steps, and it still allocates only for
+  bytes that arrive, never for a declared `Content-Length` alone. A pooled
+  Wing request no longer keeps the last POST body it carried.
+
+  One trade-off: the pooled JSON buffer behind `c.JSON` on net/http now drops
+  buffers over 64 KiB. Each response over 64 KiB allocates a new buffer (a
+  1 MiB response went from 1.2 to 2.5 MiB allocated), and after a burst of
+  them the pool no longer holds onto them (median heap left after one GC:
+  2 MB before, 5 KB after, with wide run-to-run spread).
+
+  The parse and response paths that every request takes are unchanged
+  within noise (20-sample runs: parse GET/POST, JSON and plaintext
+  responses), except `BenchmarkCPUHandlerInline` at +1.6% (5 ns), which no
+  single change here accounts for.
 
 - **`HealthHandler` no longer sends a checker's error text.** Before, a
   failed check answered with its error, for example

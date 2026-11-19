@@ -2,47 +2,47 @@ goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   68612	     18348 ns/op	   21610 B/op	     216 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   65913	     15252 ns/op	   21631 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel     	   69396	     17208 ns/op	   21604 B/op	     215 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   91456	     13020 ns/op	   21485 B/op	     214 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	3.684s
+ok  	github.com/go-kruda/kruda/contrib/session	5.596s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   67780	     17322 ns/op	   21616 B/op	     216 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   89752	     19066 ns/op	   21492 B/op	     214 allocs/op
+BenchmarkMemoryStoreGetParallel     	   68025	     17362 ns/op	   21614 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   70650	     14365 ns/op	   21596 B/op	     215 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	5.029s
+ok  	github.com/go-kruda/kruda/contrib/session	3.458s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   65733	     17859 ns/op	   21632 B/op	     216 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   88995	     16066 ns/op	   21495 B/op	     214 allocs/op
+BenchmarkMemoryStoreGetParallel     	   68235	     17624 ns/op	   21613 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   89592	     14463 ns/op	   21493 B/op	     214 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	4.727s
+ok  	github.com/go-kruda/kruda/contrib/session	4.756s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   67378	     20328 ns/op	   21619 B/op	     216 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   63380	     17342 ns/op	   21653 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel     	   68020	     17483 ns/op	   21614 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   90472	     14834 ns/op	   21489 B/op	     214 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	3.723s
+ok  	github.com/go-kruda/kruda/contrib/session	5.277s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   26520	     45799 ns/op	   22409 B/op	     224 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   81313	     13950 ns/op	   21532 B/op	     215 allocs/op
+BenchmarkMemoryStoreGetParallel     	   69133	     17342 ns/op	   21606 B/op	     215 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   90673	     13900 ns/op	   21488 B/op	     214 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	4.598s
+ok  	github.com/go-kruda/kruda/contrib/session	4.671s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
-BenchmarkMemoryStoreGetParallel     	   59223	     18201 ns/op	   21690 B/op	     216 allocs/op
-BenchmarkMemoryStoreGetParallel-8   	   85188	     13318 ns/op	   21513 B/op	     215 allocs/op
+BenchmarkMemoryStoreGetParallel     	   67393	     20530 ns/op	   21619 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   90572	     13181 ns/op	   21488 B/op	     214 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda/contrib/session	4.500s
+ok  	github.com/go-kruda/kruda/contrib/session	4.833s

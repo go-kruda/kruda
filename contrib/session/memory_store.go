@@ -57,13 +57,16 @@ func NewMemoryStore(cleanupInterval ...time.Duration) *MemoryStore {
 func (s *MemoryStore) Get(id string) (*SessionData, error) {
 	s.mu.RLock()
 	entry, ok := s.entries[id]
+	// Expiry is judged while the entry is still current; a Save after the
+	// unlock must not make a session that was valid here look expired.
+	expired := ok && time.Now().After(entry.expiresAt)
 	s.mu.RUnlock()
 
 	if !ok {
 		return nil, nil
 	}
 
-	if time.Now().After(entry.expiresAt) {
+	if expired {
 		// Expired — remove lazily, unless a write replaced it meanwhile.
 		s.mu.Lock()
 		if cur, ok := s.entries[id]; ok && time.Now().After(cur.expiresAt) {

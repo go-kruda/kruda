@@ -52,3 +52,38 @@ func TestReadEmpty(t *testing.T) {
 		t.Fatalf("got %q tooLarge=%v err=%v", got, tooLarge, err)
 	}
 }
+
+// A declared length the client never sends must not be allocated up front.
+func TestReadDoesNotTrustDeclaredLength(t *testing.T) {
+	boom := errors.New("stalled")
+	got, _, err := Read(iotest.ErrReader(boom), 1<<20, 4<<20)
+	if !errors.Is(err, boom) || cap(got) > 1024 {
+		t.Fatalf("cap=%d err=%v", cap(got), err)
+	}
+}
+
+func TestReadKnownLengthEndsAtExactSize(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 100_000)
+	got, _, err := Read(bytes.NewReader(body), int64(len(body)), 0)
+	if err != nil || len(got) != len(body) || cap(got) != len(body) {
+		t.Fatalf("len=%d cap=%d err=%v", len(got), cap(got), err)
+	}
+}
+
+func TestReadMaxIntLimit(t *testing.T) {
+	got, tooLarge, err := Read(bytes.NewReader([]byte("hello")), 5, int(^uint(0)>>1))
+	if err != nil || tooLarge || string(got) != "hello" {
+		t.Fatalf("got %q tooLarge=%v err=%v", got, tooLarge, err)
+	}
+}
+
+// The byte past the limit and a read error can arrive together; both are
+// reported so each caller keeps its own precedence.
+func TestReadReportsErrorWithTooLarge(t *testing.T) {
+	boom := errors.New("boom")
+	r := iotest.DataErrReader(io.MultiReader(bytes.NewReader([]byte("abcdef")), iotest.ErrReader(boom)))
+	_, tooLarge, err := Read(r, -1, 5)
+	if !tooLarge || err == nil {
+		t.Fatalf("tooLarge=%v err=%v", tooLarge, err)
+	}
+}

@@ -1604,9 +1604,10 @@ func (w *worker) failSend(c *conn) {
 // keeps the takeover thread count low when the connection is genuinely idle.
 const takeoverSpinReads = 8
 
-// maxReusedTakeoverOut matches the response buffer cutoff: a larger output
-// buffer is dropped rather than held for the connection's lifetime.
-const maxReusedTakeoverOut = 64 << 10
+// maxReusedTakeoverOut bounds what an idle Takeover connection keeps: an
+// output buffer grown past it is dropped after the write, so one large reply
+// does not stay attached to the connection.
+const maxReusedTakeoverOut = 4 << 10
 
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
@@ -1674,6 +1675,9 @@ func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
 			return err
 		}
 		defer f.SetWriteDeadline(time.Time{})
+	}
+	if stream.remaining <= 0 {
+		return nil // a handler may declare a non-positive size; nothing to send
 	}
 	// Write is synchronous, so one buffer serves every chunk.
 	buf := make([]byte, int(min(int64(32*1024), stream.remaining)))
@@ -1895,9 +1899,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					}
 					headerSnapshot := make([]byte, headerEnd)
 					copy(headerSnapshot, buf[:headerEnd])
-					// Seed bodyBuf with already-received body bytes. Each request
-					// owns its body, so every accumulation starts a new buffer.
-					bodyBuf = make([]byte, 0, min(need, 8192))
+					// Seed bodyBuf with already-received body bytes. bodyBuf is
+					// reused across this connection's requests; each request gets
+					// its own copy of the body below.
+					bodyBuf = bodyBuf[:0]
 					if have := readN - headerEnd; have > 0 {
 						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
 					}
@@ -1937,10 +1942,11 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if surplus := len(bodyBuf) - need; surplus > 0 {
 						readN = copy(buf, bodyBuf[need:])
 					}
-					// The request owns the body from here on, so the next
-					// accumulation must start a new buffer rather than reuse it.
-					body := bodyBuf[:need:need]
-					bodyBuf = nil
+					// One exact copy for the request: bodyBuf is reused by the next
+					// accumulation, and the header is not joined to the body again.
+					body := make([]byte, need)
+					copy(body, bodyBuf[:need])
+					bodyBuf = bodyBuf[:0]
 					r2, ok2 := parseHTTPRequestOwnedBody(headerSnapshot, body, w.limits)
 					if !ok2 {
 						keepAlive = false

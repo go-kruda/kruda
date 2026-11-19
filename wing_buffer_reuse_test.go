@@ -76,12 +76,17 @@ func TestHeadResponseReservesNoBody(t *testing.T) {
 	}
 }
 
-// patterned returns n bytes that differ by position, so a reused buffer that
-// leaks bytes from an earlier request or chunk changes the digest.
+// patterned returns n bytes that do not repeat at any chunk size, so a
+// reused buffer that leaks bytes from an earlier request or chunk changes the
+// digest.
 func patterned(n int, seed byte) []byte {
 	b := make([]byte, n)
+	x := uint32(seed) + 1
 	for i := range b {
-		b[i] = byte(i*31) + seed
+		x ^= x << 13
+		x ^= x >> 17
+		x ^= x << 5
+		b[i] = byte(x)
 	}
 	return b
 }
@@ -97,10 +102,14 @@ func digest(b []byte) string {
 // that are now reused across requests and chunks.
 func TestWingBufferReuseKeepAlive(t *testing.T) {
 	streams := map[string][]byte{"a": patterned(100_000, 1), "b": patterned(70_001, 7)}
+	var kept []byte // a body the handler holds on to past its request
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		switch r.Path() {
 		case "/up":
 			got, _ := r.Body()
+			if kept == nil {
+				kept = got
+			}
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte(digest(got)))
 		case "/stream/a", "/stream/b":
@@ -145,6 +154,12 @@ func TestWingBufferReuseKeepAlive(t *testing.T) {
 				}
 				return b
 			}
+			// A first bodyless request puts a Takeover connection on its own
+			// goroutine, so the uploads below use that path's accumulation.
+			do([]byte("GET /short HTTP/1.1\r\nHost: x\r\n\r\n"))
+			kept = nil
+			first := patterned(300_000, 99)
+			do(append([]byte("POST /up HTTP/1.1\r\nHost: x\r\nContent-Length: 300000\r\n\r\n"), first...))
 			for i := range 3 {
 				for _, size := range []int{300_000, 9_000} {
 					body := patterned(size, byte(i))
@@ -164,6 +179,9 @@ func TestWingBufferReuseKeepAlive(t *testing.T) {
 						t.Fatalf("stream %s round %d corrupted", name, i)
 					}
 				}
+			}
+			if !bytes.Equal(kept, first) {
+				t.Fatal("a body kept by the handler was overwritten by a later upload")
 			}
 		})
 	}
@@ -191,13 +209,23 @@ func TestWingOwnedBodyPipelinedSurplus(t *testing.T) {
 			}
 			defer conn.Close()
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+			br := bufio.NewReader(conn)
+			// Prime so a Takeover connection is on its own goroutine first.
+			if _, err := conn.Write([]byte("GET /prime HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+				t.Fatal(err)
+			}
+			if resp, err := http.ReadResponse(br, nil); err != nil {
+				t.Fatal(err)
+			} else {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
 			body := patterned(50_000, 3)
 			wire := append([]byte("POST /first HTTP/1.1\r\nHost: x\r\nContent-Length: "+strconv.Itoa(len(body))+"\r\n\r\n"), body...)
 			wire = append(wire, "GET /second HTTP/1.1\r\nHost: x\r\n\r\n"...)
 			if _, err := conn.Write(wire); err != nil {
 				t.Fatal(err)
 			}
-			br := bufio.NewReader(conn)
 			for _, want := range []string{"/first:" + digest(body), "/second:" + digest(nil)} {
 				resp, err := http.ReadResponse(br, nil)
 				if err != nil {
@@ -209,6 +237,63 @@ func TestWingOwnedBodyPipelinedSurplus(t *testing.T) {
 					t.Fatalf("got %q, want %q", got, want)
 				}
 			}
+		})
+	}
+}
+
+// TestWingNegativeStreamSize declares a negative stream size on every preset.
+// The worker must not crash and must keep serving new connections. (What the
+// response says for such a size is a separate question.)
+func TestWingNegativeStreamSize(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/neg" {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.(*wingResponse).SetFileStream(io.NopCloser(bytes.NewReader(nil)), -1)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("ok"))
+	})
+	get := func(t *testing.T, conn net.Conn, br *bufio.Reader, path string) {
+		t.Helper()
+		if _, err := conn.Write([]byte("GET " + path + " HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	for _, preset := range []struct {
+		name string
+		p    Preset
+	}{{"inline", Bolt}, {"takeover", Spear}} {
+		t.Run(preset.name, func(t *testing.T) {
+			addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: preset.p}, handler)
+			defer stop()
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+			br := bufio.NewReader(conn)
+			get(t, conn, br, "/prime")
+			if _, err := conn.Write([]byte("GET /neg HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
+				t.Fatal(err)
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			_, _ = br.ReadString('\n')
+			conn.Close()
+
+			c2, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c2.Close()
+			_ = c2.SetDeadline(time.Now().Add(5 * time.Second))
+			get(t, c2, bufio.NewReader(c2), "/after")
 		})
 	}
 }

@@ -52,6 +52,11 @@ func parseHTTPRequestOwnedBody(header, body []byte, limits parserLimits) (*wingR
 		return nil, false
 	}
 	r, _, ok := parseHTTPRequestInternal(header, limits, false, body)
+	if ok && len(r.body) == 0 {
+		// The header declared no body, so the accumulated bytes are not its body.
+		releaseRequest(r)
+		return nil, false
+	}
 	return r, ok
 }
 
@@ -434,9 +439,6 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool,
 	if contentLength > maxContentLength {
 		return nil, 0, false // reject oversized requests
 	}
-	if ownedBody != nil && (contentLength != len(ownedBody) || bodyStart != len(data)) {
-		return nil, 0, false // the header block must end exactly where the owned body begins
-	}
 	if contentLength > 0 {
 		// Over BodyLimit — reject here so the slow-path classifier emits a 413.
 		// Catches complete in-buffer bodies that fit the read buffer but exceed
@@ -444,15 +446,20 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool,
 		if limits.bodyLimit > 0 && contentLength > limits.bodyLimit {
 			return nil, 0, false
 		}
-		body := ownedBody
-		consumed := bodyStart
-		if body == nil {
+		var body []byte
+		consumed := bodyStart + contentLength
+		if ownedBody == nil {
 			if bodyStart+contentLength > len(data) {
 				return nil, 0, false // incomplete body
 			}
-			consumed += contentLength
 			body = make([]byte, contentLength) // safe copy
 			copy(body, data[bodyStart:bodyStart+contentLength])
+		} else {
+			// The header block must end exactly where the owned body begins.
+			if contentLength != len(ownedBody) || bodyStart != len(data) {
+				return nil, 0, false
+			}
+			body = ownedBody
 		}
 		r := acquireRequest()
 		r.method = method

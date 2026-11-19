@@ -239,3 +239,27 @@ func TestCompiledDiveMatchesBoxed(t *testing.T) {
 		}
 	}
 }
+
+type mutableKey string
+
+var mutableKeyLabel = "before"
+
+func (mutableKey) String() string { return mutableKeyLabel }
+
+// A map key that formats itself is labelled before the element rules run, so
+// a rule with side effects cannot change the reported name.
+func TestDiveMapKeyLabelTakenBeforeRules(t *testing.T) {
+	type input struct {
+		Items map[mutableKey]int `json:"items" validate:"dive,flip"`
+	}
+	mutableKeyLabel = "before"
+	v := NewValidator().Register("flip", func(any, string) bool {
+		mutableKeyLabel = "after"
+		return false
+	})
+	in := input{Items: map[mutableKey]int{"k": 1}}
+	err := validate(buildValidators[input](v), reflect.ValueOf(&in).Elem(), v.messages)
+	if err == nil || err.Errors[0].Field != "items[before]" {
+		t.Fatalf("got %v", err)
+	}
+}

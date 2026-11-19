@@ -4,18 +4,18 @@ pkg: github.com/go-kruda/kruda/contrib/session
 cpu: Apple M3
                          │ session-base-fba66a1.txt │           session-new.txt           │
                          │          sec/op          │    sec/op     vs base               │
-MemoryStoreGetParallel                18.27µ ± 151%   18.17µ ± 19%        ~ (p=0.937 n=6)
-MemoryStoreGetParallel-8             15.659µ ±  22%   5.312µ ± 56%  -66.08% (p=0.002 n=6)
-geomean                               16.92µ          9.825µ        -41.92%
+MemoryStoreGetParallel                 17.42µ ± 18%   17.28µ ±  2%        ~ (p=0.240 n=6)
+MemoryStoreGetParallel-8              14.133µ ±  8%   5.108µ ± 15%  -63.86% (p=0.002 n=6)
+geomean                                15.69µ         9.396µ        -40.12%
 
                          │ session-base-fba66a1.txt │          session-new.txt           │
                          │           B/op           │     B/op      vs base              │
-MemoryStoreGetParallel                 21.12Ki ± 4%   21.14Ki ± 1%       ~ (p=0.937 n=6)
-MemoryStoreGetParallel-8               21.02Ki ± 1%   20.77Ki ± 0%  -1.18% (p=0.002 n=6)
-geomean                                21.07Ki        20.96Ki       -0.54%
+MemoryStoreGetParallel                 21.11Ki ± 0%   21.10Ki ± 0%       ~ (p=0.686 n=6)
+MemoryStoreGetParallel-8               20.98Ki ± 1%   20.76Ki ± 0%  -1.08% (p=0.002 n=6)
+geomean                                21.05Ki        20.93Ki       -0.56%
 
                          │ session-base-fba66a1.txt │         session-new.txt          │
                          │        allocs/op         │ allocs/op   vs base              │
-MemoryStoreGetParallel                   216.0 ± 4%   216.0 ± 1%       ~ (p=1.000 n=6)
-MemoryStoreGetParallel-8                 215.0 ± 0%   212.0 ± 0%  -1.40% (p=0.002 n=6)
-geomean                                  215.5        214.0       -0.70%
+MemoryStoreGetParallel                   216.0 ± 0%   215.5 ± 0%       ~ (p=1.000 n=6)
+MemoryStoreGetParallel-8                 214.0 ± 0%   212.0 ± 0%  -0.93% (p=0.002 n=6)
+geomean                                  215.0        213.7       -0.58%

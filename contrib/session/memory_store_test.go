@@ -407,3 +407,21 @@ func TestMemoryStore_CustomCleanupInterval(t *testing.T) {
 		t.Fatalf("expected 5s cleanup interval, got %v", store.cleanupInterval)
 	}
 }
+
+// Get judges expiry on the entry it read, so an entry replaced by a later Save
+// is never reported expired because of the old deadline.
+func TestMemoryStoreGetJudgesExpiryOnReadEntry(t *testing.T) {
+	s := NewMemoryStore()
+	defer s.Close()
+	_ = s.Save("id", &SessionData{Values: map[string]any{"v": 1}}, time.Hour)
+	if d, _ := s.Get("id"); d == nil {
+		t.Fatal("live session missing")
+	}
+	_ = s.Save("gone", &SessionData{}, -time.Second)
+	if d, _ := s.Get("gone"); d != nil {
+		t.Fatal("expired session returned")
+	}
+	if s.Len() != 1 {
+		t.Fatalf("expired entry not removed, len=%d", s.Len())
+	}
+}

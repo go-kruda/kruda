@@ -2,95 +2,95 @@ goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda
 cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       269.9 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       289.5 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8            	    2000	       272.6 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       277.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8        	    2000	        63.56 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        28.04 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     32924 ns/op	   2.07 MB/s	      33 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     24182 ns/op	   2.61 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    148503 ns/op	 1300343 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     84404 ns/op	  264611 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     19780 ns/op	     827 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    693161 ns/op	   42185 B/op	     148 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	2.215s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8            	    2000	       265.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       283.9 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8        	    2000	        70.81 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        26.50 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     31721 ns/op	   2.14 MB/s	      35 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     23983 ns/op	   2.63 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    158699 ns/op	 1300419 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     87549 ns/op	  264653 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     20676 ns/op	     825 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    703100 ns/op	   42259 B/op	     148 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	2.272s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8            	    2000	       268.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       274.9 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8        	    2000	        74.92 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        26.08 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     30938 ns/op	   2.20 MB/s	      33 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     24782 ns/op	   2.54 MB/s	      39 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    158717 ns/op	 1300367 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     87058 ns/op	  264474 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     19605 ns/op	     835 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    634060 ns/op	   42170 B/op	     148 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	2.122s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8            	    2000	       292.2 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       293.8 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8        	    2000	        77.98 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        30.90 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     28406 ns/op	   2.39 MB/s	      35 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     21178 ns/op	   2.97 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    154834 ns/op	 1300436 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     88818 ns/op	  264627 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     20890 ns/op	     839 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    793109 ns/op	   42163 B/op	     148 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	2.436s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8            	    2000	       262.6 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       282.9 ns/op	      96 B/op	       5 allocs/op
 BenchmarkCPUResponseJSON-8        	    2000	        68.71 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        29.62 ns/op	       2 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     29327 ns/op	   2.32 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     20585 ns/op	   3.06 MB/s	      37 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    146591 ns/op	 1300470 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    152243 ns/op	 1300491 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     22707 ns/op	     835 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    817677 ns/op	   42207 B/op	     148 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        29.06 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     30806 ns/op	   2.21 MB/s	      37 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     24645 ns/op	   2.56 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    164339 ns/op	 1300641 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     87809 ns/op	  264741 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     21615 ns/op	     833 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    681848 ns/op	   42182 B/op	     148 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda	2.595s
+ok  	github.com/go-kruda/kruda	2.233s
 goos: darwin
 goarch: arm64
 pkg: github.com/go-kruda/kruda
 cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       266.5 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       267.8 ns/op	      96 B/op	       5 allocs/op
-BenchmarkCPUResponseJSON-8        	    2000	        71.69 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        28.00 ns/op	       2 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     29911 ns/op	   2.27 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     27259 ns/op	   2.31 MB/s	      40 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    204896 ns/op	 1300638 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    173748 ns/op	 1300509 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     22591 ns/op	     835 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    987471 ns/op	   42263 B/op	     148 allocs/op
+BenchmarkCPUParseGET-8            	    2000	       301.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8           	    2000	       301.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8        	    2000	        88.29 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	    2000	        30.50 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-8      	    2000	     29088 ns/op	   2.34 MB/s	      35 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-8           	    2000	     21884 ns/op	   2.88 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-8         	    2000	    140534 ns/op	 1300612 B/op	      32 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-8       	    2000	     85515 ns/op	  264658 B/op	      16 allocs/op
+BenchmarkPerfLoopback/json-takeover-8           	    2000	     21827 ns/op	     839 B/op	      12 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    662424 ns/op	   42242 B/op	     148 allocs/op
 PASS
-ok  	github.com/go-kruda/kruda	3.098s
-goos: darwin
-goarch: arm64
-pkg: github.com/go-kruda/kruda
-cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       271.9 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       282.5 ns/op	      96 B/op	       5 allocs/op
-BenchmarkCPUResponseJSON-8        	    2000	        70.79 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        28.31 ns/op	       2 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     32271 ns/op	   2.11 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     28594 ns/op	   2.20 MB/s	      40 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    171452 ns/op	 1300616 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    163291 ns/op	 1300757 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     21925 ns/op	     831 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    683754 ns/op	   42241 B/op	     148 allocs/op
-PASS
-ok  	github.com/go-kruda/kruda	2.475s
-goos: darwin
-goarch: arm64
-pkg: github.com/go-kruda/kruda
-cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       260.5 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       276.8 ns/op	      96 B/op	       5 allocs/op
-BenchmarkCPUResponseJSON-8        	    2000	        67.00 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        26.83 ns/op	       2 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     30008 ns/op	   2.27 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     22620 ns/op	   2.79 MB/s	      37 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    183273 ns/op	 1300763 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    179699 ns/op	 1300464 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     56833 ns/op	     821 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    836983 ns/op	   42249 B/op	     148 allocs/op
-PASS
-ok  	github.com/go-kruda/kruda	2.840s
-goos: darwin
-goarch: arm64
-pkg: github.com/go-kruda/kruda
-cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       283.9 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       281.5 ns/op	      96 B/op	       5 allocs/op
-BenchmarkCPUResponseJSON-8        	    2000	        62.12 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        26.85 ns/op	       0 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     41081 ns/op	   1.66 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     24043 ns/op	   2.62 MB/s	      37 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    233947 ns/op	 1300604 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    202759 ns/op	 1300821 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     24555 ns/op	     831 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    716552 ns/op	   42272 B/op	     148 allocs/op
-PASS
-ok  	github.com/go-kruda/kruda	2.698s
-goos: darwin
-goarch: arm64
-pkg: github.com/go-kruda/kruda
-cpu: Apple M3
-BenchmarkCPUParseGET-8            	    2000	       271.3 ns/op	      64 B/op	       5 allocs/op
-BenchmarkCPUParsePOST-8           	    2000	       270.5 ns/op	      96 B/op	       5 allocs/op
-BenchmarkCPUResponseJSON-8        	    2000	        57.27 ns/op	     162 B/op	       1 allocs/op
-BenchmarkCPUResponsePlaintext-8   	    2000	        27.33 ns/op	       2 B/op	       0 allocs/op
-BenchmarkLoopbackPlaintext-8      	    2000	     31341 ns/op	   2.17 MB/s	      35 B/op	       2 allocs/op
-BenchmarkLoopbackJSON-8           	    2000	     26430 ns/op	   2.38 MB/s	      37 B/op	       2 allocs/op
-BenchmarkPerfLoopback/post256K-inline-8         	    2000	    214865 ns/op	 1300491 B/op	      32 allocs/op
-BenchmarkPerfLoopback/post256K-takeover-8       	    2000	    228878 ns/op	 1300493 B/op	      32 allocs/op
-BenchmarkPerfLoopback/json-takeover-8           	    2000	     21698 ns/op	     831 B/op	      12 allocs/op
-BenchmarkPerfLoopback/stream1M-inline-8         	    2000	    753323 ns/op	   42218 B/op	     148 allocs/op
-PASS
-ok  	github.com/go-kruda/kruda	2.777s
+ok  	github.com/go-kruda/kruda	2.365s

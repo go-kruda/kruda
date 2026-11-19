@@ -75,6 +75,17 @@ func BenchmarkPerfLoopback(b *testing.B) {
 					b.Fatal(resp.StatusCode)
 				}
 			}
+			// A bodyless request first moves a Takeover connection onto its own
+			// goroutine, so the measured requests take that path.
+			if _, err := conn.Write(get); err != nil {
+				b.Fatal(err)
+			}
+			if resp, err := http.ReadResponse(br, nil); err != nil {
+				b.Fatal(err)
+			} else {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
 			roundTrip()
 			b.ReportAllocs()
 			b.ResetTimer()

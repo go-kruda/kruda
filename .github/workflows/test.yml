@@ -16,14 +16,16 @@ permissions:
 jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Linux and macOS run on the maintainer's own runners (labels set at
+    # registration); matrix.os keeps the check names the branch rule requires.
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         go-version: ['1.26.11', 'stable']
         os: [ubuntu-latest, macos-latest, windows-2025]
-        # macOS runners queue the longest; Go stable is covered on Linux and Windows.
+        # One macOS runner; Go stable is covered on Linux and Windows.
         exclude:
           - os: macos-latest
             go-version: 'stable'
@@ -36,6 +38,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
+          # Self-hosted runners keep their caches on disk; saving them to
+          # GitHub hung for 12+ minutes on the dev server.
+          cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Record Windows runtime environment
         if: runner.os == 'Windows'

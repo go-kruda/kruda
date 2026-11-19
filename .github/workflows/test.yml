@@ -38,6 +38,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
+          # Self-hosted runners keep their caches on disk; saving them to
+          # GitHub hung for 12+ minutes on the dev server.
+          cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Record Windows runtime environment
         if: runner.os == 'Windows'

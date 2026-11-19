@@ -307,3 +307,17 @@ func TestWingNegativeStreamSize(t *testing.T) {
 		})
 	}
 }
+
+func TestAppendBodyStopsAtNeed(t *testing.T) {
+	var b []byte
+	for range 100 {
+		b = appendBody(b, make([]byte, 3000), 300_000)
+	}
+	if len(b) != 300_000 || cap(b) != 300_000 {
+		t.Fatalf("len=%d cap=%d", len(b), cap(b))
+	}
+	b = appendBody(b, []byte("surplus"), 300_000)
+	if len(b) != 300_007 {
+		t.Fatalf("surplus lost: len=%d", len(b))
+	}
+}

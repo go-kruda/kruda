@@ -1207,8 +1207,24 @@ func accumBody(bodyBuf, src []byte, need int) (out, surplus []byte) {
 	if take > len(src) {
 		take = len(src)
 	}
-	out = append(bodyBuf, src[:take]...)
+	out = appendBody(bodyBuf, src[:take], need)
 	return out, src[take:]
+}
+
+// appendBody appends src to a body buffer of declared size need. It doubles
+// instead of append's ~1.25x steps for large slices, and never past need, so
+// a body arriving in many reads is copied a few times rather than dozens.
+func appendBody(dst, src []byte, need int) []byte {
+	if n := len(dst) + len(src); n > cap(dst) {
+		newCap := max(2*cap(dst), n)
+		if newCap > need {
+			newCap = max(need, n)
+		}
+		grown := make([]byte, len(dst), newCap)
+		copy(grown, dst)
+		dst = grown
+	}
+	return append(dst, src...)
 }
 
 // beginBodyAccum reserves and starts body accumulation for a connection.
@@ -1911,7 +1927,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					}
 					bodyBuf = bodyBuf[:0]
 					if have := readN - headerEnd; have > 0 {
-						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
+						bodyBuf = appendBody(bodyBuf, buf[headerEnd:readN], need)
 					}
 					readN = 0
 					// Read remaining body bytes, reusing buf as a temp chunk buffer.
@@ -1920,7 +1936,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					for len(bodyBuf) < need {
 						n, rerr := f.Read(buf)
 						if n > 0 {
-							bodyBuf = append(bodyBuf, buf[:n]...)
+							bodyBuf = appendBody(bodyBuf, buf[:n], need)
 						}
 						if rerr != nil {
 							if w.readTimeout > 0 {

@@ -17,14 +17,14 @@ jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
     # All three OSes run on the maintainer's own runners (labels set at
-    # registration); matrix.os keeps the check names the branch rule requires.
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os == 'windows-2025' && fromJSON('["self-hosted","kruda-windows"]') || matrix.os }}
+    # registration).
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os == 'windows' && fromJSON('["self-hosted","kruda-windows"]') || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         go-version: ['1.26.11', 'stable']
-        os: [ubuntu-latest, macos-latest, windows-2025]
+        os: [ubuntu-latest, macos-latest, windows]
         # One macOS runner; Go stable is covered on Linux and Windows.
         exclude:
           - os: macos-latest

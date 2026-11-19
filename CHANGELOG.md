@@ -42,35 +42,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   | Path | Before | After |
   | --- | --- | --- |
-  | Validation, 6 fields with `required`/`oneof`/`len`/`gt`/`lte` | 380 ns, 8 allocs | 73 ns, 0 allocs |
+  | Validation, 6 fields with `required`/`oneof`/`len`/`gt`/`lte` | 371 ns, 8 allocs | 71 ns, 0 allocs |
   | Validation, `dive` over 100 strings and a 10-key map | 9.7 µs, 230 allocs | 1.7 µs, 20 allocs |
-  | Typed handler with validation | 233 ns, 4 allocs | 196 ns, 3 allocs |
+  | Typed handler with validation | 233 ns, 4 allocs | 191 ns, 3 allocs |
   | `Use` of a transient service | 6.0 µs | 3.0 µs |
-  | net/http body read, 1 MiB | 397 µs, 5.0 MiB | 195 µs, 2.0 MiB |
-  | Wing POST, 256 KiB body across many reads, inline route | 1.75 MiB/req | 1.24 MiB/req |
-  | Wing POST, 256 KiB body, Takeover route | 524 KiB/req, 103 µs | 258 KiB/req, 87 µs |
-  | Wing JSON response on a Takeover route | 1306 B, 16 allocs | 834 B, 12 allocs |
-  | Wing streamed (non-sendfile) body, 1 MiB | 1038 KiB/req | 41 KiB/req |
+  | net/http body read, 1 MiB | 389 µs, 5.0 MiB | 192 µs, 2.0 MiB |
+  | Wing POST, 256 KiB body across many reads, inline route | 1.75 MiB, 191 µs | 508 KiB, 112 µs |
+  | Wing POST, 256 KiB body, Takeover route | 524 KiB | 508 KiB, and the connection no longer keeps the upload's buffer |
+  | Wing JSON response on a Takeover route | 1305 B, 16 allocs | 826 B, 12 allocs |
+  | Wing streamed (non-sendfile) body, 1 MiB | 1038 KiB | 41 KiB |
   | Wing `HEAD` for a 1 MiB string body | 1.06 MB reserved | 144 B |
-  | `contrib/session` `MemoryStore.Get`, 8 goroutines | 14.1 µs | 5.1 µs |
+  | `contrib/session` `MemoryStore.Get`, 8 goroutines | 13.6 µs | 5.1 µs |
 
   Built-in `gt`, `gte`, `lt`, `lte`, `len`, `oneof` and `required` are now
   checked without boxing the value, as `min` and `max` already were; a
   failing or overridden rule still runs the original function. The net/http
-  body reader no longer grows in small steps, and it still allocates only for
-  bytes that arrive, never for a declared `Content-Length` alone. A pooled
-  Wing request no longer keeps the last POST body it carried.
+  body reader and Wing's body accumulation no longer grow in small steps, and
+  they still allocate only for bytes that arrive, never for a declared
+  `Content-Length` alone. A pooled Wing request no longer keeps the last POST
+  body it carried, and a Takeover connection no longer keeps an accumulator
+  over 64 KiB, or a reused output buffer over 4 KiB, while it idles.
 
   One trade-off: the pooled JSON buffer behind `c.JSON` on net/http now drops
   buffers over 64 KiB. Each response over 64 KiB allocates a new buffer (a
   1 MiB response went from 1.2 to 2.5 MiB allocated), and after a burst of
-  them the pool no longer holds onto them (median heap left after one GC:
-  2 MB before, 5 KB after, with wide run-to-run spread).
+  them the pool no longer holds onto them (whole-heap growth left after one
+  GC, median of 6 runs: 2 MB before, 7 KB after, with wide run-to-run spread).
 
-  The parse and response paths that every request takes are unchanged
-  within noise (20-sample runs: parse GET/POST, JSON and plaintext
-  responses), except `BenchmarkCPUHandlerInline` at +1.6% (5 ns), which no
-  single change here accounts for.
+  On the paths every request takes, 20-sample runs show parse GET/POST, JSON
+  responses and the full parse-to-response cycle unchanged within noise,
+  plaintext responses 3% faster, and `BenchmarkCPUHandlerInline` 1.6% (5 ns)
+  slower, which no single change here accounts for.
 
 - **`HealthHandler` no longer sends a checker's error text.** Before, a
   failed check answered with its error, for example

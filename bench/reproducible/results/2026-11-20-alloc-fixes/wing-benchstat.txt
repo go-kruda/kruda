@@ -4,31 +4,31 @@ pkg: github.com/go-kruda/kruda
 cpu: Apple M3
                                  │ wing-base-fba66a1.txt │            wing-new.txt             │
                                  │        sec/op         │    sec/op     vs base               │
-CPUParseGET-8                              266.0n ±  63%   270.5n ± 11%        ~ (p=0.589 n=6)
-CPUParsePOST-8                             282.9n ±   7%   283.4n ±  6%        ~ (p=0.818 n=6)
-CPUResponseJSON-8                          58.76n ±  17%   72.87n ± 21%  +24.00% (p=0.015 n=6)
-CPUResponsePlaintext-8                     27.76n ±  17%   28.55n ±  9%        ~ (p=0.937 n=6)
-LoopbackPlaintext-8                        29.93µ ±   7%   30.87µ ±  8%        ~ (p=0.240 n=6)
-LoopbackJSON-8                             22.23µ ±  17%   24.08µ ± 12%        ~ (p=0.394 n=6)
-PerfLoopback/post256K-inline-8             199.8µ ± 155%   156.8µ ± 10%  -21.55% (p=0.002 n=6)
-PerfLoopback/post256K-takeover-8          102.72µ ±  18%   87.30µ ±  3%  -15.00% (p=0.002 n=6)
-PerfLoopback/json-takeover-8               21.75µ ±  15%   20.78µ ±  6%        ~ (p=0.132 n=6)
-PerfLoopback/stream1M-inline-8             793.2µ ±  25%   687.5µ ± 15%  -13.33% (p=0.015 n=6)
-geomean                                    5.573µ          5.451µ         -2.19%
+CPUParseGET-8                              270.8n ± 104%   261.6n ±  1%        ~ (p=1.000 n=6)
+CPUParsePOST-8                             280.9n ±  25%   267.7n ±  3%        ~ (p=0.132 n=6)
+CPUResponseJSON-8                          61.15n ±  41%   70.37n ± 12%        ~ (p=0.180 n=6)
+CPUResponsePlaintext-8                     27.72n ±   5%   26.95n ±  4%        ~ (p=0.065 n=6)
+LoopbackPlaintext-8                        30.04µ ±  13%   30.50µ ±  6%        ~ (p=1.000 n=6)
+LoopbackJSON-8                             22.75µ ±  28%   23.43µ ±  7%        ~ (p=0.818 n=6)
+PerfLoopback/post256K-inline-8             190.5µ ±  41%   112.1µ ±  6%  -41.16% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-8          103.52µ ±  25%   99.24µ ±  7%        ~ (p=0.132 n=6)
+PerfLoopback/json-takeover-8               21.56µ ±  11%   21.22µ ±  8%        ~ (p=0.937 n=6)
+PerfLoopback/stream1M-inline-8             897.2µ ±  10%   721.9µ ± 16%  -19.54% (p=0.004 n=6)
+geomean                                    5.658µ          5.259µ         -7.05%
 
                                  │ wing-base-fba66a1.txt │             wing-new.txt              │
                                  │         B/op          │     B/op      vs base                 │
 CPUParseGET-8                                 64.00 ± 0%     64.00 ± 0%        ~ (p=1.000 n=6) ¹
 CPUParsePOST-8                                96.00 ± 0%     96.00 ± 0%        ~ (p=1.000 n=6) ¹
 CPUResponseJSON-8                             162.0 ± 0%     162.0 ± 0%        ~ (p=1.000 n=6) ¹
-CPUResponsePlaintext-8                        2.000 ±  ?     2.000 ±  ?        ~ (p=1.000 n=6)
-LoopbackPlaintext-8                           35.00 ± 6%     35.00 ± 6%        ~ (p=0.864 n=6)
-LoopbackJSON-8                                38.00 ± 5%     37.00 ± 5%        ~ (p=0.424 n=6)
-PerfLoopback/post256K-inline-8              1.750Mi ± 0%   1.240Mi ± 0%  -29.11% (p=0.002 n=6)
-PerfLoopback/post256K-takeover-8            523.7Ki ± 0%   258.4Ki ± 0%  -50.66% (p=0.002 n=6)
-PerfLoopback/json-takeover-8                 1305.5 ± 1%     834.0 ± 1%  -36.12% (p=0.002 n=6)
-PerfLoopback/stream1M-inline-8            1038.13Ki ± 0%   41.19Ki ± 0%  -96.03% (p=0.002 n=6)
-geomean                                     1.110Ki          707.0       -37.82%
+CPUResponsePlaintext-8                        1.000 ±  ?     1.000 ±  ?        ~ (p=1.000 n=6)
+LoopbackPlaintext-8                           35.00 ± 6%     34.00 ± 3%        ~ (p=0.232 n=6)
+LoopbackJSON-8                                37.00 ± 5%     37.00 ± 8%        ~ (p=0.848 n=6)
+PerfLoopback/post256K-inline-8             1791.3Ki ± 0%   508.2Ki ± 0%  -71.63% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-8            523.7Ki ± 0%   508.4Ki ± 0%   -2.91% (p=0.002 n=6)
+PerfLoopback/json-takeover-8                 1304.5 ± 1%     826.0 ± 2%  -36.68% (p=0.002 n=6)
+PerfLoopback/stream1M-inline-8            1038.11Ki ± 0%   41.37Ki ± 0%  -96.01% (p=0.002 n=6)
+geomean                                     1.033Ki          641.9       -39.33%
 ¹ all samples are equal
 
                                  │ wing-base-fba66a1.txt │            wing-new.txt             │
@@ -39,16 +39,16 @@ CPUResponseJSON-8                           1.000 ± 0%     1.000 ± 0%        ~
 CPUResponsePlaintext-8                      0.000 ± 0%     0.000 ± 0%        ~ (p=1.000 n=6) ¹
 LoopbackPlaintext-8                         2.000 ± 0%     2.000 ± 0%        ~ (p=1.000 n=6) ¹
 LoopbackJSON-8                              2.000 ± 0%     2.000 ± 0%        ~ (p=1.000 n=6) ¹
-PerfLoopback/post256K-inline-8              35.00 ± 3%     32.00 ± 0%   -8.57% (p=0.002 n=6)
-PerfLoopback/post256K-takeover-8            20.00 ± 0%     16.00 ± 0%  -20.00% (p=0.002 n=6)
+PerfLoopback/post256K-inline-8              34.00 ± 3%     23.00 ± 0%  -32.35% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-8            20.00 ± 0%     22.00 ± 0%  +10.00% (p=0.002 n=6)
 PerfLoopback/json-takeover-8                16.00 ± 0%     12.00 ± 0%  -25.00% (p=0.002 n=6)
-PerfLoopback/stream1M-inline-8              182.0 ± 0%     148.0 ± 0%  -18.68% (p=0.002 n=6)
-geomean                                                ²                -7.76%               ²
+PerfLoopback/stream1M-inline-8              182.0 ± 0%     149.0 ± 0%  -18.13% (p=0.002 n=6)
+geomean                                                ²                -7.53%               ²
 ¹ all samples are equal
 ² summaries must be >0 to compute geomean
 
-                    │ wing-base-fba66a1.txt │            wing-new.txt             │
-                    │          B/s          │      B/s       vs base              │
-LoopbackPlaintext-8           2.165Mi ±  8%   2.103Mi ±  8%       ~ (p=0.260 n=6)
-LoopbackJSON-8                2.704Mi ± 15%   2.499Mi ± 13%       ~ (p=0.420 n=6)
-geomean                       2.419Mi         2.292Mi        -5.25%
+                    │ wing-base-fba66a1.txt │            wing-new.txt            │
+                    │          B/s          │     B/s       vs base              │
+LoopbackPlaintext-8           2.160Mi ± 12%   2.127Mi ± 5%       ~ (p=1.000 n=6)
+LoopbackJSON-8                2.642Mi ± 22%   2.565Mi ± 7%       ~ (p=0.784 n=6)
+geomean                       2.389Mi         2.336Mi       -2.22%

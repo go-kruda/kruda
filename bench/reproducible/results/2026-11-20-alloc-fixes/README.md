@@ -1,8 +1,10 @@
 # Allocation fixes, 2026-11-20
 
 Paired A/B of branch `perf/alloc-fixes` against `fba66a1` on macOS arm64
-(Apple M3, 8 cores), Go 1.26.1, `-tags kruda_stdjson`. In-process benchmarks;
-not HTTP throughput, and not run on Linux.
+(Apple M3, 8 cores), Go 1.26.11 (the toolchain the module selects),
+`-tags kruda_stdjson`. In-process benchmarks; not HTTP throughput, and not run
+on Linux. `run-info.txt` records the exact base and candidate revisions of the
+`core-*`, `wing-*` and `session-*` files.
 
 | Files | What | How |
 | --- | --- | --- |
@@ -11,5 +13,6 @@ not HTTP throughput, and not run on Linux.
 | `hot-path/response-*` | JSON/plaintext responses, full cycle, inline handler | same |
 | `hot-path/aa-*` | Noise floor: `fba66a1` against itself | same |
 
-The `core-*`/`wing-*` runs predate the parse change in `hot-path/parse-*`; that
-change moves one check and affects parse time only, not allocations.
+The `hot-path/` runs were taken at `2be3a5e`. The two later commits change
+validation map labels, the body reader's EOF probe, Wing body accumulation and
+stream buffers; none touches the parse or response code those runs measure.

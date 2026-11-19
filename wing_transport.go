@@ -1471,6 +1471,12 @@ func (w *worker) directSend(c *conn) {
 	c.sendBuf = c.sendBuf[:0]
 	c.sendN = 0
 	if stream := c.fileStream; stream != nil {
+		// A sent chunk leaves c.sendBuf on stream.buf. Detach it: the next read
+		// refills that array, and after the last chunk the connection must not
+		// keep a 32 KiB stream buffer for later responses.
+		if cap(c.sendBuf) > 0 && cap(stream.buf) > 0 && &c.sendBuf[:1][0] == &stream.buf[:1][0] {
+			c.sendBuf = nil
+		}
 		if stream.remaining > 0 {
 			if !stream.reading {
 				stream.reading = true
@@ -1483,11 +1489,6 @@ func (w *worker) directSend(c *conn) {
 					stream.buf = make([]byte, n)
 				}
 				chunk := stream.buf[:n]
-				// The previous chunk was sent from this array; the read below
-				// refills it, so the connection must not keep appending to it.
-				if cap(c.sendBuf) > 0 && &c.sendBuf[:1][0] == &chunk[0] {
-					c.sendBuf = nil
-				}
 				fd := c.fd
 
 				go func() {
@@ -1608,6 +1609,10 @@ const takeoverSpinReads = 8
 // output buffer grown past it is dropped after the write, so one large reply
 // does not stay attached to the connection.
 const maxReusedTakeoverOut = 4 << 10
+
+// maxReusedTakeoverBody bounds the body accumulator a Takeover connection
+// keeps between requests; a larger one is dropped once its body is copied.
+const maxReusedTakeoverBody = 64 << 10
 
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
@@ -1899,9 +1904,11 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					}
 					headerSnapshot := make([]byte, headerEnd)
 					copy(headerSnapshot, buf[:headerEnd])
-					// Seed bodyBuf with already-received body bytes. bodyBuf is
-					// reused across this connection's requests; each request gets
-					// its own copy of the body below.
+					// Seed bodyBuf with already-received body bytes. A small bodyBuf
+					// is reused across this connection's requests (see below).
+					if bodyBuf == nil {
+						bodyBuf = make([]byte, 0, min(need, 8192))
+					}
 					bodyBuf = bodyBuf[:0]
 					if have := readN - headerEnd; have > 0 {
 						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
@@ -1942,11 +1949,19 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if surplus := len(bodyBuf) - need; surplus > 0 {
 						readN = copy(buf, bodyBuf[need:])
 					}
-					// One exact copy for the request: bodyBuf is reused by the next
-					// accumulation, and the header is not joined to the body again.
-					body := make([]byte, need)
-					copy(body, bodyBuf[:need])
-					bodyBuf = bodyBuf[:0]
+					// The header is not joined to the body again. A small accumulator
+					// is kept for the next request, so the request gets a copy; a
+					// large one is handed to the request rather than held while the
+					// connection idles.
+					var body []byte
+					if cap(bodyBuf) > maxReusedTakeoverBody {
+						body = bodyBuf[:need:need]
+						bodyBuf = nil
+					} else {
+						body = make([]byte, need)
+						copy(body, bodyBuf[:need])
+						bodyBuf = bodyBuf[:0]
+					}
 					r2, ok2 := parseHTTPRequestOwnedBody(headerSnapshot, body, w.limits)
 					if !ok2 {
 						keepAlive = false

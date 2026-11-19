@@ -351,7 +351,10 @@ func (fv *fieldValidator) validateElems(messages map[string]string, fieldVal ref
 		for iter.Next() {
 			key := iter.Key()
 			if eager {
-				errs = fv.applyElemRulesNamed(messages, iter.Value(), fv.elemName(0, key), errs)
+				// The label is taken before the value, as it always was: a
+				// key's String method may change what the value holds.
+				name := fv.elemName(0, key)
+				errs = fv.applyElemRulesNamed(messages, iter.Value(), name, errs)
 				continue
 			}
 			errs = fv.applyElemRules(messages, iter.Value(), 0, key, errs)

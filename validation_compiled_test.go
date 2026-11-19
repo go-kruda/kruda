@@ -263,3 +263,26 @@ func TestDiveMapKeyLabelTakenBeforeRules(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+type rewritingKey string
+
+var rewritingMap map[rewritingKey]int
+
+func (k rewritingKey) String() string {
+	rewritingMap[k] = 1
+	return string(k)
+}
+
+// A self-formatting key is labelled before its value is read, so a String
+// method that changes the value changes what is validated, as before.
+func TestDiveMapKeyLabelledBeforeValueRead(t *testing.T) {
+	type input struct {
+		Items map[rewritingKey]int `json:"items" validate:"dive,gt=0"`
+	}
+	rewritingMap = map[rewritingKey]int{"k": 0}
+	in := input{Items: rewritingMap}
+	v := NewValidator()
+	if err := validate(buildValidators[input](v), reflect.ValueOf(&in).Elem(), v.messages); err != nil {
+		t.Fatalf("validated the value from before the label was taken: %v", err)
+	}
+}

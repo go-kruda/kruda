@@ -87,3 +87,11 @@ func TestReadReportsErrorWithTooLarge(t *testing.T) {
 		t.Fatalf("tooLarge=%v err=%v", tooLarge, err)
 	}
 }
+
+// A body longer than its declared length still never holds more than limit+1.
+func TestReadProbeRespectsLimit(t *testing.T) {
+	got, tooLarge, err := Read(bytes.NewReader(bytes.Repeat([]byte("x"), 2000)), 1000, 1000)
+	if err != nil || !tooLarge || cap(got) > 1001 {
+		t.Fatalf("cap=%d tooLarge=%v err=%v", cap(got), tooLarge, err)
+	}
+}

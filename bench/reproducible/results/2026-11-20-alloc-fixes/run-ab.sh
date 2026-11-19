@@ -6,7 +6,15 @@
 set -eu
 BASE=${1:-fba66a1}
 OUT=${2:-$(mktemp -d)}
+mkdir -p "$OUT"
+OUT=$(cd "$OUT" && pwd) # the benchmark subshells change directory
 NEW=$(pwd)
+{
+  echo "base: $(git rev-parse "$BASE")"
+  echo "candidate: $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' +uncommitted changes')"
+  echo "go: $(go version)"
+  echo "host: $(uname -sm)"
+} > "$OUT/run-info.txt"
 TREE=$(mktemp -d)
 git archive "$BASE" | tar -x -C "$TREE"
 cp perf_alloc_bench_test.go wing_perf_alloc_bench_test.go wing_perf_loopback_bench_test.go "$TREE/"

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,14 +103,19 @@ func digest(b []byte) string {
 // that are now reused across requests and chunks.
 func TestWingBufferReuseKeepAlive(t *testing.T) {
 	streams := map[string][]byte{"a": patterned(100_000, 1), "b": patterned(70_001, 7)}
-	var kept []byte // a body the handler holds on to past its request
+	var (
+		keptMu sync.Mutex
+		kept   []byte // a body the handler holds on to past its request
+	)
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		switch r.Path() {
 		case "/up":
 			got, _ := r.Body()
+			keptMu.Lock()
 			if kept == nil {
 				kept = got
 			}
+			keptMu.Unlock()
 			w.Header().Set("Content-Type", "text/plain")
 			w.Write([]byte(digest(got)))
 		case "/stream/a", "/stream/b":
@@ -157,7 +163,9 @@ func TestWingBufferReuseKeepAlive(t *testing.T) {
 			// A first bodyless request puts a Takeover connection on its own
 			// goroutine, so the uploads below use that path's accumulation.
 			do([]byte("GET /short HTTP/1.1\r\nHost: x\r\n\r\n"))
+			keptMu.Lock()
 			kept = nil
+			keptMu.Unlock()
 			first := patterned(300_000, 99)
 			do(append([]byte("POST /up HTTP/1.1\r\nHost: x\r\nContent-Length: 300000\r\n\r\n"), first...))
 			for i := range 3 {
@@ -180,6 +188,8 @@ func TestWingBufferReuseKeepAlive(t *testing.T) {
 					}
 				}
 			}
+			keptMu.Lock()
+			defer keptMu.Unlock()
 			if !bytes.Equal(kept, first) {
 				t.Fatal("a body kept by the handler was overwritten by a later upload")
 			}

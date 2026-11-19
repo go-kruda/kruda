@@ -41,7 +41,7 @@ func Read(r io.Reader, contentLength int64, limit int) (b []byte, tooLarge bool,
 			// Every declared byte is in: look for EOF without growing.
 			n, rerr = r.Read(probe[:])
 			if n > 0 {
-				b = append(b, probe[0])
+				b = append(grow(b, want, window), probe[0])
 			}
 		} else {
 			if len(b) == cap(b) {

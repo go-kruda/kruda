@@ -36,18 +36,30 @@ var (
 // On success, consumed is the number of bytes used by the parsed request,
 // allowing callers to preserve any pipelined data that follows.
 func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
-	return parseHTTPRequestInternal(data, limits, false)
+	return parseHTTPRequestInternal(data, limits, false, nil)
 }
 
 func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, bool) {
-	return parseHTTPRequestInternal(data, limits, true)
+	return parseHTTPRequestInternal(data, limits, true, nil)
+}
+
+// parseHTTPRequestOwnedBody parses a complete header block whose body was
+// accumulated separately. The request takes body as its own, so the body is
+// not joined to the header and copied again. body must be exactly the
+// declared Content-Length and must not be reused by the caller.
+func parseHTTPRequestOwnedBody(header, body []byte, limits parserLimits) (*wingRequest, bool) {
+	if len(body) == 0 {
+		return nil, false
+	}
+	r, _, ok := parseHTTPRequestInternal(header, limits, false, body)
+	return r, ok
 }
 
 // wingExtraHeader is one request header outside the knownHeader fast-path
 // set, stored lowercase-keyed for case-insensitive lookup in Header().
 type wingExtraHeader struct{ k, v string }
 
-func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
+func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool, ownedBody []byte) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
 	for skip+1 < len(data) && data[skip] == '\r' && data[skip+1] == '\n' {
@@ -422,6 +434,9 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 	if contentLength > maxContentLength {
 		return nil, 0, false // reject oversized requests
 	}
+	if ownedBody != nil && (contentLength != len(ownedBody) || bodyStart != len(data)) {
+		return nil, 0, false // the header block must end exactly where the owned body begins
+	}
 	if contentLength > 0 {
 		// Over BodyLimit — reject here so the slow-path classifier emits a 413.
 		// Catches complete in-buffer bodies that fit the read buffer but exceed
@@ -429,12 +444,16 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		if limits.bodyLimit > 0 && contentLength > limits.bodyLimit {
 			return nil, 0, false
 		}
-		if bodyStart+contentLength > len(data) {
-			return nil, 0, false // incomplete body
+		body := ownedBody
+		consumed := bodyStart
+		if body == nil {
+			if bodyStart+contentLength > len(data) {
+				return nil, 0, false // incomplete body
+			}
+			consumed += contentLength
+			body = make([]byte, contentLength) // safe copy
+			copy(body, data[bodyStart:bodyStart+contentLength])
 		}
-		consumed := bodyStart + contentLength
-		body := make([]byte, contentLength) // safe copy
-		copy(body, data[bodyStart:bodyStart+contentLength])
 		r := acquireRequest()
 		r.method = method
 		r.path = path
@@ -1297,6 +1316,7 @@ type fileStream struct {
 	reader    io.ReadCloser
 	remaining int64
 	reading   bool
+	buf       []byte // chunk buffer, reused once the previous chunk is sent
 	mu        sync.Mutex
 	active    bool
 	closing   bool

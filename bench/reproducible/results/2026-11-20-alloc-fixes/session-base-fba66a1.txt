@@ -1,0 +1,48 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   68612	     18348 ns/op	   21610 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   65913	     15252 ns/op	   21631 B/op	     216 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.684s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   67780	     17322 ns/op	   21616 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   89752	     19066 ns/op	   21492 B/op	     214 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	5.029s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   65733	     17859 ns/op	   21632 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   88995	     16066 ns/op	   21495 B/op	     214 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	4.727s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   67378	     20328 ns/op	   21619 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   63380	     17342 ns/op	   21653 B/op	     216 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.723s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   26520	     45799 ns/op	   22409 B/op	     224 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   81313	     13950 ns/op	   21532 B/op	     215 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	4.598s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+BenchmarkMemoryStoreGetParallel     	   59223	     18201 ns/op	   21690 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	   85188	     13318 ns/op	   21513 B/op	     215 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	4.500s

@@ -1332,12 +1332,12 @@ func (w *worker) finishBodyAccum(c *conn) {
 	if w.maxInflightBody > 0 {
 		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
 	}
-	// Reconstruct: header block + body bytes → full request bytes.
-	full := append(c.headerSnapshot, c.bodyBuf...)
+	// The request takes the accumulated body as its own; only the header is parsed again.
+	header, body := c.headerSnapshot, c.bodyBuf
 	c.bodyNeed = 0
 	c.headerSnapshot = nil
 	c.bodyBuf = nil
-	req, _, ok := parseHTTPRequest(full, w.limits)
+	req, ok := parseHTTPRequestOwnedBody(header, body, w.limits)
 	if !ok {
 		w.closeConn(c.fd)
 		return
@@ -1478,8 +1478,16 @@ func (w *worker) directSend(c *conn) {
 				if engine, ok := w.eng.(interface{ enableAsync() }); ok {
 					engine.enableAsync()
 				}
-				n := min(int64(32*1024), stream.remaining)
-				chunk := make([]byte, int(n))
+				n := int(min(int64(32*1024), stream.remaining))
+				if cap(stream.buf) < n {
+					stream.buf = make([]byte, n)
+				}
+				chunk := stream.buf[:n]
+				// The previous chunk was sent from this array; the read below
+				// refills it, so the connection must not keep appending to it.
+				if cap(c.sendBuf) > 0 && &c.sendBuf[:1][0] == &chunk[0] {
+					c.sendBuf = nil
+				}
 				fd := c.fd
 
 				go func() {
@@ -1596,6 +1604,10 @@ func (w *worker) failSend(c *conn) {
 // keeps the takeover thread count low when the connection is genuinely idle.
 const takeoverSpinReads = 8
 
+// maxReusedTakeoverOut matches the response buffer cutoff: a larger output
+// buffer is dropped rather than held for the connection's lifetime.
+const maxReusedTakeoverOut = 64 << 10
+
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
 
@@ -1663,8 +1675,10 @@ func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
 		}
 		defer f.SetWriteDeadline(time.Time{})
 	}
+	// Write is synchronous, so one buffer serves every chunk.
+	buf := make([]byte, int(min(int64(32*1024), stream.remaining)))
 	for stream.remaining > 0 {
-		chunk := make([]byte, int(min(int64(32*1024), stream.remaining)))
+		chunk := buf[:int(min(int64(len(buf)), stream.remaining))]
 		if err := w.readStreamChunk(stream, chunk); err != nil {
 			return err
 		}
@@ -1738,6 +1752,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	req := first
 	keepAlive := req.keepAlive
 	requestStarted := false
+	// out is serialized into again once the synchronous write has returned.
+	var out []byte
 
 	for {
 		// Handle request.
@@ -1751,7 +1767,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			}()
 			w.handler.ServeKruda(resp, req)
 		}()
+		resp.buf = out[:0]
 		data := resp.buildZeroCopy()
+		builtIntoOut := resp.staticResp == nil
+		resp.buf = nil // out stays with this loop, never with the pooled response
 		stream := resp.fileStream
 		resp.fileStream = nil
 		releaseResponse(resp)
@@ -1763,6 +1782,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			stream.close()
 			keepAlive = false
 			goto done
+		}
+		if builtIntoOut && cap(data) <= maxReusedTakeoverOut {
+			out = data[:0]
 		}
 		if stream != nil {
 			err := w.writeFileStream(f, stream)
@@ -1873,8 +1895,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					}
 					headerSnapshot := make([]byte, headerEnd)
 					copy(headerSnapshot, buf[:headerEnd])
-					// Seed bodyBuf with already-received body bytes.
-					bodyBuf = bodyBuf[:0]
+					// Seed bodyBuf with already-received body bytes. Each request
+					// owns its body, so every accumulation starts a new buffer.
+					bodyBuf = make([]byte, 0, min(need, 8192))
 					if have := readN - headerEnd; have > 0 {
 						bodyBuf = append(bodyBuf, buf[headerEnd:readN]...)
 					}
@@ -1908,16 +1931,17 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if w.maxInflightBody > 0 {
 						atomic.AddInt64(&w.inflightBody, -int64(need))
 					}
-					// Reconstruct and re-parse with full body present.
-					full := append(headerSnapshot, bodyBuf[:need]...)
 					// Carry bytes beyond the body (start of the next pipelined
 					// request) back into buf so the next iteration parses them
 					// instead of dropping them.
 					if surplus := len(bodyBuf) - need; surplus > 0 {
 						readN = copy(buf, bodyBuf[need:])
 					}
-					bodyBuf = bodyBuf[:0]
-					r2, _, ok2 := parseHTTPRequest(full, w.limits)
+					// The request owns the body from here on, so the next
+					// accumulation must start a new buffer rather than reuse it.
+					body := bodyBuf[:need:need]
+					bodyBuf = nil
+					r2, ok2 := parseHTTPRequestOwnedBody(headerSnapshot, body, w.limits)
 					if !ok2 {
 						keepAlive = false
 						goto done

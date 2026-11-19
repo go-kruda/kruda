@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: Apple M3
+                         │ session-base-fba66a1.txt │           session-new.txt           │
+                         │          sec/op          │    sec/op     vs base               │
+MemoryStoreGetParallel                18.27µ ± 151%   18.17µ ± 19%        ~ (p=0.937 n=6)
+MemoryStoreGetParallel-8             15.659µ ±  22%   5.312µ ± 56%  -66.08% (p=0.002 n=6)
+geomean                               16.92µ          9.825µ        -41.92%
+
+                         │ session-base-fba66a1.txt │          session-new.txt           │
+                         │           B/op           │     B/op      vs base              │
+MemoryStoreGetParallel                 21.12Ki ± 4%   21.14Ki ± 1%       ~ (p=0.937 n=6)
+MemoryStoreGetParallel-8               21.02Ki ± 1%   20.77Ki ± 0%  -1.18% (p=0.002 n=6)
+geomean                                21.07Ki        20.96Ki       -0.54%
+
+                         │ session-base-fba66a1.txt │         session-new.txt          │
+                         │        allocs/op         │ allocs/op   vs base              │
+MemoryStoreGetParallel                   216.0 ± 4%   216.0 ± 1%       ~ (p=1.000 n=6)
+MemoryStoreGetParallel-8                 215.0 ± 0%   212.0 ± 0%  -1.40% (p=0.002 n=6)
+geomean                                  215.5        214.0       -0.70%

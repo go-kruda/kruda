@@ -39,7 +39,7 @@ if [[ ${#modules[@]} -eq 0 ]]; then
   modules+=("cmd/kruda")
 fi
 
-test_flags=(-tags kruda_stdjson)
+test_flags=(-count=1 -tags kruda_stdjson)
 if [[ "$race" == true ]]; then
   test_flags=(-race "${test_flags[@]}")
 fi

@@ -98,7 +98,7 @@ jobs:
             COVER_FLAG="-coverprofile=coverage.out"
             SKIP_FLAG="-skip=^TestPlaintextPerformanceGuard$"
           fi
-          go test -v -race -tags kruda_stdjson $COVER_FLAG $SKIP_FLAG ./...
+          go test -v -race -count=1 -tags kruda_stdjson $COVER_FLAG $SKIP_FLAG ./...
 
       - name: Run Wing performance guard
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
@@ -108,7 +108,7 @@ jobs:
       - name: Run default JSON engine tests
         if: matrix.os == 'ubuntu-latest'
         shell: bash
-        run: CGO_ENABLED=1 go test -race -skip '^TestPlaintextPerformanceGuard$' ./...
+        run: CGO_ENABLED=1 go test -race -count=1 -skip '^TestPlaintextPerformanceGuard$' ./...
 
       # Sonic accelerates amd64 and arm64 only; on other 64-bit architectures it
       # routes its own API to encoding/json, and Kruda's json package takes a

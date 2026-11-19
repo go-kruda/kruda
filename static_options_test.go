@@ -13,7 +13,7 @@ import (
 	"testing/fstest"
 )
 
-// --- Static option helpers (WithMaxAge / WithIndex / WithBrowse) ---
+// --- Static option helpers (WithMaxAge / WithIndex) ---
 
 func TestStatic_WithMaxAge(t *testing.T) {
 	fs := fstest.MapFS{
@@ -43,21 +43,6 @@ func TestStatic_WithIndex(t *testing.T) {
 	resp, _ := tc.Get("/")
 	if !strings.Contains(resp.BodyString(), "<html>home</html>") {
 		t.Errorf("body = %q", resp.BodyString())
-	}
-}
-
-func TestStatic_WithBrowse(t *testing.T) {
-	fs := fstest.MapFS{
-		"sub/file.txt": {Data: []byte("hello")},
-	}
-	app := New()
-	app.StaticFS("/files", fs, WithBrowse())
-	app.Compile()
-
-	tc := NewTestClient(app)
-	resp, _ := tc.Get("/files/sub/file.txt")
-	if resp.StatusCode() != 200 {
-		t.Errorf("status = %d", resp.StatusCode())
 	}
 }
 
@@ -215,14 +200,6 @@ func TestStatic_DirectoryFileLifetime(t *testing.T) {
 			files:      fstest.MapFS{"sub/file.txt": {Data: []byte("hello")}},
 			wantStatus: 404,
 			wantBody:   "Not Found",
-			wantOpened: []string{"sub"},
-		},
-		{
-			name:       "missing index with browse",
-			files:      fstest.MapFS{"sub/file.txt": {Data: []byte("hello")}},
-			opts:       []StaticOption{WithBrowse()},
-			wantStatus: 200,
-			wantBody:   "Directory listing not implemented",
 			wantOpened: []string{"sub"},
 		},
 	}

@@ -379,6 +379,15 @@ func (r *Router) addRoute(method, path string, handlers []HandlerFunc) {
 
 	// Parse into segments and insert
 	segments := parseSegments(path)
+	names := make(map[string]struct{}, len(segments))
+	for _, seg := range segments {
+		if seg.param != "" {
+			names[seg.param] = struct{}{}
+		}
+	}
+	if len(names) > maxRouteParams {
+		panic(fmt.Sprintf("kruda: route %s %s has %d path parameters; the limit is %d", method, path, len(names), maxRouteParams))
+	}
 	insertRoute(root, segments, 0, handlers, method, path)
 }
 

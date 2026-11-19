@@ -149,17 +149,6 @@ func buildTypedHandler[In any, Out any](
 	opts []RouteOption,
 ) HandlerFunc {
 	binder, validatorFactory := selectGeneratedPlan[In](method, path, opts)
-	return buildTypedHandlerWithBinder(app, method, path, handler, opts, binder, validatorFactory)
-}
-
-func buildTypedHandlerWithBinder[In any, Out any](
-	app *App,
-	method, path string,
-	handler func(*C[In]) (*Out, error),
-	opts []RouteOption,
-	binder func(*Ctx) (reflect.Value, error),
-	validatorFactory func([]ValidatorDescriptor) func(*In) bool,
-) HandlerFunc {
 	return buildTypedHandlerWithValidation(app, method, path, handler, opts, binder, validatorFactory)
 }
 

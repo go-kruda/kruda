@@ -96,6 +96,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   warning, raise `WingConfig.HandlerPoolSize` or move the route to
   `kruda.DB`.
 
+- **A route with more than 8 path parameters panics at registration.**
+  Before, `/:a/:b/:c/:d/:e/:f/:g/:h/:i` registered and matched, but the
+  ninth value was dropped and `c.Param("i")` returned `""`. Now
+  registration panics with the route and the count. `:id?`, `:id<regex>`
+  and `*wildcard` each count as one; routes with 8 or fewer are unchanged.
+
+### Removed
+
+- `WithBrowse()` for static files. It never listed directories: a directory
+  without an index answered `200` with the text "Directory listing not
+  implemented". Remove the option from `Static`/`StaticFS` calls; such a
+  directory now answers `404`, as it does without the option.
+
 ### Fixed
 
 - A typed handler input field whose type is a named `string` or `bool`

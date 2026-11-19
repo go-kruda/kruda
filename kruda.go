@@ -37,6 +37,11 @@ type App struct {
 	// Precomputed security headers (nil if SecurityHeaders=false)
 	secHeaders [][2]string
 
+	// optionsChain runs global middleware for an OPTIONS request to a path
+	// that has routes but no OPTIONS route, so CORS can answer the preflight.
+	// It ends in the usual 405. Nil when there is no global middleware.
+	optionsChain []HandlerFunc
+
 	// logEnricher, when non-nil, appends per-record attributes to the request
 	// logger returned by c.Log(). Resolved at log-emit time so a cached logger
 	// still picks up attrs (e.g. trace_id) that became available after c.Log()
@@ -152,6 +157,11 @@ func (app *App) registerOpenAPI() error {
 }
 
 func (app *App) prepareCompiledState() {
+	if len(app.middleware) > 0 {
+		app.optionsChain = buildChain(app.middleware, nil, func(*Ctx) error {
+			return NewError(405, "method not allowed")
+		})
+	}
 	// Precompute security headers with canonical keys
 	if app.config.SecurityHeaders {
 		sec := app.config.Security

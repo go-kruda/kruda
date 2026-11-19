@@ -69,6 +69,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   another. The package doc's description of the default key was also out of
   date.
 
+- **Global middleware now runs for an `OPTIONS` request to a path that has
+  routes but no `OPTIONS` route.** Before, with the CORS setup from the
+  security guide and only `app.Post("/users", ...)`, a browser preflight
+  `OPTIONS /users` got `405` with no `Access-Control-Allow-*` headers,
+  because middleware ran only after a route matched, so the browser blocked
+  the `POST`. Now `middleware.CORS` answers the preflight with `204`.
+  Without CORS the response is unchanged: `405` with an `Allow` header.
+  Unknown paths still get `404` without middleware. Other global middleware
+  (logger, request ID, rate limit, auth) now also sees these `OPTIONS`
+  requests; an auth middleware placed before `CORS` answers `401` instead
+  of `405`. Middleware added only to a `Group` still does not run for them,
+  so register `CORS` with `app.Use`.
+
 ### Fixed
 
 - A typed handler input field whose type is a named `string` or `bool`

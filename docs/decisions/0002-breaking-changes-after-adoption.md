@@ -2,6 +2,7 @@
 
 Date: 2026-07-31
 Status: Accepted
+Amended: 2026-11-20 (rule 3, see [Amendment](#amendment-2026-11-20))
 
 Extends ADR 0001 from the API surface to runtime behaviour. It does not
 replace it, and ADR 0001's premise still holds.
@@ -22,7 +23,8 @@ on Linux, and two changes have touched things ADR 0001 never spoke about
   response containing `<`, `>` or `&`.
 - **v1.7.1, unreleased at the time of writing**, enforces `validate`
   tags by default, so an application can start rejecting requests it
-  previously accepted. It is merged and waiting; see rule 3.
+  previously accepted. It was merged and waited for Rianhub to take
+  v1.7.0, under the original rule 3.
 
 Neither removes a symbol. ADR 0001 reasoned entirely about the API
 surface, where a break fails loudly at build time on a developer's
@@ -48,12 +50,12 @@ reading that entry.
 an instant rollback that does not need a downgrade. When an escape hatch would be expensive, fixing forward is
 fine — that is the advantage of owning both sides.
 
-**3. One behaviour change per release.** Never ship two independent ones
-together, so that when production misbehaves there is a single suspect.
-A change plus the prerequisites that make it safe is one item: v1.7.1
-carries validation-by-default together with the unknown-rule fix it
-required. The response-byte change was a second cause, so it went out
-separately as v1.7.0, and v1.7.1 waits until Rianhub has taken v1.7.0.
+**3. Several behaviour changes may ship together, each one listed.** The
+release's CHANGELOG entry opens with a "Check before upgrading" list: one
+line per behaviour change, naming what in an app it affects, such as a
+config value, a route shape or an option. Rianhub is checked against that
+list before it upgrades. A change plus the prerequisites that make it safe
+is still one line.
 
 **4. Version numbers signal how much attention a release needs.** They
 are not a semver contract — ADR 0001 already put the v1 line outside
@@ -61,8 +63,8 @@ strict semver. A patch may change behaviour and add exported API, which
 is why validation-by-default is v1.7.1; `gorelease` and `apidiff` will
 flag that, and the flag is expected rather than a stop.
 
-A fix for a real vulnerability ships immediately and does not wait its
-turn under rule 3.
+A fix for a real vulnerability ships immediately, without waiting for
+other work to be ready.
 
 ## Consequences
 
@@ -70,8 +72,10 @@ turn under rule 3.
   CHANGELOG. That is acceptable while the only installer is the person
   writing it, and it is stated in the release notes rather than left for
   someone to discover.
-- Rule 3 means two behaviour changes ready together are two releases, so
-  the cadence is slower than the work rate.
+- When production misbehaves after a release that carried several
+  behaviour changes, there can be more than one suspect. The checklist
+  narrows them before the upgrade; after it, the whole release is rolled
+  back, not one change.
 - ADR 0001 is unchanged and still governs the API surface: removals may
   ship in a v1 minor. If that ever needs revisiting, it will be because
   the premise it rests on has actually expired.
@@ -80,3 +84,16 @@ turn under rule 3.
   need the opposite: deprecation windows, opt-outs that are mandatory
   rather than cheap, and a patch channel safe to install unread. Writing
   those rules now would be guessing at a situation that does not exist.
+
+## Amendment 2026-11-20
+
+Rule 3 first read "one behaviour change per release": never ship two
+independent ones together, so production has a single suspect. It held
+for v1.7.0 and v1.7.1. After v1.8.5 the work outran it. Eight independent
+behaviour changes landed on `main` in about two weeks, from the router's
+method matching to Wing's full-pool 503. One per release would have meant
+eight releases, each waiting for Rianhub to upgrade.
+
+The rule now trades the single suspect for a list checked before the
+upgrade. That keeps the part that helped, knowing which changes can touch
+the app, and drops the part that did not scale.

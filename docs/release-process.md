@@ -51,10 +51,10 @@ Before opening the release PR, run `./scripts/pre-release.sh` for local release 
         do nothing (v1.7.0's before/after byte table is the standard)
   - [ ] An escape hatch ships with it if a cheap one exists (build tag, option). If one would
         be expensive, note that fixing forward is the plan
-  - [ ] It is the **only** behaviour change in this release, so a production problem has a
-        single suspect — a change plus its prerequisites counts as one
-  - [ ] The previous behaviour change is already running in Rianhub. Exception: a fix for a
-        real vulnerability ships immediately and does not wait
+  - [ ] It has a line in the release's "Check before upgrading" list, naming what in an app
+        it affects (a config value, a route shape, an option). A change plus its
+        prerequisites is one line
+  - [ ] Rianhub is checked against that list before it upgrades
 
 ## Tagging
 

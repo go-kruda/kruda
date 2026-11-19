@@ -177,6 +177,13 @@ func (s *Session) setCookie(id string, maxAge int) {
 }
 
 // save persists the session to the store (called by middleware after c.Next()).
+// Save writes the session to the store now. The middleware also saves after
+// the handler returns, but by then the response has been sent, so a failure
+// can only be logged. Call Save before responding when the client must learn
+// that a change was not stored. ErrSessionNotFound means the session expired
+// or another request destroyed or regenerated it; the change was not stored.
+func (s *Session) Save() error { return s.save() }
+
 func (s *Session) save() error {
 	if s.destroy {
 		return s.store.Delete(s.id)
@@ -187,8 +194,15 @@ func (s *Session) save() error {
 			if !ok {
 				return ErrAtomicStoreRequired
 			}
-			_, err := store.SaveExisting(s.id, s.data, s.config.IdleTimeout)
-			return err
+			saved, err := store.SaveExisting(s.id, s.data, s.config.IdleTimeout)
+			if err != nil {
+				return err
+			}
+			if !saved {
+				return ErrSessionNotFound
+			}
+			s.modified = false
+			return nil
 		}
 		if err := s.store.Save(s.id, s.data, s.config.IdleTimeout); err != nil {
 			return err

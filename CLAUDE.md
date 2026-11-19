@@ -160,11 +160,13 @@ short rules, sized for a single self-coordinating user:
    table is the standard. This is the rule that actually helps.
 2. **Give an escape hatch when it is cheap** (`-tags kruda_stdjson`;
    `kruda.WithoutValidation()`). When it would be expensive, fixing forward is fine.
-3. **One behaviour change per release**, so production misbehaving has one suspect.
-   A change plus its prerequisites is one item; v1.7.1 waits for Rianhub to take v1.7.0.
+3. **Several behaviour changes may ship together, each one listed.** The CHANGELOG
+   entry opens with a "Check before upgrading" list, one line per change naming what in
+   an app it affects; Rianhub is checked against it before upgrading. (Amended
+   2026-11-20; it used to be one behaviour change per release.)
 4. **Version numbers signal attention needed, not semver.** A patch may change
    behaviour and add exported API — that is why validation-by-default is v1.7.1, and
-   why `gorelease`/`apidiff` will flag it. A real vulnerability fix skips rule 3.
+   why `gorelease`/`apidiff` will flag it. A real vulnerability fix ships immediately.
 
 ⚠️ These rules assume the only installer is the person writing them. **If Kruda gains
 external users they are wrong, not merely incomplete** — real adopters need

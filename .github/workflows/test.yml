@@ -16,9 +16,9 @@ permissions:
 jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
-    # Linux and macOS run on the maintainer's own runners (labels set at
+    # All three OSes run on the maintainer's own runners (labels set at
     # registration); matrix.os keeps the check names the branch rule requires.
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os == 'windows-2025' && fromJSON('["self-hosted","kruda-windows"]') || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false

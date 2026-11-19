@@ -966,7 +966,7 @@ func releaseRequest(r *wingRequest) {
 	r.method = ""
 	r.path = ""
 	r.query = ""
-	r.body = r.body[:0]
+	r.body = nil // a fresh body is copied per request; keeping it would pin the last upload
 	r.contentType = ""
 	r.cookie = ""
 	r.host = ""
@@ -1539,7 +1539,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	if r.jsonFast {
 		statusLine := wingStatusLine(r.status)
 		date := dateHdr()
-		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+r.sentBodyLen(len(r.body)))
 		b = append(b, statusLine...)
 		b = append(b, date...)
 		if statusHasNoBody(r.status) {
@@ -1641,7 +1641,7 @@ func headerIs(key, name string) bool {
 }
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {
-	b = growForAppend(b, 128+len(r.stringContentType)+len(r.stringBody))
+	b = growForAppend(b, 128+len(r.stringContentType)+r.sentBodyLen(len(r.stringBody)))
 	b = append(b, wingStatusLine(r.status)...)
 	b = append(b, dateHdr()...)
 	if r.stringContentType != "" {
@@ -1664,7 +1664,7 @@ func (r *wingResponse) appendStringTo(b []byte) []byte {
 func (r *wingResponse) appendJSONTo(b []byte) []byte {
 	statusLine := wingStatusLine(r.status)
 	date := dateHdr()
-	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+r.sentBodyLen(len(r.body)))
 	b = append(b, statusLine...)
 	b = append(b, date...)
 	if statusHasNoBody(r.status) {
@@ -1770,6 +1770,14 @@ func statusHasNoBody(status int) bool { return status == 204 || status == 304 }
 // omitBody reports whether the body must stay off the wire. Sending one would
 // make a keep-alive client read it as the start of the next response.
 func (r *wingResponse) omitBody() bool { return r.headRequest || statusHasNoBody(r.status) }
+
+// sentBodyLen is the payload space to reserve: none when the body is not sent.
+func (r *wingResponse) sentBodyLen(n int) int {
+	if r.omitBody() {
+		return 0
+	}
+	return n
+}
 
 // dropFileBody closes a pending sendfile or stream body without sending it.
 func (r *wingResponse) dropFileBody() {

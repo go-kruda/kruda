@@ -51,18 +51,25 @@ func NewMemoryStore(cleanupInterval ...time.Duration) *MemoryStore {
 }
 
 // Get retrieves session data by ID. Returns nil, nil if not found or expired.
+//
+// Stored data is never changed in place (every write stores a new copy), so
+// the copy is made after the lock is released and readers do not serialize.
 func (s *MemoryStore) Get(id string) (*SessionData, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 	entry, ok := s.entries[id]
+	s.mu.RUnlock()
 
 	if !ok {
 		return nil, nil
 	}
 
 	if time.Now().After(entry.expiresAt) {
-		// Expired — remove lazily.
-		delete(s.entries, id)
+		// Expired — remove lazily, unless a write replaced it meanwhile.
+		s.mu.Lock()
+		if cur, ok := s.entries[id]; ok && time.Now().After(cur.expiresAt) {
+			delete(s.entries, id)
+		}
+		s.mu.Unlock()
 		return nil, nil
 	}
 

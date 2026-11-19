@@ -235,11 +235,12 @@ func goid() int64 {
 // pushResolving pushes a type onto the current goroutine's resolution stack.
 // Returns an error if the type is already on the stack (circular dependency).
 // If goid() returns 0 (parsing failed), cycle detection is skipped to avoid
-// false positives from multiple goroutines sharing the same key.
-func (c *Container) pushResolving(t reflect.Type) error {
+// false positives from multiple goroutines sharing the same key. The returned
+// id is passed to popResolving, so the goroutine is identified once.
+func (c *Container) pushResolving(t reflect.Type) (int64, error) {
 	id := goid()
 	if id == 0 {
-		return nil // cannot identify goroutine — skip cycle detection
+		return 0, nil // cannot identify goroutine — skip cycle detection
 	}
 	val, _ := c.resolving.LoadOrStore(id, &[]reflect.Type{})
 	stack := val.(*[]reflect.Type)
@@ -253,18 +254,17 @@ func (c *Container) pushResolving(t reflect.Type) error {
 				names[i] = st.String()
 			}
 			names[len(*stack)] = t.String()
-			return fmt.Errorf("kruda: circular dependency: %s", strings.Join(names, " → "))
+			return 0, fmt.Errorf("kruda: circular dependency: %s", strings.Join(names, " → "))
 		}
 	}
 
 	*stack = append(*stack, t)
-	return nil
+	return id, nil
 }
 
 // popResolving removes the last type from the current goroutine's resolution stack.
 // If the stack becomes empty, the entry is deleted from the map.
-func (c *Container) popResolving() {
-	id := goid()
+func (c *Container) popResolving(id int64) {
 	if id == 0 {
 		return // cycle detection was skipped — nothing to pop
 	}
@@ -300,10 +300,11 @@ func Use[T any](c *Container) (T, error) {
 	}
 	if entry, ok := c.transients[t]; ok {
 		c.mu.RUnlock()
-		if err := c.pushResolving(t); err != nil {
+		id, err := c.pushResolving(t)
+		if err != nil {
 			return zero, err
 		}
-		defer c.popResolving()
+		defer c.popResolving(id)
 		inst, err := entry.factory()
 		if err != nil {
 			return zero, fmt.Errorf("kruda: transient factory for %v failed: %w", t, err)
@@ -323,10 +324,11 @@ func Use[T any](c *Container) (T, error) {
 			}
 			return typed, nil
 		}
-		if err := c.pushResolving(t); err != nil {
+		id, err := c.pushResolving(t)
+		if err != nil {
 			return zero, err
 		}
-		defer c.popResolving()
+		defer c.popResolving(id)
 		inst, first, err := entry.resolve()
 		if err != nil {
 			return zero, fmt.Errorf("kruda: lazy factory for %v failed: %w", t, err)

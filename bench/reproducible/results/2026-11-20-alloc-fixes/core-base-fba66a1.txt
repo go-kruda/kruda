@@ -1,0 +1,132 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 5235188	       234.2 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  196262	      6468 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  125686	      9839 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3266426	       372.6 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	 1000000	      1553 ns/op	2637.28 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   47097	     27608 ns/op	2373.77 MB/s	  283843 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    2558	    440767 ns/op	2378.98 MB/s	 5240029 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1716	    704072 ns/op	      2069 retained-KB	 1192111 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 4733084	       243.9 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	30282064	        45.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 5222974	       225.1 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4427937	       270.0 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	25461601	        47.70 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	46951647	        26.68 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   52989	     21877 ns/op	        -8.523 retained-KB	  262286 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   14494	     78356 ns/op	 1057159 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	20.866s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 4460991	       250.6 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  182209	      6392 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  126205	      9826 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3134504	       398.9 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	  776929	      1513 ns/op	2706.41 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   50356	     26511 ns/op	2472.08 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    2931	    579166 ns/op	1810.49 MB/s	 5240029 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1629	    698008 ns/op	      2069 retained-KB	 1199606 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 5394831	       231.2 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	30491032	        41.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 4222948	       266.1 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4419861	       270.3 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	25746536	        47.28 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	46930759	        25.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   65713	     27764 ns/op	       241.8 retained-KB	  262284 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   18986	     63979 ns/op	 1057159 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	22.271s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 5031769	       231.9 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  185037	      6213 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  126122	      9856 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3180786	       378.6 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	 1000000	      1295 ns/op	3163.29 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   52336	     33971 ns/op	1929.16 MB/s	  283843 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    2967	    430027 ns/op	2438.40 MB/s	 5240030 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1680	    710675 ns/op	      3108 retained-KB	 1217524 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 5009875	       224.7 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	30168249	        41.00 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 5118013	       230.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4205674	       333.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	23209224	        49.71 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	47168034	        26.07 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   63771	     21283 ns/op	       254.5 retained-KB	  262283 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   19666	     60909 ns/op	 1057158 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	21.006s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 4425190	       244.3 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  201799	      6818 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  107605	     10912 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3133602	       375.5 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	  987792	      1251 ns/op	3275.47 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   49521	     23923 ns/op	2739.41 MB/s	  283843 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    2896	    594529 ns/op	1763.71 MB/s	 5240036 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1730	    848182 ns/op	      2062 retained-KB	 1211863 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 4690749	       232.6 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	30108264	        40.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 5508631	       234.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4410348	       309.8 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	24477661	        46.20 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	47113942	        26.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   51056	     21645 ns/op	       245.3 retained-KB	  262280 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   19244	     59496 ns/op	 1057159 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	20.880s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 5261799	       251.5 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  198750	      6053 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  127062	      9795 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3269565	       368.4 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	 1000000	      1189 ns/op	3443.88 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   45892	     24946 ns/op	2627.08 MB/s	  283843 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    2905	    423189 ns/op	2477.80 MB/s	 5240031 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1740	    748908 ns/op	      2073 retained-KB	 1254182 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 5304363	       228.4 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	29982446	        39.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 5257728	       216.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4352768	       313.0 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	25249116	        47.75 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	47296386	        25.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   67741	     21323 ns/op	       248.1 retained-KB	  262282 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   20468	     57749 ns/op	 1057157 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	20.580s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkTypedHandlerValidation-8   	 5121230	       236.7 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-8          	  198540	      5990 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-8         	  124130	      9812 ns/op	    2801 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-8        	 3146832	       375.6 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-8     	 1000000	      1225 ns/op	3344.18 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-8    	   48885	     24451 ns/op	2680.32 MB/s	  283843 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-8     	    3144	    385137 ns/op	2722.60 MB/s	 5240027 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-8    	    1758	    746303 ns/op	      2077 retained-KB	 1334671 B/op	      24 allocs/op
+BenchmarkCompiledValidation/original-8         	 5306041	       226.1 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-8         	30333765	        39.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-8                         	 5639973	       213.4 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8                        	 4215937	       278.8 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-8                     	25606441	        46.66 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8                	45873093	        27.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-8               	   65311	     18059 ns/op	       253.0 retained-KB	  262283 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-8                  	   21699	     84660 ns/op	 1057159 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	21.260s

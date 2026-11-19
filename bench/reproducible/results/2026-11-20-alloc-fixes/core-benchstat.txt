@@ -1,0 +1,84 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+                              │ core-base-fba66a1.txt │             core-new.txt             │
+                              │        sec/op         │    sec/op      vs base               │
+TypedHandlerValidation-8                 240.5n ±  5%   196.8n ±   3%  -18.15% (p=0.002 n=6)
+DI_UseTransient-8                        6.303µ ±  8%   3.056µ ±   7%  -51.52% (p=0.002 n=6)
+PerfValidateDive-8                       9.833µ ± 11%   1.738µ ±   6%  -82.32% (p=0.002 n=6)
+PerfValidateRules-8                     375.55n ±  6%   72.39n ±   9%  -80.72% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-8                  1273.0n ± 22%   528.6n ± 109%  -58.47% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-8                 25.729µ ± 32%   5.871µ ±  69%  -77.18% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-8                  435.40µ ± 37%   83.59µ ±  21%  -80.80% (p=0.002 n=6)
+PerfJSONPoolRetention-8                  728.5µ ± 16%   820.1µ ±   9%        ~ (p=0.065 n=6)
+CompiledValidation/original-8            229.8n ±  6%   227.2n ±   4%        ~ (p=0.626 n=6)
+CompiledValidation/compiled-8            40.76n ± 11%   41.98n ±   7%        ~ (p=0.132 n=6)
+CPUParseGET-8                            227.8n ± 17%   222.0n ±  12%        ~ (p=0.589 n=6)
+CPUParsePOST-8                           294.3n ± 13%   283.2n ±   9%        ~ (p=0.937 n=6)
+CPUResponseJSON-8                        47.49n ±  5%   47.55n ±  33%        ~ (p=0.937 n=6)
+CPUResponsePlaintext-8                   26.38n ±  4%   25.18n ±  12%        ~ (p=0.180 n=6)
+PerfWingBodyRetention-8                  21.48µ ± 29%   20.65µ ±  32%        ~ (p=0.589 n=6)
+PerfWingHEADString-8                  62444.00n ± 36%   68.56n ±  25%  -99.89% (p=0.002 n=6)
+geomean                                  1.992µ         773.3n         -61.17%
+
+                              │ core-base-fba66a1.txt │               core-new.txt                │
+                              │         B/op          │     B/op       vs base                    │
+TypedHandlerValidation-8                40.00 ±  0%       32.00 ±  0%   -20.00% (p=0.002 n=6)
+DI_UseTransient-8                       296.0 ±  0%       232.0 ±  0%   -21.62% (p=0.002 n=6)
+PerfValidateDive-8                     2801.0 ±  0%       240.0 ±  0%   -91.43% (p=0.002 n=6)
+PerfValidateRules-8                     128.0 ±  0%         0.0 ±  0%  -100.00% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-8               10.688Ki ±  0%     4.812Ki ±  0%   -54.97% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-8              277.19Ki ±  0%     72.06Ki ±  0%   -74.00% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-8                4.997Mi ±  0%     1.008Mi ±  0%   -79.83% (p=0.002 n=6)
+PerfJSONPoolRetention-8               1.158Mi ± 10%     2.446Mi ± 11%  +111.15% (p=0.002 n=6)
+CompiledValidation/original-8           40.00 ±  0%       40.00 ±  0%         ~ (p=1.000 n=6) ¹
+CompiledValidation/compiled-8           0.000 ±  0%       0.000 ±  0%         ~ (p=1.000 n=6) ¹
+CPUParseGET-8                           64.00 ±  0%       64.00 ±  0%         ~ (p=1.000 n=6) ¹
+CPUParsePOST-8                          96.00 ±  0%       96.00 ±  0%         ~ (p=1.000 n=6) ¹
+CPUResponseJSON-8                       160.0 ±  0%       160.0 ±  0%         ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-8                  0.000 ±  0%       0.000 ±  0%         ~ (p=1.000 n=6) ¹
+PerfWingBodyRetention-8               256.1Ki ±  0%     256.2Ki ±  0%    +0.01% (p=0.006 n=6)
+PerfWingHEADString-8                1057159.0 ±  0%       144.0 ±  0%   -99.99% (p=0.002 n=6)
+geomean                                             ²                  ?                      ² ³
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+³ ratios must be >0 to compute geomean
+
+                              │ core-base-fba66a1.txt │              core-new.txt              │
+                              │       allocs/op       │ allocs/op   vs base                    │
+TypedHandlerValidation-8                 4.000 ± 0%     3.000 ± 0%   -25.00% (p=0.002 n=6)
+DI_UseTransient-8                        8.000 ± 0%     7.000 ± 0%   -12.50% (p=0.002 n=6)
+PerfValidateDive-8                      230.00 ± 0%     20.00 ± 0%   -91.30% (p=0.002 n=6)
+PerfValidateRules-8                      8.000 ± 0%     0.000 ± 0%  -100.00% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-8                   8.000 ± 0%     3.000 ± 0%   -62.50% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-8                 18.000 ± 0%     3.000 ± 0%   -83.33% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-8                  29.000 ± 0%     3.000 ± 0%   -89.66% (p=0.002 n=6)
+PerfJSONPoolRetention-8                  24.00 ± 0%     31.00 ± 3%   +29.17% (p=0.002 n=6)
+CompiledValidation/original-8            4.000 ± 0%     4.000 ± 0%         ~ (p=1.000 n=6) ¹
+CompiledValidation/compiled-8            0.000 ± 0%     0.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParseGET-8                            5.000 ± 0%     5.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParsePOST-8                           5.000 ± 0%     5.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponseJSON-8                        1.000 ± 0%     1.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-8                   0.000 ± 0%     0.000 ± 0%         ~ (p=1.000 n=6) ¹
+PerfWingBodyRetention-8                  2.000 ± 0%     2.000 ± 0%         ~ (p=1.000 n=6) ¹
+PerfWingHEADString-8                     1.000 ± 0%     1.000 ± 0%         ~ (p=1.000 n=6) ¹
+geomean                                             ²               ?                      ² ³
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+³ ratios must be >0 to compute geomean
+
+                        │ core-base-fba66a1.txt │              core-new.txt              │
+                        │          B/s          │      B/s        vs base                │
+PerfNetHTTPBody/4KiB-8            2.998Gi ± 18%    7.240Gi ± 52%  +141.47% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-8           2.374Gi ± 24%   10.400Gi ± 41%  +338.00% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-8            2.243Gi ± 27%   11.725Gi ± 21%  +422.66% (p=0.002 n=6)
+geomean                           2.518Gi          9.593Gi        +280.94%
+
+                        │ core-base-fba66a1.txt │                core-new.txt                 │
+                        │      retained-KB      │   retained-KB    vs base                    │
+PerfJSONPoolRetention-8          2071.000 ± 50%    9.789 ± 10545%   -99.53% (p=0.002 n=6)
+PerfWingBodyRetention-8             246.7 ±   ?   -268.5 ±    -1%  -208.86% (p=0.002 n=6)
+geomean                             714.8                          ?                      ¹ ²
+¹ summaries must be >0 to compute geomean
+² ratios must be >0 to compute geomean

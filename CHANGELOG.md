@@ -18,6 +18,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its plan. It is off by default; without it the output is unchanged. See
   "Generated Binding" in the handlers guide.
 
+- `contrib/session`: `Session.Save()` writes the session before the handler
+  responds, so the handler can return an error when the store fails. The
+  middleware still saves after the handler, but Kruda has already sent the
+  response by then, so a failure there only reaches the logs.
+
 ### Changed
 
 - Typed handlers bind `query` and `param` fields with fewer allocations. The
@@ -98,6 +103,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`c.JSON(200, ...)`, and a typed handler without a return value), so the
   generated file did not compile. It now emits `c.JSON(...)` and a typed
   handler that returns `(*Response, error)`.
+
+- **`contrib/session` reports a change that could not be stored because the
+  session is gone.** Before, if a request changed its session and another
+  request logged out, regenerated it, or it expired first, the change was
+  dropped and the middleware returned no error. It still is not stored, so a
+  logged-out session is never recreated, but the save now returns
+  `session.ErrSessionNotFound`: from `Session.Save()` for the handler, or
+  from the middleware, which logs it. The README now also says that
+  overlapping requests from one browser follow last-save-wins.
 
 ### Security
 

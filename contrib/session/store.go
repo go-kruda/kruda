@@ -9,7 +9,7 @@ import (
 // by the session middleware or session ID regeneration.
 var ErrAtomicStoreRequired = errors.New("session: store does not support the required atomic operation")
 
-// ErrSessionNotFound reports that the session being regenerated was deleted or expired.
+// ErrSessionNotFound reports that the session being saved or regenerated was deleted or expired.
 var ErrSessionNotFound = errors.New("session: session no longer exists")
 
 // SessionData holds the session's internal state.

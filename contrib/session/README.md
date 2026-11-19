@@ -108,6 +108,24 @@ Custom stores should implement `SaveExisting(string, *SessionData, time.Duration
 (bool, error)` with the same atomic guarantee (for example, a conditional SQL
 update or Redis script). A separate `Get` followed by `Save` is insufficient.
 
+The middleware saves after the handler returns, when the response has already
+been sent. A failed save is returned from the middleware and logged, but the
+client has already seen the handler's status. When the client must know, call
+`sess.Save()` before responding and handle its error:
+
+```go
+sess.Set("theme", "dark")
+if err := sess.Save(); err != nil {
+    return err // session.ErrSessionNotFound if it expired or was destroyed
+}
+return c.JSON(kruda.Map{"saved": true})
+```
+
+Each request saves the whole session it loaded, so when two requests from one
+browser overlap, the later save wins and drops the other request's changes.
+Keep values that change in parallel out of the session, or store them
+elsewhere with their own update.
+
 For ID rotation, implement `RegeneratingStore` as well. Its
 `Regenerate(oldID, newID string, data *SessionData, ttl time.Duration) (bool, error)`
 must atomically verify that the old session exists and is unexpired, persist the

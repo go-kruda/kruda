@@ -185,7 +185,7 @@ Key behaviors:
 
 - **Exact origin matching** via O(1) lookup set. Non-matching origins get no `Access-Control-Allow-Origin`.
 - **Credentials + wildcard rejection**: `AllowCredentials: true` with `AllowOrigins: ["*"]` panics at startup (CORS spec violation).
-- **Preflight handling**: `OPTIONS` requests return HTTP 204 with appropriate `Access-Control-Allow-*` headers.
+- **Preflight handling**: `OPTIONS` requests return HTTP 204 with appropriate `Access-Control-Allow-*` headers. You do not need to register `OPTIONS` routes: a preflight to a path that has other routes still runs global middleware. Register `CORS` with `app.Use`, as above. Middleware added only to a `Group` does not run for an unrouted `OPTIONS` request, so the browser gets 405.
 - **Vary header**: `Vary: Origin` is set automatically for non-wildcard configurations.
 - **Startup validation**: Invalid origin formats panic at init so misconfigurations are caught early.
 

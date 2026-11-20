@@ -883,6 +883,23 @@ func findInNode(n *node, path string, params *routeParams, trackHits bool) []Han
 
 // findAllowedMethods returns a comma-separated list of methods that match the path,
 // or empty string if none. Uses allowedMethodsCache for static paths (zero alloc).
+// routePatternFor returns the pattern of a route that matches path under any
+// standard method, or "" when none does. A preflight answered by global
+// middleware uses it, so c.Route() is a pattern rather than the raw path.
+func (r *Router) routePatternFor(path string) string {
+	var params routeParams
+	for _, method := range standardMethods {
+		params.reset()
+		if r.find(method, path, &params) != nil {
+			if params.pattern != "" {
+				return params.pattern
+			}
+			return path // static route: the path is its pattern
+		}
+	}
+	return ""
+}
+
 func (r *Router) findAllowedMethods(path string) string {
 	if r.allowedMethodsCache != nil {
 		if cached, ok := r.allowedMethodsCache[path]; ok {

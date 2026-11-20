@@ -469,6 +469,7 @@ func (app *App) unrouted(c *Ctx) []HandlerFunc {
 	}
 	c.SetHeader("Allow", allowed)
 	if c.method == "OPTIONS" && app.optionsChain != nil {
+		c.params.pattern = app.router.routePatternFor(c.path)
 		return app.optionsChain
 	}
 	app.handleError(c, NewError(405, "method not allowed"))

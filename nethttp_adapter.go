@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-kruda/kruda/internal/bodyread"
 	"github.com/go-kruda/kruda/transport"
@@ -35,6 +36,10 @@ func (r *fastNetHTTPRequest) Path() string {
 }
 
 func (r *fastNetHTTPRequest) Header(key string) string {
+	// net/http moves Host out of the header map into Request.Host.
+	if len(key) == 4 && strings.EqualFold(key, "Host") {
+		return r.r.Host
+	}
 	return r.r.Header.Get(key)
 }
 

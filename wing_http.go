@@ -36,18 +36,35 @@ var (
 // On success, consumed is the number of bytes used by the parsed request,
 // allowing callers to preserve any pipelined data that follows.
 func parseHTTPRequest(data []byte, limits parserLimits) (*wingRequest, int, bool) {
-	return parseHTTPRequestInternal(data, limits, false)
+	return parseHTTPRequestInternal(data, limits, false, nil)
 }
 
 func parseHTTPRequestFast(data []byte, limits parserLimits) (*wingRequest, int, bool) {
-	return parseHTTPRequestInternal(data, limits, true)
+	return parseHTTPRequestInternal(data, limits, true, nil)
+}
+
+// parseHTTPRequestOwnedBody parses a complete header block whose body was
+// accumulated separately. The request takes body as its own, so the body is
+// not joined to the header and copied again. body must be exactly the
+// declared Content-Length and must not be reused by the caller.
+func parseHTTPRequestOwnedBody(header, body []byte, limits parserLimits) (*wingRequest, bool) {
+	if len(body) == 0 {
+		return nil, false
+	}
+	r, _, ok := parseHTTPRequestInternal(header, limits, false, body)
+	if ok && len(r.body) == 0 {
+		// The header declared no body, so the accumulated bytes are not its body.
+		releaseRequest(r)
+		return nil, false
+	}
+	return r, ok
 }
 
 // wingExtraHeader is one request header outside the knownHeader fast-path
 // set, stored lowercase-keyed for case-insensitive lookup in Header().
 type wingExtraHeader struct{ k, v string }
 
-func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool) (*wingRequest, int, bool) {
+func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool, ownedBody []byte) (*wingRequest, int, bool) {
 	// RFC 7230 §3.5: skip leading CRLF before request-line.
 	skip := 0
 	for skip+1 < len(data) && data[skip] == '\r' && data[skip+1] == '\n' {
@@ -429,12 +446,21 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool)
 		if limits.bodyLimit > 0 && contentLength > limits.bodyLimit {
 			return nil, 0, false
 		}
-		if bodyStart+contentLength > len(data) {
-			return nil, 0, false // incomplete body
-		}
+		var body []byte
 		consumed := bodyStart + contentLength
-		body := make([]byte, contentLength) // safe copy
-		copy(body, data[bodyStart:bodyStart+contentLength])
+		if ownedBody == nil {
+			if bodyStart+contentLength > len(data) {
+				return nil, 0, false // incomplete body
+			}
+			body = make([]byte, contentLength) // safe copy
+			copy(body, data[bodyStart:bodyStart+contentLength])
+		} else {
+			// The header block must end exactly where the owned body begins.
+			if contentLength != len(ownedBody) || bodyStart != len(data) {
+				return nil, 0, false
+			}
+			body = ownedBody
+		}
 		r := acquireRequest()
 		r.method = method
 		r.path = path
@@ -966,7 +992,7 @@ func releaseRequest(r *wingRequest) {
 	r.method = ""
 	r.path = ""
 	r.query = ""
-	r.body = r.body[:0]
+	r.body = nil // a fresh body is copied per request; keeping it would pin the last upload
 	r.contentType = ""
 	r.cookie = ""
 	r.host = ""
@@ -1297,6 +1323,7 @@ type fileStream struct {
 	reader    io.ReadCloser
 	remaining int64
 	reading   bool
+	buf       []byte // chunk buffer, reused once the previous chunk is sent
 	mu        sync.Mutex
 	active    bool
 	closing   bool
@@ -1539,7 +1566,7 @@ func (r *wingResponse) buildZeroCopy() []byte {
 	if r.jsonFast {
 		statusLine := wingStatusLine(r.status)
 		date := dateHdr()
-		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+		b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+r.sentBodyLen(len(r.body)))
 		b = append(b, statusLine...)
 		b = append(b, date...)
 		if statusHasNoBody(r.status) {
@@ -1641,7 +1668,7 @@ func headerIs(key, name string) bool {
 }
 
 func (r *wingResponse) appendStringTo(b []byte) []byte {
-	b = growForAppend(b, 128+len(r.stringContentType)+len(r.stringBody))
+	b = growForAppend(b, 128+len(r.stringContentType)+r.sentBodyLen(len(r.stringBody)))
 	b = append(b, wingStatusLine(r.status)...)
 	b = append(b, dateHdr()...)
 	if r.stringContentType != "" {
@@ -1664,7 +1691,7 @@ func (r *wingResponse) appendStringTo(b []byte) []byte {
 func (r *wingResponse) appendJSONTo(b []byte) []byte {
 	statusLine := wingStatusLine(r.status)
 	date := dateHdr()
-	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+len(r.body))
+	b = growForAppend(b, len(statusLine)+len(date)+len(jsonHeaderContentLength)+contentLengthValueLen(len(r.body))+4+r.sentBodyLen(len(r.body)))
 	b = append(b, statusLine...)
 	b = append(b, date...)
 	if statusHasNoBody(r.status) {
@@ -1770,6 +1797,14 @@ func statusHasNoBody(status int) bool { return status == 204 || status == 304 }
 // omitBody reports whether the body must stay off the wire. Sending one would
 // make a keep-alive client read it as the start of the next response.
 func (r *wingResponse) omitBody() bool { return r.headRequest || statusHasNoBody(r.status) }
+
+// sentBodyLen is the payload space to reserve: none when the body is not sent.
+func (r *wingResponse) sentBodyLen(n int) int {
+	if r.omitBody() {
+		return 0
+	}
+	return n
+}
 
 // dropFileBody closes a pending sendfile or stream body without sending it.
 func (r *wingResponse) dropFileBody() {

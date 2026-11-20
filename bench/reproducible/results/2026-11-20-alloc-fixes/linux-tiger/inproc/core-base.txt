@@ -1,0 +1,132 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3681132	       331.4 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  163700	      7316 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	  101396	     11765 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2643430	       448.2 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  505680	      2165 ns/op	1892.35 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   32444	     37139 ns/op	1764.61 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	     954	   1249218 ns/op	 839.39 MB/s	 5240034 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1310	    944040 ns/op	      2070 retained-KB	 1560197 B/op	      25 allocs/op
+BenchmarkCompiledValidation/original-16         	 4518231	       264.4 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	21750620	        54.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4693720	       256.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3648866	       325.1 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	19621598	        61.08 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	42549136	        28.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   30838	     39307 ns/op	       257.1 retained-KB	  262411 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	   10000	    103269 ns/op	 1057471 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.695s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3566835	       328.7 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  144294	      7193 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	  104043	     11665 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2706097	       453.6 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  528220	      2094 ns/op	1956.49 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   33136	     37118 ns/op	1765.62 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	    1155	   1156601 ns/op	 906.60 MB/s	 5240026 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1292	    948648 ns/op	      2070 retained-KB	 1666241 B/op	      26 allocs/op
+BenchmarkCompiledValidation/original-16         	 4524014	       261.9 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	22383104	        54.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4492188	       255.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3775363	       319.3 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	18730051	        63.32 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	41183606	        28.99 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   31654	     38873 ns/op	        -0.5078 retained-KB	  262410 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	   13617	     87623 ns/op	 1057466 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.869s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3618619	       332.2 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  170464	      7169 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	  104788	     11745 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2668947	       448.7 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  582999	      2057 ns/op	1991.64 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   32320	     37608 ns/op	1742.62 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	    1144	   1184394 ns/op	 885.33 MB/s	 5240031 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1258	    952745 ns/op	      3110 retained-KB	 1623588 B/op	      26 allocs/op
+BenchmarkCompiledValidation/original-16         	 4592673	       265.0 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	22144201	        53.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4747630	       252.1 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3854090	       316.2 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	20394364	        60.93 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	38728652	        29.96 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   30022	     39784 ns/op	       244.4 retained-KB	  262410 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	   10000	    113292 ns/op	 1057486 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	20.124s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3615534	       327.7 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  165818	      7251 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	   96673	     11902 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2590130	       466.2 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  514273	      2039 ns/op	2008.46 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   30363	     37295 ns/op	1757.23 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	    1020	   1135530 ns/op	 923.42 MB/s	 5240041 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1102	    917654 ns/op	      1040 retained-KB	 1625851 B/op	      26 allocs/op
+BenchmarkCompiledValidation/original-16         	 4627152	       260.8 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	21926677	        53.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4572523	       259.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3651846	       332.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	19441713	        62.11 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	40938656	        29.05 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   26976	     44120 ns/op	       251.7 retained-KB	  262417 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	    9988	    121057 ns/op	 1057502 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.432s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3455366	       327.3 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  165271	      7158 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	  100077	     11920 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2694314	       459.2 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  494486	      2025 ns/op	2022.91 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   33447	     36453 ns/op	1797.82 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	    1202	   1175799 ns/op	 891.80 MB/s	 5240028 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1257	    949136 ns/op	      2070 retained-KB	 1640894 B/op	      26 allocs/op
+BenchmarkCompiledValidation/original-16         	 4505832	       269.9 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	22112422	        53.86 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4798596	       253.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3676572	       324.9 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	17709553	        63.64 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	39876570	        29.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   24902	     46722 ns/op	       251.3 retained-KB	  262420 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	    9870	    108227 ns/op	 1057471 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.707s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkTypedHandlerValidation-16    	 3642086	       330.3 ns/op	      40 B/op	       4 allocs/op
+BenchmarkDI_UseTransient-16           	  166243	      7232 ns/op	     296 B/op	       8 allocs/op
+BenchmarkPerfValidateDive-16          	   96816	     11818 ns/op	    2802 B/op	     230 allocs/op
+BenchmarkPerfValidateRules-16         	 2681086	       452.3 ns/op	     128 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/4KiB-16      	  530529	      2047 ns/op	2001.19 MB/s	   10944 B/op	       8 allocs/op
+BenchmarkPerfNetHTTPBody/64KiB-16     	   33734	     35789 ns/op	1831.16 MB/s	  283842 B/op	      18 allocs/op
+BenchmarkPerfNetHTTPBody/1MiB-16      	    1102	   1076703 ns/op	 973.88 MB/s	 5240033 B/op	      29 allocs/op
+BenchmarkPerfJSONPoolRetention-16     	    1171	    931489 ns/op	      1039 retained-KB	 1573799 B/op	      25 allocs/op
+BenchmarkCompiledValidation/original-16         	 4577152	       267.1 ns/op	      40 B/op	       4 allocs/op
+BenchmarkCompiledValidation/compiled-16         	22083664	        53.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUParseGET-16                         	 4811360	       252.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16                        	 3808828	       318.7 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16                     	19115738	        62.99 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16                	38166248	        30.04 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPerfWingBodyRetention-16               	   28376	     41537 ns/op	        -5.398 retained-KB	  262412 B/op	       2 allocs/op
+BenchmarkPerfWingHEADString-16                  	   10000	    101074 ns/op	 1057499 B/op	       1 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.460s

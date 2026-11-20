@@ -1,0 +1,4 @@
+base: fba66a155b2125f371a29d17598b43f228d3b992
+candidate: 97124aca7ec6892488db81866655d80109daf958
+go: go version go1.26.11 darwin/arm64
+host: Darwin arm64

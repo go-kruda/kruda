@@ -34,6 +34,51 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `kruda_stdjson`, 8 to 6 allocs/op and 426 to 384 ns/op with Sonic. These are
   in-process benchmarks, not HTTP throughput or process memory.
 
+- Fewer allocations and less retained memory on several paths. Responses,
+  status codes and errors are unchanged. Measured with paired benchmarks
+  against `fba66a1` (6 alternating rounds, macOS arm64, Go 1.26,
+  `kruda_stdjson`; in-process). The same runs on Linux amd64 agree. Script
+  and raw results: `bench/reproducible/results/2026-11-20-alloc-fixes/`.
+
+  | Path | Before | After |
+  | --- | --- | --- |
+  | Validation, 6 fields with `required`/`oneof`/`len`/`gt`/`lte` | 371 ns, 8 allocs | 71 ns, 0 allocs |
+  | Validation, `dive` over 100 strings and a 10-key map | 9.7 µs, 230 allocs | 1.7 µs, 20 allocs |
+  | Typed handler with validation | 233 ns, 4 allocs | 191 ns, 3 allocs |
+  | `Use` of a transient service | 6.0 µs | 3.0 µs |
+  | net/http body read, 1 MiB | 389 µs, 5.0 MiB | 192 µs, 2.0 MiB |
+  | Wing POST, 256 KiB body across many reads, inline route | 1.75 MiB, 191 µs | 508 KiB, 112 µs |
+  | Wing POST, 256 KiB body, Takeover route | 524 KiB | 508 KiB, and the connection no longer keeps the upload's buffer |
+  | Wing JSON response on a Takeover route | 1305 B, 16 allocs | 826 B, 12 allocs |
+  | Wing streamed (non-sendfile) body, 1 MiB | 1038 KiB | 41 KiB |
+  | Wing `HEAD` for a 1 MiB string body | 1.06 MB reserved | 144 B |
+  | `contrib/session` `MemoryStore.Get`, 8 goroutines | 13.6 µs | 5.1 µs |
+
+  Built-in `gt`, `gte`, `lt`, `lte`, `len`, `oneof` and `required` are now
+  checked without boxing the value, as `min` and `max` already were; a
+  failing or overridden rule still runs the original function. The net/http
+  body reader and Wing's body accumulation no longer grow in small steps, and
+  they still allocate only for bytes that arrive, never for a declared
+  `Content-Length` alone. A pooled Wing request no longer keeps the last POST
+  body it carried, and a Takeover connection no longer keeps an accumulator
+  over 64 KiB, or a reused output buffer over 4 KiB, while it idles.
+
+  One trade-off: the pooled JSON buffer behind `c.JSON` on net/http now drops
+  buffers over 64 KiB. Each response over 64 KiB allocates a new buffer (a
+  1 MiB response went from 1.2 to 2.5 MiB allocated), and after a burst of
+  them the pool no longer holds onto them (whole-heap growth left after one
+  GC, median of 6 runs: 2 MB before, 7 KB after, with wide run-to-run spread).
+
+  On the paths every request takes, 20-sample runs show parse GET/POST, JSON
+  responses and the full parse-to-response cycle unchanged within noise. On
+  macOS plaintext responses were 3% faster and `BenchmarkCPUHandlerInline`
+  1.6% (5 ns) slower; on Linux `BenchmarkCPUResponsePlaintext` was 10% (3 ns)
+  slower, and the gap disappears when only the new test files are removed, so
+  it comes from test-binary layout rather than the server code. HTTP
+  throughput with `wrk` on Linux (Wing, 4 workers, 128 connections, 6
+  alternating rounds) is unchanged within 1% for plaintext, JSON and a small
+  JSON POST.
+
 - **`HealthHandler` no longer sends a checker's error text.** Before, a
   failed check answered with its error, for example
   `{"status":"unhealthy","checks":{"DB":"dial tcp 10.0.0.5:5432: connect: connection refused"}}`,

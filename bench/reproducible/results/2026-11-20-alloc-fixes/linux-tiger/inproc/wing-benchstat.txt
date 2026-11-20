@@ -1,0 +1,54 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+                                  │ wing-base.txt │ wing-new.txt │
+                                  │                              sec/op                              │                  sec/op                   vs base               │
+CPUParseGET-16                                                                          273.4n ± 59%                              265.9n ±  73%        ~ (p=0.390 n=6)
+CPUParsePOST-16                                                                         330.7n ± 58%                              324.6n ±   5%        ~ (p=0.258 n=6)
+CPUResponseJSON-16                                                                      90.64n ± 88%                              79.44n ± 143%        ~ (p=0.818 n=6)
+CPUResponsePlaintext-16                                                                 38.96n ± 28%                              36.12n ±  17%        ~ (p=0.589 n=6)
+LoopbackPlaintext-16                                                                    21.54µ ±  8%                              21.19µ ±   6%        ~ (p=0.485 n=6)
+LoopbackJSON-16                                                                         20.61µ ±  8%                              20.65µ ±  20%        ~ (p=1.000 n=6)
+PerfLoopback/post256K-inline-16                                                         345.2µ ±  6%                              166.3µ ±   5%  -51.84% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-16                                                       156.1µ ±  8%                              150.6µ ±   4%        ~ (p=0.240 n=6)
+PerfLoopback/json-takeover-16                                                           13.51µ ± 24%                              13.53µ ±  12%        ~ (p=0.699 n=6)
+PerfLoopback/stream1M-inline-16                                                        1023.4µ ±  5%                              802.2µ ±   2%  -21.61% (p=0.002 n=6)
+geomean                                                                                 6.344µ                                    5.584µ         -11.98%
+
+                                  │ wing-base.txt │ wing-new.txt │
+                                  │                               B/op                               │                  B/op                   vs base                 │
+CPUParseGET-16                                                                           65.00 ±  0%                               65.00 ± 0%        ~ (p=1.000 n=6) ¹
+CPUParsePOST-16                                                                          97.00 ±  0%                               97.00 ± 0%        ~ (p=1.000 n=6) ¹
+CPUResponseJSON-16                                                                       162.0 ±  0%                               162.0 ± 0%        ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-16                                                                  1.500 ± 33%                               2.000 ± 0%        ~ (p=0.182 n=6)
+LoopbackPlaintext-16                                                                     39.00 ±  0%                               39.00 ± 5%        ~ (p=0.455 n=6)
+LoopbackJSON-16                                                                          37.00 ±  5%                               37.00 ± 5%        ~ (p=1.000 n=6)
+PerfLoopback/post256K-inline-16                                                       1796.0Ki ±  0%                             512.1Ki ± 0%  -71.48% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-16                                                      524.5Ki ±  0%                             508.8Ki ± 0%   -2.99% (p=0.002 n=6)
+PerfLoopback/json-takeover-16                                                           1322.0 ±  1%                               847.0 ± 1%  -35.93% (p=0.002 n=6)
+PerfLoopback/stream1M-inline-16                                                      1041.40Ki ±  0%                             41.60Ki ± 0%  -96.01% (p=0.002 n=6)
+geomean                                                                                1.093Ki                                     702.0       -37.27%
+¹ all samples are equal
+
+                                  │ wing-base.txt │ wing-new.txt │
+                                  │                            allocs/op                             │               allocs/op                 vs base                 │
+CPUParseGET-16                                                                          5.000 ± 0%                                 5.000 ± 0%        ~ (p=1.000 n=6) ¹
+CPUParsePOST-16                                                                         5.000 ± 0%                                 5.000 ± 0%        ~ (p=1.000 n=6) ¹
+CPUResponseJSON-16                                                                      1.000 ± 0%                                 1.000 ± 0%        ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-16                                                                 0.000 ± 0%                                 0.000 ± 0%        ~ (p=1.000 n=6) ¹
+LoopbackPlaintext-16                                                                    2.000 ± 0%                                 2.000 ± 0%        ~ (p=1.000 n=6) ¹
+LoopbackJSON-16                                                                         2.000 ± 0%                                 2.000 ± 0%        ~ (p=1.000 n=6) ¹
+PerfLoopback/post256K-inline-16                                                         35.50 ± 1%                                 24.00 ± 0%  -32.39% (p=0.002 n=6)
+PerfLoopback/post256K-takeover-16                                                       20.00 ± 0%                                 22.00 ± 0%  +10.00% (p=0.002 n=6)
+PerfLoopback/json-takeover-16                                                           16.00 ± 0%                                 12.00 ± 0%  -25.00% (p=0.002 n=6)
+PerfLoopback/stream1M-inline-16                                                         183.0 ± 0%                                 149.0 ± 0%  -18.58% (p=0.002 n=6)
+geomean                                                                                            ²                                            -7.59%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                     │ wing-base.txt │ wing-new.txt │
+                     │                               B/s                                │                    B/s                     vs base              │
+LoopbackPlaintext-16                                                       3.014Mi ± 8%                               3.066Mi ±  6%       ~ (p=0.513 n=6)
+LoopbackJSON-16                                                            2.918Mi ± 7%                               2.909Mi ± 17%       ~ (p=0.985 n=6)
+geomean                                                                    2.966Mi                                    2.986Mi        +0.70%

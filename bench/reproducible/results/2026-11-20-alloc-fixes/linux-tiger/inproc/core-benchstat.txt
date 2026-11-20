@@ -1,0 +1,84 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+                               │ core-base.txt │ core-new.txt │
+                               │                              sec/op                              │                  sec/op                   vs base               │
+TypedHandlerValidation-16                                                            329.5n ±  1%                               270.0n ±  1%  -18.06% (p=0.002 n=6)
+DI_UseTransient-16                                                                   7.213µ ±  1%                               3.594µ ±  2%  -50.18% (p=0.002 n=6)
+PerfValidateDive-16                                                                 11.792µ ±  1%                               1.833µ ±  1%  -84.46% (p=0.002 n=6)
+PerfValidateRules-16                                                                452.95n ±  3%                               71.93n ±  1%  -84.12% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-16                                                              2.052µ ±  6%                               1.482µ ±  6%  -27.78% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-16                                                             37.13µ ±  4%                               19.10µ ±  6%  -48.55% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-16                                                             1166.2µ ±  8%                               364.0µ ± 18%  -68.79% (p=0.002 n=6)
+PerfJSONPoolRetention-16                                                             946.3µ ±  3%                              1172.4µ ±  6%  +23.89% (p=0.002 n=6)
+CompiledValidation/original-16                                                       264.7n ±  2%                               265.1n ±  1%        ~ (p=0.699 n=6)
+CompiledValidation/compiled-16                                                       53.88n ±  2%                               41.32n ±  1%  -23.30% (p=0.002 n=6)
+CPUParseGET-16                                                                       254.2n ±  2%                               249.2n ±  2%   -1.95% (p=0.015 n=6)
+CPUParsePOST-16                                                                      322.1n ±  3%                               320.6n ±  2%        ~ (p=0.699 n=6)
+CPUResponseJSON-16                                                                   62.55n ±  3%                               61.66n ±  8%        ~ (p=0.485 n=6)
+CPUResponsePlaintext-16                                                              29.41n ±  4%                               31.48n ±  4%   +7.02% (p=0.002 n=6)
+PerfWingBodyRetention-16                                                             40.66µ ± 15%                               44.37µ ± 34%        ~ (p=0.240 n=6)
+PerfWingHEADString-16                                                            105748.00n ± 17%                               71.69n ±  3%  -99.93% (p=0.002 n=6)
+geomean                                                                              2.736µ                                     1.142µ        -58.26%
+
+                               │ core-base.txt │ core-new.txt │
+                               │                               B/op                               │                B/op                  vs base                    │
+TypedHandlerValidation-16                                                            40.00 ± 0%                              32.00 ± 0%   -20.00% (p=0.002 n=6)
+DI_UseTransient-16                                                                   296.0 ± 0%                              232.0 ± 0%   -21.62% (p=0.002 n=6)
+PerfValidateDive-16                                                                 2802.0 ± 0%                              240.0 ± 0%   -91.43% (p=0.002 n=6)
+PerfValidateRules-16                                                                 128.0 ± 0%                                0.0 ± 0%  -100.00% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-16                                                           10.688Ki ± 0%                            7.563Ki ± 0%   -29.23% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-16                                                           277.2Ki ± 0%                            127.6Ki ± 0%   -53.98% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-16                                                            4.997Mi ± 0%                            2.000Mi ± 0%   -59.99% (p=0.002 n=6)
+PerfJSONPoolRetention-16                                                           1.549Mi ± 4%                            2.966Mi ± 1%   +91.40% (p=0.002 n=6)
+CompiledValidation/original-16                                                       40.00 ± 0%                              40.00 ± 0%         ~ (p=1.000 n=6) ¹
+CompiledValidation/compiled-16                                                       0.000 ± 0%                              0.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParseGET-16                                                                       64.00 ± 0%                              64.00 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParsePOST-16                                                                      96.00 ± 0%                              96.00 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponseJSON-16                                                                   160.0 ± 0%                              160.0 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-16                                                              0.000 ± 0%                              0.000 ± 0%         ~ (p=1.000 n=6) ¹
+PerfWingBodyRetention-16                                                           256.3Ki ± 0%                            256.3Ki ± 0%    +0.02% (p=0.002 n=6)
+PerfWingHEADString-16                                                            1057478.5 ± 0%                              144.0 ± 0%   -99.99% (p=0.002 n=6)
+geomean                                                                                         ²                                        ?                      ² ³
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+³ ratios must be >0 to compute geomean
+
+                               │ core-base.txt │ core-new.txt │
+                               │                            allocs/op                             │              allocs/op               vs base                    │
+TypedHandlerValidation-16                                                            4.000 ± 0%                              3.000 ± 0%   -25.00% (p=0.002 n=6)
+DI_UseTransient-16                                                                   8.000 ± 0%                              7.000 ± 0%   -12.50% (p=0.002 n=6)
+PerfValidateDive-16                                                                 230.00 ± 0%                              20.00 ± 0%   -91.30% (p=0.002 n=6)
+PerfValidateRules-16                                                                 8.000 ± 0%                              0.000 ± 0%  -100.00% (p=0.002 n=6)
+PerfNetHTTPBody/4KiB-16                                                              8.000 ± 0%                              7.000 ± 0%   -12.50% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-16                                                             18.00 ± 0%                              11.00 ± 0%   -38.89% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-16                                                              29.00 ± 0%                              15.00 ± 0%   -48.28% (p=0.002 n=6)
+PerfJSONPoolRetention-16                                                             26.00 ± 4%                              33.00 ± 0%   +26.92% (p=0.002 n=6)
+CompiledValidation/original-16                                                       4.000 ± 0%                              4.000 ± 0%         ~ (p=1.000 n=6) ¹
+CompiledValidation/compiled-16                                                       0.000 ± 0%                              0.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParseGET-16                                                                       5.000 ± 0%                              5.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUParsePOST-16                                                                      5.000 ± 0%                              5.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponseJSON-16                                                                   1.000 ± 0%                              1.000 ± 0%         ~ (p=1.000 n=6) ¹
+CPUResponsePlaintext-16                                                              0.000 ± 0%                              0.000 ± 0%         ~ (p=1.000 n=6) ¹
+PerfWingBodyRetention-16                                                             2.000 ± 0%                              2.000 ± 0%         ~ (p=1.000 n=6) ¹
+PerfWingHEADString-16                                                                1.000 ± 0%                              1.000 ± 0%         ~ (p=1.000 n=6) ¹
+geomean                                                                                         ²                                        ?                      ² ³
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+³ ratios must be >0 to compute geomean
+
+                         │ core-base.txt │ core-new.txt │
+                         │                               B/s                                │                   B/s                    vs base                │
+PerfNetHTTPBody/4KiB-16                                                        1.859Gi ± 5%                             2.574Gi ±  5%   +38.42% (p=0.002 n=6)
+PerfNetHTTPBody/64KiB-16                                                       1.644Gi ± 4%                             3.195Gi ±  6%   +94.35% (p=0.002 n=6)
+PerfNetHTTPBody/1MiB-16                                                        857.5Mi ± 8%                            2752.2Mi ± 16%  +220.94% (p=0.002 n=6)
+geomean                                                                        1.368Gi                                  2.806Gi        +105.15%
+
+                         │ core-base.txt │ core-new.txt │
+                         │                           retained-KB                            │             retained-KB              vs base                    │
+PerfJSONPoolRetention-16                                                     2070.000 ± 50%                           7.111 ±   ?   -99.66% (p=0.009 n=6)
+PerfWingBodyRetention-16                                                        247.9 ±   ?                          -260.6 ± -1%  -205.14% (p=0.002 n=6)
+geomean                                                                         716.3                                              ?                      ¹ ²
+¹ summaries must be >0 to compute geomean
+² ratios must be >0 to compute geomean

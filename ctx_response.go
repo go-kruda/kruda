@@ -134,6 +134,17 @@ func (c *Ctx) JSON(v any) error {
 	return c.jsonSend(data)
 }
 
+// maxPooledJSONBuf matches Wing's response buffer cutoff: a buffer grown by
+// one large response is dropped instead of being held by the pool.
+const maxPooledJSONBuf = 64 << 10
+
+func putJSONBuf(buf *bytes.Buffer) {
+	if buf.Cap() > maxPooledJSONBuf {
+		return
+	}
+	jsonBufPool.Put(buf)
+}
+
 // jsonPooled marshals v into a pooled bytes.Buffer and writes the response.
 // The buffer is returned to the pool after the write completes.
 // The fasthttp path is inlined here to avoid the jsonSend function call overhead.
@@ -142,7 +153,7 @@ func (c *Ctx) jsonPooled(v any, enc func(buf *bytes.Buffer, v any) error) error 
 	buf.Reset()
 
 	if err := enc(buf, v); err != nil {
-		jsonBufPool.Put(buf)
+		putJSONBuf(buf)
 		return err
 	}
 
@@ -150,13 +161,13 @@ func (c *Ctx) jsonPooled(v any, enc func(buf *bytes.Buffer, v any) error) error 
 
 	// Fast path: tryFastHTTPJSON writes directly to fasthttp, bypassing transport interface.
 	if c.tryFastHTTPJSON(data) {
-		jsonBufPool.Put(buf)
+		putJSONBuf(buf)
 		return nil
 	}
 
 	// Non-fasthttp path — delegate to shared jsonSend
 	err := c.jsonSend(data)
-	jsonBufPool.Put(buf)
+	putJSONBuf(buf)
 	return err
 }
 

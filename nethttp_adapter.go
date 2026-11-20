@@ -3,12 +3,12 @@ package kruda
 import (
 	"context"
 	"errors"
-	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
 
+	"github.com/go-kruda/kruda/internal/bodyread"
 	"github.com/go-kruda/kruda/transport"
 )
 
@@ -57,27 +57,13 @@ func (r *fastNetHTTPRequest) Body() ([]byte, error) {
 		return nil, ErrBodyTooLarge
 	}
 
-	buf := make([]byte, 0, 512)
-	tmp := make([]byte, 512)
-	total := 0
-	for {
-		n, err := r.r.Body.Read(tmp)
-		if n > 0 {
-			total += n
-			// Streaming check for chunked transfers (ContentLength == -1)
-			if r.maxBody > 0 && total > r.maxBody {
-				return nil, ErrBodyTooLarge
-			}
-			buf = append(buf, tmp[:n]...)
-		}
-		if err != nil {
-			r.body = buf
-			if err == io.EOF {
-				err = nil
-			}
-			return buf, err
-		}
+	// The limit is also enforced while reading, for chunked transfers.
+	buf, tooLarge, err := bodyread.Read(r.r.Body, r.r.ContentLength, r.maxBody)
+	if tooLarge {
+		return nil, ErrBodyTooLarge
 	}
+	r.body = buf
+	return buf, err
 }
 
 func (r *fastNetHTTPRequest) RawQuery() string { return r.r.URL.RawQuery }

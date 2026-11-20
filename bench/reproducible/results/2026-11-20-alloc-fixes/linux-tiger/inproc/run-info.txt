@@ -1,0 +1,4 @@
+base: fba66a155b2125f371a29d17598b43f228d3b992
+candidate: bdef8ff70bdc0c6a2406cb9d73cd2be96cef75c8
+go: go version go1.26.11 linux/amd64
+host: Linux x86_64

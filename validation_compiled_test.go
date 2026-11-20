@@ -169,3 +169,120 @@ func BenchmarkCompiledValidation(b *testing.B) {
 		})
 	}
 }
+
+type stringerText string
+
+func (s stringerText) String() string { return "shown:" + string(s) }
+
+// TestCompiledRuleParity extends the compileMinMax drift guard to every rule
+// compileRule mirrors.
+func TestCompiledRuleParity(t *testing.T) {
+	type signed int64
+	type text string
+	x := 1
+	values := []any{
+		int(0), int(5), int8(-128), int64(math.MaxInt64), int64(9007199254740993), signed(-3),
+		uint(0), uint8(255), uint64(math.MaxUint64), uint64(9007199254740993),
+		float32(-1.5), float64(0), math.NaN(), math.Inf(-1), math.Inf(1),
+		"", "a", "ab", "ก", text("b"), stringerText("a"), stringerText("shown:a"),
+		[]int(nil), []int{1, 2}, [2]int{}, map[string]int(nil), map[string]int{"a": 1},
+		true, false, (*int)(nil), &x, struct{}{}, struct{ A int }{1},
+	}
+	params := []string{
+		"", "invalid", " 1", "0", "-0", "1", "2", "+1", "-1", "1.5", "1e1", "0x10",
+		"9007199254740992", "9007199254740993", "9223372036854775807", "18446744073709551615",
+		"1e999", "NaN", "Inf", "-Inf", "a", "a b", "  a   b  ", "b ab", "shown:a", "ก",
+	}
+	rules := builtinRules()
+	for _, name := range []string{"gt", "gte", "lt", "lte", "len", "oneof", "required", "min", "max"} {
+		original := rules[name]
+		for _, value := range values {
+			v := reflect.ValueOf(value)
+			for _, param := range params {
+				check := compileRule(v.Type(), name, param)
+				if check == nil {
+					continue
+				}
+				if got, want := check(v), original(value, param); got != want {
+					t.Errorf("%s(%T(%v), %q) = %v, want %v", name, value, value, param, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestCompiledDiveMatchesBoxed(t *testing.T) {
+	type input struct {
+		Tags   []string       `json:"tags" validate:"dive,required,min=2,max=4"`
+		Codes  []string       `json:"codes" validate:"dive,oneof=a b"`
+		Limits map[string]int `json:"limits" validate:"dive,gte=1,lte=10"`
+		IDs    [3]int         `json:"ids" validate:"dive,gt=0"`
+		Sizes  []string       `json:"sizes" validate:"dive,len=2"`
+	}
+	v := NewValidator()
+	compiled := buildValidators[input](v)
+	boxed := append([]fieldValidator(nil), compiled...)
+	for i := range boxed {
+		if len(compiled[i].elemChecks) == 0 {
+			t.Fatalf("%s: dive chain not compiled", compiled[i].fieldName)
+		}
+		boxed[i].checks, boxed[i].elemChecks = nil, nil
+	}
+	for _, in := range []input{
+		{Tags: []string{"go", "ab"}, Codes: []string{"a"}, Limits: map[string]int{"x": 3}, IDs: [3]int{1, 2, 3}, Sizes: []string{"ok"}},
+		{Tags: []string{"", "toolong", "ok"}, Codes: []string{"c", "a"}, Limits: map[string]int{"x": 0}, IDs: [3]int{0, 1, -1}, Sizes: []string{"x"}},
+	} {
+		got := validate(compiled, reflect.ValueOf(&in).Elem(), v.messages)
+		want := validate(boxed, reflect.ValueOf(&in).Elem(), v.messages)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("validation = %#v, want %#v", got, want)
+		}
+	}
+}
+
+type mutableKey string
+
+var mutableKeyLabel = "before"
+
+func (mutableKey) String() string { return mutableKeyLabel }
+
+// A map key that formats itself is labelled before the element rules run, so
+// a rule with side effects cannot change the reported name.
+func TestDiveMapKeyLabelTakenBeforeRules(t *testing.T) {
+	type input struct {
+		Items map[mutableKey]int `json:"items" validate:"dive,flip"`
+	}
+	mutableKeyLabel = "before"
+	v := NewValidator().Register("flip", func(any, string) bool {
+		mutableKeyLabel = "after"
+		return false
+	})
+	in := input{Items: map[mutableKey]int{"k": 1}}
+	err := validate(buildValidators[input](v), reflect.ValueOf(&in).Elem(), v.messages)
+	if err == nil || err.Errors[0].Field != "items[before]" {
+		t.Fatalf("got %v", err)
+	}
+}
+
+type rewritingKey string
+
+var rewritingMap map[rewritingKey]int
+
+func (k rewritingKey) String() string {
+	rewritingMap[k] = 1
+	return string(k)
+}
+
+// A self-formatting key is labelled before its value is read, so a String
+// method that changes the value changes what is validated, as before.
+func TestDiveMapKeyLabelledBeforeValueRead(t *testing.T) {
+	type input struct {
+		Items map[rewritingKey]int `json:"items" validate:"dive,gt=0"`
+	}
+	rewritingMap = map[rewritingKey]int{"k": 0}
+	in := input{Items: rewritingMap}
+	v := NewValidator()
+	if err := validate(buildValidators[input](v), reflect.ValueOf(&in).Elem(), v.messages); err != nil {
+		t.Fatalf("validated the value from before the label was taken: %v", err)
+	}
+}

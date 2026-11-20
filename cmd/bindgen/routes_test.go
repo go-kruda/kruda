@@ -254,13 +254,13 @@ func TestGeneratedRoutesWhiteBoxCompile(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	for _, folder := range []string{".", "transport", "json"} {
+	for _, folder := range []string{".", "transport", "json", "internal/bodyread"} {
 		entries, err := os.ReadDir(filepath.Join(root, folder))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if folder != "." {
-			if err := os.Mkdir(filepath.Join(dir, folder), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Join(dir, folder), 0755); err != nil {
 				t.Fatal(err)
 			}
 		}

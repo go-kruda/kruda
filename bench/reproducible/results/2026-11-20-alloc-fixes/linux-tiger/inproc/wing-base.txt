@@ -1,0 +1,96 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       278.5 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       321.3 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	        68.13 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        32.65 ns/op	       1 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     21827 ns/op	   3.12 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     20417 ns/op	   3.09 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    341643 ns/op	 1838828 B/op	      35 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    156361 ns/op	  537199 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     13749 ns/op	    1337 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	    983020 ns/op	 1066392 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.155s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       259.5 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       523.3 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	        82.59 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        33.44 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     23319 ns/op	   2.92 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     22164 ns/op	   2.84 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    336196 ns/op	 1839125 B/op	      36 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    143115 ns/op	  537139 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     13265 ns/op	    1332 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	   1007205 ns/op	 1066497 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.158s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       434.6 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       335.7 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	        84.05 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        49.94 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     21252 ns/op	   3.20 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     20621 ns/op	   3.06 MB/s	      39 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    336657 ns/op	 1839102 B/op	      36 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    149255 ns/op	  537099 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     12718 ns/op	    1312 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	   1015891 ns/op	 1066337 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.190s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       268.4 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       345.2 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	       170.2 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        40.48 ns/op	       2 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     20455 ns/op	   3.32 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     20601 ns/op	   3.06 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    366299 ns/op	 1839082 B/op	      36 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    155821 ns/op	  537005 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     12244 ns/op	    1325 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	   1030826 ns/op	 1066390 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.290s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       264.0 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       322.1 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	        97.24 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        37.44 ns/op	       1 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     20669 ns/op	   3.29 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     20857 ns/op	   3.02 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    348851 ns/op	 1839138 B/op	      35 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    158477 ns/op	  537282 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     15990 ns/op	    1319 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	   1040000 ns/op	 1066385 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.288s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUParseGET-16             	    2000	       429.9 ns/op	      65 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-16            	    2000	       325.6 ns/op	      97 B/op	       5 allocs/op
+BenchmarkCPUResponseJSON-16         	    2000	        98.71 ns/op	     162 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-16    	    2000	        45.27 ns/op	       1 B/op	       0 allocs/op
+BenchmarkLoopbackPlaintext-16       	    2000	     22287 ns/op	   3.05 MB/s	      39 B/op	       2 allocs/op
+BenchmarkLoopbackJSON-16            	    2000	     20557 ns/op	   3.06 MB/s	      37 B/op	       2 allocs/op
+BenchmarkPerfLoopback/post256K-inline-16         	    2000	    350973 ns/op	 1838942 B/op	      35 allocs/op
+BenchmarkPerfLoopback/post256K-takeover-16       	    2000	    167351 ns/op	  537099 B/op	      20 allocs/op
+BenchmarkPerfLoopback/json-takeover-16           	    2000	     16757 ns/op	    1306 B/op	      16 allocs/op
+BenchmarkPerfLoopback/stream1M-inline-16         	    2000	   1071200 ns/op	 1066522 B/op	     183 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	3.367s

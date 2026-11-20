@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-kruda/kruda/internal/bodyread"
 )
 
 // NetHTTPTransport implements Transport using Go's standard net/http.
@@ -157,18 +158,13 @@ func (r *netHTTPRequest) Body() ([]byte, error) {
 	}
 	defer r.r.Body.Close()
 
-	reader := io.Reader(r.r.Body)
-	if r.maxBody > 0 {
-		reader = io.LimitReader(r.r.Body, int64(r.maxBody)+1)
-	}
-
-	data, err := io.ReadAll(reader)
+	data, tooLarge, err := bodyread.Read(r.r.Body, r.r.ContentLength, r.maxBody)
 	if err != nil {
 		r.bodyErr = err
 		return nil, err
 	}
 
-	if r.maxBody > 0 && len(data) > r.maxBody {
+	if tooLarge {
 		r.bodyErr = ErrBodyTooLarge
 		return nil, ErrBodyTooLarge
 	}

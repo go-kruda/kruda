@@ -1,0 +1,21 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+                         │ session-base.txt │ session-new.txt │
+                         │                               sec/op                                │                   sec/op                     vs base               │
+MemoryStoreGetParallel                                                             20.65µ ± 1%                                   20.32µ ± 1%   -1.59% (p=0.009 n=6)
+MemoryStoreGetParallel-8                                                          17.009µ ± 3%                                   4.009µ ± 2%  -76.43% (p=0.002 n=6)
+geomean                                                                            18.74µ                                        9.026µ       -51.84%
+
+                         │ session-base.txt │ session-new.txt │
+                         │                                B/op                                 │                     B/op                      vs base              │
+MemoryStoreGetParallel                                                            21.21Ki ± 0%                                   21.20Ki ± 0%  -0.05% (p=0.009 n=6)
+MemoryStoreGetParallel-8                                                          21.10Ki ± 0%                                   20.73Ki ± 0%  -1.74% (p=0.002 n=6)
+geomean                                                                           21.15Ki                                        20.96Ki       -0.90%
+
+                         │ session-base.txt │ session-new.txt │
+                         │                              allocs/op                              │                  allocs/op                    vs base              │
+MemoryStoreGetParallel                                                              217.0 ± 0%                                     216.5 ± 0%       ~ (p=0.182 n=6)
+MemoryStoreGetParallel-8                                                            215.5 ± 0%                                     212.0 ± 0%  -1.62% (p=0.002 n=6)
+geomean                                                                             216.2                                          214.2       -0.93%

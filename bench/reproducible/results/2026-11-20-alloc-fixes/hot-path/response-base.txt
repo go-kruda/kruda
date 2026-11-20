@@ -1,0 +1,110 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8        	23055891	        50.26 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	27166402	        46.03 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	25714836	        47.18 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	25906642	        45.58 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47514166	        25.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	45363117	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47212959	        25.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47214352	        25.45 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUFullCycle-8           	 3888272	       308.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3867332	       328.1 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3926451	       306.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3849772	       312.6 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3897022	       309.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3810679	       309.9 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3900037	       313.3 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3881673	       310.8 ns/op	     280 B/op	       8 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.729s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8        	25559785	        45.87 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26417266	        61.36 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26512378	        46.34 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26638251	        45.76 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47714588	        25.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47337434	        25.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47400931	        25.35 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	44496837	        25.72 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUFullCycle-8           	 3812181	       322.8 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3902768	       308.1 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3944061	       306.7 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3872140	       309.8 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3898292	       309.9 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3893823	       310.6 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3880881	       334.2 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 2862813	       351.6 ns/op	     280 B/op	       8 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.807s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8        	25680877	        45.94 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	27142028	        44.90 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26825958	        45.29 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26165856	        56.46 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47525536	        25.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47045984	        25.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	44996272	        25.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	46561030	        25.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUFullCycle-8           	 3913101	       308.3 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3887768	       309.7 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3776889	       311.8 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3906542	       306.4 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3910255	       311.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3873476	       312.9 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3789200	       311.6 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3862657	       311.3 ns/op	     280 B/op	       8 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.671s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8        	26107269	        45.49 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	23221105	        53.28 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	25976556	        45.24 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26733052	        45.86 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	46232826	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	46922426	        25.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47271156	        25.49 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47425674	        25.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUFullCycle-8           	 3778112	       340.3 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3611502	       316.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3824007	       325.0 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3850592	       312.6 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3667150	       334.2 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3633309	       317.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3832765	       314.5 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3839400	       314.1 ns/op	     280 B/op	       8 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.504s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUResponseJSON-8        	25964448	        44.81 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	27066447	        45.05 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	27053175	        45.54 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON-8        	26679759	        54.41 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47385410	        25.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47494186	        25.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47355258	        25.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext-8   	47494107	        25.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUFullCycle-8           	 3921188	       307.8 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3877018	       308.9 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3862786	       373.2 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUFullCycle-8           	 3757238	       312.4 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3821553	       315.3 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3767781	       315.7 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3869510	       310.1 ns/op	     280 B/op	       8 allocs/op
+BenchmarkCPUHandlerInline-8       	 3869445	       312.3 ns/op	     280 B/op	       8 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	19.927s

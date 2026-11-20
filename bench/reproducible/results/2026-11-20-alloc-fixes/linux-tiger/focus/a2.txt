@@ -1,0 +1,100 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17631148	        67.20 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17936464	        67.62 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39731235	        29.40 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39388879	        29.90 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.748s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17664050	        66.84 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17829759	        67.49 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39885896	        29.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	40382498	        29.96 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.790s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17414798	        67.52 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17826207	        67.35 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39572796	        29.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39983088	        30.15 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.766s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	16956208	        66.94 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17714533	        67.48 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	40244691	        30.26 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39203383	        29.90 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.725s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17574778	        67.10 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17642694	        67.75 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39893624	        29.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	40347669	        29.72 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.766s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17570059	        66.84 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17850066	        67.84 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	40375354	        29.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39336243	        30.19 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.788s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17461808	        67.02 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17702012	        67.69 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39688245	        29.94 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39308436	        29.87 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.736s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17428276	        66.78 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17786887	        67.40 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39845421	        29.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39780962	        30.07 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.752s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17545604	        67.02 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17708106	        67.73 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	39706196	        30.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	39942374	        30.25 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.786s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkCPUResponseJSON      	17664687	        66.92 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponseJSON      	17656027	        68.19 ns/op	     160 B/op	       1 allocs/op
+BenchmarkCPUResponsePlaintext 	41980334	        30.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCPUResponsePlaintext 	38655248	        29.74 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	4.806s

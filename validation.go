@@ -99,6 +99,9 @@ type fieldValidator struct {
 	customMsg string      // from `message:"..."` tag, empty if not set
 	omitEmpty bool        // `omitempty`: a zero value skips the field's rules
 	checks    []func(reflect.Value) bool
+	// elemChecks mirrors elemRules the way checks mirrors rules: when every
+	// element passes them, the element is never boxed.
+	elemChecks []func(reflect.Value) bool
 }
 
 // ruleEntry is a single parsed validation rule.
@@ -250,17 +253,11 @@ func buildValidators[T any](v *Validator) []fieldValidator {
 		if len(fv.rules) == 0 && len(fv.elemRules) == 0 {
 			continue
 		}
-		for _, rule := range fv.rules {
-			if !field.IsExported() || v.customRules[rule.name] {
-				fv.checks = nil
-				break
+		if field.IsExported() {
+			fv.checks = compileRules(v, field.Type, fv.rules)
+			if et := diveElem(field.Type); et != nil {
+				fv.elemChecks = compileRules(v, et, fv.elemRules)
 			}
-			check := compileMinMax(field.Type, rule.name, rule.param)
-			if check == nil {
-				fv.checks = nil
-				break
-			}
-			fv.checks = append(fv.checks, check)
 		}
 		validators = append(validators, fv)
 	}
@@ -288,14 +285,7 @@ func validate(validators []fieldValidator, v reflect.Value, messages map[string]
 
 		// Only pure built-in chains use the unboxed success path. Failures and
 		// custom rules retain the original value snapshot and error ordering.
-		valid := len(fv.checks) > 0
-		for _, check := range fv.checks {
-			if !check(fieldVal) {
-				valid = false
-				break
-			}
-		}
-		if len(fv.rules) > 0 && !valid {
+		if len(fv.rules) > 0 && !passesAll(fv.checks, fieldVal) {
 			value := fieldVal.Interface()
 			for _, rule := range fv.rules {
 				if rule.fn(value, rule.param) {
@@ -351,28 +341,95 @@ func (fv *fieldValidator) validateElems(messages map[string]string, fieldVal ref
 	switch fieldVal.Kind() {
 	case reflect.Slice, reflect.Array:
 		for i := 0; i < fieldVal.Len(); i++ {
-			name := fv.fieldName + "[" + strconv.Itoa(i) + "]"
-			errs = fv.applyElemRules(messages, fieldVal.Index(i), name, errs)
+			errs = fv.applyElemRules(messages, fieldVal.Index(i), i, reflect.Value{}, errs)
 		}
 	case reflect.Map:
+		// A key type with its own formatting runs user code, so its label is
+		// taken before the element rules run, as it always was.
+		eager := formatsItself(fieldVal.Type().Key())
 		iter := fieldVal.MapRange()
 		for iter.Next() {
-			name := fv.fieldName + "[" + fmt.Sprintf("%v", iter.Key().Interface()) + "]"
-			errs = fv.applyElemRules(messages, iter.Value(), name, errs)
+			key := iter.Key()
+			if eager {
+				// The label is taken before the value, as it always was: a
+				// key's String method may change what the value holds.
+				name := fv.elemName(0, key)
+				errs = fv.applyElemRulesNamed(messages, iter.Value(), name, errs)
+				continue
+			}
+			errs = fv.applyElemRules(messages, iter.Value(), 0, key, errs)
 		}
 	}
 	return errs
 }
 
-func (fv *fieldValidator) applyElemRules(messages map[string]string, elem reflect.Value, name string, errs []FieldError) []FieldError {
+// applyElemRules checks one element. Its name (`tags[2]`, `limits[free]`) is
+// built on the first failure, so a valid collection costs no labels.
+func (fv *fieldValidator) applyElemRules(messages map[string]string, elem reflect.Value, idx int, key reflect.Value, errs []FieldError) []FieldError {
+	if passesAll(fv.elemChecks, elem) {
+		return errs
+	}
 	value := elem.Interface()
+	name := ""
 	for _, rule := range fv.elemRules {
 		if rule.fn(value, rule.param) {
 			continue
 		}
+		if name == "" {
+			name = fv.elemName(idx, key)
+		}
 		errs = append(errs, fv.fieldError(messages, rule, name, value))
 	}
 	return errs
+}
+
+// applyElemRulesNamed is applyElemRules with the label already built.
+func (fv *fieldValidator) applyElemRulesNamed(messages map[string]string, elem reflect.Value, name string, errs []FieldError) []FieldError {
+	if passesAll(fv.elemChecks, elem) {
+		return errs
+	}
+	value := elem.Interface()
+	for _, rule := range fv.elemRules {
+		if !rule.fn(value, rule.param) {
+			errs = append(errs, fv.fieldError(messages, rule, name, value))
+		}
+	}
+	return errs
+}
+
+// formatsItself reports whether fmt's %v might call a method while
+// formatting t: anything but a basic kind without its own formatting
+// (structs and arrays format their fields, interfaces their dynamic value).
+func formatsItself(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
+		return t.Implements(formatterType) || t.Implements(stringerType) || t.Implements(errorType)
+	}
+	return true
+}
+
+func (fv *fieldValidator) elemName(idx int, key reflect.Value) string {
+	if key.IsValid() {
+		return fv.fieldName + "[" + fmt.Sprintf("%v", key.Interface()) + "]"
+	}
+	return fv.fieldName + "[" + strconv.Itoa(idx) + "]"
+}
+
+// passesAll reports whether a non-empty compiled chain accepts v. An empty
+// chain means the rules could not all be compiled, so the boxed rules decide.
+func passesAll(checks []func(reflect.Value) bool, v reflect.Value) bool {
+	if len(checks) == 0 {
+		return false
+	}
+	for _, check := range checks {
+		if !check(v) {
+			return false
+		}
+	}
+	return true
 }
 
 // diveKind reports the collection kind `dive` will walk, or reflect.Invalid if
@@ -529,6 +586,142 @@ func compileMinMax(t reflect.Type, name, param string) func(reflect.Value) bool 
 		return func(v reflect.Value) bool { return v.Float() <= n }
 	}
 	return nil
+}
+
+// compileRules compiles a whole chain, or returns nil when any rule cannot be
+// compiled or is overridden, so the boxed rules run for every rule as before.
+func compileRules(v *Validator, t reflect.Type, rules []ruleEntry) []func(reflect.Value) bool {
+	var checks []func(reflect.Value) bool
+	for _, rule := range rules {
+		if v.customRules[rule.name] {
+			return nil
+		}
+		check := compileRule(t, rule.name, rule.param)
+		if check == nil {
+			return nil
+		}
+		checks = append(checks, check)
+	}
+	return checks
+}
+
+// compileRule is the unboxed mirror of the built-in rule name. The same
+// contract as compileMinMax applies: the same verdict as the boxed rule for
+// every value and param, or nil. TestCompiledRuleParity guards it.
+func compileRule(t reflect.Type, name, param string) func(reflect.Value) bool {
+	switch name {
+	case "min", "max":
+		return compileMinMax(t, name, param)
+	case "gt", "gte", "lt", "lte":
+		return compileCompare(t, name, param)
+	case "len":
+		return compileLen(t, param)
+	case "oneof":
+		return compileOneOf(t, param)
+	case "required":
+		return compileRequired(t)
+	}
+	return nil
+}
+
+// diveElem is the element type `dive` walks, or nil for a non-collection.
+func diveElem(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return t.Elem()
+	}
+	return nil
+}
+
+func compileCompare(t reflect.Type, name, param string) func(reflect.Value) bool {
+	n, err := strconv.ParseFloat(param, 64)
+	if err != nil {
+		return nil
+	}
+	switch t.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if ni, err := strconv.ParseInt(param, 10, 64); err == nil {
+			return orderedCheck(name, ni, reflect.Value.Int)
+		}
+		return orderedCheck(name, n, func(v reflect.Value) float64 { return float64(v.Int()) })
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if nu, err := strconv.ParseUint(param, 10, 64); err == nil {
+			return orderedCheck(name, nu, reflect.Value.Uint)
+		}
+		return orderedCheck(name, n, func(v reflect.Value) float64 { return float64(v.Uint()) })
+	case reflect.Float32, reflect.Float64:
+		return orderedCheck(name, n, reflect.Value.Float)
+	case reflect.String:
+		return orderedCheck(name, n, func(v reflect.Value) float64 { return float64(v.Len()) })
+	}
+	return nil
+}
+
+func orderedCheck[N int64 | uint64 | float64](name string, p N, get func(reflect.Value) N) func(reflect.Value) bool {
+	switch name {
+	case "gt":
+		return func(v reflect.Value) bool { return get(v) > p }
+	case "gte":
+		return func(v reflect.Value) bool { return get(v) >= p }
+	case "lt":
+		return func(v reflect.Value) bool { return get(v) < p }
+	case "lte":
+		return func(v reflect.Value) bool { return get(v) <= p }
+	}
+	return nil
+}
+
+func compileLen(t reflect.Type, param string) func(reflect.Value) bool {
+	n, err := strconv.Atoi(param)
+	if err != nil {
+		return nil
+	}
+	switch t.Kind() {
+	case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
+		return func(v reflect.Value) bool { return v.Len() == n }
+	}
+	return nil
+}
+
+var (
+	formatterType = reflect.TypeOf((*fmt.Formatter)(nil)).Elem()
+	stringerType  = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+	errorType     = reflect.TypeOf((*error)(nil)).Elem()
+)
+
+// compileOneOf covers string kinds only. validateOneOf compares fmt's %v
+// text, which is the string itself unless the type formats itself.
+func compileOneOf(t reflect.Type, param string) func(reflect.Value) bool {
+	if t.Kind() != reflect.String || formatsItself(t) {
+		return nil
+	}
+	opts := strings.Fields(param)
+	return func(v reflect.Value) bool {
+		s := v.String()
+		for _, opt := range opts {
+			if s == opt {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// compileRequired skips interface fields: validateRequired sees the dynamic
+// value there, not the field.
+func compileRequired(t reflect.Type) func(reflect.Value) bool {
+	switch t.Kind() {
+	case reflect.Interface:
+		return nil
+	case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
+		return func(v reflect.Value) bool { return v.Len() > 0 }
+	case reflect.Pointer:
+		return func(v reflect.Value) bool { return !v.IsNil() }
+	}
+	return func(v reflect.Value) bool { return !v.IsZero() }
 }
 
 // validateMin is mirrored by compileMinMax (unboxed success path) and by the

@@ -1,0 +1,70 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8    	 5532955	       216.2 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5553240	       215.4 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5539245	       216.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5371490	       218.6 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4314902	       285.2 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4207204	       277.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4367012	       274.6 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4410979	       274.3 ns/op	      96 B/op	       5 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	10.006s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8    	 5529226	       214.7 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5672781	       214.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5449261	       220.2 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5675640	       226.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4397736	       274.2 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4486300	       271.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4406660	       274.0 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4457628	       267.7 ns/op	      96 B/op	       5 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	9.916s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8    	 5495673	       218.9 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5472024	       220.5 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5522500	       219.1 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5227278	       246.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4262262	       275.8 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4212072	       284.6 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4462668	       271.9 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4410475	       275.3 ns/op	      96 B/op	       5 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	9.910s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8    	 5230528	       226.9 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5557206	       225.6 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 4948130	       227.3 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5610266	       214.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4508641	       274.5 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4527498	       270.2 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4433114	       271.8 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 3485100	       293.8 ns/op	      96 B/op	       5 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	9.685s
+goos: darwin
+goarch: arm64
+pkg: github.com/go-kruda/kruda
+cpu: Apple M3
+BenchmarkCPUParseGET-8    	 5035004	       222.0 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5527543	       241.1 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 4407574	       252.4 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParseGET-8    	 5410160	       222.2 ns/op	      64 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4379712	       277.4 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4156838	       301.2 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4419049	       273.6 ns/op	      96 B/op	       5 allocs/op
+BenchmarkCPUParsePOST-8   	 4334719	       272.5 ns/op	      96 B/op	       5 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda	9.816s

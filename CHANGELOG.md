@@ -156,6 +156,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Wing: a POST to a Pool, Spawn or Takeover route (`Arrow`, `Spear`, `DB`,
+  `Render`) whose body arrived after its header ran on the event loop, so a
+  handler waiting on a database stalled every other connection on that
+  worker. Such requests now keep their route's dispatch. They still run
+  inline when another handler owns the connection, or, for Takeover, when
+  earlier responses on it are not yet sent.
+- Wing: a partial request that arrived in the same read as a complete one
+  (`GET / ...\r\n\r\nGET / HTTP/1.1\r\nHost: te`) was never closed by
+  `ReadTimeout`, so a client could hold the connection open indefinitely.
+- Wing: presets on routes with `:param` or `*wildcard` were matched by the
+  text before the first `:` and tried in map order. With both
+  `/users/:id` (`DB`) and `/users/:id/avatar` (`Plaintext`), either could
+  win depending on the run, and a preset could apply to a path its route
+  does not match. They are now matched segment by segment, the most specific
+  pattern first. A regex constraint on a param is still not checked when
+  choosing the preset.
+- Wing: `Header("HOST")`, `Header("CONTENT-TYPE")` and other spellings of
+  `Host`, `Content-Type`, `Cookie`, `Accept` and `Connection` besides the
+  canonical and lowercase ones returned an empty string.
+- Wing: on a keep-alive connection that a Takeover route already owned, a
+  later request to a `Stream` route got a buffered writer, so `c.SSE()`
+  answered 500. A later `Stream` or `Hijack` request now gets its own writer.
+- Wing: `Shutdown` waited for Pool handlers before cancelling their request
+  contexts, so a handler waiting on `r.Context().Done()` held shutdown until
+  it gave up on its own. Contexts are now cancelled first.
+- Wing: a file stream with a negative size sent `Content-Length: -1`. It now
+  answers 500 and closes the reader. Kruda's own callers always pass a known
+  size.
+
 - A typed handler input field whose type is a named `string` or `bool`
   (`type Status string`) with a `query`, `param` or `default` tag made the
   request panic inside the binder.

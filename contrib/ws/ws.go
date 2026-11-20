@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-kruda/kruda"
@@ -119,17 +120,26 @@ func (u *Upgrader) validateUpgrade(c *kruda.Ctx) error {
 
 // checkOrigin validates the Origin header against allowed origins.
 //
-// When AllowedOrigins is empty, all origins are permitted.
+// When AllowedOrigins is empty, only the same origin is permitted: an Origin
+// header must name the request's Host. Browsers send Origin on every
+// WebSocket handshake, so this stops another site from opening a socket with
+// the user's cookies. AllowedOrigins: []string{"*"} permits every origin.
 // When AllowedOrigins is set:
 //   - Requests with a matching Origin header are allowed
 //   - Requests with no Origin header are allowed by default (same-origin / non-browser)
 //   - Set StrictOrigin=true to reject requests with no Origin header
 func (u *Upgrader) checkOrigin(c *kruda.Ctx) error {
+	origin := c.Header("Origin")
 	if len(u.Config.AllowedOrigins) == 0 {
-		return nil // all origins allowed
+		if origin == "" {
+			return nil // non-browser client
+		}
+		if o, err := url.Parse(origin); err == nil && o.Host != "" && strings.EqualFold(o.Host, requestHost(c)) {
+			return nil
+		}
+		return fmt.Errorf("ws: origin %q is not the same origin; set AllowedOrigins to permit it", origin)
 	}
 
-	origin := c.Header("Origin")
 	if origin == "" {
 		if u.Config.StrictOrigin {
 			return fmt.Errorf("ws: Origin header required (strict mode)")
@@ -144,6 +154,17 @@ func (u *Upgrader) checkOrigin(c *kruda.Ctx) error {
 	}
 
 	return fmt.Errorf("ws: origin %q not allowed", origin)
+}
+
+// requestHost returns the Host the client sent. net/http moves it out of the
+// header map into Request.Host, so read it there first.
+func requestHost(c *kruda.Ctx) string {
+	if r := c.Request(); r != nil {
+		if hr, ok := r.RawRequest().(*http.Request); ok {
+			return hr.Host
+		}
+	}
+	return c.Header("Host")
 }
 
 // computeAcceptKey computes the Sec-WebSocket-Accept value per RFC 6455 §4.2.2.

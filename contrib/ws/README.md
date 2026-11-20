@@ -32,7 +32,7 @@ ws.HandleFunc(app, "/ws", func(conn *ws.Conn) {
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| AllowedOrigins | []string | nil | Allowed origin values; nil allows all origins |
+| AllowedOrigins | []string | nil | Allowed origin values; nil allows the same origin only, `"*"` allows all |
 | StrictOrigin | bool | false | Require Origin when AllowedOrigins is set |
 | MaxMessageSize | int64 | 1048576 | Maximum message size |
 | ReadBufferSize | int | 4096 | Read buffer size |

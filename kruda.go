@@ -272,14 +272,17 @@ func (app *App) addRoute(method, path string, handler HandlerFunc, opts ...Route
 	chain := buildChain(app.middleware, nil, handler)
 	app.router.addRoute(method, path, chain)
 
-	// Apply Wing preset if transport supports it.
-	if len(opts) > 0 {
+	// Apply Wing preset if transport supports it. A route without one is still
+	// recorded, so a param or wildcard preset cannot answer for it.
+	if fc, ok := app.transport.(transport.PresetConfigurator); ok {
 		var rc routeConfig
 		for _, o := range opts {
 			o.applyRoute(&rc)
 		}
-		if rc.preset != nil {
-			if fc, ok := app.transport.(transport.PresetConfigurator); ok {
+		if rc.preset == nil {
+			fc.SetRoutePreset(method, path, &Preset{inherit: true})
+		} else {
+			{
 				f := *rc.preset
 				f.handlers = chain
 				fc.SetRoutePreset(method, path, &f)

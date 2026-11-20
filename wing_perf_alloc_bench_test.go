@@ -4,13 +4,15 @@ package kruda
 
 import (
 	"bytes"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 // BenchmarkPerfWingBodyRetention parses large POSTs then plain GETs through
-// the request pool, and reports what the pool still holds after one GC.
+// the request pool, and reports live heap growth. What the pool keeps of a
+// body is checked by TestReleaseRequestDropsBody.
 func BenchmarkPerfWingBodyRetention(b *testing.B) {
 	body := bytes.Repeat([]byte("x"), 256<<10)
 	post := append([]byte("POST /up HTTP/1.1\r\nHost: x\r\nContent-Length: "+strconv.Itoa(len(body))+"\r\n\r\n"), body...)
@@ -30,6 +32,8 @@ func BenchmarkPerfWingBodyRetention(b *testing.B) {
 	}
 	b.StopTimer()
 	retainedKB(b, before)
+	runtime.KeepAlive(post)
+	runtime.KeepAlive(get)
 }
 
 func BenchmarkPerfWingHEADString(b *testing.B) {

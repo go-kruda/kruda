@@ -1162,6 +1162,12 @@ func (r *wingRequest) Header(key string) string {
 		return r.realIP
 	}
 	lk := strings.ToLower(key)
+	switch lk {
+	case "content-type", "cookie", "host", "accept", "connection":
+		// Known headers live in their own fields, matched above only in the
+		// two usual spellings.
+		return r.Header(lk)
+	}
 	for i := range r.extraN {
 		if r.extraHdrs[i].k == lk {
 			return r.extraHdrs[i].v
@@ -1395,6 +1401,17 @@ func (r *wingResponse) SetFileStream(file io.ReadCloser, size int64) {
 		r.sendFileRelease = nil
 	}
 	r.fileStream.close()
+	r.fileStream = nil
+	if size < 0 {
+		// The size goes out as Content-Length, so an unknown size cannot be
+		// framed: answer 500 rather than send an invalid header. Close off the
+		// event loop, as other stream closes do, so a slow Close cannot stall it.
+		(&fileStream{reader: file}).close()
+		r.fileSize = 0
+		r.status = 500
+		r.body = r.body[:0]
+		return
+	}
 	r.fileStream = &fileStream{reader: file, remaining: size}
 	r.fileSize = size
 }

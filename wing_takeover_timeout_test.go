@@ -236,3 +236,51 @@ func TestWingTakeoverWriteTimeoutReleasesBlockedResponse(t *testing.T) {
 		t.Fatalf("admitted connections = %d, want 0 after WriteTimeout", got)
 	}
 }
+
+// TestWingReadTimeoutBoundsPartialRequestInSameRead sends a complete request
+// and the start of the next one in a single write. The partial request must
+// still be bounded by ReadTimeout, although its bytes never arrive on their own.
+func TestWingReadTimeoutBoundsPartialRequestInSameRead(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		preset Preset
+	}{{"Bolt", Bolt}, {"Arrow", Arrow}, {"Spear", Spear}} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := WingConfig{
+				Workers:       1,
+				DefaultPreset: tt.preset,
+				ReadTimeout:   100 * time.Millisecond,
+				IdleTimeout:   30 * time.Second,
+			}
+			addr, stop := startWingServerWithConfig(t, cfg, transport.HandlerFunc(func(w transport.ResponseWriter, _ transport.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("ok"))
+			}))
+			defer stop()
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: test\r\n\r\nGET / HTTP/1.1\r\nHost: te"); err != nil {
+				t.Fatal(err)
+			}
+			reader := bufio.NewReader(conn)
+			resp, err := http.ReadResponse(reader, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			var one [1]byte
+			if _, err := reader.Read(one[:]); err == nil {
+				t.Fatal("partial request unexpectedly produced data")
+			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				t.Fatal("partial request behind a complete one was not closed by ReadTimeout")
+			}
+		})
+	}
+}

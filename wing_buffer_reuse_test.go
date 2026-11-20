@@ -252,8 +252,8 @@ func TestWingOwnedBodyPipelinedSurplus(t *testing.T) {
 }
 
 // TestWingNegativeStreamSize declares a negative stream size on every preset.
-// The worker must not crash and must keep serving new connections. (What the
-// response says for such a size is a separate question.)
+// The size cannot be sent as Content-Length, so the response must be a
+// well-framed 500, and the worker must keep serving.
 func TestWingNegativeStreamSize(t *testing.T) {
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		if r.Path() == "/neg" {
@@ -293,8 +293,16 @@ func TestWingNegativeStreamSize(t *testing.T) {
 			if _, err := conn.Write([]byte("GET /neg HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
 				t.Fatal(err)
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-			_, _ = br.ReadString('\n')
+			resp, err := http.ReadResponse(br, nil)
+			if err != nil {
+				t.Fatalf("negative size produced an unreadable response: %v", err)
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != 500 || resp.ContentLength != 0 {
+				t.Fatalf("negative size: status %d, Content-Length %d; want 500 and 0", resp.StatusCode, resp.ContentLength)
+			}
+			get(t, conn, br, "/after")
 			conn.Close()
 
 			c2, err := net.Dial("tcp", addr)
@@ -319,5 +327,42 @@ func TestAppendBodyStopsAtNeed(t *testing.T) {
 	b = appendBody(b, []byte("surplus"), 300_000)
 	if len(b) != 300_007 {
 		t.Fatalf("surplus lost: len=%d", len(b))
+	}
+}
+
+type blockingCloser struct {
+	io.Reader
+	release chan struct{}
+	closed  chan struct{}
+}
+
+func (b *blockingCloser) Close() error {
+	<-b.release
+	close(b.closed)
+	return nil
+}
+
+// TestWingNegativeStreamSizeDoesNotWaitOnClose rejects a negative size with a
+// reader whose Close blocks. The rejection must not wait for Close, which
+// would stall an Inline worker, but the reader must still be closed.
+func TestWingNegativeStreamSizeDoesNotWaitOnClose(t *testing.T) {
+	rc := &blockingCloser{Reader: bytes.NewReader(nil), release: make(chan struct{}), closed: make(chan struct{})}
+	r := &wingResponse{}
+	returned := make(chan struct{})
+	go func() { r.SetFileStream(rc, -1); close(returned) }()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		close(rc.release)
+		t.Fatal("SetFileStream waited for the reader's Close")
+	}
+	if r.status != 500 {
+		t.Fatalf("status = %d, want 500", r.status)
+	}
+	close(rc.release)
+	select {
+	case <-rc.closed:
+	case <-time.After(time.Second):
+		t.Fatal("reader was never closed")
 	}
 }

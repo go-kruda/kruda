@@ -47,17 +47,17 @@ fi
 regressions_file="$(mktemp)"
 trap 'rm -f "$regressions_file"' EXIT
 
+# Only sec/op, B/op and allocs/op are gated. A custom metric such as
+# retained-KB can sit near zero, where any noise reads as a huge percentage,
+# so its table resets the metric and is skipped.
 awk -v threshold="$threshold" '
-  /sec\/op/ {
-    metric = "sec/op"
+  /│/ {
+    if ($0 ~ /sec\/op/) metric = "sec/op"
+    else if ($0 ~ /B\/op/) metric = "B/op"
+    else if ($0 ~ /allocs\/op/) metric = "allocs/op"
+    else if ($0 ~ /vs base/) metric = ""
   }
-  /B\/op/ {
-    metric = "B/op"
-  }
-  /allocs\/op/ {
-    metric = "allocs/op"
-  }
-  /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ {
+  metric != "" && /^[^[:space:]]/ && $0 ~ /\+[0-9.]+%/ {
     for (i = 1; i <= NF; i++) {
       if ($i ~ /^\+[0-9.]+%$/) {
         change = $i

@@ -130,6 +130,7 @@ type Preset struct {
 	path           string
 	pathClean      bool
 	explicit       bool // set for preset-table entries; selects the advisor message variant
+	inherit        bool // a route registered without a preset; it takes the default
 }
 
 // PresetOption modifies a Preset in-place.
@@ -153,8 +154,9 @@ func (p Preset) applyRoute(rc *routeConfig) {
 }
 
 func (f *Preset) defaults() {
-	// A static response runs no handler, so there is nothing to hand off.
-	if f.Dispatch == 0 || f.StaticResponse != nil {
+	// A static response runs no handler, so there is nothing to hand off. A
+	// mode Wing does not know has no dispatch path, so it runs inline too.
+	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
 }

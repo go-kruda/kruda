@@ -125,13 +125,15 @@ func (g *Group) addRoute(method, path string, handler HandlerFunc, opts ...Route
 	chain := buildChain(g.app.middleware, g.collectMiddleware(), handler)
 	g.app.router.addRoute(method, fullPath, chain)
 
-	if len(opts) > 0 {
+	if fc, ok := g.app.transport.(transport.PresetConfigurator); ok {
 		var rc routeConfig
 		for _, o := range opts {
 			o.applyRoute(&rc)
 		}
-		if rc.preset != nil {
-			if fc, ok := g.app.transport.(transport.PresetConfigurator); ok {
+		if rc.preset == nil {
+			fc.SetRoutePreset(method, fullPath, &Preset{inherit: true})
+		} else {
+			{
 				f := *rc.preset
 				f.handlers = chain
 				fc.SetRoutePreset(method, fullPath, &f)

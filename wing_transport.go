@@ -861,6 +861,11 @@ func (w *worker) tryParse(c *conn) {
 	for c.readN > 0 {
 		req, consumed, ok := parseHTTPRequestFast(c.readBuf[:c.readN], w.limits)
 		if !ok {
+			if w.readTimeout > 0 && c.readDeadline == 0 {
+				// Bytes left behind an earlier request in the same read start
+				// this one; recv only sets the deadline on an empty buffer.
+				c.readDeadline = w.clockNow() + w.readTimeout
+			}
 			if c.readN < len(c.readBuf) {
 				// Buffer has room — classify to decide whether to wait or error.
 				st, need, expectContinue := classifyIncomplete(c.readBuf[:c.readN], w.limits)

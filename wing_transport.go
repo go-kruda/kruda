@@ -2225,14 +2225,7 @@ func (w *worker) cleanup() {
 	}
 	w.fileReadMu.Unlock()
 	w.advisor.flush()
-	if w.pool != nil {
-		close(w.pool.jobs)
-		// Wait for pool goroutines to finish any in-flight job's RawSyscall
-		// before we start closing fds. Otherwise a pool goroutine's write
-		// could land on an fd the kernel has already recycled.
-		w.pool.wg.Wait()
-	}
-	// Takeover goroutines can block in a syscall.Read, a syscall.Write (a
+	// Pool, Spawn and Takeover goroutines can block in a syscall.Read, a syscall.Write (a
 	// WebSocket WriteMessage), or in app logic with no pending socket call at
 	// all. To unblock all three WITHOUT yet closing the fd (which would race
 	// with Spawn writes), shut down both directions and cancel the conn
@@ -2276,6 +2269,16 @@ func (w *worker) cleanup() {
 			}
 		}
 	}()
+	if w.pool != nil {
+		close(w.pool.jobs)
+		// Wait for pool goroutines to finish any in-flight job's RawSyscall
+		// before we start closing fds. Otherwise a pool goroutine's write
+		// could land on an fd the kernel has already recycled. This waits
+		// only after the conn contexts are cancelled and doneCh is drained,
+		// so a Pool handler waiting on its context, or blocked publishing a
+		// completion, can return.
+		w.pool.wg.Wait()
+	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()
 	close(drainStop)

@@ -4,9 +4,12 @@ package kruda
 
 import (
 	"context"
+	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/go-kruda/kruda/transport"
 )
 
 // TestWingShutdownRightAfterStartWaitsForWorkers calls Shutdown as soon as the
@@ -43,5 +46,46 @@ func TestWingShutdownRightAfterStartWaitsForWorkers(t *testing.T) {
 	case <-served:
 	case <-time.After(2 * time.Second):
 		t.Fatal("ListenAndServe did not return after Shutdown")
+	}
+}
+
+// TestWingShutdownCancelsPoolHandlerContext runs a Pool handler that waits on
+// its request context. Shutdown must cancel that context instead of waiting
+// for the handler to give up on its own.
+func TestWingShutdownCancelsPoolHandlerContext(t *testing.T) {
+	entered := make(chan struct{})
+	cancelled := make(chan bool, 1)
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		close(entered)
+		select {
+		case <-r.Context().Done():
+			cancelled <- true
+		case <-time.After(5 * time.Second):
+			cancelled <- false
+		}
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Arrow}, handler)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler never ran")
+	}
+	done := make(chan struct{})
+	go func() { stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Shutdown waited for a Pool handler blocked on its context")
+	}
+	if !<-cancelled {
+		t.Fatal("Pool handler context was not cancelled by Shutdown")
 	}
 }

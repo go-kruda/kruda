@@ -189,3 +189,48 @@ func TestPresetTableRegexParamFollowsRouter(t *testing.T) {
 		}
 	}
 }
+
+// TestPresetTableCustomMethodsMatchParams gives OPTIONS and a custom method
+// param and wildcard presets. They follow the same rules as GET.
+func TestPresetTableCustomMethodsMatchParams(t *testing.T) {
+	routes := map[string]Preset{
+		"OPTIONS /items/:id":    Arrow,
+		"OPTIONS /items/static": {inherit: true},
+		"PURGE /cache/*key":     Spear,
+		"PURGE /exact":          Arrow,
+	}
+	def := Render
+	ft := NewPresetTable(routes, def)
+	for _, tc := range []struct {
+		method, path string
+		want         Preset
+	}{
+		{"OPTIONS", "/items/7", Arrow},
+		{"OPTIONS", "/items/static", def},
+		{"OPTIONS", "/items/7/x", def},
+		{"PURGE", "/cache/a/b", Spear},
+		{"PURGE", "/exact", Arrow},
+		{"PURGE", "/other", def},
+		{"REPORT", "/cache/a", def},
+	} {
+		if got := ft.Lookup(tc.method, tc.path); got.Dispatch != tc.want.Dispatch || got.ResponseMode != tc.want.ResponseMode {
+			t.Fatalf("Lookup(%s %s) = %v/%v, want %v/%v", tc.method, tc.path, got.Dispatch, got.ResponseMode, tc.want.Dispatch, tc.want.ResponseMode)
+		}
+	}
+	if n := testing.AllocsPerRun(100, func() { ft.Lookup("PURGE", "/exact") }); n != 0 {
+		t.Fatalf("custom-method lookup allocates %v", n)
+	}
+}
+
+// TestPresetUnknownDispatchRunsInline gives a preset a dispatch mode Wing does
+// not know. It runs inline instead of reaching a dispatch branch that has no
+// Pool behind it.
+func TestPresetUnknownDispatchRunsInline(t *testing.T) {
+	ft := NewPresetTable(map[string]Preset{"GET /x": {Dispatch: DispatchMode(99)}}, Preset{Dispatch: DispatchMode(42)})
+	if got := ft.Lookup("GET", "/x").Dispatch; got != Inline {
+		t.Fatalf("route dispatch = %v, want Inline", got)
+	}
+	if got := ft.Lookup("GET", "/y").Dispatch; got != Inline {
+		t.Fatalf("default dispatch = %v, want Inline", got)
+	}
+}

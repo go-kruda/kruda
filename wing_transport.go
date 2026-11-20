@@ -1173,48 +1173,6 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 			defer w.dispatchWG.Done()
 			w.takeoverLoop(req, c.fd, leftover, f.ResponseMode)
 		}()
-		return
-
-	default:
-		// Persist or unknown — treat as Pool for now.
-		c.keepAlive = req.keepAlive
-		c.pending++
-		job := handlerJob{
-			req:          req,
-			fd:           c.fd,
-			keepAlive:    req.keepAlive,
-			responseMode: f.ResponseMode,
-			directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
-		}
-		if w.pool != nil {
-			select {
-			case w.pool.jobs <- job:
-			default:
-				releaseRequest(req)
-				w.reject503(c)
-				w.eng.SubmitSend(c.fd, nil)
-			}
-		} else {
-			resp := acquireResponseFor(req)
-			resp.responseMode = f.ResponseMode
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						resp.WriteHeader(500)
-						resp.Write([]byte("Internal Server Error\n"))
-					}
-				}()
-				w.serveRoute(resp, req, f)
-			}()
-			data := resp.buildZeroCopy()
-			stream := resp.fileStream
-			resp.fileStream = nil
-			keepAlive := req.keepAlive
-			releaseResponse(resp)
-			releaseRequest(req)
-			w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: keepAlive, stream: stream}
-		}
-		return
 	}
 }
 

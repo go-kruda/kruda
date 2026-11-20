@@ -20,14 +20,38 @@ import (
 //	    },
 //	})
 type PresetTable struct {
-	routes   [mCount]map[string]Preset // indexed by method for O(1) first lookup
-	prefixes [mCount][]prefixPreset    // param and wildcard routes, most specific first
-	fallback map[string]Preset         // custom methods
-	def      Preset
-	defHead  Preset // def without a static body, for HEAD
+	std     [mCount]methodPresets     // indexed by method for O(1) first lookup
+	custom  map[string]*methodPresets // OPTIONS and other methods
+	def     Preset
+	defHead Preset // def without a static body, for HEAD
 	// cleanPaths mirrors App PathTraversal: the router sees the cleaned path,
 	// so the lookup must too.
 	cleanPaths bool
+}
+
+// methodPresets holds one method's routes: exact paths in a map, param and
+// wildcard patterns in a list ordered most specific first.
+type methodPresets struct {
+	routes   map[string]Preset
+	prefixes []prefixPreset
+}
+
+func (mp *methodPresets) add(path string, f Preset) {
+	if isDynamic(path) {
+		f.handlers = nil
+		f.path = ""
+		f.pathClean = false
+		mp.prefixes = append(mp.prefixes, newPrefixPreset(path, f))
+		return
+	}
+	if mp.routes == nil {
+		mp.routes = make(map[string]Preset, 4)
+	}
+	mp.routes[path] = f
+}
+
+func isDynamic(path string) bool {
+	return wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0
 }
 
 type prefixPreset struct {
@@ -180,78 +204,67 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 	ft.defHead.StaticResponse = staticHeadersOnly(def.StaticResponse)
 	// Routes without a preset matter only where a param or wildcard preset of
 	// the same method could otherwise answer for them.
-	var dynamic [mCount]bool
+	dynamic := map[string]bool{}
 	for key, f := range routes {
-		method, path := splitKey(key)
-		if idx := methodIdx(method); idx >= 0 && !f.inherit && (wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0) {
-			dynamic[idx] = true
+		if method, path := splitKey(key); !f.inherit && isDynamic(path) {
+			dynamic[method] = true
 		}
 	}
 	for key, f := range routes {
+		method, path := splitKey(key)
 		if f.inherit {
-			method, path := splitKey(key)
-			if idx := methodIdx(method); idx >= 0 && dynamic[idx] {
-				ft.addDefaultRoute(idx, path)
+			if !dynamic[method] {
+				continue
 			}
+			f = ft.def
+			if method == "HEAD" {
+				f = ft.defHead
+			}
+			ft.methodFor(method).add(path, f)
 			continue
 		}
 		f.defaults()
 		f.explicit = true
-		method, path := splitKey(key)
 		if method == "HEAD" {
 			f.StaticResponse = staticHeadersOnly(f.StaticResponse)
 		}
-		idx := methodIdx(method)
-		if idx >= 0 {
-			// Param or wildcard route: matched segment by segment.
-			if wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0 {
-				f.handlers = nil
-				f.path = ""
-				f.pathClean = false
-				ft.prefixes[idx] = append(ft.prefixes[idx], newPrefixPreset(path, f))
-			} else {
-				if ft.routes[idx] == nil {
-					ft.routes[idx] = make(map[string]Preset, 4)
-				}
-				f.path = path
-				f.pathClean = !containsDotPercent(path)
-				ft.routes[idx][path] = f
-			}
-		} else {
-			if ft.fallback == nil {
-				ft.fallback = make(map[string]Preset, 2)
-			}
-			ft.fallback[key] = f
+		if !isDynamic(path) {
+			f.path = path
+			f.pathClean = !containsDotPercent(path)
 		}
+		ft.methodFor(method).add(path, f)
 	}
-	for i := range ft.prefixes {
-		ps := ft.prefixes[i]
+	sortPrefixes := func(ps []prefixPreset) {
 		sort.Slice(ps, func(a, b int) bool {
 			return morePrecise(ps[a].segs, ps[b].segs, ps[a].pattern, ps[b].pattern)
 		})
 	}
+	for i := range ft.std {
+		sortPrefixes(ft.std[i].prefixes)
+	}
+	for _, mp := range ft.custom {
+		sortPrefixes(mp.prefixes)
+	}
 	return ft
 }
 
-// addDefaultRoute records a route that takes the default preset, so a less
-// specific param or wildcard preset does not answer for it.
-func (ft *PresetTable) addDefaultRoute(idx int, path string) {
-	d := ft.def
-	if idx == mHead {
-		d = ft.defHead
+func (ft *PresetTable) methodFor(method string) *methodPresets {
+	if idx := methodIdx(method); idx >= 0 {
+		return &ft.std[idx]
 	}
-	if wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0 {
-		ft.prefixes[idx] = append(ft.prefixes[idx], newPrefixPreset(path, d))
-		return
+	if ft.custom == nil {
+		ft.custom = make(map[string]*methodPresets, 2)
 	}
-	if ft.routes[idx] == nil {
-		ft.routes[idx] = make(map[string]Preset, 4)
+	mp := ft.custom[method]
+	if mp == nil {
+		mp = &methodPresets{}
+		ft.custom[method] = mp
 	}
-	ft.routes[idx][path] = d
+	return mp
 }
 
-// Lookup returns the Preset for the given method and path.
-// Two map reads, zero allocation. Returns default if not found.
+// Lookup returns the Preset for the given method and path, or the default.
+// Zero allocation.
 func (ft *PresetTable) Lookup(method, path string) Preset {
 	if ft.cleanPaths && containsDotPercent(path) {
 		if p, err := cleanPath(path); err == nil {
@@ -259,22 +272,20 @@ func (ft *PresetTable) Lookup(method, path string) Preset {
 		}
 	}
 	idx := methodIdx(method)
+	var mp *methodPresets
 	if idx >= 0 {
-		if m := ft.routes[idx]; m != nil {
-			if f, ok := m[path]; ok {
-				return f
-			}
+		mp = &ft.std[idx]
+	} else {
+		mp = ft.custom[method]
+	}
+	if mp != nil {
+		if f, ok := mp.routes[path]; ok {
+			return f
 		}
-		// Check param route prefixes
-		for i := range ft.prefixes[idx] {
-			if pf := &ft.prefixes[idx][i]; pf.matches(path) {
+		for i := range mp.prefixes {
+			if pf := &mp.prefixes[i]; pf.matches(path) {
 				return pf.preset
 			}
-		}
-	} else if ft.fallback != nil {
-		key := method + " " + path
-		if f, ok := ft.fallback[key]; ok {
-			return f
 		}
 	}
 	if idx == mHead {

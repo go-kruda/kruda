@@ -154,8 +154,9 @@ func (p Preset) applyRoute(rc *routeConfig) {
 }
 
 func (f *Preset) defaults() {
-	// A static response runs no handler, so there is nothing to hand off.
-	if f.Dispatch == 0 || f.StaticResponse != nil {
+	// A static response runs no handler, so there is nothing to hand off. A
+	// mode Wing does not know has no dispatch path, so it runs inline too.
+	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
 }

@@ -193,6 +193,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a percent-encoded path such as `/ev%65nts` reached the `/events` handler
   without its preset, so a Stream route answered 500. Lookup now checks the
   constraint and cleans the path the way the router does.
+- Wing: presets for `OPTIONS` and custom methods matched exact paths only, so
+  a param or wildcard preset on them never applied. They now match like GET,
+  and their lookup no longer builds a string per request.
+- Wing: a preset with a dispatch mode Wing does not define now runs inline.
+  It previously ran on the Pool when one existed and otherwise on the event
+  loop through an unchecked completion path.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
   it gave up on its own. Contexts are now cancelled first; sockets stay open

@@ -182,6 +182,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   had no preset. With `StaticText` on `/files/*path`, a request to a guarded
   `/files/account` got the static response and skipped its middleware. Routes
   without a preset are now recorded, so the route the router picks decides.
+- Wing: when the handler Pool was full, the worker sent its 503 through its
+  own completion channel. With that channel full, the worker waited on itself
+  and stopped serving. The 503 is now queued on the connection directly.
+- Wing: a fragmented POST to a Takeover route ran inline on the event loop
+  when an earlier pipelined reply on the same connection was still unsent. It
+  now runs as Spawn, off the loop, and its reply follows the earlier one.
+- Wing: preset lookup ignored `:name<regex>` constraints, so a regex route's
+  preset applied to values the router sent elsewhere. With `WithPathTraversal`,
+  a percent-encoded path such as `/ev%65nts` reached the `/events` handler
+  without its preset, so a Stream route answered 500. Lookup now checks the
+  constraint and cleans the path the way the router does.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
   it gave up on its own. Contexts are now cancelled first; sockets stay open

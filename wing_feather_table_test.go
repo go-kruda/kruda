@@ -160,3 +160,32 @@ func TestPresetTableParamRoutesMatchWholePattern(t *testing.T) {
 		}
 	}
 }
+
+// TestPresetTableRegexParamFollowsRouter gives a regex-constrained param a
+// preset next to a plain param route without one. The router skips the regex
+// route for a value its regex rejects, so the preset must not apply there.
+func TestPresetTableRegexParamFollowsRouter(t *testing.T) {
+	routes := map[string]Preset{
+		"GET /jobs/:id<[0-9]+>":  Spear,
+		"GET /jobs/:slug":        {inherit: true},
+		"GET /runs/:id<[0-9]+>?": Arrow,
+	}
+	def := Render
+	for range 20 {
+		ft := NewPresetTable(routes, def)
+		for _, tc := range []struct {
+			path string
+			want Preset
+		}{
+			{"/jobs/42", Spear},
+			{"/jobs/latest", def},
+			{"/runs/7", Arrow},
+			{"/runs", Arrow},
+			{"/runs/x", def},
+		} {
+			if got := ft.Lookup("GET", tc.path); got.Dispatch != tc.want.Dispatch || got.ResponseMode != tc.want.ResponseMode {
+				t.Fatalf("Lookup(%s) = %v/%v, want %v/%v", tc.path, got.Dispatch, got.ResponseMode, tc.want.Dispatch, tc.want.ResponseMode)
+			}
+		}
+	}
+}

@@ -544,6 +544,9 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 	}
 	doneCh := make(chan doneMsg, 4096)
 	ft := NewPresetTable(cfg.Presets, cfg.DefaultPreset)
+	if app, ok := handler.(*App); ok {
+		ft.cleanPaths = app.config.PathTraversal
+	}
 	lg := cfg.Logger
 	if lg == nil {
 		lg = slog.Default()
@@ -1056,6 +1059,15 @@ func (w *worker) tryParse(c *conn) {
 	}
 }
 
+// reject503 answers a request the full Pool could not take and closes the
+// connection after it. It queues on the connection rather than doneCh: this
+// worker is doneCh's only reader, so a full doneCh would block it for good.
+func (w *worker) reject503(c *conn) {
+	c.pending--
+	c.keepAlive = false
+	c.sendBuf = append(c.sendBuf, resp503...)
+}
+
 // dispatchAsync hands a parsed request to its preset's Pool, Spawn or
 // Takeover dispatch. The caller has already consumed the request's bytes from
 // c.readBuf and checked that no other handler owns the connection.
@@ -1083,7 +1095,7 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 					"worker", w.id, "pool_size", w.config.HandlerPoolSize)
 			}
 			releaseRequest(req)
-			w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
+			w.reject503(c)
 		}
 		// Send any buffered inline responses, then wait for pool completion.
 		if c.sendN < len(c.sendBuf) {
@@ -1179,7 +1191,8 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 			case w.pool.jobs <- job:
 			default:
 				releaseRequest(req)
-				w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
+				w.reject503(c)
+				w.eng.SubmitSend(c.fd, nil)
 			}
 		} else {
 			resp := acquireResponseFor(req)
@@ -1393,9 +1406,9 @@ func (w *worker) finishBodyAccum(c *conn) {
 
 // dispatchAccumulated dispatches a body-accumulated request with its preset's
 // dispatch, so a Pool, Spawn or Takeover route does not run on the event loop
-// because its body arrived in pieces. It runs inline only when the connection
-// is not free to hand off: another handler still owns it, or, for Takeover,
-// earlier responses have not been sent yet.
+// because its body arrived in pieces. It runs inline only when another
+// handler still owns the connection. A Takeover route behind an unsent reply
+// runs as Spawn, since the fd cannot be detached yet.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	c.readDrained = false
 	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
@@ -1409,8 +1422,12 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 		return
 	}
 	finalizeRequestCommonHeaders(req)
-	if f.Dispatch != Inline && c.pending == 0 &&
-		(f.Dispatch != Takeover || (c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil)) {
+	if f.Dispatch != Inline && c.pending == 0 {
+		if f.Dispatch == Takeover && (c.sendN < len(c.sendBuf) || c.sendFileFd != 0 || c.fileStream != nil) {
+			// An earlier reply is still unsent, so the fd cannot be detached.
+			// Spawn keeps the handler off the loop and queues its reply after.
+			f.Dispatch = Spawn
+		}
 		w.dispatchAsync(c, req, f)
 		return
 	}

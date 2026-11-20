@@ -2,6 +2,7 @@ package kruda
 
 import (
 	"bytes"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -24,18 +25,53 @@ type PresetTable struct {
 	fallback map[string]Preset         // custom methods
 	def      Preset
 	defHead  Preset // def without a static body, for HEAD
+	// cleanPaths mirrors App PathTraversal: the router sees the cleaned path,
+	// so the lookup must too.
+	cleanPaths bool
 }
 
 type prefixPreset struct {
 	pattern string
-	segs    []string // pattern split on '/', without the leading empty segment
+	segs    []string         // pattern split on '/', without the leading empty segment
+	rx      []*regexp.Regexp // per segment; set only for a ":name<re>" constraint
 	preset  Preset
+}
+
+func newPrefixPreset(path string, f Preset) prefixPreset {
+	pf := prefixPreset{pattern: path, segs: strings.Split(strings.TrimPrefix(path, "/"), "/"), preset: f}
+	for i, seg := range pf.segs {
+		if rx := segRegex(seg); rx != nil {
+			if pf.rx == nil {
+				pf.rx = make([]*regexp.Regexp, len(pf.segs))
+			}
+			pf.rx[i] = rx
+		}
+	}
+	return pf
+}
+
+// segRegex compiles a ":name<re>" constraint the way the router does. An
+// invalid one yields nil; the router has already rejected it at registration.
+func segRegex(seg string) *regexp.Regexp {
+	if seg == "" || seg[0] != ':' {
+		return nil
+	}
+	raw := strings.TrimSuffix(seg[1:], "?")
+	start, end := strings.IndexByte(raw, '<'), strings.IndexByte(raw, '>')
+	if start < 0 || end < start {
+		return nil
+	}
+	rx, err := regexp.Compile("^" + raw[start+1:end] + "$")
+	if err != nil {
+		return nil
+	}
+	return rx
 }
 
 // matches reports whether path fits the route pattern segment by segment:
 // ":name" takes one non-empty segment (":name?" may also be absent at the end),
 // "*name" takes the rest, anything else must be equal. A regex constraint on
-// a param is not checked here; the router still decides the handler.
+// a param must also hold, as the router skips the route otherwise.
 func (pf *prefixPreset) matches(path string) bool {
 	if len(path) == 0 || path[0] != '/' {
 		return false
@@ -57,6 +93,9 @@ func (pf *prefixPreset) matches(path string) bool {
 			if part == "" {
 				return last && strings.HasSuffix(seg, "?") && end == len(rest)
 			}
+			if pf.rx != nil && pf.rx[i] != nil && !pf.rx[i].MatchString(part) {
+				return false
+			}
 		} else if part != seg {
 			return false
 		}
@@ -73,13 +112,17 @@ func (pf *prefixPreset) matches(path string) bool {
 	return rest == ""
 }
 
-// segRank orders segment kinds the way the router prefers them.
+// segRank orders segment kinds the way the router prefers them. A regex param
+// ranks before a plain one: where both fit a value, the constrained route is
+// the one meant for it.
 func segRank(seg string) int {
 	switch {
-	case seg != "" && seg[0] == ':':
+	case seg != "" && seg[0] == ':' && strings.IndexByte(seg, '<') > 0:
 		return 1
-	case seg != "" && seg[0] == '*':
+	case seg != "" && seg[0] == ':':
 		return 2
+	case seg != "" && seg[0] == '*':
+		return 3
 	}
 	return 0
 }
@@ -165,9 +208,7 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 				f.handlers = nil
 				f.path = ""
 				f.pathClean = false
-				ft.prefixes[idx] = append(ft.prefixes[idx], prefixPreset{
-					pattern: path, segs: strings.Split(strings.TrimPrefix(path, "/"), "/"), preset: f,
-				})
+				ft.prefixes[idx] = append(ft.prefixes[idx], newPrefixPreset(path, f))
 			} else {
 				if ft.routes[idx] == nil {
 					ft.routes[idx] = make(map[string]Preset, 4)
@@ -200,9 +241,7 @@ func (ft *PresetTable) addDefaultRoute(idx int, path string) {
 		d = ft.defHead
 	}
 	if wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0 {
-		ft.prefixes[idx] = append(ft.prefixes[idx], prefixPreset{
-			pattern: path, segs: strings.Split(strings.TrimPrefix(path, "/"), "/"), preset: d,
-		})
+		ft.prefixes[idx] = append(ft.prefixes[idx], newPrefixPreset(path, d))
 		return
 	}
 	if ft.routes[idx] == nil {
@@ -214,6 +253,11 @@ func (ft *PresetTable) addDefaultRoute(idx int, path string) {
 // Lookup returns the Preset for the given method and path.
 // Two map reads, zero allocation. Returns default if not found.
 func (ft *PresetTable) Lookup(method, path string) Preset {
+	if ft.cleanPaths && containsDotPercent(path) {
+		if p, err := cleanPath(path); err == nil {
+			path = p
+		}
+	}
 	idx := methodIdx(method)
 	if idx >= 0 {
 		if m := ft.routes[idx]; m != nil {

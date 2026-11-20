@@ -90,3 +90,29 @@ func TestWingFullPoolAnswers503AndKeepsTheLoopFree(t *testing.T) {
 		t.Fatalf("inline route while the pool is full = %d, want 200 (0 means the loop was blocked)", got)
 	}
 }
+
+// TestWingFullPoolRejectionWithFullDoneCh rejects a request while both the
+// Pool queue and doneCh are full. The worker is doneCh's only reader, so the
+// rejection must not wait on doneCh; it is queued on the connection instead.
+func TestWingFullPoolRejectionWithFullDoneCh(t *testing.T) {
+	for _, d := range []DispatchMode{Pool, DispatchMode(99)} {
+		w, _ := newTestWorker(0)
+		w.pool = &workerPool{jobs: make(chan handlerJob)}
+		w.doneCh = make(chan doneMsg)
+		c := newTestConn(7)
+		c.keepAlive = true
+		w.conns[c.fd] = c
+		req := acquireRequest()
+		req.keepAlive = true
+		returned := make(chan struct{})
+		go func() { w.dispatchAsync(c, req, Preset{Dispatch: d}); close(returned) }()
+		select {
+		case <-returned:
+		case <-time.After(time.Second):
+			t.Fatalf("dispatch %v: worker blocked publishing its own 503", d)
+		}
+		if string(c.sendBuf) != string(resp503) || c.pending != 0 || c.keepAlive {
+			t.Fatalf("dispatch %v: sendBuf=%q pending=%d keepAlive=%v", d, c.sendBuf, c.pending, c.keepAlive)
+		}
+	}
+}

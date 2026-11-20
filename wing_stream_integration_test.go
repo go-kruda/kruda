@@ -385,3 +385,28 @@ func TestWingStream_AfterTakeoverRequest(t *testing.T) {
 		t.Fatalf("event = %q", ev)
 	}
 }
+
+// TestWingStream_PercentEncodedPath requests a Stream route through a
+// percent-encoded path. With PathTraversal on, the router cleans the path and
+// runs the Stream handler, so Wing must pick the same route's preset.
+func TestWingStream_PercentEncodedPath(t *testing.T) {
+	app := New(Wing(), WithPathTraversal())
+	app.Get("/events", func(c *Ctx) error {
+		return c.SSE(func(s *SSEStream) error { return s.Data("hello") })
+	}, Stream)
+	addr, stop := startWingApp(t, app)
+	defer stop()
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	r := bufio.NewReader(conn)
+	if _, err := conn.Write([]byte("GET /ev%65nts HTTP/1.1\r\nHost: h\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if hdr := readHeaders(t, r); !strings.HasPrefix(hdr, "HTTP/1.1 200") || !strings.Contains(hdr, "text/event-stream") {
+		t.Fatalf("/ev%%65nts: %q", hdr)
+	}
+}

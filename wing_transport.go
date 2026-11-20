@@ -1036,146 +1036,8 @@ func (w *worker) tryParse(c *conn) {
 				releaseRequest(req)
 			}
 
-		case Pool:
-			// Dispatch to goroutine pool.
-			c.keepAlive = req.keepAlive
-			c.pending++
-			job := handlerJob{
-				req:          req,
-				fd:           c.fd,
-				keepAlive:    req.keepAlive,
-				responseMode: f.ResponseMode,
-				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
-			}
-			select {
-			case w.pool.jobs <- job:
-			default:
-				// Pool saturated. Running the handler here would block this
-				// loop's other connections for as long as the handler waits.
-				if !w.poolFullWarned && w.logger != nil {
-					w.poolFullWarned = true
-					w.logger.Warn("kruda: Wing handler pool is full, answering 503; raise WingConfig.HandlerPoolSize if this repeats",
-						"worker", w.id, "pool_size", w.config.HandlerPoolSize)
-				}
-				releaseRequest(req)
-				w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
-			}
-			// Send any buffered inline responses, then wait for pool completion.
-			if c.sendN < len(c.sendBuf) {
-				w.eng.SubmitSend(c.fd, nil)
-			}
-			return
-
-		case Spawn:
-			// New goroutine per request.
-			c.keepAlive = req.keepAlive
-			c.pending++
-			directWrite := c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil
-			w.dispatchWG.Add(1)
-			go func(req *wingRequest, fd int32, ka, directWrite bool, f Preset) {
-				defer w.dispatchWG.Done()
-				resp := acquireResponseFor(req)
-				resp.responseMode = f.ResponseMode
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							resp.WriteHeader(500)
-							resp.Write([]byte("Internal Server Error\n"))
-						}
-					}()
-					w.serveRoute(resp, req, f)
-				}()
-				data := resp.buildZeroCopy()
-				stream := resp.fileStream
-				resp.fileStream = nil
-				releaseResponse(resp)
-				releaseRequest(req)
-				if !directWrite || stream != nil {
-					w.doneCh <- doneMsg{fd: fd, data: data, keepAlive: ka, stream: stream}
-					w.wake()
-					return
-				}
-				// Direct write from spawn goroutine.
-				if len(data) == 0 {
-					w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
-					w.wake()
-					return
-				}
-				n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
-				if e == 0 && int(n) == len(data) {
-					w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
-				} else {
-					written := 0
-					if e == 0 {
-						written = int(n)
-					}
-					w.doneCh <- doneMsg{fd: fd, data: data[written:], keepAlive: ka}
-				}
-				w.wake()
-			}(req, c.fd, req.keepAlive, directWrite, f)
-			if c.sendN < len(c.sendBuf) {
-				w.eng.SubmitSend(c.fd, nil)
-			}
-			return
-
-		case Takeover:
-			// Goroutine takes over the connection with blocking I/O.
-			// Detach fd from epoll so the goroutine owns it exclusively.
-			c.keepAlive = req.keepAlive
-			c.pending++
-			c.takenOver = true
-			w.eng.Detach(c.fd)
-			var leftover []byte
-			if c.readN > 0 {
-				leftover = make([]byte, c.readN)
-				copy(leftover, c.readBuf[:c.readN])
-				c.readN = 0
-			}
-			w.dispatchWG.Add(1)
-			go func() {
-				defer w.dispatchWG.Done()
-				w.takeoverLoop(req, c.fd, leftover, f.ResponseMode)
-			}()
-			return
-
 		default:
-			// Persist or unknown — treat as Pool for now.
-			c.keepAlive = req.keepAlive
-			c.pending++
-			job := handlerJob{
-				req:          req,
-				fd:           c.fd,
-				keepAlive:    req.keepAlive,
-				responseMode: f.ResponseMode,
-				directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
-			}
-			if w.pool != nil {
-				select {
-				case w.pool.jobs <- job:
-				default:
-					releaseRequest(req)
-					w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
-				}
-			} else {
-				resp := acquireResponseFor(req)
-				resp.responseMode = f.ResponseMode
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							resp.WriteHeader(500)
-							resp.Write([]byte("Internal Server Error\n"))
-						}
-					}()
-					w.serveRoute(resp, req, f)
-				}()
-				data := resp.buildZeroCopy()
-				stream := resp.fileStream
-				resp.fileStream = nil
-				keepAlive := req.keepAlive
-				releaseResponse(resp)
-				releaseRequest(req)
-				w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: keepAlive, stream: stream}
-			}
+			w.dispatchAsync(c, req, f)
 			return
 		}
 
@@ -1188,6 +1050,155 @@ func (w *worker) tryParse(c *conn) {
 		w.directSend(c)
 	} else {
 		submitIdleRecv(w.eng, c.fd, nil, 0)
+	}
+}
+
+// dispatchAsync hands a parsed request to its preset's Pool, Spawn or
+// Takeover dispatch. The caller has already consumed the request's bytes from
+// c.readBuf and checked that no other handler owns the connection.
+func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
+	switch f.Dispatch {
+	case Pool:
+		// Dispatch to goroutine pool.
+		c.keepAlive = req.keepAlive
+		c.pending++
+		job := handlerJob{
+			req:          req,
+			fd:           c.fd,
+			keepAlive:    req.keepAlive,
+			responseMode: f.ResponseMode,
+			directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
+		}
+		select {
+		case w.pool.jobs <- job:
+		default:
+			// Pool saturated. Running the handler here would block this
+			// loop's other connections for as long as the handler waits.
+			if !w.poolFullWarned && w.logger != nil {
+				w.poolFullWarned = true
+				w.logger.Warn("kruda: Wing handler pool is full, answering 503; raise WingConfig.HandlerPoolSize if this repeats",
+					"worker", w.id, "pool_size", w.config.HandlerPoolSize)
+			}
+			releaseRequest(req)
+			w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
+		}
+		// Send any buffered inline responses, then wait for pool completion.
+		if c.sendN < len(c.sendBuf) {
+			w.eng.SubmitSend(c.fd, nil)
+		}
+		return
+
+	case Spawn:
+		// New goroutine per request.
+		c.keepAlive = req.keepAlive
+		c.pending++
+		directWrite := c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil
+		w.dispatchWG.Add(1)
+		go func(req *wingRequest, fd int32, ka, directWrite bool, f Preset) {
+			defer w.dispatchWG.Done()
+			resp := acquireResponseFor(req)
+			resp.responseMode = f.ResponseMode
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						resp.WriteHeader(500)
+						resp.Write([]byte("Internal Server Error\n"))
+					}
+				}()
+				w.serveRoute(resp, req, f)
+			}()
+			data := resp.buildZeroCopy()
+			stream := resp.fileStream
+			resp.fileStream = nil
+			releaseResponse(resp)
+			releaseRequest(req)
+			if !directWrite || stream != nil {
+				w.doneCh <- doneMsg{fd: fd, data: data, keepAlive: ka, stream: stream}
+				w.wake()
+				return
+			}
+			// Direct write from spawn goroutine.
+			if len(data) == 0 {
+				w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
+				w.wake()
+				return
+			}
+			n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
+			if e == 0 && int(n) == len(data) {
+				w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
+			} else {
+				written := 0
+				if e == 0 {
+					written = int(n)
+				}
+				w.doneCh <- doneMsg{fd: fd, data: data[written:], keepAlive: ka}
+			}
+			w.wake()
+		}(req, c.fd, req.keepAlive, directWrite, f)
+		if c.sendN < len(c.sendBuf) {
+			w.eng.SubmitSend(c.fd, nil)
+		}
+		return
+
+	case Takeover:
+		// Goroutine takes over the connection with blocking I/O.
+		// Detach fd from epoll so the goroutine owns it exclusively.
+		c.keepAlive = req.keepAlive
+		c.pending++
+		c.takenOver = true
+		w.eng.Detach(c.fd)
+		var leftover []byte
+		if c.readN > 0 {
+			leftover = make([]byte, c.readN)
+			copy(leftover, c.readBuf[:c.readN])
+			c.readN = 0
+		}
+		w.dispatchWG.Add(1)
+		go func() {
+			defer w.dispatchWG.Done()
+			w.takeoverLoop(req, c.fd, leftover, f.ResponseMode)
+		}()
+		return
+
+	default:
+		// Persist or unknown — treat as Pool for now.
+		c.keepAlive = req.keepAlive
+		c.pending++
+		job := handlerJob{
+			req:          req,
+			fd:           c.fd,
+			keepAlive:    req.keepAlive,
+			responseMode: f.ResponseMode,
+			directWrite:  c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil,
+		}
+		if w.pool != nil {
+			select {
+			case w.pool.jobs <- job:
+			default:
+				releaseRequest(req)
+				w.doneCh <- doneMsg{fd: c.fd, data: resp503, keepAlive: false}
+			}
+		} else {
+			resp := acquireResponseFor(req)
+			resp.responseMode = f.ResponseMode
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						resp.WriteHeader(500)
+						resp.Write([]byte("Internal Server Error\n"))
+					}
+				}()
+				w.serveRoute(resp, req, f)
+			}()
+			data := resp.buildZeroCopy()
+			stream := resp.fileStream
+			resp.fileStream = nil
+			keepAlive := req.keepAlive
+			releaseResponse(resp)
+			releaseRequest(req)
+			w.doneCh <- doneMsg{fd: c.fd, data: data, keepAlive: keepAlive, stream: stream}
+		}
+		return
 	}
 }
 
@@ -1377,9 +1388,11 @@ func (w *worker) finishBodyAccum(c *conn) {
 	w.dispatchAccumulated(c, req, f)
 }
 
-// dispatchAccumulated dispatches a body-accumulated request.
-// Accumulated bodies are always dispatched inline; non-inline presets
-// with large bodies are uncommon and correctness takes precedence here.
+// dispatchAccumulated dispatches a body-accumulated request with its preset's
+// dispatch, so a Pool, Spawn or Takeover route does not run on the event loop
+// because its body arrived in pieces. It runs inline only when the connection
+// is not free to hand off: another handler still owns it, or, for Takeover,
+// earlier responses have not been sent yet.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	c.readDrained = false
 	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
@@ -1393,6 +1406,11 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 		return
 	}
 	finalizeRequestCommonHeaders(req)
+	if f.Dispatch != Inline && c.pending == 0 &&
+		(f.Dispatch != Takeover || (c.sendN >= len(c.sendBuf) && c.sendFileFd == 0 && c.fileStream == nil)) {
+		w.dispatchAsync(c, req, f)
+		return
+	}
 	resp := acquireResponseFor(req)
 	resp.responseMode = f.ResponseMode
 	start := time.Now().UnixNano()

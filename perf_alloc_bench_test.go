@@ -14,7 +14,11 @@ import (
 
 // retainedKB reports heap still reachable after one GC, which keeps pooled
 // objects alive (sync.Pool moves them to its victim cache on the first GC).
+// retainedKB reports live heap growth since before. Two GCs empty sync.Pool
+// victim caches, as baselineHeap does; with one, a pooled buffer counts only
+// when no GC happened after its last Put, so the metric flips run to run.
 func retainedKB(b *testing.B, before runtime.MemStats) {
+	runtime.GC()
 	runtime.GC()
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
@@ -117,4 +121,5 @@ func BenchmarkPerfJSONPoolRetention(b *testing.B) {
 	}
 	b.StopTimer()
 	retainedKB(b, before)
+	runtime.KeepAlive(app)
 }

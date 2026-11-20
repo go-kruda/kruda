@@ -178,6 +178,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wing: on a keep-alive connection that a Takeover route already owned, a
   later request to a `Stream` route got a buffered writer, so `c.SSE()`
   answered 500. A later `Stream` or `Hijack` request now gets its own writer.
+- Wing: a param or wildcard preset answered for a more specific route that
+  had no preset. With `StaticText` on `/files/*path`, a request to a guarded
+  `/files/account` got the static response and skipped its middleware. Routes
+  without a preset are now recorded, so the route the router picks decides.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
   it gave up on its own. Contexts are now cancelled first; sockets stay open

@@ -130,6 +130,7 @@ type Preset struct {
 	path           string
 	pathClean      bool
 	explicit       bool // set for preset-table entries; selects the advisor message variant
+	inherit        bool // a route registered without a preset; it takes the default
 }
 
 // PresetOption modifies a Preset in-place.

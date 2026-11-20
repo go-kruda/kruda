@@ -187,6 +187,9 @@ func (t *Transport) SetRoutePreset(method, path string, preset any) {
 	if t.config.Presets == nil {
 		t.config.Presets = make(map[string]Preset)
 	}
+	if _, taken := t.config.Presets[method+" "+path]; taken && f.inherit {
+		return
+	}
 	f.path = path
 	f.pathClean = !containsDotPercent(path)
 	t.config.Presets[method+" "+path] = f

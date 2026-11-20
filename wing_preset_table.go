@@ -135,7 +135,23 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 	def.defaults()
 	ft := PresetTable{def: def, defHead: def}
 	ft.defHead.StaticResponse = staticHeadersOnly(def.StaticResponse)
+	// Routes without a preset matter only where a param or wildcard preset of
+	// the same method could otherwise answer for them.
+	var dynamic [mCount]bool
 	for key, f := range routes {
+		method, path := splitKey(key)
+		if idx := methodIdx(method); idx >= 0 && !f.inherit && (wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0) {
+			dynamic[idx] = true
+		}
+	}
+	for key, f := range routes {
+		if f.inherit {
+			method, path := splitKey(key)
+			if idx := methodIdx(method); idx >= 0 && dynamic[idx] {
+				ft.addDefaultRoute(idx, path)
+			}
+			continue
+		}
 		f.defaults()
 		f.explicit = true
 		method, path := splitKey(key)
@@ -174,6 +190,25 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 		})
 	}
 	return ft
+}
+
+// addDefaultRoute records a route that takes the default preset, so a less
+// specific param or wildcard preset does not answer for it.
+func (ft *PresetTable) addDefaultRoute(idx int, path string) {
+	d := ft.def
+	if idx == mHead {
+		d = ft.defHead
+	}
+	if wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0 {
+		ft.prefixes[idx] = append(ft.prefixes[idx], prefixPreset{
+			pattern: path, segs: strings.Split(strings.TrimPrefix(path, "/"), "/"), preset: d,
+		})
+		return
+	}
+	if ft.routes[idx] == nil {
+		ft.routes[idx] = make(map[string]Preset, 4)
+	}
+	ft.routes[idx][path] = d
 }
 
 // Lookup returns the Preset for the given method and path.

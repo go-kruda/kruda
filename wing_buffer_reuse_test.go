@@ -252,8 +252,8 @@ func TestWingOwnedBodyPipelinedSurplus(t *testing.T) {
 }
 
 // TestWingNegativeStreamSize declares a negative stream size on every preset.
-// The worker must not crash and must keep serving new connections. (What the
-// response says for such a size is a separate question.)
+// The size cannot be sent as Content-Length, so the response must be a
+// well-framed 500, and the worker must keep serving.
 func TestWingNegativeStreamSize(t *testing.T) {
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		if r.Path() == "/neg" {
@@ -293,8 +293,16 @@ func TestWingNegativeStreamSize(t *testing.T) {
 			if _, err := conn.Write([]byte("GET /neg HTTP/1.1\r\nHost: x\r\n\r\n")); err != nil {
 				t.Fatal(err)
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-			_, _ = br.ReadString('\n')
+			resp, err := http.ReadResponse(br, nil)
+			if err != nil {
+				t.Fatalf("negative size produced an unreadable response: %v", err)
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != 500 || resp.ContentLength != 0 {
+				t.Fatalf("negative size: status %d, Content-Length %d; want 500 and 0", resp.StatusCode, resp.ContentLength)
+			}
+			get(t, conn, br, "/after")
 			conn.Close()
 
 			c2, err := net.Dial("tcp", addr)

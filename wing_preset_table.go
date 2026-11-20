@@ -1,6 +1,10 @@
 package kruda
 
-import "bytes"
+import (
+	"bytes"
+	"sort"
+	"strings"
+)
 
 // PresetTable maps method+path to a Preset for per-route dispatch decisions.
 // Lookup is two map reads (method → path → Preset), zero allocation.
@@ -16,15 +20,82 @@ import "bytes"
 //	})
 type PresetTable struct {
 	routes   [mCount]map[string]Preset // indexed by method for O(1) first lookup
-	prefixes [mCount][]prefixPreset    // param routes: prefix before ':'
+	prefixes [mCount][]prefixPreset    // param and wildcard routes, most specific first
 	fallback map[string]Preset         // custom methods
 	def      Preset
 	defHead  Preset // def without a static body, for HEAD
 }
 
 type prefixPreset struct {
-	prefix string
-	preset Preset
+	pattern string
+	segs    []string // pattern split on '/', without the leading empty segment
+	preset  Preset
+}
+
+// matches reports whether path fits the route pattern segment by segment:
+// ":name" takes one non-empty segment (":name?" may also be absent at the end),
+// "*name" takes the rest, anything else must be equal. A regex constraint on
+// a param is not checked here; the router still decides the handler.
+func (pf *prefixPreset) matches(path string) bool {
+	if len(path) == 0 || path[0] != '/' {
+		return false
+	}
+	rest := path[1:]
+	for i, seg := range pf.segs {
+		if seg != "" && seg[0] == '*' {
+			return true
+		}
+		end := strings.IndexByte(rest, '/')
+		var part string
+		if end < 0 {
+			part, end = rest, len(rest)
+		} else {
+			part = rest[:end]
+		}
+		last := i == len(pf.segs)-1
+		if seg != "" && seg[0] == ':' {
+			if part == "" {
+				return last && strings.HasSuffix(seg, "?") && end == len(rest)
+			}
+		} else if part != seg {
+			return false
+		}
+		if last {
+			return end == len(rest)
+		}
+		if end == len(rest) {
+			// Path ended; only an optional param or a wildcard may follow.
+			next := pf.segs[i+1]
+			return i+1 == len(pf.segs)-1 && next != "" && (next[0] == '*' || (next[0] == ':' && strings.HasSuffix(next, "?")))
+		}
+		rest = rest[end+1:]
+	}
+	return rest == ""
+}
+
+// segRank orders segment kinds the way the router prefers them.
+func segRank(seg string) int {
+	switch {
+	case seg != "" && seg[0] == ':':
+		return 1
+	case seg != "" && seg[0] == '*':
+		return 2
+	}
+	return 0
+}
+
+// morePrecise orders patterns so the first match is the most specific one,
+// and so the order does not depend on map iteration.
+func morePrecise(a, b []string, pa, pb string) bool {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if ra, rb := segRank(a[i]), segRank(b[i]); ra != rb {
+			return ra < rb
+		}
+	}
+	if len(a) != len(b) {
+		return len(a) > len(b)
+	}
+	return pa < pb
 }
 
 // method index constants matching Wing's HTTP parser wingInternMethod output.
@@ -73,13 +144,13 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 		}
 		idx := methodIdx(method)
 		if idx >= 0 {
-			// Param route: store as prefix match
-			if colonIdx := wingIndexByte(path, ':'); colonIdx > 0 {
+			// Param or wildcard route: matched segment by segment.
+			if wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0 {
 				f.handlers = nil
 				f.path = ""
 				f.pathClean = false
 				ft.prefixes[idx] = append(ft.prefixes[idx], prefixPreset{
-					prefix: path[:colonIdx], preset: f,
+					pattern: path, segs: strings.Split(strings.TrimPrefix(path, "/"), "/"), preset: f,
 				})
 			} else {
 				if ft.routes[idx] == nil {
@@ -96,6 +167,12 @@ func NewPresetTable(routes map[string]Preset, def Preset) PresetTable {
 			ft.fallback[key] = f
 		}
 	}
+	for i := range ft.prefixes {
+		ps := ft.prefixes[i]
+		sort.Slice(ps, func(a, b int) bool {
+			return morePrecise(ps[a].segs, ps[b].segs, ps[a].pattern, ps[b].pattern)
+		})
+	}
 	return ft
 }
 
@@ -110,8 +187,8 @@ func (ft *PresetTable) Lookup(method, path string) Preset {
 			}
 		}
 		// Check param route prefixes
-		for _, pf := range ft.prefixes[idx] {
-			if len(path) >= len(pf.prefix) && path[:len(pf.prefix)] == pf.prefix {
+		for i := range ft.prefixes[idx] {
+			if pf := &ft.prefixes[idx][i]; pf.matches(path) {
 				return pf.preset
 			}
 		}

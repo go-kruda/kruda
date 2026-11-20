@@ -122,3 +122,41 @@ func BenchmarkPresetTableLookupExactOne(b *testing.B) {
 		_ = ft.Lookup("GET", "/plaintext")
 	}
 }
+
+func TestPresetTableParamRoutesMatchWholePattern(t *testing.T) {
+	db := Spear
+	plain := Arrow
+	static := Preset{Dispatch: Inline, StaticResponse: []byte("HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\ns")}
+	routes := map[string]Preset{
+		"GET /users/:id":         db,
+		"GET /users/:id/avatar":  plain,
+		"GET /items/:id/summary": static,
+		"GET /files/*path":       plain,
+		"GET /tags/:name?":       db,
+	}
+	def := Render
+	for range 20 { // map order differs per build; every build must agree
+		ft := NewPresetTable(routes, def)
+		for _, tc := range []struct {
+			path string
+			want Preset
+		}{
+			{"/users/7", db},
+			{"/users/7/avatar", plain},
+			{"/users/7/other", def},
+			{"/items/42/summary", static},
+			{"/items/42/missing", def},
+			{"/items/42", def},
+			{"/files/a/b.txt", plain},
+			{"/files/", plain},
+			{"/tags", db},
+			{"/tags/go", db},
+			{"/tags/go/x", def},
+		} {
+			got := ft.Lookup("GET", tc.path)
+			if got.Dispatch != tc.want.Dispatch || got.ResponseMode != tc.want.ResponseMode || string(got.StaticResponse) != string(tc.want.StaticResponse) {
+				t.Fatalf("Lookup(%s) = %+v, want %+v", tc.path, got, tc.want)
+			}
+		}
+	}
+}

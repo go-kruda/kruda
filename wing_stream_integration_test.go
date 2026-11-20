@@ -345,3 +345,43 @@ func TestWingStream_WriteDeadlineUnblocksHandler(t *testing.T) {
 		t.Fatal("handler did not return within deadline despite stuck client")
 	}
 }
+
+// TestWingStream_AfterTakeoverRequest asks for a DB route and then, on the same
+// keep-alive connection, a Stream route. The Takeover connection must give the
+// second request a streaming writer instead of the buffered one.
+func TestWingStream_AfterTakeoverRequest(t *testing.T) {
+	app := New(Wing())
+	app.Get("/db", func(c *Ctx) error { return c.Text("db") }, DB)
+	app.Get("/events", func(c *Ctx) error {
+		return c.SSE(func(s *SSEStream) error { return s.Data("hello") })
+	}, Stream)
+	addr, stop := startWingApp(t, app)
+	defer stop()
+
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	r := bufio.NewReader(conn)
+	if _, err := conn.Write([]byte("GET /db HTTP/1.1\r\nHost: h\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if hdr := readHeaders(t, r); !strings.HasPrefix(hdr, "HTTP/1.1 200") {
+		t.Fatalf("/db: %q", hdr)
+	}
+	if _, err := r.Discard(2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte("GET /events HTTP/1.1\r\nHost: h\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	hdr := readHeaders(t, r)
+	if !strings.HasPrefix(hdr, "HTTP/1.1 200") || !strings.Contains(hdr, "text/event-stream") {
+		t.Fatalf("/events after /db: %q", hdr)
+	}
+	if ev := readSSEEvent(t, r); ev != "data: hello\n\n" {
+		t.Fatalf("event = %q", ev)
+	}
+}

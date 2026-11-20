@@ -1803,7 +1803,19 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	// out is serialized into again once the synchronous write has returned.
 	var out []byte
 
-	for {
+	for served := false; ; served = true {
+		if served {
+			// A later request on this connection may be a Stream or Hijack
+			// route, which needs its own writer rather than a buffered one.
+			switch w.presets.Lookup(req.method, req.path).ResponseMode {
+			case responseStream:
+				w.streamTakeover(req, fd, f)
+				return
+			case responseHijack:
+				w.hijackTakeover(req, fd, f, append([]byte(nil), buf[:readN]...))
+				return
+			}
+		}
 		// Handle request.
 		resp := acquireResponseFor(req)
 		func() {

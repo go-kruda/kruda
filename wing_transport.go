@@ -685,8 +685,10 @@ func (w *worker) sweepTimeouts(now int64) {
 			w.closeConn(fd)
 			continue
 		}
-		// Idle timeout: keep-alive conn with no activity.
-		if w.idleTimeout > 0 && c.readN == 0 && now-c.lastActive > w.idleTimeout {
+		// Idle timeout: keep-alive conn with no activity. A conn still sending a
+		// response is not idle; WriteTimeout bounds that instead.
+		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
+		if w.idleTimeout > 0 && c.readN == 0 && !sending && now-c.lastActive > w.idleTimeout {
 			w.closeConn(fd)
 			continue
 		}

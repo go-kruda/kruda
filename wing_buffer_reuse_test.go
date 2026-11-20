@@ -329,3 +329,40 @@ func TestAppendBodyStopsAtNeed(t *testing.T) {
 		t.Fatalf("surplus lost: len=%d", len(b))
 	}
 }
+
+type blockingCloser struct {
+	io.Reader
+	release chan struct{}
+	closed  chan struct{}
+}
+
+func (b *blockingCloser) Close() error {
+	<-b.release
+	close(b.closed)
+	return nil
+}
+
+// TestWingNegativeStreamSizeDoesNotWaitOnClose rejects a negative size with a
+// reader whose Close blocks. The rejection must not wait for Close, which
+// would stall an Inline worker, but the reader must still be closed.
+func TestWingNegativeStreamSizeDoesNotWaitOnClose(t *testing.T) {
+	rc := &blockingCloser{Reader: bytes.NewReader(nil), release: make(chan struct{}), closed: make(chan struct{})}
+	r := &wingResponse{}
+	returned := make(chan struct{})
+	go func() { r.SetFileStream(rc, -1); close(returned) }()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		close(rc.release)
+		t.Fatal("SetFileStream waited for the reader's Close")
+	}
+	if r.status != 500 {
+		t.Fatalf("status = %d, want 500", r.status)
+	}
+	close(rc.release)
+	select {
+	case <-rc.closed:
+	case <-time.After(time.Second):
+		t.Fatal("reader was never closed")
+	}
+}

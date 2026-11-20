@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,5 +88,37 @@ func TestWingShutdownCancelsPoolHandlerContext(t *testing.T) {
 	}
 	if !<-cancelled {
 		t.Fatal("Pool handler context was not cancelled by Shutdown")
+	}
+}
+
+// TestWingShutdownDeliversFinishingPoolResponse runs a Pool handler that is
+// still working when Shutdown starts and ignores its context. Its response
+// must still reach the client instead of hitting a socket already shut down.
+func TestWingShutdownDeliversFinishingPoolResponse(t *testing.T) {
+	entered := make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		close(entered)
+		time.Sleep(200 * time.Millisecond)
+		w.Write([]byte("late"))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Arrow}, handler)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler never ran")
+	}
+	go stop()
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	got, _ := io.ReadAll(conn)
+	if !strings.Contains(string(got), "late") {
+		t.Fatalf("response lost during shutdown, got %q", got)
 	}
 }

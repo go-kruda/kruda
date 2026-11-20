@@ -2234,12 +2234,11 @@ func (w *worker) cleanup() {
 	// Either way takeoverLoop exits and dispatchWG.Done fires. SHUT_* doesn't
 	// free the fd number, so kernel won't recycle it — Spawn's write side
 	// stays valid until we run closeFd below.
+	// Cancel first and shut sockets only after the Pool has finished, so a Pool
+	// handler that completes during shutdown still writes its response.
 	for _, c := range w.conns {
-		if c.pending > 0 {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
-			if c.cancel != nil {
-				c.cancel()
-			}
+		if c.pending > 0 && c.cancel != nil {
+			c.cancel()
 		}
 	}
 	for _, c := range w.conns {
@@ -2276,8 +2275,13 @@ func (w *worker) cleanup() {
 		// could land on an fd the kernel has already recycled. This waits
 		// only after the conn contexts are cancelled and doneCh is drained,
 		// so a Pool handler waiting on its context, or blocked publishing a
-		// completion, can return.
+		// completion, can return. Sockets are still open here.
 		w.pool.wg.Wait()
+	}
+	for _, c := range w.conns {
+		if c.pending > 0 {
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+		}
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()

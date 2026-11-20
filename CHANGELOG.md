@@ -180,9 +180,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   answered 500. A later `Stream` or `Hijack` request now gets its own writer.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
-  it gave up on its own. Contexts are now cancelled first.
+  it gave up on its own. Contexts are now cancelled first; sockets stay open
+  until the Pool finishes, so a handler that completes during shutdown still
+  delivers its response. A handler that ignores its context still holds
+  shutdown until it returns or the `Shutdown` deadline passes.
 - Wing: a file stream with a negative size sent `Content-Length: -1`. It now
-  answers 500 and closes the reader. Kruda's own callers always pass a known
+  answers 500 and closes the reader off the event loop. Kruda's own callers always pass a known
   size.
 
 - A typed handler input field whose type is a named `string` or `bool`

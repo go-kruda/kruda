@@ -1404,8 +1404,9 @@ func (r *wingResponse) SetFileStream(file io.ReadCloser, size int64) {
 	r.fileStream = nil
 	if size < 0 {
 		// The size goes out as Content-Length, so an unknown size cannot be
-		// framed: answer 500 rather than send an invalid header.
-		_ = file.Close()
+		// framed: answer 500 rather than send an invalid header. Close off the
+		// event loop, as other stream closes do, so a slow Close cannot stall it.
+		(&fileStream{reader: file}).close()
 		r.fileSize = 0
 		r.status = 500
 		r.body = r.body[:0]

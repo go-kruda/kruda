@@ -27,12 +27,11 @@
 //   - "token_bucket"   — default; smoother bursts, lower memory
 //   - "sliding_window" — strict windowed count
 //
-// IPs are read from RemoteAddr by default. To honor X-Forwarded-For /
-// X-Real-IP, set TrustedProxies — only requests originating from a trusted
-// proxy IP are allowed to override the source IP. Forwarded chains are read
-// from right to left, and malformed or repeated headers fall back to the peer.
-// CIDR is not supported
-// in v1; list each proxy IP individually.
+// Clients are identified by c.IP(), so the app's WithTrustProxy and
+// WithTrustedProxies settings apply. Setting TrustedProxies here replaces them
+// for the limiter only. Either way, forwarded chains are read from right to
+// left, and malformed or repeated headers fall back to the peer. CIDR is not
+// supported; list each proxy IP individually.
 //
 // # Configuration
 //

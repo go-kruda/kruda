@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/transport"
 )
 
 // New creates a rate limiting middleware with the given config.
@@ -19,7 +20,13 @@ func New(config ...Config) kruda.HandlerFunc {
 	}
 	cfg.defaults()
 
-	policy := newProxyPolicy(cfg.TrustedProxies)
+	// Without its own TrustedProxies the limiter follows the app's proxy
+	// settings, so clients behind a trusted proxy keep separate buckets.
+	var policy *transport.ProxyPolicy
+	if len(cfg.TrustedProxies) > 0 {
+		p := transport.NewProxyPolicy(cfg.TrustedProxies)
+		policy = &p
+	}
 
 	// Default key function: client IP
 	keyFunc := cfg.KeyFunc
@@ -101,9 +108,15 @@ func clientKey(ip string) string {
 	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
-// extractIP uses the same trusted-hop policy as the framework.
-func extractIP(c *kruda.Ctx, policy proxyPolicy) string {
-	ip := policy.clientIP(requestWithPeer(c.Request()))
+// extractIP uses the limiter's own trusted proxies when set, and the app's
+// client IP otherwise.
+func extractIP(c *kruda.Ctx, policy *transport.ProxyPolicy) string {
+	var ip string
+	if policy != nil {
+		ip = policy.ClientIP(c.Request())
+	} else {
+		ip = c.IP()
+	}
 	if ip == "" {
 		return "unknown"
 	}

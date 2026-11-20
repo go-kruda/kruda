@@ -31,13 +31,15 @@ app.Use(ratelimit.ForRoute("/api/login", 5, time.Minute))
 | Window | time.Duration | time.Minute | Time window |
 | KeyFunc | func(*kruda.Ctx) string | IP-based | Custom key function |
 | Algorithm | string | "token_bucket" | Algorithm type |
-| TrustedProxies | []string | nil | Trusted proxy IPs |
+| TrustedProxies | []string | nil | Trusted proxy IPs for the limiter only; nil follows the app |
 
 ## Client IP and trusted proxies
 
-The default key uses the socket peer, independently of `WithTrustProxy`. When
-`TrustedProxies` contains the peer IP, the limiter checks `X-Forwarded-For`
-from right to left and stops at the nearest untrusted IP. Invalid or repeated
+The default key uses `c.IP()`, so it follows the app's `WithTrustProxy` and
+`WithTrustedProxies`. Behind a trusted proxy each client keeps its own bucket.
+Setting `TrustedProxies` here replaces the app's list for the limiter. When the
+peer is trusted, `X-Forwarded-For` is read from right to left and stops at the
+nearest untrusted IP. Invalid or repeated
 forwarding headers fall back to the socket peer. `X-Real-IP` is used only when
 `X-Forwarded-For` is absent. Only exact IPs are supported.
 

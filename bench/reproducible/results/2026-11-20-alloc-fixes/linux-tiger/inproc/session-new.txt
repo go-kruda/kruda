@@ -1,0 +1,48 @@
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   57297	     20585 ns/op	   21709 B/op	     217 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  287896	      4100 ns/op	   21227 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.573s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   58125	     20275 ns/op	   21701 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  278942	      4014 ns/op	   21230 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.537s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   57216	     20375 ns/op	   21710 B/op	     217 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  276594	      3970 ns/op	   21231 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.503s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   58369	     20270 ns/op	   21698 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  273916	      3986 ns/op	   21233 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.484s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   57651	     20591 ns/op	   21705 B/op	     217 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  260156	      4103 ns/op	   21239 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.446s
+goos: linux
+goarch: amd64
+pkg: github.com/go-kruda/kruda/contrib/session
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+BenchmarkMemoryStoreGetParallel     	   57792	     20167 ns/op	   21704 B/op	     216 allocs/op
+BenchmarkMemoryStoreGetParallel-8   	  284106	      4003 ns/op	   21228 B/op	     212 allocs/op
+PASS
+ok  	github.com/go-kruda/kruda/contrib/session	3.534s

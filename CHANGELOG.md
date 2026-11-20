@@ -37,8 +37,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fewer allocations and less retained memory on several paths. Responses,
   status codes and errors are unchanged. Measured with paired benchmarks
   against `fba66a1` (6 alternating rounds, macOS arm64, Go 1.26,
-  `kruda_stdjson`; in-process, not HTTP throughput on Linux). Script and raw
-  results: `bench/reproducible/results/2026-11-20-alloc-fixes/`.
+  `kruda_stdjson`; in-process). The same runs on Linux amd64 agree. Script
+  and raw results: `bench/reproducible/results/2026-11-20-alloc-fixes/`.
 
   | Path | Before | After |
   | --- | --- | --- |
@@ -70,9 +70,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   GC, median of 6 runs: 2 MB before, 7 KB after, with wide run-to-run spread).
 
   On the paths every request takes, 20-sample runs show parse GET/POST, JSON
-  responses and the full parse-to-response cycle unchanged within noise,
-  plaintext responses 3% faster, and `BenchmarkCPUHandlerInline` 1.6% (5 ns)
-  slower, which no single change here accounts for.
+  responses and the full parse-to-response cycle unchanged within noise. On
+  macOS plaintext responses were 3% faster and `BenchmarkCPUHandlerInline`
+  1.6% (5 ns) slower; on Linux `BenchmarkCPUResponsePlaintext` was 10% (3 ns)
+  slower, and the gap disappears when only the new test files are removed, so
+  it comes from test-binary layout rather than the server code. HTTP
+  throughput with `wrk` on Linux (Wing, 4 workers, 128 connections, 6
+  alternating rounds) is unchanged within 1% for plaintext, JSON and a small
+  JSON POST.
 
 - **`HealthHandler` no longer sends a checker's error text.** Before, a
   failed check answered with its error, for example

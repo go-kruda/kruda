@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/module"
 )
 
 //go:embed all:templates
@@ -66,6 +67,16 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 		projectName = filepath.Base(target)
 		moduleName = projectName
+	}
+	// Like go mod init, allow local main module names without a domain.
+	if err := module.CheckImportPath(moduleName); err != nil {
+		return fmt.Errorf("invalid module path %q: %w", moduleName, err)
+	}
+	if moduleName == "go" || moduleName == "toolchain" {
+		return fmt.Errorf("module path %q is reserved", moduleName)
+	}
+	if _, _, ok := module.SplitPathVersion(moduleName); !ok {
+		return fmt.Errorf("invalid major version suffix in module path %q", moduleName)
 	}
 	data := templateData{ProjectName: projectName, ModuleName: moduleName}
 

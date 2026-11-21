@@ -180,6 +180,28 @@ func TestScaffoldedProjectBuilds(t *testing.T) {
 	}
 }
 
+func TestNewRejectsInvalidModuleBeforeScaffolding(t *testing.T) {
+	for _, name := range []string{"Release Candidate", "go", "toolchain"} {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), name)
+			if err := os.Mkdir(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(dir)
+			if err := runNew(newCmd, []string{"."}); err == nil {
+				t.Error("expected an invalid module path error")
+			}
+			entries, err := os.ReadDir(".")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Errorf("project directory contains %v after validation failed", entries)
+			}
+		})
+	}
+}
+
 func TestNewFilesystemProjectBuilds(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

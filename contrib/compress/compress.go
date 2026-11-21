@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,8 +143,8 @@ func shouldCompress(data []byte, contentType string, cfg Config) bool {
 // Each compression level gets its own pool to avoid re-creating writers
 // when custom levels are used.
 var (
-	gzipPools  sync.Map // map[int]*sync.Pool
-	flatePools sync.Map // map[int]*sync.Pool
+	gzipPools sync.Map // map[int]*sync.Pool
+	zlibPools sync.Map // map[int]*sync.Pool
 )
 
 // getGzipPool returns a sync.Pool for the given compression level.
@@ -160,18 +162,18 @@ func getGzipPool(level int) *sync.Pool {
 	return actual.(*sync.Pool)
 }
 
-// getFlatePool returns a sync.Pool for the given compression level.
-func getFlatePool(level int) *sync.Pool {
-	if v, ok := flatePools.Load(level); ok {
+// getZlibPool returns a sync.Pool for the given compression level.
+func getZlibPool(level int) *sync.Pool {
+	if v, ok := zlibPools.Load(level); ok {
 		return v.(*sync.Pool)
 	}
 	pool := &sync.Pool{
 		New: func() interface{} {
-			w, _ := flate.NewWriter(nil, level)
+			w, _ := zlib.NewWriterLevel(nil, level)
 			return w
 		},
 	}
-	actual, _ := flatePools.LoadOrStore(level, pool)
+	actual, _ := zlibPools.LoadOrStore(level, pool)
 	return actual.(*sync.Pool)
 }
 
@@ -179,9 +181,8 @@ func getFlatePool(level int) *sync.Pool {
 func compressData(data []byte, encoding string, level int) ([]byte, error) {
 	var buf bytes.Buffer
 
-	// Normalize: -1 means default compression
-	if level == -1 {
-		level = flate.DefaultCompression
+	if level < flate.HuffmanOnly || level > flate.BestCompression {
+		return nil, fmt.Errorf("compress: invalid compression level %d", level)
 	}
 
 	switch encoding {
@@ -226,13 +227,13 @@ func compressGzip(buf *bytes.Buffer, data []byte, level int) ([]byte, error) {
 
 // compressDeflate compresses data using deflate with level-keyed pooling.
 func compressDeflate(buf *bytes.Buffer, data []byte, level int) ([]byte, error) {
-	pool := getFlatePool(level)
+	pool := getZlibPool(level)
 
 	v := pool.Get()
-	w, ok := v.(*flate.Writer)
+	w, ok := v.(*zlib.Writer)
 	if !ok {
 		var err error
-		w, err = flate.NewWriter(buf, level)
+		w, err = zlib.NewWriterLevel(buf, level)
 		if err != nil {
 			return nil, err
 		}

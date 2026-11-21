@@ -692,7 +692,7 @@ func (w *worker) sweepTimeouts(now int64) {
 		// send buffer can hold seconds of data for a slow reader, so the time
 		// since the last write does not show whether the client is reading.
 		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
-		if w.idleTimeout > 0 && c.readN == 0 && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
+		if w.idleTimeout > 0 && c.readN == 0 && c.bodyNeed == 0 && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
 			w.closeConn(fd)
 			continue
 		}

@@ -15,7 +15,7 @@ import (
 	"github.com/go-kruda/kruda/transport"
 )
 
-func TestCacheQueryAcrossBackends(t *testing.T) {
+func TestCacheKeyAcrossBackends(t *testing.T) {
 	backends := []struct {
 		name   string
 		option kruda.Option
@@ -37,6 +37,9 @@ func TestCacheQueryAcrossBackends(t *testing.T) {
 			app.Get("/data", func(c *kruda.Ctx) error {
 				calls.Add(1)
 				return CacheBytes(c, "text/plain", []byte(c.Request().(interface{ RawQuery() string }).RawQuery()))
+			})
+			app.Get("/site", func(c *kruda.Ctx) error {
+				return CacheBytes(c, "text/plain", []byte(c.Header("Host")))
 			})
 			ln, err := net.Listen("tcp4", "127.0.0.1:0")
 			if err != nil {
@@ -93,6 +96,26 @@ func TestCacheQueryAcrossBackends(t *testing.T) {
 				}
 				if calls.Load() != before+2 {
 					t.Fatal("cache hit skipped route handler")
+				}
+			}
+			for _, tc := range []struct{ host, want string }{
+				{"first.example.test", "MISS"},
+				{"second.example.test", "MISS"},
+				{"first.example.test", "HIT"},
+			} {
+				req, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+"/site", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Host = tc.host
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil || string(body) != tc.host || resp.Header.Get("X-Cache") != tc.want {
+					t.Fatalf("host %s: body=%q cache=%q want %s: %v", tc.host, body, resp.Header.Get("X-Cache"), tc.want, err)
 				}
 			}
 		})

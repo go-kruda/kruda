@@ -263,3 +263,21 @@ func goDirective(t *testing.T, root string) string {
 	t.Fatal("no go directive in " + root + "/go.mod")
 	return ""
 }
+
+func TestRunBindgenRejectsSameFileBeforeCallingGenerator(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "input.go")
+	data := []byte("package sample\ntype Sample struct{}\n")
+	if err := os.WriteFile(source, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runBindgen(cmd, source, "Sample", source, "bindSample", false)
+	if err == nil || !strings.Contains(err.Error(), "same file") {
+		t.Fatalf("runBindgen = %v, want same-file error", err)
+	}
+	if got, err := os.ReadFile(source); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("input changed: %q, %v", got, err)
+	}
+}

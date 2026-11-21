@@ -59,3 +59,23 @@ func TestWingIdleTimeoutSparesActiveDownload(t *testing.T) {
 		t.Skipf("download finished in %v, before the idle sweep could run", time.Since(start))
 	}
 }
+
+func TestWingIdleTimeoutLeavesAccumulatingBodyToReadTimeout(t *testing.T) {
+	w, _ := newTestWorker(0)
+	w.idleTimeout = int64(time.Second)
+	w.readTimeout = int64(5 * time.Second)
+	c := newTestConn(12345)
+	c.lastActive = 1
+	c.readDeadline = c.lastActive + w.readTimeout
+	c.bodyNeed = 32 << 10
+	w.conns[c.fd] = c
+
+	w.sweepTimeouts(c.lastActive + int64(2*time.Second))
+	if w.conns[c.fd] != c {
+		t.Fatal("idle timeout closed a request with a body in progress")
+	}
+	w.sweepTimeouts(c.readDeadline + 1)
+	if w.conns[c.fd] != nil {
+		t.Fatal("read timeout did not close the incomplete upload")
+	}
+}

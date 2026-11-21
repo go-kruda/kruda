@@ -3,6 +3,7 @@ package kruda
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -715,6 +716,35 @@ func TestContainsRule(t *testing.T) {
 		got := containsRule(tt.vtag, tt.rule)
 		if got != tt.want {
 			t.Errorf("containsRule(%q, %q) = %v, want %v", tt.vtag, tt.rule, got, tt.want)
+		}
+	}
+}
+
+func TestGenerateSchemaDistinctAnonymousTypesAndOptionsOnlyJSONName(t *testing.T) {
+	type Envelope struct {
+		Left struct {
+			X int `json:"x"`
+		} `json:"left"`
+		Right struct {
+			Y int `json:"y"`
+		} `json:"right"`
+		Extra string `json:",omitempty"`
+	}
+	components := map[string]*schemaRef{}
+	const prefix = "#/components/schemas/"
+	resolve := func(ref *schemaRef) *schemaRef {
+		return components[strings.TrimPrefix(ref.Ref, prefix)]
+	}
+	envelope := resolve(generateSchema(reflect.TypeFor[Envelope](), components))
+	if _, ok := envelope.Properties["Extra"]; !ok {
+		t.Fatalf("schema properties omit Extra: %v", envelope.Properties)
+	}
+	for _, tc := range []struct{ field, property string }{
+		{"left", "x"}, {"right", "y"},
+	} {
+		inner := resolve(envelope.Properties[tc.field])
+		if len(inner.Properties) != 1 || inner.Properties[tc.property] == nil {
+			t.Errorf("%s refers to the wrong schema: %v", tc.field, inner)
 		}
 	}
 }

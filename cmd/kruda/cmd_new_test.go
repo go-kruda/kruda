@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -177,4 +178,66 @@ func TestScaffoldedProjectBuilds(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewNestedProjectBuilds(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	localCore := err == nil && strings.HasPrefix(string(core), "module github.com/go-kruda/kruda\n")
+	if !localCore && testing.Short() {
+		t.Skip("needs the module proxy without a core checkout")
+	}
+	t.Chdir(t.TempDir())
+	if err := runNew(newCmd, []string{"./sub/app"}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join("sub", "app")
+	steps := [][]string{{"mod", "tidy"}, {"build", "./..."}}
+	if localCore {
+		steps = append([][]string{{"mod", "edit", "-replace", "github.com/go-kruda/kruda=" + root}}, steps...)
+	}
+	for _, args := range steps {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("go %v: %v\n%s", args, err, out)
+		}
+	}
+}
+
+func TestMCPNewConfinesProjectToWorkspace(t *testing.T) {
+	outside := t.TempDir()
+	t.Chdir(t.TempDir())
+	if _, err := toolNew(map[string]any{"project_name": "sample"}); err != nil {
+		t.Fatalf("create local project: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("sample", "go.mod")); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("single directory name", func(t *testing.T) {
+		for _, name := range []string{".", "nested/project", "nested\\project", outside} {
+			if _, err := toolNew(map[string]any{"project_name": name}); err == nil {
+				t.Errorf("accepted invalid project name %q", name)
+			}
+		}
+	})
+	t.Run("directory link", func(t *testing.T) {
+		if err := os.Symlink(outside, "outside"); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			t.Fatal(err)
+		}
+		if _, err := toolNew(map[string]any{"project_name": "outside"}); err == nil {
+			t.Fatal("accepted directory outside workspace")
+		}
+		entries, err := os.ReadDir(outside)
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("unexpected outside directory contents: %v, %v", entries, err)
+		}
+	})
 }

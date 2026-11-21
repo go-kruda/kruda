@@ -13,9 +13,8 @@ on:
 permissions:
   contents: read
 
-# A new push to a PR cancels its older run, so rebases do not queue twice
-# for the scarce macOS runners. Pushes, tags and release calls get a group
-# of their own and are never cancelled.
+# A new push to a PR cancels its older test run. Pushes, tags and release
+# calls each get their own group.
 concurrency:
   group: tests-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -23,9 +22,7 @@ concurrency:
 jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
-    # Every OS runs on the maintainer's own runners (labels set at
-    # registration); matrix.os keeps the check names the branch rule requires.
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","kruda-linux"]') || matrix.os == 'macos-latest' && fromJSON('["self-hosted","macOS","ARM64"]') || matrix.os == 'windows-2025' && fromJSON('["self-hosted","kruda-windows"]') || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -45,9 +42,6 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
-          # Self-hosted runners keep their caches on disk; saving them to
-          # GitHub hung for 12+ minutes on the dev server.
-          cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Record Windows runtime environment
         if: runner.os == 'Windows'

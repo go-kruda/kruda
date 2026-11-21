@@ -589,3 +589,9 @@ function copyError(){
 </script>
 </body>
 </html>`
+
+func (app *App) warnDevMode() {
+	if app.config.DevMode {
+		app.config.Logger.Warn("development mode is enabled; do not expose development diagnostics publicly", "pprof", pprofAvailable && app.config.devModeSet)
+	}
+}

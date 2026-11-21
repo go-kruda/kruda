@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -12,13 +13,17 @@ import (
 
 func TestPprofRequiresExplicitDevMode(t *testing.T) {
 	t.Setenv("KRUDA_ENV", "development")
+	explicitStatus := http.StatusNotFound
+	if pprofAvailable {
+		explicitStatus = http.StatusOK
+	}
 	for _, tc := range []struct {
 		name    string
 		options []Option
 		want    int
 	}{
 		{"environment only", nil, 404},
-		{"explicit enable", []Option{WithDevMode(true)}, 200},
+		{"explicit enable", []Option{WithDevMode(true)}, explicitStatus},
 		{"explicit disable", []Option{WithDevMode(false)}, 404},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,5 +69,12 @@ func TestDevModeStartupWarning(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestDefaultMuxProfilingRoutesRequireBuildOptIn(t *testing.T) {
+	_, pattern := http.DefaultServeMux.Handler(httptest.NewRequest("GET", "/debug/pprof/cmdline", nil))
+	if registered := pattern != ""; registered != pprofAvailable {
+		t.Fatalf("pprof registration = %v, build opt-in = %v", registered, pprofAvailable)
 	}
 }

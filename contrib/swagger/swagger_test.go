@@ -1,6 +1,7 @@
 package swagger
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -197,5 +198,25 @@ func TestNew_HTMLEscaping(t *testing.T) {
 	}
 	if strings.Contains(body, `"/><script>alert(1)</script>`) {
 		t.Error("specURL should be HTML-escaped to prevent XSS")
+	}
+}
+
+func TestScriptSpecURLAndPinnedAssets(t *testing.T) {
+	const spec = "/api/openapi.json?version=v1&format=json"
+	page := renderHTML(Config{SpecURL: spec})
+	_, script, ok := strings.Cut(page, "url: ")
+	literal, _, found := strings.Cut(script, ",\n")
+	var decoded string
+	if !ok || !found || json.Unmarshal([]byte(literal), &decoded) != nil || decoded != spec {
+		t.Fatalf("invalid JavaScript URL literal: %q", literal)
+	}
+	for _, name := range []string{"swagger-ui.css", "swagger-ui-bundle.js", "swagger-ui-standalone-preset.js"} {
+		asset := "swagger-ui-dist@5.34.1/" + name + `" integrity="sha384-`
+		if !strings.Contains(page, asset) {
+			t.Errorf("asset missing pinned version or SHA-384 integrity: %s", name)
+		}
+	}
+	if strings.Count(page, `crossorigin="anonymous"`) != 3 {
+		t.Fatal("expected anonymous CORS for each pinned asset")
 	}
 }

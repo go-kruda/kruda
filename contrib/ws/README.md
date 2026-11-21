@@ -42,8 +42,7 @@ ws.HandleFunc(app, "/ws", func(conn *ws.Conn) {
 
 ## Origin checks behind a proxy
 
-With no `AllowedOrigins`, the host in `Origin` must equal the request's
-`Host`. Behind a reverse proxy that rewrites `Host` (nginx's default is
-`proxy_set_header Host $proxy_host`), browsers get 403. Forward the original
-host with `proxy_set_header Host $host`, or set `AllowedOrigins` to your
-site's origin, for example `[]string{"https://app.example.com"}`.
+With no `AllowedOrigins`, the origin's scheme, host and port must match the
+connection scheme and request authority. When a reverse proxy terminates TLS
+or rewrites the authority, set `AllowedOrigins` to the public origins, for
+example `[]string{"https://app.example.com"}`.

@@ -1,3 +1,5 @@
+//go:build kruda_pprof
+
 package kruda
 
 import (
@@ -20,11 +22,7 @@ func (app *App) registerPprofRoutes() {
 	app.Get("/debug/pprof/threadcreate", wrapPprofHandler(pprof.Handler("threadcreate").ServeHTTP))
 }
 
-func (app *App) warnDevMode() {
-	if app.config.DevMode {
-		app.config.Logger.Warn("development mode is enabled; do not expose development diagnostics publicly", "pprof", app.config.devModeSet)
-	}
-}
+const pprofAvailable = true
 
 // wrapPprofHandler adapts net/http pprof handlers to Kruda's handler signature.
 func wrapPprofHandler(h http.HandlerFunc) HandlerFunc {

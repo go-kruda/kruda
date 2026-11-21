@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/go-kruda/kruda"
@@ -89,6 +92,9 @@ func TestUpgrade_DefaultOriginIsSameOrigin(t *testing.T) {
 		{"no origin", Config{}, func(string) string { return "" }, http.StatusSwitchingProtocols},
 		{"same origin", Config{}, func(h string) string { return "http://" + h }, http.StatusSwitchingProtocols},
 		{"same origin, other case", Config{}, func(h string) string { return "HTTP://" + strings.ToUpper(h) }, http.StatusSwitchingProtocols},
+		{"different scheme", Config{}, func(h string) string { return "https://" + h }, http.StatusForbidden},
+		{"different port", Config{}, func(h string) string { host, _, _ := net.SplitHostPort(h); return "http://" + host }, http.StatusForbidden},
+		{"public origin behind TLS proxy", Config{AllowedOrigins: []string{"https://app.example.test"}}, func(string) string { return "https://app.example.test" }, http.StatusSwitchingProtocols},
 		{"cross origin", Config{}, func(string) string { return "https://evil.example.com" }, http.StatusForbidden},
 		{"null origin", Config{}, func(string) string { return "null" }, http.StatusForbidden},
 		{"explicit wildcard", Config{AllowedOrigins: []string{"*"}}, func(string) string { return "https://evil.example.com" }, http.StatusSwitchingProtocols},
@@ -103,5 +109,49 @@ func TestUpgrade_DefaultOriginIsSameOrigin(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestNetHTTPOriginUsesTLSAndDefaultPort(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	app.Get("/ws", func(c *kruda.Ctx) error {
+		if err := New().checkOrigin(c); err != nil {
+			return c.Status(http.StatusForbidden).Text("origin rejected")
+		}
+		return c.Text("origin accepted")
+	})
+	for _, tc := range []struct {
+		origin string
+		want   int
+	}{
+		{"https://example.test", 200},
+		{"https://example.test:443", 200},
+		{"http://example.test:443", 403},
+		{"https://example.test:444", 403},
+		{"https://example.test/#fragment", 403},
+	} {
+		req := httptest.NewRequest("GET", "https://example.test:443/ws", nil)
+		req.Header.Set("Origin", tc.origin)
+		req.Header.Set("X-Forwarded-Proto", "http")
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("%s: status = %d, want %d", tc.origin, rec.Code, tc.want)
+		}
+	}
+}
+
+func TestUpgradeRejectsBodyReadError(t *testing.T) {
+	app := kruda.New(kruda.NetHTTP())
+	HandleFunc(app, "/ws", func(*Conn) { t.Fatal("upgrade reached the handler") })
+	req := httptest.NewRequest("GET", "/ws", iotest.ErrReader(errors.New("body read error")))
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
 	}
 }

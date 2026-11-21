@@ -469,11 +469,11 @@ In development mode (`WithDevMode(true)` or `KRUDA_ENV=development`):
 - Rich error pages are rendered with source context
 - Environment variables are filtered (no `SECRET`, `PASSWORD`, `TOKEN`, `KEY`, `CREDENTIAL`, `AUTH`)
 
-Dev mode defaults to `false`. `KRUDA_ENV=development` does not register pprof
-routes. Explicit `WithDevMode(true)` registers `/debug/pprof/*` on the
-application port; these endpoints require net/http and can expose process
-arguments and heap contents. Restrict them to trusted local access. `Listen`
-and `Serve` log a warning when development mode is enabled.
+Dev mode defaults to `false`. To register `/debug/pprof/*` on the application port,
+build with `-tags kruda_pprof`, use net/http, and pass `WithDevMode(true)`.
+The profiling build also registers Go's standard handlers on `http.DefaultServeMux`.
+Serve diagnostics only on trusted local listeners. `Listen` and `Serve` log a
+warning when development mode is enabled.
 
 ## Production Checklist
 

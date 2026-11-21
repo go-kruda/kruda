@@ -285,7 +285,14 @@ func TestContainsETag(t *testing.T) {
 }
 
 func TestETagConditionalMethodsAndExplicitStrength(t *testing.T) {
-	app := kruda.New(kruda.NetHTTP()).Use(New(Config{Weak: false}))
+	var calls []string
+	app := kruda.New(kruda.NetHTTP()).Use(New(Config{
+		Weak: false,
+		Skip: func(c *kruda.Ctx) bool {
+			calls = append(calls, c.Method())
+			return false
+		},
+	}))
 	handler := func(c *kruda.Ctx) error {
 		if GenerateAndSetETag(c, []byte("data")) {
 			return nil
@@ -308,6 +315,9 @@ func TestETagConditionalMethodsAndExplicitStrength(t *testing.T) {
 		if rec.Code != tc.want || rec.Header().Get("ETag") != tag {
 			t.Errorf("%s: status = %d, tag = %q, want %d, %q", tc.method, rec.Code, rec.Header().Get("ETag"), tc.want, tag)
 		}
+	}
+	if len(calls) != 1 || calls[0] != "GET" {
+		t.Errorf("Skip called for %v, want [GET]", calls)
 	}
 }
 

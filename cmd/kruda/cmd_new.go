@@ -60,6 +60,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 	argument := filepath.ToSlash(name)
 	if filepath.IsAbs(name) || moduleName == "." || moduleName == ".." ||
 		strings.HasPrefix(argument, "./") || strings.HasPrefix(argument, "../") {
+		target, err := filepath.Abs(name)
+		if err != nil {
+			return fmt.Errorf("resolving project directory: %w", err)
+		}
+		projectName = filepath.Base(target)
 		moduleName = projectName
 	}
 	data := templateData{ProjectName: projectName, ModuleName: moduleName}

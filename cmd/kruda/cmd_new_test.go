@@ -180,7 +180,7 @@ func TestScaffoldedProjectBuilds(t *testing.T) {
 	}
 }
 
-func TestNewNestedProjectBuilds(t *testing.T) {
+func TestNewFilesystemProjectBuilds(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
@@ -190,22 +190,25 @@ func TestNewNestedProjectBuilds(t *testing.T) {
 	if !localCore && testing.Short() {
 		t.Skip("needs the module proxy without a core checkout")
 	}
-	t.Chdir(t.TempDir())
-	if err := runNew(newCmd, []string{"./sub/app"}); err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Join("sub", "app")
-	steps := [][]string{{"mod", "tidy"}, {"build", "./..."}}
-	if localCore {
-		steps = append([][]string{{"mod", "edit", "-replace", "github.com/go-kruda/kruda=" + root}}, steps...)
-	}
-	for _, args := range steps {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("go %v: %v\n%s", args, err, out)
-		}
+	for _, target := range []string{"./sub/app", "."} {
+		t.Run(target, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if err := runNew(newCmd, []string{target}); err != nil {
+				t.Fatal(err)
+			}
+			steps := [][]string{{"mod", "tidy"}, {"build", "./..."}}
+			if localCore {
+				steps = append([][]string{{"mod", "edit", "-replace", "github.com/go-kruda/kruda=" + root}}, steps...)
+			}
+			for _, args := range steps {
+				cmd := exec.Command("go", args...)
+				cmd.Dir = target
+				cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("go %v: %v\n%s", args, err, out)
+				}
+			}
+		})
 	}
 }
 

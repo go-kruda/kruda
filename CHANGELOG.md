@@ -25,13 +25,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **`contrib/ws` accepts only the same origin by default.** Origin must match
-  the connection scheme, host and port. Non-browser clients may omit it.
-  If a reverse proxy terminates TLS or rewrites the request authority, set
-  `AllowedOrigins` to the public origins.
+- **`contrib/ws` accepts only the same origin by default.** Older versions
+  accepted every origin when `AllowedOrigins` was empty. Now the origin must
+  match the request scheme, host and port. Non-browser clients may omit it.
+  TLS-terminating proxies can preserve `Host` and overwrite
+  `X-Forwarded-Proto` with `https` after the app enables proxy trust for
+  their socket IPs. Set `AllowedOrigins` to the public origins when the
+  proxy rewrites the authority or the core lacks `Ctx.IsTrustedProxy`.
+  `AllowedOrigins: []string{"*"}` restores the original allow-all policy.
 - Dev-mode profiling routes require the `kruda_pprof` build tag and
   `WithDevMode(true)` with net/http. Default builds leave Go's default mux
-  free of profiling routes.
+  free of profiling routes. `kruda pgo` adds that tag to its profiling build.
 - `contrib/cache` includes the request host in the default key. Existing
   persisted entries will miss until repopulated.
 - `contrib/etag` uses weak tags with `New()`. When passing a `Config`,

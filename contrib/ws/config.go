@@ -29,9 +29,9 @@ const (
 // Config holds WebSocket upgrader configuration.
 type Config struct {
 	// AllowedOrigins is the list of allowed Origin header values.
-	// Empty means an Origin header must match the connection scheme, host and port.
+	// Empty means an Origin header must match the request scheme, host and port.
 	// []string{"*"} allows every origin. List the public origins here when a
-	// reverse proxy terminates TLS or changes the request authority.
+	// reverse proxy changes the request authority.
 	AllowedOrigins []string
 
 	// StrictOrigin rejects requests with no Origin header when AllowedOrigins is set.

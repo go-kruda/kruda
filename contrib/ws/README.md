@@ -43,6 +43,11 @@ ws.HandleFunc(app, "/ws", func(conn *ws.Conn) {
 ## Origin checks behind a proxy
 
 With no `AllowedOrigins`, the origin's scheme, host and port must match the
-connection scheme and request authority. When a reverse proxy terminates TLS
-or rewrites the authority, set `AllowedOrigins` to the public origins, for
-example `[]string{"https://app.example.com"}`.
+request. A TLS-terminating proxy can preserve the public `Host` and overwrite
+`X-Forwarded-Proto` with `https`. Configure its socket IP with
+`kruda.WithTrustedProxies(...)` and enable `kruda.WithTrustProxy(true)`.
+This uses the core version that provides `Ctx.IsTrustedProxy`.
+
+When the proxy rewrites the authority or the core does not provide that
+method, set `AllowedOrigins` to the public origins, for example
+`[]string{"https://app.example.com"}`.

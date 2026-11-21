@@ -112,6 +112,15 @@ func (c *Ctx) Cookie(name string) string {
 	return ""
 }
 
+// IsTrustedProxy reports whether the immediate socket peer is a configured trusted proxy.
+func (c *Ctx) IsTrustedProxy() bool {
+	if !c.app.config.TrustProxy {
+		return false
+	}
+	peer, ok := c.Request().(interface{ PeerAddr() string })
+	return ok && c.app.proxyPolicy.IsTrustedPeer(peer.PeerAddr())
+}
+
 // IP returns the client's IP address.
 func (c *Ctx) IP() string {
 	if r := c.Request(); r != nil {

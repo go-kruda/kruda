@@ -8,19 +8,21 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/iotest"
 	"time"
 
 	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/transport"
 )
 
 // handshakeStatus sends one upgrade request with the given Origin ("" for none)
 // and returns the response status.
-func handshakeStatus(t *testing.T, backend kruda.Option, cfg Config, origin func(host string) string) int {
+func handshakeStatus(t *testing.T, backend kruda.Option, cfg Config, origin func(host string) string, forwardedProto string, proxyOptions ...kruda.Option) int {
 	t.Helper()
-	app := kruda.New(backend)
+	app := kruda.New(append([]kruda.Option{backend}, proxyOptions...)...)
 	upgrader := New(cfg)
 	app.Get("/ws", func(c *kruda.Ctx) error {
 		return upgrader.Upgrade(c, func(conn *Conn) { conn.Close(CloseNormalClosure, "") })
@@ -46,6 +48,9 @@ func handshakeStatus(t *testing.T, backend kruda.Option, cfg Config, origin func
 		"Sec-WebSocket-Version: 13\r\n"
 	if o := origin(host); o != "" {
 		req += "Origin: " + o + "\r\n"
+	}
+	if forwardedProto != "" {
+		req += "X-Forwarded-Proto: " + forwardedProto + "\r\n"
 	}
 	// Wing rebinds the address itself, so an early dial can land on the
 	// listener it closes. Retry until a response comes back.
@@ -104,7 +109,7 @@ func TestUpgrade_DefaultOriginIsSameOrigin(t *testing.T) {
 			option kruda.Option
 		}{{"nethttp", kruda.NetHTTP()}, {"wing", kruda.Wing()}} { // fasthttp has no WebSocket upgrade
 			t.Run(b.name+"/"+tc.name, func(t *testing.T) {
-				if got := handshakeStatus(t, b.option, tc.cfg, tc.origin); got != tc.want {
+				if got := handshakeStatus(t, b.option, tc.cfg, tc.origin, ""); got != tc.want {
 					t.Fatalf("status = %d, want %d", got, tc.want)
 				}
 			})
@@ -153,5 +158,62 @@ func TestUpgradeRejectsBodyReadError(t *testing.T) {
 	app.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body)
+	}
+}
+
+type proxyTestTransport struct {
+	transport.Transport
+	trustedIP string
+}
+
+func (p proxyTestTransport) ProxyConfig() (bool, []string) {
+	return true, []string{p.trustedIP}
+}
+
+func (p proxyTestTransport) SetRoutePreset(method, path string, preset any) {
+	if t, ok := p.Transport.(transport.PresetConfigurator); ok {
+		t.SetRoutePreset(method, path, preset)
+	}
+}
+
+func TestUpgradeHTTPSBehindTrustedProxy(t *testing.T) {
+	if _, ok := any((*kruda.Ctx)(nil)).(interface{ IsTrustedProxy() bool }); !ok {
+		t.Skip("trusted scheme needs a core with IsTrustedProxy")
+	}
+	for _, backend := range []struct {
+		name         string
+		option       kruda.Option
+		newTransport func() transport.Transport
+	}{
+		{"nethttp", kruda.NetHTTP(), func() transport.Transport {
+			return transport.NewNetHTTP(transport.NetHTTPConfig{})
+		}},
+		{"wing", kruda.Wing(), func() transport.Transport {
+			return kruda.NewWingTransport(kruda.WingConfig{Workers: 1})
+		}},
+	} {
+		t.Run(backend.name, func(t *testing.T) {
+			if backend.name == "wing" && runtime.GOOS == "windows" {
+				t.Skip("Wing is unavailable on Windows")
+			}
+			for _, tc := range []struct {
+				name      string
+				trustedIP string
+				want      int
+			}{
+				{"trusted", "127.0.0.1", http.StatusSwitchingProtocols},
+				{"untrusted", "192.0.2.1", http.StatusForbidden},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					proxy := proxyTestTransport{Transport: backend.newTransport(), trustedIP: tc.trustedIP}
+					got := handshakeStatus(t, backend.option, Config{}, func(host string) string {
+						return "https://" + host
+					}, "https", kruda.WithTransport(proxy))
+					if got != tc.want {
+						t.Fatalf("status = %d, want %d", got, tc.want)
+					}
+				})
+			}
+		})
 	}
 }

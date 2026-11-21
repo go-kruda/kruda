@@ -57,12 +57,14 @@ func New(config ...Config) kruda.HandlerFunc {
 	}
 
 	return func(c *kruda.Ctx) error {
-		if cfg.Skip != nil && cfg.Skip(c) {
+		method := c.Method()
+		conditional := method == http.MethodGet || method == http.MethodHead
+		if conditional && cfg.Skip != nil && cfg.Skip(c) {
 			return c.Next()
 		}
 
 		c.Set("etag:weak", cfg.Weak)
-		if method := c.Method(); method == http.MethodGet || method == http.MethodHead {
+		if conditional {
 			c.Set("etag:if-none-match", c.Header("If-None-Match"))
 		}
 

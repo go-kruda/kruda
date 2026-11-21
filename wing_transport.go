@@ -686,13 +686,14 @@ func (w *worker) sweepTimeouts(now int64) {
 			w.closeConn(fd)
 			continue
 		}
-		// Idle timeout: no request and no response in progress for IdleTimeout,
-		// counted from the last byte received or sent. A connection still
+		// Idle timeout covers a stalled upload when no read deadline is set.
+		// Idle time counts from the last byte received or sent. A connection still
 		// sending is bounded by WriteTimeout instead, as in net/http: the kernel
 		// send buffer can hold seconds of data for a slow reader, so the time
 		// since the last write does not show whether the client is reading.
 		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
-		if w.idleTimeout > 0 && c.readN == 0 && c.bodyNeed == 0 && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
+		readingBody := c.bodyNeed > 0 && w.readTimeout > 0 && c.readDeadline > 0
+		if w.idleTimeout > 0 && c.readN == 0 && !readingBody && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
 			w.closeConn(fd)
 			continue
 		}

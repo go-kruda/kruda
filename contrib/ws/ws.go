@@ -167,18 +167,22 @@ func (u *Upgrader) checkOrigin(c *kruda.Ctx) error {
 	return fmt.Errorf("ws: origin %q not allowed", origin)
 }
 
-// The transport connection supplies the scheme. Deployments that terminate
-// TLS at a proxy can configure the public origin with AllowedOrigins.
 func requestOrigin(c *kruda.Ctx) (scheme, host string) {
+	host = c.Header("Host")
 	if r := c.Request(); r != nil {
 		if hr, ok := r.RawRequest().(*http.Request); ok {
+			host = hr.Host
 			if hr.TLS != nil {
-				return "https", hr.Host
+				return "https", host
 			}
-			return "http", hr.Host
 		}
 	}
-	return "http", c.Header("Host")
+	// Older core versions can use AllowedOrigins for TLS-terminating proxies.
+	if peer, ok := any(c).(interface{ IsTrustedProxy() bool }); ok &&
+		peer.IsTrustedProxy() && strings.EqualFold(c.Header("X-Forwarded-Proto"), "https") {
+		return "https", host
+	}
+	return "http", host
 }
 
 func originHostPort(u *url.URL) string {

@@ -44,7 +44,7 @@ func main() {
 	}
 }
 
-func run(input, typeName, output, funcName string, routes bool) error {
+func run(input, typeName, output, funcName string, routes bool) (runErr error) {
 	if input == "" || output == "" || !token.IsIdentifier(typeName) || !token.IsIdentifier(funcName) {
 		return fmt.Errorf("input, output, type, and func are required; type and func must be identifiers")
 	}
@@ -52,7 +52,7 @@ func run(input, typeName, output, funcName string, routes bool) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	sourceInfo, err := source.Stat()
 	if err != nil {
 		return err
@@ -69,7 +69,11 @@ func run(input, typeName, output, funcName string, routes bool) error {
 	if err != nil {
 		return err
 	}
-	defer dest.Close()
+	defer func() {
+		if closeErr := dest.Close(); runErr == nil {
+			runErr = closeErr
+		}
+	}()
 	destInfo, err := dest.Stat()
 	if err != nil {
 		return err
@@ -83,7 +87,7 @@ func run(input, typeName, output, funcName string, routes bool) error {
 	if _, err := dest.Write(generated); err != nil {
 		return err
 	}
-	return dest.Close()
+	return nil
 }
 
 func generate(filename string, src []byte, typeName, funcName string) ([]byte, error) {

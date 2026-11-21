@@ -30,7 +30,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   another site could open a WebSocket carrying the user's cookies. Now an
   `Origin` header must name the request's `Host`; a request without `Origin`
   (non-browser clients) still passes. To keep the old behaviour, set
-  `AllowedOrigins: []string{"*"}`.
+  `AllowedOrigins: []string{"*"}`. **Check before upgrading:** a reverse proxy
+  that rewrites `Host` (nginx's default `proxy_set_header Host $proxy_host`)
+  makes every browser handshake look cross-origin and get 403. Forward the
+  original host (`proxy_set_header Host $host`) or list your site in
+  `AllowedOrigins`.
 - **`contrib/ratelimit` follows the app's trusted proxies.** The default key
   was the socket peer, independently of `WithTrustProxy`, so behind a proxy
   the app trusted every client shared one bucket. The key is now `c.IP()`.

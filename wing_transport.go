@@ -255,7 +255,7 @@ type conn struct {
 	closePending    bool   // close after async ownership returns; prevents fd reuse
 	remoteAddr      string // lazy peer address cache, filled only if Request.RemoteAddr is used
 	lastActive      int64  // unix nano — updated on accept + each recv
-	lastSent        int64  // unix nano — last write that sent bytes; kept only while IdleTimeout is on
+	lastSent        int64  // unix nano — last write that sent bytes; idle time counts from here after a response
 	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
 	readSuppressed  bool   // readiness arrived while pending; drain once ownership returns
 	readDrained     bool   // socket input exhausted during synchronous inline dispatch
@@ -686,9 +686,13 @@ func (w *worker) sweepTimeouts(now int64) {
 			w.closeConn(fd)
 			continue
 		}
-		// Idle timeout: no bytes received or sent for IdleTimeout. A download
-		// that keeps sending is not idle; one the client stopped reading is.
-		if w.idleTimeout > 0 && c.readN == 0 && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
+		// Idle timeout: no request and no response in progress for IdleTimeout,
+		// counted from the last byte received or sent. A connection still
+		// sending is bounded by WriteTimeout instead, as in net/http: the kernel
+		// send buffer can hold seconds of data for a slow reader, so the time
+		// since the last write does not show whether the client is reading.
+		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
+		if w.idleTimeout > 0 && c.readN == 0 && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
 			w.closeConn(fd)
 			continue
 		}

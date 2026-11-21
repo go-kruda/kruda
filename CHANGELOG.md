@@ -185,9 +185,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   pattern there.
 - Wing: the idle sweep closed a connection that was still sending a
   response. With `WriteTimeout` off or longer than `IdleTimeout`, a download
-  longer than `IdleTimeout` was cut mid-body. Idle time now counts from the
-  last byte received or sent, so a download that keeps moving stays open and
-  one the client stopped reading is still closed.
+  longer than `IdleTimeout` was cut mid-body. A connection still sending is
+  now bounded by `WriteTimeout` only, as in net/http, and idle time counts
+  from the last byte sent. With `WriteTimeout` 0, a client that stops reading
+  is not timed out; keep a `WriteTimeout` if that matters.
 - net/http: `c.Header("Host")` returned an empty string, because net/http
   moves `Host` out of the header map. It now returns the Host, as Wing and
   fasthttp do.

@@ -382,6 +382,10 @@ func toolNew(args map[string]any) (string, error) {
 		return "", fmt.Errorf("unknown template %q: must be minimal, api, or fullstack", tmpl)
 	}
 
+	if err := validateModulePath(name); err != nil {
+		return "", err
+	}
+
 	workspace, err := os.OpenRoot(".")
 	if err != nil {
 		return "", err

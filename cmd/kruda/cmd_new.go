@@ -68,15 +68,8 @@ func runNew(cmd *cobra.Command, args []string) error {
 		projectName = filepath.Base(target)
 		moduleName = projectName
 	}
-	// Like go mod init, allow local main module names without a domain.
-	if err := module.CheckImportPath(moduleName); err != nil {
-		return fmt.Errorf("invalid module path %q: %w", moduleName, err)
-	}
-	if moduleName == "go" || moduleName == "toolchain" {
-		return fmt.Errorf("module path %q is reserved", moduleName)
-	}
-	if _, _, ok := module.SplitPathVersion(moduleName); !ok {
-		return fmt.Errorf("invalid major version suffix in module path %q", moduleName)
+	if err := validateModulePath(moduleName); err != nil {
+		return err
 	}
 	data := templateData{ProjectName: projectName, ModuleName: moduleName}
 
@@ -88,6 +81,20 @@ func runNew(cmd *cobra.Command, args []string) error {
 
 	// Print getting started message
 	printGettingStarted(name, tmplName)
+	return nil
+}
+
+func validateModulePath(moduleName string) error {
+	// Like go mod init, allow local main module names without a domain.
+	if err := module.CheckImportPath(moduleName); err != nil {
+		return fmt.Errorf("invalid module path %q: %w", moduleName, err)
+	}
+	if moduleName == "go" || moduleName == "toolchain" {
+		return fmt.Errorf("module path %q is reserved", moduleName)
+	}
+	if _, _, ok := module.SplitPathVersion(moduleName); !ok {
+		return fmt.Errorf("invalid major version suffix in module path %q", moduleName)
+	}
 	return nil
 }
 

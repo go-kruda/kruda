@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/go-kruda/kruda v1.7.2
+	github.com/go-kruda/kruda v1.8.5
 	github.com/go-kruda/kruda/contrib/ratelimit v0.0.0
 )
 

@@ -234,6 +234,20 @@ func TestNewFilesystemProjectBuilds(t *testing.T) {
 	}
 }
 
+func TestMCPNewRejectsInvalidModuleBeforeCreatingDirectory(t *testing.T) {
+	for _, name := range []string{"my app", "go", "toolchain"} {
+		t.Run(name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if _, err := toolNew(map[string]any{"project_name": name}); err == nil {
+				t.Errorf("accepted invalid module path %q", name)
+			}
+			if _, err := os.Lstat(name); !os.IsNotExist(err) {
+				t.Errorf("expected project directory %q to be absent, got %v", name, err)
+			}
+		})
+	}
+}
+
 func TestMCPNewConfinesProjectToWorkspace(t *testing.T) {
 	outside := t.TempDir()
 	t.Chdir(t.TempDir())

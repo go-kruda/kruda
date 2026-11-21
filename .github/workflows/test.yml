@@ -22,7 +22,10 @@ concurrency:
 jobs:
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: >-
+      ${{ github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+          matrix.self_hosted || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -33,6 +36,13 @@ jobs:
         exclude:
           - os: macos-latest
             go-version: 'stable'
+        include:
+          - os: ubuntu-latest
+            self_hosted: [self-hosted, kruda-linux]
+          - os: macos-latest
+            self_hosted: [self-hosted, macOS, ARM64]
+          - os: windows-2025
+            self_hosted: [self-hosted, kruda-windows]
 
     steps:
       - name: Checkout code
@@ -42,6 +52,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
+          cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Record Windows runtime environment
         if: runner.os == 'Windows'

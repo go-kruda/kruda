@@ -34,6 +34,7 @@ type MemoryStore struct {
 	bytes           int64
 	maxBytes        int64
 	maxEntries      int
+	lastPurge       time.Time // last expired sweep made to free room in Set
 	cleanupInterval time.Duration
 	stopCleanup     chan struct{}
 	stopped         atomic.Bool
@@ -108,8 +109,16 @@ func (s *MemoryStore) Set(key string, resp *CachedResponse, ttl time.Duration) e
 	if s.maxBytes > 0 && size > s.maxBytes {
 		return nil
 	}
-	for s.order.Len() > 0 &&
-		((s.maxEntries > 0 && len(s.entries) >= s.maxEntries) || (s.maxBytes > 0 && s.bytes+size > s.maxBytes)) {
+	full := func() bool {
+		return (s.maxEntries > 0 && len(s.entries) >= s.maxEntries) || (s.maxBytes > 0 && s.bytes+size > s.maxBytes)
+	}
+	// Free expired entries before live ones. The sweep is O(n), so a full store
+	// under a stream of new keys runs it at most once a second.
+	if now := time.Now(); full() && now.Sub(s.lastPurge) >= time.Second {
+		s.lastPurge = now
+		s.removeExpiredLocked(now)
+	}
+	for s.order.Len() > 0 && full() {
 		s.remove(s.order.Front().Value.(string))
 	}
 
@@ -187,12 +196,16 @@ func (s *MemoryStore) cleanupLoop() {
 
 // removeExpired removes all expired entries from the store.
 func (s *MemoryStore) removeExpired() {
-	now := time.Now()
 	s.mu.Lock()
+	s.removeExpiredLocked(time.Now())
+	s.mu.Unlock()
+}
+
+// removeExpiredLocked removes entries expired at now. Must be called with s.mu held.
+func (s *MemoryStore) removeExpiredLocked(now time.Time) {
 	for k, e := range s.entries {
 		if now.After(e.expiresAt) {
 			s.remove(k)
 		}
 	}
-	s.mu.Unlock()
 }

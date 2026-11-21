@@ -50,3 +50,21 @@ func TestMemoryStore_DefaultByteBudget(t *testing.T) {
 		t.Fatalf("Len = %d MiB-sized entries, over the %d MiB default budget", n, DefaultMaxBytes>>20)
 	}
 }
+
+// TestMemoryStore_EvictsExpiredBeforeLive fills a store whose oldest entry is
+// still valid and whose newer entry has expired. Making room must drop the
+// expired entry, not the live one.
+func TestMemoryStore_EvictsExpiredBeforeLive(t *testing.T) {
+	store := NewMemoryStore(2)
+	defer store.Close()
+	_ = store.Set("live", sizedResponse(1), time.Hour)
+	_ = store.Set("short", sizedResponse(1), 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	_ = store.Set("new", sizedResponse(1), time.Hour)
+	if got, _ := store.Get("live"); got == nil {
+		t.Fatal("a live entry was evicted while an expired one was present")
+	}
+	if got, _ := store.Get("new"); got == nil {
+		t.Fatal("new entry missing")
+	}
+}

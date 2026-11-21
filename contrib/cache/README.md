@@ -57,7 +57,7 @@ without loss. A custom `KeyFunc` can define a key for other transports.
 | KeyFunc | func(*kruda.Ctx) string | method + path + query + auth/cookie hash | Cache key function |
 | Methods | []string | ["GET"] | HTTP methods eligible for caching |
 | StatusCodes | []int | [200] | Status codes eligible for caching |
-| Store | Store | MemoryStore | Cache storage backend |
+| Store | Store | MemoryStore | Cache storage backend; the default holds 1000 entries and 64 MiB (`SetMaxBytes` to change) |
 | Skip | func(*kruda.Ctx) bool | nil | Skip caching condition |
 
 `CacheJSON` encodes once using `Ctx.EncodeJSON`, then stores and sends the same

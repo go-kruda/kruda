@@ -26,9 +26,9 @@ type Config struct {
 	// Default: nil (no skip).
 	Skip func(*kruda.Ctx) bool
 
-	// TrustedProxies is the list of trusted proxy IPs.
+	// TrustedProxies is the list of trusted proxy IPs for the limiter only.
 	// X-Forwarded-For is only used when the request comes from a trusted proxy.
-	// Empty = do not trust forwarded headers (use the socket peer only).
+	// Empty = use c.IP(), which follows the app's proxy settings.
 	//
 	// NOTE: Only exact IP addresses are supported (e.g., "10.0.0.1").
 	// CIDR notation (e.g., "10.0.0.0/8") is NOT supported in v1.

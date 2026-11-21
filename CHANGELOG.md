@@ -25,6 +25,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`contrib/ws` accepts only the same origin when `AllowedOrigins` is
+  empty.** Before, an empty list accepted every `Origin`, so a page on
+  another site could open a WebSocket carrying the user's cookies. Now an
+  `Origin` header must name the request's `Host`; a request without `Origin`
+  (non-browser clients) still passes. To keep the old behaviour, set
+  `AllowedOrigins: []string{"*"}`. **Check before upgrading:** a reverse proxy
+  that rewrites `Host` (nginx's default `proxy_set_header Host $proxy_host`)
+  makes every browser handshake look cross-origin and get 403. Forward the
+  original host (`proxy_set_header Host $host`) or list your site in
+  `AllowedOrigins`.
+- **`contrib/ratelimit` follows the app's trusted proxies.** The default key
+  was the socket peer, independently of `WithTrustProxy`, so behind a proxy
+  the app trusted every client shared one bucket. The key is now `c.IP()`.
+  `Config.TrustedProxies` still overrides it for the limiter. The module now
+  requires core v1.8.5.
+- **`contrib/cache` `MemoryStore` has a byte budget.** It held up to 1000
+  entries of any size, so distinct query strings on a 5 MB endpoint could
+  keep 5 GB. It now also stops at `DefaultMaxBytes` (64 MiB), evicting the
+  oldest entries first, and does not store a response larger than the whole
+  budget. Change it with `NewMemoryStore(n).SetMaxBytes(bytes)`; 0 removes
+  the limit. Eviction no longer scans every entry under the lock.
+
 - Typed handlers bind `query` and `param` fields with fewer allocations. The
   input parser now picks a setter per field when the route is registered and
   writes scalar values straight into the input struct, and the handler no
@@ -155,6 +177,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory now answers `404`, as it does without the option.
 
 ### Fixed
+
+- A CORS preflight to a path with routes for other methods runs the global
+  middleware chain, where `c.Route()` returned the raw path. Metrics and
+  tracing middleware then made a new label for every preflight path, which
+  anyone could grow without limit. `c.Route()` now returns the matched route
+  pattern there.
+- Wing: the idle sweep closed a connection that was still sending a
+  response. With `WriteTimeout` off or longer than `IdleTimeout`, a download
+  longer than `IdleTimeout` was cut mid-body. A connection still sending is
+  now bounded by `WriteTimeout` only, as in net/http, and idle time counts
+  from the last byte sent. With `WriteTimeout` 0, a client that stops reading
+  is not timed out; keep a `WriteTimeout` if that matters.
+- net/http: `c.Header("Host")` returned an empty string, because net/http
+  moves `Host` out of the header map. It now returns the Host, as Wing and
+  fasthttp do.
 
 - Wing: a POST to a Pool, Spawn or Takeover route (`Arrow`, `Spear`, `DB`,
   `Render`) whose body arrived after its header ran on the event loop, so a

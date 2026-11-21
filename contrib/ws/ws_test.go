@@ -486,7 +486,7 @@ func TestUpgrade_OriginRejection(t *testing.T) {
 
 func TestUpgrade_OriginAllowAll(t *testing.T) {
 	app := kruda.New(kruda.NetHTTP())
-	upgrader := New(Config{}) // empty AllowedOrigins = allow all
+	upgrader := New(Config{}) // empty AllowedOrigins = same origin; dialWS sends none
 
 	app.Get("/ws", func(c *kruda.Ctx) error {
 		return upgrader.Upgrade(c, func(conn *Conn) {

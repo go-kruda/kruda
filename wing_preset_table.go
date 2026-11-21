@@ -51,7 +51,7 @@ func (mp *methodPresets) add(path string, f Preset) {
 }
 
 func isDynamic(path string) bool {
-	return wingIndexByte(path, ':') > 0 || wingIndexByte(path, '*') > 0
+	return strings.IndexByte(path, ':') > 0 || strings.IndexByte(path, '*') > 0
 }
 
 type prefixPreset struct {
@@ -302,15 +302,6 @@ func splitKey(key string) (string, string) {
 		}
 	}
 	return key, "/"
-}
-
-func wingIndexByte(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
 }
 
 // staticHeadersOnly cuts a prebuilt response down to its headers, so a HEAD

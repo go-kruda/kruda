@@ -18,7 +18,7 @@
 //	app.Use(cache.New(cache.Config{
 //	    TTL:     10 * time.Minute,
 //	    Methods: []string{"GET"},
-//	    Store:   cache.NewMemoryStore(5000),
+//	    Store:   cache.NewMemoryStore(5000).SetMaxBytes(256 << 20),
 //	}))
 //
 // # What it does
@@ -45,5 +45,7 @@
 // # See also
 //
 //   - [Store] — interface for plugging in custom backends (e.g. Redis)
-//   - [NewMemoryStore] — in-memory LRU store shipped with the package
+//   - [NewMemoryStore] — in-memory store shipped with the package; it evicts
+//     oldest entries past its entry limit or its byte budget
+//     ([DefaultMaxBytes], change with [MemoryStore.SetMaxBytes])
 package cache

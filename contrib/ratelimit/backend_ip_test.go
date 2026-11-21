@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-kruda/kruda"
+	"github.com/go-kruda/kruda/transport"
 )
 
 func TestClientIPAcrossBackends(t *testing.T) {
@@ -143,8 +144,8 @@ func TestTrustedForwardingAcrossBackends(t *testing.T) {
 				t.Fatal(err)
 			}
 			app := kruda.New(tc.option, kruda.WithTrustProxy(true))
-			trusted := newProxyPolicy([]string{"127.0.0.1", "10.0.0.2"})
-			app.Get("/ip", func(c *kruda.Ctx) error { return c.Text(extractIP(c, trusted)) })
+			trusted := transport.NewProxyPolicy([]string{"127.0.0.1", "10.0.0.2"})
+			app.Get("/ip", func(c *kruda.Ctx) error { return c.Text(extractIP(c, &trusted)) })
 			app.Get("/ready", func(c *kruda.Ctx) error { return c.Text("ready") })
 			done := make(chan error, 1)
 			go func() { done <- app.Serve(ln) }()

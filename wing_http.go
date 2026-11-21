@@ -430,7 +430,8 @@ func parseHTTPRequestInternal(data []byte, limits parserLimits, unsafePath bool,
 		return nil, 0, false
 	}
 
-	// Reject Transfer-Encoding: chunked (unsupported; HTTP/1.1 allows chunked only in responses).
+	// Reject any Transfer-Encoding: Wing does not decode chunked request bodies,
+	// and refusing them closes off TE-based smuggling.
 	if hasTE {
 		return nil, 0, false
 	}

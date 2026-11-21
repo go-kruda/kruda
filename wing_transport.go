@@ -255,6 +255,7 @@ type conn struct {
 	closePending    bool   // close after async ownership returns; prevents fd reuse
 	remoteAddr      string // lazy peer address cache, filled only if Request.RemoteAddr is used
 	lastActive      int64  // unix nano — updated on accept + each recv
+	lastSent        int64  // unix nano — last write that sent bytes; idle time counts from here after a response
 	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
 	readSuppressed  bool   // readiness arrived while pending; drain once ownership returns
 	readDrained     bool   // socket input exhausted during synchronous inline dispatch
@@ -685,8 +686,13 @@ func (w *worker) sweepTimeouts(now int64) {
 			w.closeConn(fd)
 			continue
 		}
-		// Idle timeout: keep-alive conn with no activity.
-		if w.idleTimeout > 0 && c.readN == 0 && now-c.lastActive > w.idleTimeout {
+		// Idle timeout: no request and no response in progress for IdleTimeout,
+		// counted from the last byte received or sent. A connection still
+		// sending is bounded by WriteTimeout instead, as in net/http: the kernel
+		// send buffer can hold seconds of data for a slow reader, so the time
+		// since the last write does not show whether the client is reading.
+		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
+		if w.idleTimeout > 0 && c.readN == 0 && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
 			w.closeConn(fd)
 			continue
 		}
@@ -1484,6 +1490,9 @@ func (w *worker) directSend(c *conn) {
 			return
 		}
 		c.sendN += int(r)
+		if w.idleTimeout > 0 {
+			c.lastSent = w.now
+		}
 	}
 	c.sendBuf = c.sendBuf[:0]
 	c.sendN = 0
@@ -1535,6 +1544,9 @@ func (w *worker) directSend(c *conn) {
 			n, err := sendfile(c.fd, c.sendFileFd, nil, int(c.sendFileSize))
 			if n > 0 {
 				c.sendFileSize -= int64(n)
+				if w.idleTimeout > 0 {
+					c.lastSent = w.now
+				}
 			}
 			if err != nil {
 				if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {

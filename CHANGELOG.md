@@ -25,16 +25,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **`contrib/ws` accepts only the same origin when `AllowedOrigins` is
-  empty.** Before, an empty list accepted every `Origin`, so a page on
-  another site could open a WebSocket carrying the user's cookies. Now an
-  `Origin` header must name the request's `Host`; a request without `Origin`
-  (non-browser clients) still passes. To keep the old behaviour, set
-  `AllowedOrigins: []string{"*"}`. **Check before upgrading:** a reverse proxy
-  that rewrites `Host` (nginx's default `proxy_set_header Host $proxy_host`)
-  makes every browser handshake look cross-origin and get 403. Forward the
-  original host (`proxy_set_header Host $host`) or list your site in
-  `AllowedOrigins`.
+- **`contrib/ws` accepts only the same origin by default.** Older versions
+  accepted every origin when `AllowedOrigins` was empty. Now the origin must
+  match the request scheme, host and port. Non-browser clients may omit it.
+  TLS-terminating proxies can preserve `Host` and overwrite
+  `X-Forwarded-Proto` with `https` after the app enables proxy trust for
+  their socket IPs. Set `AllowedOrigins` to the public origins when the
+  proxy rewrites the authority or the core lacks `Ctx.IsTrustedProxy`.
+  `AllowedOrigins: []string{"*"}` restores the original allow-all policy.
+- Dev-mode profiling routes require the `kruda_pprof` build tag and
+  `WithDevMode(true)` with net/http. Default builds leave Go's default mux
+  free of profiling routes. `kruda pgo` adds that tag to its profiling build.
+- `contrib/cache` includes the request host in the default key. Existing
+  persisted entries will miss until repopulated.
+- `contrib/etag` uses weak tags with `New()`. When passing a `Config`,
+  set `Weak: true` to keep weak tags.
 - **`contrib/ratelimit` follows the app's trusted proxies.** The default key
   was the socket peer, independently of `WithTrustProxy`, so behind a proxy
   the app trusted every client shared one bucket. The key is now `c.IP()`.
@@ -177,6 +182,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory now answers `404`, as it does without the option.
 
 ### Fixed
+
+- Bindgen preserves the source when the output resolves to the same file.
+- `kruda new` handles explicit filesystem paths, and the MCP scaffolder keeps
+  projects inside the working directory.
+- WebSocket upgrades reject failed request-body reads.
+- Wing leaves uploads in progress to the read timeout.
+- OpenAPI keeps distinct anonymous schemas and uses Go field names for
+  options-only JSON tags.
+- `contrib/compress` emits zlib-wrapped HTTP deflate responses.
+- `contrib/etag` matches lists of entity tags and sends 304 only for GET and HEAD.
+- Swagger UI pins its assets with subresource integrity and preserves spec URLs.
 
 - A CORS preflight to a path with routes for other methods runs the global
   middleware chain, where `c.Route()` returned the raw path. Metrics and

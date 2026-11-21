@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -91,7 +92,11 @@ func (u *Upgrader) validateUpgrade(c *kruda.Ctx) error {
 	// read as the headers would otherwise reach the hijack path while a split
 	// body is rejected earlier by Wing). Check the parsed body rather than the
 	// Content-Length header, which not every transport exposes via c.Header.
-	if body, _ := c.BodyBytes(); len(body) > 0 {
+	body, err := c.BodyBytes()
+	if err != nil {
+		return fmt.Errorf("ws: failed to read upgrade request body")
+	}
+	if len(body) > 0 {
 		return fmt.Errorf("ws: upgrade request must not carry a body")
 	}
 
@@ -120,8 +125,7 @@ func (u *Upgrader) validateUpgrade(c *kruda.Ctx) error {
 
 // checkOrigin validates the Origin header against allowed origins.
 //
-// When AllowedOrigins is empty, only the same origin is permitted: an Origin
-// header must name the request's Host. Browsers send Origin on every
+// When AllowedOrigins is empty, the scheme, host and port must match. Browsers send Origin on every
 // WebSocket handshake, so this stops another site from opening a socket with
 // the user's cookies. AllowedOrigins: []string{"*"} permits every origin.
 // When AllowedOrigins is set:
@@ -134,8 +138,15 @@ func (u *Upgrader) checkOrigin(c *kruda.Ctx) error {
 		if origin == "" {
 			return nil // non-browser client
 		}
-		if o, err := url.Parse(origin); err == nil && o.Host != "" && strings.EqualFold(o.Host, requestHost(c)) {
-			return nil
+		o, err := url.Parse(origin)
+		if err == nil && o.Host != "" && o.User == nil && o.Path == "" &&
+			!o.ForceQuery && o.RawQuery == "" && o.Fragment == "" {
+			scheme, authority := requestOrigin(c)
+			h, err := url.Parse(scheme + "://" + authority)
+			if err == nil && h.Hostname() != "" && o.Scheme == scheme &&
+				strings.EqualFold(originHostPort(o), originHostPort(h)) {
+				return nil
+			}
 		}
 		return fmt.Errorf("ws: origin %q is not the same origin; set AllowedOrigins to permit it", origin)
 	}
@@ -156,15 +167,33 @@ func (u *Upgrader) checkOrigin(c *kruda.Ctx) error {
 	return fmt.Errorf("ws: origin %q not allowed", origin)
 }
 
-// requestHost returns the Host the client sent. net/http moves it out of the
-// header map into Request.Host, so read it there first.
-func requestHost(c *kruda.Ctx) string {
+func requestOrigin(c *kruda.Ctx) (scheme, host string) {
+	host = c.Header("Host")
 	if r := c.Request(); r != nil {
 		if hr, ok := r.RawRequest().(*http.Request); ok {
-			return hr.Host
+			host = hr.Host
+			if hr.TLS != nil {
+				return "https", host
+			}
 		}
 	}
-	return c.Header("Host")
+	// Older core versions can use AllowedOrigins for TLS-terminating proxies.
+	if peer, ok := any(c).(interface{ IsTrustedProxy() bool }); ok &&
+		peer.IsTrustedProxy() && strings.EqualFold(c.Header("X-Forwarded-Proto"), "https") {
+		return "https", host
+	}
+	return "http", host
+}
+
+func originHostPort(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 // computeAcceptKey computes the Sec-WebSocket-Accept value per RFC 6455 §4.2.2.

@@ -41,10 +41,7 @@ func (p ProxyPolicy) ClientIP(r Request) string {
 	} else {
 		raw = r.RemoteAddr()
 	}
-	if host, _, err := net.SplitHostPort(raw); err == nil {
-		raw = host
-	}
-	ip, ok := proxyIP(raw)
+	ip, ok := proxyPeerIP(raw)
 	if !ok {
 		return ""
 	}
@@ -89,6 +86,23 @@ func (p ProxyPolicy) ClientIP(r Request) string {
 		}
 	}
 	return remote
+}
+
+// IsTrustedPeer reports whether the supplied socket address is in the proxy allowlist.
+func (p ProxyPolicy) IsTrustedPeer(addr string) bool {
+	ip, ok := proxyPeerIP(addr)
+	if !ok {
+		return false
+	}
+	_, trusted := p.trusted[ip]
+	return trusted
+}
+
+func proxyPeerIP(raw string) (netip.Addr, bool) {
+	if host, _, err := net.SplitHostPort(raw); err == nil {
+		raw = host
+	}
+	return proxyIP(raw)
 }
 
 func proxyIP(raw string) (netip.Addr, bool) {

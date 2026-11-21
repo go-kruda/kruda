@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -55,6 +56,11 @@ func runGenerateBinder(cmd *cobra.Command, args []string) error {
 }
 
 func runBindgen(cmd *cobra.Command, input, typeName, output, funcName string, routes bool) error {
+	if src, err := os.Stat(input); err == nil {
+		if dst, err := os.Stat(output); err == nil && os.SameFile(src, dst) {
+			return fmt.Errorf("input and output refer to the same file")
+		}
+	}
 	args := []string{"run", "github.com/go-kruda/kruda/cmd/bindgen",
 		"-input", input, "-type", typeName, "-output", output, "-func", funcName}
 	if routes {

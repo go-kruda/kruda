@@ -1,8 +1,8 @@
 package compress
 
 import (
-	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
 	"github.com/go-kruda/kruda/middleware"
 	"io"
 	"net/http/httptest"
@@ -68,7 +68,10 @@ func TestDeflateCompression(t *testing.T) {
 	}
 
 	// Decompress and verify
-	dr := flate.NewReader(w.Body)
+	dr, err := zlib.NewReader(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer dr.Close()
 
 	body, err := io.ReadAll(dr)

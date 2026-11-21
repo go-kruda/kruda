@@ -85,10 +85,7 @@ type schemaRef struct {
 	MaxLength  *int                  `json:"maxLength,omitempty"`
 	Nullable   bool                  `json:"nullable,omitempty"`
 
-	// typeID is the fully-qualified type string ("pkg/path.Name" or the generic
-	// instantiation name) used to tell two types apart when their sanitized keys
-	// collide. Not serialized — internal bookkeeping only.
-	typeID string `json:"-"`
+	goType reflect.Type
 }
 
 // routeInfo holds metadata for a single registered typed route.
@@ -151,16 +148,6 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	if name == "" {
 		name = "Anonymous"
 	}
-	// id is the type's fully-qualified identity. For a generic instantiation,
-	// t.Name() already embeds the full type-arg paths (e.g.
-	// "ResourceList[github.com/app/models.User]"); for a plain named type we
-	// prepend its package path so two same-short-name types from different
-	// packages are distinguishable.
-	id := name
-	if pkg := t.PkgPath(); pkg != "" && !strings.ContainsAny(name, "[") {
-		id = pkg + "." + name
-	}
-
 	// A generic instantiation's name embeds "/", "[", "]", ".", and "*" for
 	// pointer args — characters that make the derived $ref an invalid JSON
 	// pointer. sanitizeComponentName maps the full instantiation name (incl. each
@@ -169,17 +156,10 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	// so existing keys never move (the golden guard relies on this no-op).
 	componentKey := sanitizeComponentName(name)
 
-	// Resolve key collisions by true type identity. An entry under this key that
-	// shares our id is the same type → return a $ref. A different id is a genuine
-	// cross-package short-name clash (only possible for plain named types, whose
-	// sanitized key is the bare short name): disambiguate with the full package
-	// path, then a numeric counter, so distinct types never share a key and an
-	// existing schema is never overwritten — even three+ types whose packages
-	// share a trailing segment (e.g. several ".../models.User"). Generic keys
-	// already encode full identity, so they rarely reach the clash branch; the
-	// counter keeps even a pathological generic clash safe.
+	// Component names are labels. Compare Go types to tell apart schemas
+	// with the same label, including different anonymous structs.
 	if existing, exists := components[componentKey]; exists {
-		if existing.typeID == id {
+		if existing.goType == t {
 			return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 		}
 		base := componentKey
@@ -192,7 +172,7 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 			if !taken {
 				break
 			}
-			if again.typeID == id {
+			if again.goType == t {
 				return &schemaRef{Ref: "#/components/schemas/" + componentKey}
 			}
 			componentKey = base + "_" + strconv.Itoa(n)
@@ -204,7 +184,7 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 	schema := &schemaRef{
 		Type:       "object",
 		Properties: make(map[string]*schemaRef),
-		typeID:     id,
+		goType:     t,
 	}
 	components[componentKey] = schema
 
@@ -220,6 +200,9 @@ func generateSchema(t reflect.Type, components map[string]*schemaRef) *schemaRef
 		}
 		if idx := strings.IndexByte(propName, ','); idx != -1 {
 			propName = propName[:idx]
+		}
+		if propName == "" {
+			propName = field.Name
 		}
 
 		propSchema := generateSchema(field.Type, components)

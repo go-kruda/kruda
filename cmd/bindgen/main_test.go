@@ -304,3 +304,33 @@ func TestDefaultFloatPreservesSpecialValues(t *testing.T) {
 		}
 	}
 }
+
+func TestRunRejectsOutputAliasingInput(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.go")
+	original := []byte("package sample\ntype Input struct { Query string }\n")
+	if err := os.WriteFile(input, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"same path", "hard link", "symlink"} {
+		t.Run(name, func(t *testing.T) {
+			output := input
+			if name != "same path" {
+				output = filepath.Join(dir, name)
+				link := os.Link
+				if name == "symlink" {
+					link = os.Symlink
+				}
+				if err := link(input, output); err != nil {
+					t.Skipf("creating %s: %v", name, err)
+				}
+			}
+			if err := run(input, "Input", output, "bindInput", false); err == nil || !strings.Contains(err.Error(), "same file") {
+				t.Fatalf("run returned %v, want same-file error", err)
+			}
+			if data, err := os.ReadFile(input); err != nil || !bytes.Equal(data, original) {
+				t.Fatalf("input changed: %q, %v", data, err)
+			}
+		})
+	}
+}

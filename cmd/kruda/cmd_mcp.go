@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -368,6 +369,9 @@ func toolNew(args map[string]any) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("project_name is required")
 	}
+	if !filepath.IsLocal(name) || name == "." || strings.ContainsAny(name, "/\\") {
+		return "", fmt.Errorf("project_name must be a single local directory name")
+	}
 	tmpl, _ := args["template"].(string)
 	if tmpl == "" {
 		tmpl = "minimal"
@@ -378,13 +382,25 @@ func toolNew(args map[string]any) (string, error) {
 		return "", fmt.Errorf("unknown template %q: must be minimal, api, or fullstack", tmpl)
 	}
 
-	if isNonEmptyDir(name) {
+	workspace, err := os.OpenRoot(".")
+	if err != nil {
+		return "", err
+	}
+	defer workspace.Close()
+	if err := workspace.Mkdir(name, 0o755); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	entries, err := fs.ReadDir(workspace.FS(), name)
+	if err != nil {
+		return "", fmt.Errorf("reading project directory: %w", err)
+	}
+	if len(entries) != 0 {
 		return "", fmt.Errorf("directory %q already exists and is not empty", name)
 	}
 
 	data := templateData{ProjectName: name, ModuleName: name}
-	tmplDir := filepath.Join("templates", tmpl)
-	if err := scaffoldFromFS(templateFS, tmplDir, name, data); err != nil {
+	tmplDir := "templates/" + tmpl
+	if err := scaffoldInto(templateFS, tmplDir, workspace, name, data); err != nil {
 		return "", fmt.Errorf("scaffolding failed: %w", err)
 	}
 

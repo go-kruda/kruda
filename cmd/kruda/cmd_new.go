@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/module"
 )
 
 //go:embed all:templates
@@ -54,13 +56,32 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %q already exists and is not empty", name)
 	}
 
-	data := templateData{
-		ProjectName: name,
-		ModuleName:  name,
+	projectName := filepath.Base(name)
+	moduleName := filepath.ToSlash(filepath.Clean(name))
+	argument := filepath.ToSlash(name)
+	if filepath.IsAbs(name) || moduleName == "." || moduleName == ".." ||
+		strings.HasPrefix(argument, "./") || strings.HasPrefix(argument, "../") {
+		target, err := filepath.Abs(name)
+		if err != nil {
+			return fmt.Errorf("resolving project directory: %w", err)
+		}
+		projectName = filepath.Base(target)
+		moduleName = projectName
 	}
+	// Like go mod init, allow local main module names without a domain.
+	if err := module.CheckImportPath(moduleName); err != nil {
+		return fmt.Errorf("invalid module path %q: %w", moduleName, err)
+	}
+	if moduleName == "go" || moduleName == "toolchain" {
+		return fmt.Errorf("module path %q is reserved", moduleName)
+	}
+	if _, _, ok := module.SplitPathVersion(moduleName); !ok {
+		return fmt.Errorf("invalid major version suffix in module path %q", moduleName)
+	}
+	data := templateData{ProjectName: projectName, ModuleName: moduleName}
 
 	// Scaffold the project from embedded templates
-	tmplDir := filepath.Join("templates", tmplName)
+	tmplDir := "templates/" + tmplName
 	if err := scaffoldFromFS(templateFS, tmplDir, name, data); err != nil {
 		return fmt.Errorf("scaffolding failed: %w", err)
 	}
@@ -82,57 +103,58 @@ func isNonEmptyDir(path string) bool {
 // scaffoldFromFS walks the embedded template directory and creates files
 // in the target directory, executing Go templates with the provided data.
 func scaffoldFromFS(fsys embed.FS, tmplDir, targetDir string, data templateData) error {
-	return fs.WalkDir(fsys, tmplDir, func(path string, d fs.DirEntry, err error) error {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(targetDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return scaffoldInto(fsys, tmplDir, root, ".", data)
+}
+
+func scaffoldInto(fsys embed.FS, tmplDir string, root *os.Root, targetDir string, data templateData) error {
+	return fs.WalkDir(fsys, tmplDir, func(templatePath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Compute relative path from template root
-		relPath, err := filepath.Rel(tmplDir, path)
-		if err != nil {
-			return err
-		}
-		if relPath == "." {
+		if templatePath == tmplDir {
 			return nil
 		}
 
-		targetPath := filepath.Join(targetDir, relPath)
+		targetPath := filepath.Join(targetDir, filepath.FromSlash(strings.TrimPrefix(templatePath, tmplDir+"/")))
 
 		if d.IsDir() {
-			return os.MkdirAll(targetPath, 0o755)
+			return root.MkdirAll(targetPath, 0o755)
 		}
 
 		// Read template content
-		content, err := fsys.ReadFile(path)
+		content, err := fsys.ReadFile(templatePath)
 		if err != nil {
-			return fmt.Errorf("reading template %s: %w", path, err)
+			return fmt.Errorf("reading template %s: %w", templatePath, err)
 		}
 
 		// Strip .tmpl suffix from target filename
 		targetPath = strings.TrimSuffix(targetPath, ".tmpl")
 
-		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
-
 		// Execute template
-		tmpl, err := template.New(filepath.Base(path)).Parse(string(content))
+		tmpl, err := template.New(path.Base(templatePath)).Parse(string(content))
 		if err != nil {
-			return fmt.Errorf("parsing template %s: %w", path, err)
+			return fmt.Errorf("parsing template %s: %w", templatePath, err)
 		}
 
-		f, err := os.Create(targetPath)
+		f, err := root.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
 		if err != nil {
 			return fmt.Errorf("creating %s: %w", targetPath, err)
 		}
-		defer f.Close()
-
-		if err := tmpl.Execute(f, data); err != nil {
-			return fmt.Errorf("executing template %s: %w", path, err)
+		execErr := tmpl.Execute(f, data)
+		closeErr := f.Close()
+		if execErr != nil {
+			return fmt.Errorf("executing template %s: %w", templatePath, execErr)
 		}
-
-		return nil
+		return closeErr
 	})
 }
 

@@ -3,13 +3,13 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-kruda/kruda"
 	"github.com/valyala/fasthttp"
-	"net/http"
 )
 
 // Config holds configuration for the cache middleware.
@@ -19,7 +19,7 @@ type Config struct {
 	TTL time.Duration
 
 	// KeyFunc generates the cache key from the request context.
-	// Default: method + path + raw query + auth/cookie hashes
+	// Default: method + host + path + raw query + auth/cookie hashes
 	KeyFunc func(c *kruda.Ctx) string
 
 	// Methods lists HTTP methods eligible for caching.
@@ -55,11 +55,22 @@ func (c *Config) defaults() {
 	}
 }
 
-// defaultKeyFunc generates a cache key from method, path, query, and
+// defaultKeyFunc generates a cache key from method, host, path, query, and
 // authenticated request identity headers.
 func defaultKeyFunc(c *kruda.Ctx) string {
 	var b strings.Builder
 	b.WriteString(c.Method())
+	b.WriteByte(':')
+	host := c.Header("Host")
+	if host == "" {
+		// Older net/http adapters do not expose Request.Host as a header.
+		if r := c.Request(); r != nil {
+			if req, ok := r.RawRequest().(*http.Request); ok {
+				host = req.Host
+			}
+		}
+	}
+	b.WriteString(url.QueryEscape(strings.ToLower(host)))
 	b.WriteByte(':')
 	b.WriteString(url.QueryEscape(c.Path()))
 

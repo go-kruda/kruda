@@ -34,7 +34,7 @@ run on every request. Place `Replay` after authorization and before expensive
 work to avoid recomputing a cached result. `CacheJSON` and `CacheBytes` replay cached bytes at the point
 where the handler calls them; code before those helpers runs on every request.
 
-The default key preserves the complete raw query on built-in transports,
+The default key includes the request host and preserves the complete raw query on built-in transports,
 including repeated keys. Reordering the query can produce a separate entry.
 On older Wing cores without raw-query access, default caching is bypassed; use
 the updated core or a lossless custom `KeyFunc`.
@@ -54,7 +54,7 @@ without loss. A custom `KeyFunc` can define a key for other transports.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | TTL | time.Duration | 5*time.Minute | Cache expiration time |
-| KeyFunc | func(*kruda.Ctx) string | method + path + query + auth/cookie hash | Cache key function |
+| KeyFunc | func(*kruda.Ctx) string | method + host + path + query + auth/cookie hash | Cache key function |
 | Methods | []string | ["GET"] | HTTP methods eligible for caching |
 | StatusCodes | []int | [200] | Status codes eligible for caching |
 | Store | Store | MemoryStore | Cache storage backend; the default holds 1000 entries and 64 MiB (`SetMaxBytes` to change) |

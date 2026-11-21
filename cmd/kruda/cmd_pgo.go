@@ -23,8 +23,8 @@ var pgoCmd = &cobra.Command{
 	Long: `Generate a CPU profile for Profile-Guided Optimization (PGO).
 
 This command:
-  1. Builds your app with pprof enabled (adds net/http/pprof import)
-  2. Starts your app alongside a pprof HTTP server
+  1. Builds your app with the kruda_pprof tag
+  2. Starts your app and finds its pprof HTTP endpoint
   3. Waits for you to generate representative load (or runs bombardier if available)
   4. Collects a CPU profile and saves it as default.pgo
 
@@ -78,7 +78,11 @@ func runPGO(cmd *cobra.Command, args []string) error {
 	binPath := filepath.Join(dir, ".kruda-pgo-tmp")
 	fmt.Printf("%s[kruda pgo]%s Building your app...\n", colorYellow, colorReset)
 
-	buildArgs := []string{"build", "-o", binPath, "./"}
+	tags, err := pgoBuildTags(dir)
+	if err != nil {
+		return err
+	}
+	buildArgs := []string{"build", "-tags", tags, "-o", binPath, "./"}
 	buildCmd := exec.Command("go", buildArgs...)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
@@ -129,21 +133,25 @@ func runPGO(cmd *cobra.Command, args []string) error {
 		resp, err := http.Get(pprofURL)
 		if err == nil {
 			resp.Body.Close()
-			pprofReady = true
-			break
+			if resp.StatusCode == http.StatusOK {
+				pprofReady = true
+				break
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
 
 	if !pprofReady {
 		// pprof not on separate port, try same port
-		pprofURL = fmt.Sprintf("http://localhost:%d/debug/pprof/", port)
+		pprofURL = fmt.Sprintf("http://localhost:%d/debug/pprof/cmdline", port)
 		resp, err := http.Get(pprofURL)
 		if err == nil {
 			resp.Body.Close()
-			pprofReady = true
-			pprofPort = port
-			fmt.Printf("%s[kruda pgo]%s pprof found on app port :%d\n", colorGreen, colorReset, port)
+			if resp.StatusCode == http.StatusOK {
+				pprofReady = true
+				pprofPort = port
+				fmt.Printf("%s[kruda pgo]%s pprof found on app port :%d\n", colorGreen, colorReset, port)
+			}
 		}
 	}
 
@@ -183,6 +191,10 @@ func runPGO(cmd *cobra.Command, args []string) error {
 			return
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			profileDone <- fmt.Errorf("pprof returned %s", resp.Status)
+			return
+		}
 
 		f, err := os.Create(profileFile)
 		if err != nil {
@@ -262,6 +274,26 @@ func runPGO(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	return nil
+}
+
+func pgoBuildTags(dir string) (string, error) {
+	cmd := exec.Command("go", "list", "-f", `{{join context.BuildTags ","}}`, "unsafe")
+	cmd.Dir = dir
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("reading Go build tags: %w", err)
+	}
+	tags := strings.TrimSpace(string(out))
+	for tag := range strings.SplitSeq(tags, ",") {
+		if tag == "kruda_pprof" {
+			return tags, nil
+		}
+	}
+	if tags == "" {
+		return "kruda_pprof", nil
+	}
+	return tags + ",kruda_pprof", nil
 }
 
 // runAutoLoad uses bombardier to generate representative load on the given endpoints.

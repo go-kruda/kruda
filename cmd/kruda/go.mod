@@ -2,7 +2,10 @@ module github.com/go-kruda/kruda/cmd/kruda
 
 go 1.26.11
 
-require github.com/spf13/cobra v1.8.1
+require (
+	github.com/spf13/cobra v1.8.1
+	golang.org/x/mod v0.43.0
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

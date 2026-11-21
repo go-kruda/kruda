@@ -24,5 +24,5 @@ etag.GenerateAndSetETag(c, responseBody)
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Weak | bool | true | Generate weak ETags |
+| Weak | bool | true with `New()` | Generate weak ETags. Set to true when supplying a config to keep weak tags. |
 | Skip | func(*kruda.Ctx) bool | nil | Skip ETag function |

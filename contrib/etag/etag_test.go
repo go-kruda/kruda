@@ -284,12 +284,40 @@ func TestContainsETag(t *testing.T) {
 	}
 }
 
-func TestConfigDefaults(t *testing.T) {
-	var cfg Config
-	cfg.defaults()
-
-	if !cfg.Weak {
-		t.Error("Expected default Weak to be true")
+func TestETagConditionalMethodsAndExplicitStrength(t *testing.T) {
+	var calls []string
+	app := kruda.New(kruda.NetHTTP()).Use(New(Config{
+		Weak: false,
+		Skip: func(c *kruda.Ctx) bool {
+			calls = append(calls, c.Method())
+			return false
+		},
+	}))
+	handler := func(c *kruda.Ctx) error {
+		if GenerateAndSetETag(c, []byte("data")) {
+			return nil
+		}
+		return c.Text("data")
+	}
+	app.Get("/test", handler).Post("/test", handler)
+	tag := GenerateETag([]byte("data"), false)
+	for _, tc := range []struct {
+		method string
+		want   int
+	}{
+		{"GET", 304},
+		{"POST", 200},
+	} {
+		req := httptest.NewRequest(tc.method, "/test", nil)
+		req.Header.Set("If-None-Match", `W/"other,tag", W/`+tag)
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+		if rec.Code != tc.want || rec.Header().Get("ETag") != tag {
+			t.Errorf("%s: status = %d, tag = %q, want %d, %q", tc.method, rec.Code, rec.Header().Get("ETag"), tc.want, tag)
+		}
+	}
+	if len(calls) != 1 || calls[0] != "GET" {
+		t.Errorf("Skip called for %v, want [GET]", calls)
 	}
 }
 

@@ -146,9 +146,9 @@ func WithHeaderLimit(limit int) Option {
 
 // WithDevMode enables or disables development mode.
 // When enabled, the framework relaxes X-Frame-Options to SAMEORIGIN
-// and activates the dev error page and pprof routes (net/http only).
-// Default: false (production mode). KRUDA_ENV=development enables dev error
-// pages, but pprof requires WithDevMode(true).
+// and activates the dev error page. Profiling routes also require the
+// kruda_pprof build tag and the net/http transport.
+// Default: false (production mode). KRUDA_ENV=development enables dev error pages.
 func WithDevMode(enabled bool) Option {
 	return func(a *App) {
 		a.config.DevMode = enabled

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"net/http"
+	"strings"
 
 	"github.com/go-kruda/kruda"
 )
@@ -11,17 +12,12 @@ import (
 // Config holds ETag middleware configuration.
 type Config struct {
 	// Weak generates weak ETags (W/"...") when true, strong ETags otherwise.
-	// Default: true (weak ETags are faster and sufficient for most use cases).
+	// New() without a Config generates weak ETags.
 	Weak bool
 
 	// Skip allows conditional bypassing of ETag generation.
 	// Return true to skip ETag processing for this request.
 	Skip func(*kruda.Ctx) bool
-}
-
-// defaults applies default configuration values.
-func (c *Config) defaults() {
-	c.Weak = true // Default to weak ETags
 }
 
 // New creates an ETag middleware with the given configuration.
@@ -55,32 +51,23 @@ func (c *Config) defaults() {
 //	    return c.SendBytesWithType("application/json; charset=utf-8", body)
 //	})
 func New(config ...Config) kruda.HandlerFunc {
-	var cfg Config
+	cfg := Config{Weak: true}
 	if len(config) > 0 {
 		cfg = config[0]
 	}
-	cfg.defaults()
 
 	return func(c *kruda.Ctx) error {
-		// Skip non-GET/HEAD requests
 		method := c.Method()
-		if method != http.MethodGet && method != http.MethodHead {
+		conditional := method == http.MethodGet || method == http.MethodHead
+		if conditional && cfg.Skip != nil && cfg.Skip(c) {
 			return c.Next()
 		}
 
-		// Skip if configured to skip
-		if cfg.Skip != nil && cfg.Skip(c) {
-			return c.Next()
-		}
-
-		// Parse If-None-Match header and store for helper functions
-		ifNoneMatch := c.Header("If-None-Match")
-
-		// Store ETag config in context for handlers to use
 		c.Set("etag:weak", cfg.Weak)
-		c.Set("etag:if-none-match", ifNoneMatch)
+		if conditional {
+			c.Set("etag:if-none-match", c.Header("If-None-Match"))
+		}
 
-		// Execute handler chain
 		return c.Next()
 	}
 }
@@ -114,6 +101,10 @@ func SetETag(c *kruda.Ctx, etag string) bool {
 	// c.SetHeader() may not be flushed by all response methods (e.g. c.Text()
 	// has a fast path that bypasses writeHeaders), so we write directly.
 	c.ResponseWriter().Header().Set("ETag", etag)
+
+	if c.Method() != http.MethodGet && c.Method() != http.MethodHead {
+		return false
+	}
 
 	// Check If-None-Match from middleware or directly from request
 	ifNoneMatch := ""
@@ -157,42 +148,33 @@ func GenerateAndSetETag(c *kruda.Ctx, body []byte) bool {
 
 // etagMatches checks if the If-None-Match header matches the generated ETag.
 func etagMatches(ifNoneMatch, etag string) bool {
-	// Handle "*" wildcard
-	if ifNoneMatch == "*" {
-		return true
-	}
-
-	// Simple comparison for most common case
-	if ifNoneMatch == etag {
-		return true
-	}
-
-	// Handle weak ETag comparison - weak ETags can match strong ETags with same value
-	if isWeakETag(ifNoneMatch) || isWeakETag(etag) {
-		return weakETagsMatch(ifNoneMatch, etag)
-	}
-
-	// Handle comma-separated ETags (simplified)
-	if len(ifNoneMatch) > len(etag) {
-		// Check if etag is contained in the list
-		return containsETag(ifNoneMatch, etag)
-	}
-
-	return false
+	ifNoneMatch = trimSpaces(ifNoneMatch)
+	return ifNoneMatch == "*" || containsETag(ifNoneMatch, etag)
 }
 
-// containsETag checks if an ETag is present in a comma-separated list.
+// containsETag compares a list of entity tags using weak comparison.
 func containsETag(list, etag string) bool {
-	start := 0
-	for i := 0; i <= len(list); i++ {
-		if i == len(list) || list[i] == ',' {
-			candidate := trimSpaces(list[start:i])
-			if candidate == etag ||
-				(isWeakETag(candidate) || isWeakETag(etag)) && weakETagsMatch(candidate, etag) {
-				return true
-			}
-			start = i + 1
+	for list = trimSpaces(list); list != ""; list = trimSpaces(list) {
+		if list[0] == ',' {
+			list = list[1:]
+			continue
 		}
+		tag := strings.TrimPrefix(list, "W/")
+		if len(tag) == 0 || tag[0] != '"' {
+			return false
+		}
+		end := strings.IndexByte(tag[1:], '"')
+		if end == -1 {
+			return false
+		}
+		candidate, rest := tag[:end+2], trimSpaces(tag[end+2:])
+		if rest != "" && rest[0] != ',' {
+			return false
+		}
+		if weakETagsMatch(candidate, etag) {
+			return true
+		}
+		list = rest
 	}
 	return false
 }

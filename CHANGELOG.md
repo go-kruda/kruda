@@ -25,6 +25,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Wing honours `Connection: close` on a response.** Check before upgrading.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | Response has `Connection: close` (Inline, Pool, Spawn, Takeover) | connection kept, next pipelined request ran | response sent, connection closed |
+  | Request asked to close, more input arrived while the response drained | that request could run and keep the connection | input dropped, connection closed |
+
+  A proxy handler that copies upstream hop-by-hop headers now closes the
+  client connection whenever the upstream closes. Do not copy `Connection`
+  from an upstream response. `c.Text`, `c.HTML` and `c.JSON` with no custom
+  headers are unaffected.
+
 - **`contrib/ws` accepts only the same origin by default.** Older versions
   accepted every origin when `AllowedOrigins` was empty. Now the origin must
   match the request scheme, host and port. Non-browser clients may omit it.
@@ -183,6 +195,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Wing: a `Stream` route whose handler wrote no body (an empty `c.Stream`,
+  `NoContent`) closed the connection without any response. It now sends the
+  status and headers. A copy that failed before its first byte still closes
+  without a response, so it is not mistaken for an empty success.
+- Wing: a stream, or a HEAD without a body, could send conflicting
+  `Content-Length` headers. An equal repeat is now sent once, and a
+  conflicting or invalid value is not sent.
+- Wing: a `StaticText` or `StaticJSON` route requested on a connection a
+  Takeover route owned ran its handler. It now sends the static response, as
+  on a fresh connection, so its handler and middleware no longer run there.
+
 - Bindgen preserves the source when the output resolves to the same file.
 - `kruda new` handles explicit filesystem paths, and the MCP scaffolder keeps
   projects inside the working directory.
@@ -254,9 +277,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   loop through an unchecked completion path.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
-  it gave up on its own. Contexts are now cancelled first; sockets stay open
-  until the Pool finishes, so a handler that completes during shutdown still
-  delivers its response. A handler that ignores its context still holds
+  it gave up on its own. Contexts are now cancelled first; Pool and Spawn
+  sockets stay open until the Pool finishes, so a handler that completes
+  during shutdown still delivers its response. A handler that ignores its context still holds
   shutdown until it returns or the `Shutdown` deadline passes.
 - Wing: a file stream with a negative size sent `Content-Length: -1`. It now
   answers 500 and closes the reader off the event loop. Kruda's own callers always pass a known

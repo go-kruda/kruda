@@ -259,6 +259,8 @@ type conn struct {
 	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
 	readSuppressed  bool   // readiness arrived while pending; drain once ownership returns
 	readDrained     bool   // socket input exhausted during synchronous inline dispatch
+	parseDepth      uint8  // parses nested through completed sends
+	resumeParse     bool   // yielded with input to parse; the next write event resumes
 	ctx             context.Context
 	cancel          context.CancelFunc
 	sendFileFd      int32 // sendfile: source fd (0 = none)
@@ -1619,7 +1621,7 @@ func (w *worker) directSend(c *conn) {
 		return
 	}
 	if c.readN > 0 {
-		w.tryParse(c)
+		w.parseAfterSend(c)
 		return
 	}
 	// A short stream read or EAGAIN exhausts the current EPOLLET input. This evidence
@@ -1633,7 +1635,7 @@ func (w *worker) directSend(c *conn) {
 	if e == 0 && r > 0 {
 		c.readN = int(r)
 		c.readDrained = int(r) < len(c.readBuf)
-		w.tryParse(c)
+		w.parseAfterSend(c)
 		return
 	}
 	// Speculative read got EAGAIN — arm read for next data arrival.
@@ -2163,6 +2165,24 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	w.wake()
 }
 
+// maxParseDepth is how many read batches one connection may run per event.
+const maxParseDepth = 16
+
+// parseAfterSend is the only way back from a send into tryParse. A client that
+// keeps the socket readable and reads its responses would otherwise nest
+// without end. At the limit it yields through a write event: buffered input
+// gets no further read edge.
+func (w *worker) parseAfterSend(c *conn) {
+	if c.parseDepth >= maxParseDepth {
+		c.resumeParse = true
+		w.eng.SubmitSend(c.fd, nil)
+		return
+	}
+	c.parseDepth++
+	w.tryParse(c)
+	c.parseDepth--
+}
+
 func (w *worker) handleSend(ev event) {
 	var c *conn
 	if ev.ConnPtr != nil {
@@ -2178,6 +2198,10 @@ func (w *worker) handleSend(ev event) {
 		// No pending data or sendfile — remove EPOLLOUT, listen for EPOLLIN.
 		if c != nil {
 			w.eng.SubmitRecv(c.fd, nil, 0)
+			if c.resumeParse {
+				c.resumeParse = false
+				w.directSend(c)
+			}
 		}
 		return
 	}

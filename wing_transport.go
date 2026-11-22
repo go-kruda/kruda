@@ -2104,6 +2104,7 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 		}()
 		w.handler.ServeKruda(sw, first)
 	}()
+	sw.finish() // a handler that wrote no body has not sent its headers yet
 
 	cancel() // stop the watcher; it parks on f.Read until the fd closes below
 

@@ -328,7 +328,14 @@ func (c *Ctx) Stream(reader io.Reader) error {
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	c.responded = true
+	copyState, tracked := c.writer.(interface{ setCopyUnfinished(bool) })
+	if tracked {
+		copyState.setCopyUnfinished(true)
+	}
 	_, err := io.Copy(writerAdapter{c.writer}, reader)
+	if tracked && err == nil {
+		copyState.setCopyUnfinished(false)
+	}
 	return err
 }
 

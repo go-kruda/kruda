@@ -34,6 +34,8 @@ type wingStreamWriter struct {
 	status       int
 	headersSent  bool
 	head         bool // HEAD: send the headers, never the body
+	broken       bool // part of the preamble may be on the wire
+	copying      bool // a c.Stream copy has not succeeded
 	writeTimeout time.Duration
 }
 
@@ -82,10 +84,22 @@ func (w *wingStreamWriter) flushHeaders() error {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))
 	}
 	if _, err := w.conn.Write(hdr); err != nil {
+		w.broken = true
 		return err
 	}
 	w.headersSent = true
 	return nil
+}
+
+// setCopyUnfinished is set by c.Stream around its copy, so a copy that
+// failed or panicked is not completed as an empty success.
+func (w *wingStreamWriter) setCopyUnfinished(v bool) { w.copying = v }
+
+// finish sends the preamble of a response whose handler wrote no body.
+func (w *wingStreamWriter) finish() {
+	if !w.headersSent && !w.broken && !w.copying {
+		_ = w.flushHeaders()
+	}
 }
 
 func (w *wingStreamWriter) Write(p []byte) (int, error) {

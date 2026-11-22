@@ -25,6 +25,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Wing stops reading while a connection's responses wait to be sent.** Check
+  before upgrading. This is part of the denial-of-service fixes under Security.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | Client pipelines and reads slowly or not at all | every request read ran, and responses queued without limit | parsing pauses at 256 KiB unsent (one response may pass it), reading pauses until the send completes |
+  | Request pipelined behind a response over 256 KiB | could run while that response was being sent | runs after it is sent |
+  | `WriteTimeout` with a client that keeps sending but does not read | refreshed by each request, so it never fired | fires |
+  | Client half-closes while responses wait | cut the responses, or kept the connection until `IdleTimeout` | sends the responses, then closes |
+  | `ReadTimeout` with part of the next request behind a response being sent | could cut that response | counts once the send completes |
+  | Pipelining client that never pauses | one connection could keep its worker | yields after 16 read batches |
+  | Body over 10 MiB declared with `BodyLimit` 0 | waited for and buffered the body, then failed | `413` from the header |
+
+  A long pipeline of large responses takes longer to start its later handlers,
+  and a client has to read responses for its later requests to run.
+
 - **Wing honours `Connection: close` on a response.** Check before upgrading.
 
   | Case | Before | Now |
@@ -264,6 +280,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wing: a fragmented POST to a Takeover route ran inline on the event loop
   when an earlier pipelined reply on the same connection was still unsent. It
   now runs as Spawn, off the loop, and its reply follows the earlier one.
+  Behind more than 256 KiB of unsent reply it waits for the send first.
 - Wing: preset lookup ignored `:name<regex>` constraints, so a regex route's
   preset applied to values the router sent elsewhere. With `WithPathTraversal`,
   a percent-encoded path such as `/ev%65nts` reached the `/events` handler
@@ -315,6 +332,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   overlapping requests from one browser follow last-save-wins.
 
 ### Security
+
+- **Wing: an unauthenticated client could end the process or exhaust it.**
+  Apps on Wing, the Linux default, were affected whatever their routes or
+  presets. Upgrade, or run with `KRUDA_TRANSPORT=nethttp` until you can. That
+  variable has no effect when the app selects a transport in code; use
+  `kruda.NetHTTP()` there instead.
+
+  | Problem | Effect | Confirmed in |
+  |---|---|---|
+  | A read into a full receive buffer while a response waited | panic, process exit | v1.8.2, v1.8.5 (Linux) |
+  | Parsing and sending called each other without a bound | stack overflow, process exit | v1.4.0, v1.7.2, v1.8.2 to v1.8.5 |
+  | Responses queued for a client that read none | unbounded memory, `WriteTimeout` never fired | v1.8.5 |
+  | A partial request behind a complete one | no timeout applied, connection held | v1.8.5 |
+  | No 10 MiB body ceiling when `BodyLimit` is 0 | memory follows the declared length | v1.8.5 |
+
+  Versions not listed were not tested and should not be assumed safe. With
+  `BodyLimit` 0 there is still no per-worker budget for bodies in flight, so
+  each connection can buffer up to 10 MiB: keep a `BodyLimit`, or set
+  `WingConfig.MaxInflightBodyBytes`.
 
 - **The router matches the whole HTTP method name.** Before, it checked only
   the first two letters of 4- to 7-letter methods, so `POLL /users` or

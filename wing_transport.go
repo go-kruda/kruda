@@ -684,17 +684,22 @@ func (w *worker) sweepTimeouts(now int64) {
 		if c.pending > 0 {
 			continue // handler in flight — don't close
 		}
-		// Read timeout: partial request sitting too long.
-		if w.readTimeout > 0 && c.readDeadline > 0 && now > c.readDeadline {
-			w.closeConn(fd)
-			continue
+		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
+		// Read timeout: partial request sitting too long. Its clock restarts while
+		// a reply is being sent, because nothing is read then, body bytes excepted.
+		if w.readTimeout > 0 && c.readDeadline > 0 {
+			if sending && c.bodyNeed == 0 {
+				c.readDeadline = now + w.readTimeout
+			} else if now > c.readDeadline {
+				w.closeConn(fd)
+				continue
+			}
 		}
 		// Idle timeout covers a stalled upload when no read deadline is set.
 		// Idle time counts from the last byte received or sent. A connection still
 		// sending is bounded by WriteTimeout instead, as in net/http: the kernel
 		// send buffer can hold seconds of data for a slow reader, so the time
 		// since the last write does not show whether the client is reading.
-		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
 		readingBody := c.bodyNeed > 0 && w.readTimeout > 0 && c.readDeadline > 0
 		if w.idleTimeout > 0 && c.readN == 0 && !readingBody && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
 			w.closeConn(fd)

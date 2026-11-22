@@ -1828,10 +1828,14 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	var out []byte
 
 	for served := false; ; served = true {
+		var static []byte // the route's prebuilt response, if it has one
 		if served {
 			// A later request on this connection may be a Stream or Hijack
-			// route, which needs its own writer rather than a buffered one.
-			switch w.presets.Lookup(req.method, req.path).ResponseMode {
+			// route, which needs its own writer rather than a buffered one, or
+			// a static route, which runs no handler.
+			preset := w.presets.Lookup(req.method, req.path)
+			static = preset.StaticResponse
+			switch preset.ResponseMode {
 			case responseStream:
 				w.streamTakeover(req, fd, f)
 				return
@@ -1849,6 +1853,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					resp.Write([]byte("Internal Server Error\n"))
 				}
 			}()
+			if static != nil {
+				resp.SetStaticResponse(static)
+				return
+			}
 			w.handler.ServeKruda(resp, req)
 		}()
 		keepAlive = keepAlive && !resp.closeRequested()

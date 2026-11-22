@@ -257,7 +257,7 @@ type conn struct {
 	lastActive      int64  // unix nano — updated on accept + each recv
 	lastSent        int64  // unix nano — last write that sent bytes; idle time counts from here after a response
 	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
-	readSuppressed  bool   // readiness arrived while pending; drain once ownership returns
+	readSuppressed  bool   // readiness was not acted on; stays until a read finds EAGAIN or EOF
 	readDrained     bool   // socket input exhausted during synchronous inline dispatch
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
@@ -820,23 +820,32 @@ func (w *worker) handleRecv(ev event) {
 	if c == nil {
 		return
 	}
-	// A full buffer waits too: it is parsed again once the queued send completes.
-	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 || c.readN == len(c.readBuf) {
-		c.readSuppressed = true
-		c.readDrained = false
-		if testSuppressedRecvHook != nil {
-			testSuppressedRecvHook(c.fd)
-		}
+	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 {
+		c.suppressRead()
 		return
 	}
-	if c.sendN < len(c.sendBuf) && c.sendingFinal() {
+	queued := c.sendN < len(c.sendBuf)
+	if queued && c.sendingFinal() {
 		w.discardInput(c)
 		return
 	}
-	c.readSuppressed = false
+	// Input waits in the socket behind unsent output, so a client that does not
+	// read cannot grow the queue. A body being accumulated still reads. A full
+	// buffer waits too: it is parsed again once the send completes. So does a
+	// yielded turn, or an EOF here would drop the requests it left buffered.
+	if queued && c.bodyNeed == 0 || c.resumeParse || c.readN == len(c.readBuf) {
+		c.suppressRead()
+		return
+	}
 	c.readDrained = false
 	requested := len(c.readBuf) - c.readN
 	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
+	if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+		// An earlier read already took what this readiness reported.
+		c.readSuppressed = false
+		submitIdleRecv(w.eng, c.fd, nil, 0)
+		return
+	}
 	if e != 0 || nr <= 0 {
 		w.closeConn(c.fd)
 		return
@@ -894,16 +903,16 @@ func (w *worker) tryParse(c *conn) {
 				case parseNeedHeaderMore:
 					// Compaction can leave a partial header after a full read.
 					// EPOLLET will not notify again for bytes already in the socket.
-					if runtime.GOOS == "linux" && !c.readDrained && c.pending == 0 {
+					if runtime.GOOS == "linux" && (!c.readDrained || c.readSuppressed) && c.pending == 0 {
 						// Flush this batch before a refill can queue more responses.
 						if c.sendN < len(c.sendBuf) || c.sendFileFd > 0 || c.fileStream != nil {
 							w.directSend(c)
 							return
 						}
 						requested := len(c.readBuf) - c.readN
-						c.readSuppressed = false
 						n, _, err := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
 						if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+							c.readSuppressed = false
 							c.readDrained = true
 						} else if err != 0 {
 							w.closeConn(c.fd)
@@ -1062,7 +1071,8 @@ func (w *worker) tryParse(c *conn) {
 			return
 		}
 
-		if !c.keepAlive {
+		// At the limit, send before building more; the rest is parsed afterwards.
+		if !c.keepAlive || len(c.sendBuf)-c.sendN >= maxQueuedSend {
 			break
 		}
 	}
@@ -1342,7 +1352,8 @@ func (w *worker) drainPipelinedAfterBody(c *conn) {
 		}
 		if e != 0 || rn <= 0 {
 			// Error or EOF: the accumulated request is still dispatched; teardown
-			// happens on the post-response keep-alive read.
+			// happens on the post-response keep-alive read, which must not be skipped.
+			c.readSuppressed = true
 			return
 		}
 		c.readN += int(rn)
@@ -1629,7 +1640,6 @@ func (w *worker) directSend(c *conn) {
 	if runtime.GOOS == "linux" && c.readDrained && !c.readSuppressed {
 		return
 	}
-	c.readSuppressed = false
 	c.readDrained = false
 	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
 	if e == 0 && r > 0 {
@@ -1638,6 +1648,12 @@ func (w *worker) directSend(c *conn) {
 		w.parseAfterSend(c)
 		return
 	}
+	if e != syscall.EAGAIN && e != syscall.EWOULDBLOCK {
+		// EOF or a failed socket with everything sent. No later edge reports it.
+		w.closeConn(c.fd)
+		return
+	}
+	c.readSuppressed = false
 	// Speculative read got EAGAIN — arm read for next data arrival.
 	// On Linux this is redundant (ET EPOLLIN already active) but on
 	// kqueue/darwin SubmitRecv is required to register EVFILT_READ.
@@ -2163,6 +2179,18 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	// the File — do NOT add a second close here.
 	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
 	w.wake()
+}
+
+// maxQueuedSend is how much unsent output stops a connection from parsing
+// further pipelined requests. One response may pass it.
+const maxQueuedSend = 256 << 10
+
+func (c *conn) suppressRead() {
+	c.readSuppressed = true
+	c.readDrained = false
+	if testSuppressedRecvHook != nil {
+		testSuppressedRecvHook(c.fd)
+	}
 }
 
 // maxParseDepth is how many read batches one connection may run per event.

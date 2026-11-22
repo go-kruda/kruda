@@ -50,17 +50,12 @@ func TestWingFullReadBufferWhileSending(t *testing.T) {
 				}
 				_, _ = w.Write([]byte("ok"))
 			})
-			cfg := WingConfig{
+			addr, stop := startWingServerWithConfig(t, WingConfig{
 				Workers:         1,
 				HandlerPoolSize: 2,
 				DefaultPreset:   Bolt,
 				Presets:         map[string]Preset{"GET /next": tc.preset},
-			}
-			if tc.halfClose {
-				// An EOF that arrives while reading is suppressed is left to the idle timeout.
-				cfg.IdleTimeout = time.Second
-			}
-			addr, stop := startWingServerWithConfig(t, cfg, handler)
+			}, handler)
 			defer stop()
 			conn, err := net.Dial("tcp", addr)
 			if err != nil {
@@ -136,7 +131,7 @@ func TestWingRecvLeavesInputWhenBufferIsFull(t *testing.T) {
 	if _, err := syscall.Write(fds[1], []byte("next")); err != nil {
 		t.Fatal(err)
 	}
-	c := &conn{fd: int32(fds[0]), readBuf: make([]byte, 64), readN: 64, sendBuf: []byte("queued")}
+	c := &conn{fd: int32(fds[0]), keepAlive: true, readBuf: make([]byte, 64), readN: 64, sendBuf: []byte("queued")}
 	w := &worker{conns: map[int32]*conn{c.fd: c}}
 	w.handleRecv(event{Fd: c.fd})
 	if !c.readSuppressed || c.readN != len(c.readBuf) || string(c.sendBuf) != "queued" {

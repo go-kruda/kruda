@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -105,10 +106,80 @@ func TestWingAccumulatedBodyKeepsDispatch(t *testing.T) {
 	}
 }
 
-// TestWingAccumulatedTakeoverBehindUnsentResponse pipelines a large Inline GET
-// ahead of a fragmented POST to a Takeover route, and does not read the GET's
-// reply. Takeover cannot detach while that reply is unsent, but the POST
-// handler must still run off the event loop and replies must stay in order.
+// TestWingAccumulatedTakeoverQueuesBehindUnsentResponse completes a POST body
+// for a Takeover route while a reply below the queue limit is unsent. Takeover
+// cannot detach then, so the handler runs off the loop and replies after it.
+func TestWingAccumulatedTakeoverQueuesBehindUnsentResponse(t *testing.T) {
+	big := strings.Repeat("g", 128<<10)
+	release := make(chan struct{})
+	w, c, peer, _ := socketWorker(t, 8192, transport.HandlerFunc(func(rw transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/big" {
+			_, _ = rw.Write([]byte(big))
+			return
+		}
+		<-release
+		body, _ := r.Body()
+		_, _ = rw.Write([]byte(strconv.Itoa(len(body))))
+	}))
+	w.presets = NewPresetTable(map[string]Preset{"POST /slow": Spear}, Bolt)
+	w.doneCh = make(chan doneMsg, 1)
+	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(peer, "GET /big HTTP/1.1\r\nHost: x\r\n\r\nPOST /slow HTTP/1.1\r\nHost: x\r\nContent-Length: 20000\r\n\r\n"+strings.Repeat("b", 20000)); err != nil {
+		t.Fatal(err)
+	}
+	returned := make(chan struct{})
+	go func() {
+		w.handleRecv(event{Op: opRecv, Fd: c.fd})
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(3 * time.Second):
+		close(release)
+		t.Fatal("handler ran on the event loop")
+	}
+	if c.pending != 1 || c.takenOver {
+		close(release)
+		t.Fatalf("pending=%d takenOver=%v", c.pending, c.takenOver)
+	}
+	close(release)
+	w.handleDone(<-w.doneCh)
+
+	got := make(chan string, 1)
+	go func() {
+		br := bufio.NewReader(peer)
+		var replies []string
+		for range 2 {
+			res, err := http.ReadResponse(br, nil)
+			if err != nil {
+				got <- err.Error()
+				return
+			}
+			body, _ := io.ReadAll(res.Body)
+			replies = append(replies, strconv.Itoa(len(body)))
+		}
+		got <- strings.Join(replies, ",")
+	}()
+	want := strconv.Itoa(len(big)) + ",5"
+	for {
+		select {
+		case replies := <-got:
+			if replies != want {
+				t.Fatalf("replies %s, want %s", replies, want)
+			}
+			return
+		default:
+			w.handleSend(event{Op: opSend, Fd: c.fd})
+			time.Sleep(10 * time.Microsecond)
+		}
+	}
+}
+
+// TestWingAccumulatedTakeoverBehindUnsentResponse pipelines a fragmented POST
+// to a Takeover route behind a GET reply over the queue limit. The POST waits
+// for that reply, then must run off the event loop and reply in order.
 func TestWingAccumulatedTakeoverBehindUnsentResponse(t *testing.T) {
 	big := strings.Repeat("g", 8<<20)
 	release := make(chan struct{})
@@ -153,6 +224,20 @@ func TestWingAccumulatedTakeoverBehindUnsentResponse(t *testing.T) {
 	if _, err := io.WriteString(slow, body[100:]); err != nil {
 		t.Fatal(err)
 	}
+	_ = slow.SetDeadline(time.Now().Add(5 * time.Second))
+	br := bufio.NewReader(slow)
+	read := func(want string) {
+		r, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		if string(got) != want {
+			t.Fatalf("reply out of order or wrong: %d bytes, want %d", len(got), len(want))
+		}
+	}
+	read(big)
 	select {
 	case <-entered:
 	case <-time.After(3 * time.Second):
@@ -174,18 +259,5 @@ func TestWingAccumulatedTakeoverBehindUnsentResponse(t *testing.T) {
 	}
 	resp.Body.Close()
 	close(release)
-
-	_ = slow.SetDeadline(time.Now().Add(5 * time.Second))
-	br := bufio.NewReader(slow)
-	for _, want := range []string{big, "20000"} {
-		r, err := http.ReadResponse(br, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, _ := io.ReadAll(r.Body)
-		r.Body.Close()
-		if len(got) != len(want) || string(got) != want {
-			t.Fatalf("reply out of order or wrong: %d bytes, want %d", len(got), len(want))
-		}
-	}
+	read("20000")
 }

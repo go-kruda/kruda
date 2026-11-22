@@ -6,7 +6,9 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -120,5 +122,61 @@ func TestWingShutdownDeliversFinishingPoolResponse(t *testing.T) {
 	got, _ := io.ReadAll(conn)
 	if !strings.Contains(string(got), "late") {
 		t.Fatalf("response lost during shutdown, got %q", got)
+	}
+}
+
+// TestWingShutdownNeverShutsARecycledFD finishes a Takeover while the Pool is
+// still draining. Its fd number may then belong to an unrelated socket, which
+// Shutdown must not touch.
+func TestWingShutdownNeverShutsARecycledFD(t *testing.T) {
+	socks, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(socks[1])
+	other, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(other[0])
+	defer syscall.Close(other[1])
+
+	fd := socks[0]
+	file := os.NewFile(uintptr(fd), "takeover")
+	w, _ := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	c := newTestConn(int32(fd))
+	c.pending, c.takenOver = 1, true
+	w.conns[c.fd] = c
+
+	// The Pool finishes only after the Takeover's fd was closed and reused.
+	recycled := -1
+	w.pool = &workerPool{jobs: make(chan handlerJob)}
+	w.pool.wg.Add(1)
+	go func() {
+		defer w.pool.wg.Done()
+		for range w.pool.jobs {
+		}
+		w.doneCh <- doneMsg{fd: c.fd, file: file}
+		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			if _, err := file.Stat(); err != nil {
+				n, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(other[0]), syscall.F_DUPFD_CLOEXEC, uintptr(fd))
+				if errno == 0 {
+					recycled = int(n)
+				}
+				return
+			}
+		}
+	}()
+	w.cleanup()
+	if recycled >= 0 {
+		defer syscall.Close(recycled)
+	}
+	if recycled != fd {
+		t.Skipf("fd %d was not recycled (got %d)", fd, recycled)
+	}
+	if _, err := syscall.Write(recycled, []byte("x")); err != nil {
+		t.Fatalf("Shutdown shut down an unrelated socket on the recycled fd: %v", err)
 	}
 }

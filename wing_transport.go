@@ -2225,8 +2225,10 @@ func (w *worker) cleanup() {
 	// Either way takeoverLoop exits and dispatchWG.Done fires. SHUT_* doesn't
 	// free the fd number, so kernel won't recycle it — Spawn's write side
 	// stays valid until we run closeFd below.
-	// Cancel first and shut sockets only after the Pool has finished, so a Pool
-	// handler that completes during shutdown still writes its response.
+	// Cancel first and shut Pool and Spawn sockets only after the Pool has
+	// finished, so a Pool handler that completes during shutdown still writes
+	// its response. Takeover sockets must be shut before the drain starts: the
+	// drain closes their fds, and the number can then be any socket in the process.
 	for _, c := range w.conns {
 		if c.pending > 0 && c.cancel != nil {
 			c.cancel()
@@ -2234,6 +2236,9 @@ func (w *worker) cleanup() {
 	}
 	for _, c := range w.conns {
 		c.fileStream.close()
+		if c.pending > 0 && c.takenOver {
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+		}
 	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave
 	// of Spawn/Takeover goroutines completing simultaneously can fill the
@@ -2270,7 +2275,7 @@ func (w *worker) cleanup() {
 		w.pool.wg.Wait()
 	}
 	for _, c := range w.conns {
-		if c.pending > 0 {
+		if c.pending > 0 && !c.takenOver {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}

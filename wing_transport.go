@@ -818,7 +818,8 @@ func (w *worker) handleRecv(ev event) {
 	if c == nil {
 		return
 	}
-	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 {
+	// A full buffer waits too: it is parsed again once the queued send completes.
+	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 || c.readN == len(c.readBuf) {
 		c.readSuppressed = true
 		c.readDrained = false
 		if testSuppressedRecvHook != nil {

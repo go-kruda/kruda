@@ -1713,6 +1713,31 @@ func (h *wingHeaders) contentLength() string {
 	return value
 }
 
+// connectionClose reports whether a Connection header in h lists close.
+func (h *wingHeaders) connectionClose() bool {
+	for i := 0; i < h.count; i++ {
+		if headerIs(h.keys[i], "Connection") {
+			if hasClose, _ := scanConnectionTokens([]byte(h.vals[i])); hasClose {
+				return true
+			}
+		}
+	}
+	for i := range h.extra {
+		if headerIs(h.extra[i].key, "Connection") {
+			if hasClose, _ := scanConnectionTokens([]byte(h.extra[i].val)); hasClose {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// closeRequested reports whether the response as sent asks to end the
+// connection. The fast lanes and static responses send none of r.headers.
+func (r *wingResponse) closeRequested() bool {
+	return !r.stringFast && !r.jsonFast && r.staticResp == nil && r.headers.connectionClose()
+}
+
 // headerIs matches a header key case-insensitively. Keys set through Ctx are
 // canonical, but ResponseWriter().Header() stores them as given.
 func headerIs(key, name string) bool {

@@ -423,6 +423,7 @@ func (p *workerPool) loop(h transport.Handler) {
 			}()
 			h.ServeKruda(resp, job.req)
 		}()
+		keepAlive := job.keepAlive && !resp.closeRequested()
 		data := resp.buildZeroCopy()
 		stream := resp.fileStream
 		resp.fileStream = nil
@@ -430,13 +431,13 @@ func (p *workerPool) loop(h transport.Handler) {
 		releaseRequest(job.req)
 
 		if !job.directWrite || stream != nil {
-			p.done <- doneMsg{fd: job.fd, data: data, keepAlive: job.keepAlive, stream: stream}
+			p.done <- doneMsg{fd: job.fd, data: data, keepAlive: keepAlive, stream: stream}
 			p.wake()
 			continue
 		}
 		// Direct write from pool goroutine — skip doneCh data copy + SubmitSend round-trip.
 		if len(data) == 0 {
-			p.done <- doneMsg{fd: job.fd, keepAlive: job.keepAlive}
+			p.done <- doneMsg{fd: job.fd, keepAlive: keepAlive}
 			p.wake()
 			continue
 		}
@@ -444,7 +445,7 @@ func (p *workerPool) loop(h transport.Handler) {
 		n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(job.fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
 		if e == 0 && int(n) == len(data) {
 			// Full write succeeded — signal ioLoop to re-arm EPOLLIN only.
-			p.done <- doneMsg{fd: job.fd, keepAlive: job.keepAlive}
+			p.done <- doneMsg{fd: job.fd, keepAlive: keepAlive}
 		} else {
 			// Partial or failed write — fall back to ioLoop for remainder.
 			written := 0
@@ -452,7 +453,7 @@ func (p *workerPool) loop(h transport.Handler) {
 				written = int(n)
 			}
 			remaining = data[written:]
-			p.done <- doneMsg{fd: job.fd, data: remaining, keepAlive: job.keepAlive}
+			p.done <- doneMsg{fd: job.fd, data: remaining, keepAlive: keepAlive}
 		}
 		p.wake()
 	}
@@ -825,6 +826,10 @@ func (w *worker) handleRecv(ev event) {
 		}
 		return
 	}
+	if c.sendN < len(c.sendBuf) && c.sendingFinal() {
+		w.discardInput(c)
+		return
+	}
 	c.readSuppressed = false
 	c.readDrained = false
 	requested := len(c.readBuf) - c.readN
@@ -1014,8 +1019,8 @@ func (w *worker) tryParse(c *conn) {
 				w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
 				if resp.fileFd > 0 || resp.fileStream != nil {
 					// Sendfile path: write headers, then sendfile for body.
+					c.keepAlive = req.keepAlive && !resp.closeRequested()
 					hdr := resp.buildZeroCopy()
-					c.keepAlive = req.keepAlive
 					c.sendBuf = append(c.sendBuf, hdr...)
 					c.sendFileFd = resp.fileFd
 					c.sendFileRelease = resp.sendFileRelease
@@ -1043,7 +1048,7 @@ func (w *worker) tryParse(c *conn) {
 					releaseRequest(req)
 					break
 				}
-				c.keepAlive = req.keepAlive
+				c.keepAlive = req.keepAlive && !resp.closeRequested()
 				c.sendBuf = resp.appendTo(c.sendBuf)
 				releaseResponse(resp)
 				releaseRequest(req)
@@ -1129,6 +1134,7 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 				}()
 				w.serveRoute(resp, req, f)
 			}()
+			ka = ka && !resp.closeRequested()
 			data := resp.buildZeroCopy()
 			stream := resp.fileStream
 			resp.fileStream = nil
@@ -1401,8 +1407,8 @@ func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	start := time.Now().UnixNano()
 	w.serveRoute(resp, req, f)
 	w.observeAdvisor(f, req.method, req.path, time.Now().UnixNano()-start)
+	c.keepAlive = req.keepAlive && !resp.closeRequested()
 	data := resp.buildZeroCopy()
-	c.keepAlive = req.keepAlive
 	c.sendBuf = append(c.sendBuf, data...)
 	c.fileStream = resp.fileStream
 	resp.fileStream = nil
@@ -1467,6 +1473,9 @@ func (w *worker) handleDone(msg doneMsg) {
 				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
 		} else {
+			if c.readSuppressed && c.sendingFinal() {
+				w.discardInput(c) // it arrived while the handler ran
+			}
 			w.closeConn(c.fd)
 		}
 		return
@@ -1475,6 +1484,30 @@ func (w *worker) handleDone(msg doneMsg) {
 	c.sendBuf = append(c.sendBuf, msg.data...)
 	w.eng.SubmitSend(c.fd, nil)
 }
+
+// sendingFinal reports whether c only has its last response left to send. It
+// is false while a handler runs: that handler's request may alias readBuf.
+func (c *conn) sendingFinal() bool {
+	return !c.keepAlive && c.pending == 0 && c.bodyNeed == 0
+}
+
+// discardInput drops input that arrives behind a connection's final response.
+// Running it would revive a connection that promised to close, and closing
+// over unread input would reset it and cut that response. The read count
+// bounds a peer that keeps sending.
+func (w *worker) discardInput(c *conn) {
+	c.readN = 0
+	c.readSuppressed = false
+	c.readDrained = false
+	for range maxDiscardReads {
+		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+		if e != 0 || n == 0 {
+			return // drained, or the pending send reports the failed socket
+		}
+	}
+}
+
+const maxDiscardReads = 64
 
 // directSend attempts a non-blocking write. If partial, falls back to epoll EPOLLOUT.
 func (w *worker) directSend(c *conn) {
@@ -1818,6 +1851,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			}()
 			w.handler.ServeKruda(resp, req)
 		}()
+		keepAlive = keepAlive && !resp.closeRequested()
 		resp.buf = out[:0]
 		data := resp.buildZeroCopy()
 		builtIntoOut := resp.staticResp == nil
@@ -2137,6 +2171,11 @@ func (w *worker) handleSend(ev event) {
 			w.eng.SubmitRecv(c.fd, nil, 0)
 		}
 		return
+	}
+	if c.sendingFinal() {
+		// kqueue does not watch for reads while a send waits, so drop input
+		// here before the send can finish and close over it.
+		w.discardInput(c)
 	}
 	w.directSend(c)
 }

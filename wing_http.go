@@ -1640,7 +1640,8 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 // this helper without a Content-Length being injected). hasCL reports whether
 // a Content-Length header was already present in h, detected in the same walk
 // so buffered callers avoid a second scan. A Content-Length in h is sent only
-// when keepCL is set, and never for 204 and 304, which must not carry one; a
+// when keepCL is set, once and only if it is unambiguous, and never for 204
+// and 304, which must not carry one; a
 // caller that knows the body length passes false and writes its own. A
 // Transfer-Encoding in h is always left out: Wing never chunk-encodes, so the
 // body would not match it.
@@ -1648,12 +1649,17 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 	b = append(b, wingStatusLine(status)...)
 	b = append(b, dateHdr()...)
 	noBody := statusHasNoBody(status)
+	var length string
+	if keepCL && !noBody {
+		length = h.contentLength()
+	}
 	for i := 0; i < h.count; i++ {
 		if headerIs(h.keys[i], "Content-Length") {
 			hasCL = true
-			if noBody || !keepCL {
+			if length == "" {
 				continue
 			}
+			length = "" // send it once
 		} else if headerIs(h.keys[i], "Transfer-Encoding") {
 			continue
 		}
@@ -1665,9 +1671,10 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 	for i := 0; i < len(h.extra); i++ {
 		if headerIs(h.extra[i].key, "Content-Length") {
 			hasCL = true
-			if noBody || !keepCL {
+			if length == "" {
 				continue
 			}
+			length = "" // send it once
 		} else if headerIs(h.extra[i].key, "Transfer-Encoding") {
 			continue
 		}
@@ -1677,6 +1684,33 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 		b = append(b, "\r\n"...)
 	}
 	return b, hasCL
+}
+
+// contentLength returns the length every Content-Length in h agrees on, or ""
+// when there is none, they conflict, or it is not a length. A message that
+// states two lengths can be framed differently by a proxy and a client.
+func (h *wingHeaders) contentLength() string {
+	var value string
+	var seen, conflict bool
+	check := func(key, val string) {
+		if headerIs(key, "Content-Length") {
+			conflict = conflict || seen && val != value
+			value, seen = val, true
+		}
+	}
+	for i := 0; i < h.count; i++ {
+		check(h.keys[i], h.vals[i])
+	}
+	for i := range h.extra {
+		check(h.extra[i].key, h.extra[i].val)
+	}
+	if !seen || conflict {
+		return ""
+	}
+	if _, err := strconv.ParseUint(strings.Trim(value, " \t"), 10, 63); err != nil {
+		return ""
+	}
+	return value
 }
 
 // headerIs matches a header key case-insensitively. Keys set through Ctx are

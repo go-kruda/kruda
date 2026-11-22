@@ -778,7 +778,8 @@ func classifyIncomplete(data []byte, limits parserLimits) (status parseStatus, n
 	if !hasCL || cl == 0 {
 		return parseMalformed, 0, false
 	}
-	if limits.bodyLimit > 0 && cl > limits.bodyLimit {
+	// The parser's own ceiling holds without a BodyLimit too.
+	if cl > maxContentLength || limits.bodyLimit > 0 && cl > limits.bodyLimit {
 		return parseBodyTooLarge, 0, expectContinue
 	}
 	return parseNeedBody, cl, expectContinue

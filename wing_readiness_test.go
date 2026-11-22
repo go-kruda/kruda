@@ -5,6 +5,7 @@ package kruda
 import (
 	"io"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
@@ -37,7 +38,8 @@ func TestWingReadDeadlineRestartsAfterSend(t *testing.T) {
 	c.readN = copy(c.readBuf, "GET /par")
 	c.readDeadline = int64(2 * time.Second) // expired while sending
 	w.handleSend(event{Op: opSend, Fd: c.fd})
-	w.sweepTimeouts(w.now + int64(time.Second)/2)
+	// The worker's batch clock is stale by however long the batch took.
+	w.sweepTimeouts(time.Now().UnixNano() + int64(time.Second)/2)
 	if len(eng.closedFds) != 0 {
 		t.Fatal("inherited a deadline that ran out during the send")
 	}
@@ -84,6 +86,26 @@ func TestWingWriteEventReadsBodyThatArrivedWithIt(t *testing.T) {
 	w.handleSend(event{Op: opSend, Fd: c.fd})
 	if got != "body" {
 		t.Fatal("body left in the socket with no event to come")
+	}
+}
+
+// TestWingUploadEOFKeepsReplyBeingSent delivers a write event that cannot
+// finish an earlier reply while the upload behind it has ended short.
+func TestWingUploadEOFKeepsReplyBeingSent(t *testing.T) {
+	w, c, peer, eng := socketWorker(t, 512, nil)
+	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
+		t.Fatal(err)
+	}
+	c.keepAlive = true
+	c.sendBuf = make([]byte, 4<<20)
+	c.bodyNeed = 4
+	c.bodyBuf = make([]byte, 0, 4)
+	if err := peer.(*net.UnixConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	w.handleSend(event{Op: opSend, Fd: c.fd})
+	if len(eng.closedFds) != 0 {
+		t.Fatalf("closed over a reply with %d bytes unsent", len(c.sendBuf)-c.sendN)
 	}
 }
 

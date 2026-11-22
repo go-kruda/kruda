@@ -39,7 +39,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Body over 10 MiB declared with `BodyLimit` 0 | waited for and buffered the body, then failed | `413` from the header; a length that does not fit an `int` closes the connection |
 
   A long pipeline of large responses takes longer to start its later handlers,
-  and a client has to read responses for its later requests to run.
+  and a client has to read responses for its later requests to run. A body
+  already being uploaded is still read, under `ReadTimeout`, while an earlier
+  response waits. With `WriteTimeout` 0, a connection whose client does not
+  read waits without a limit, as any blocked send does.
 
 - **Wing honours `Connection: close` on a response.** Check before upgrading.
 

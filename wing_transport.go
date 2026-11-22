@@ -1641,7 +1641,7 @@ func (w *worker) directSend(c *conn) {
 	if c.readDeadline > 0 {
 		// Nothing was read during the send, so a partial request behind it
 		// gets its whole interval from here.
-		c.readDeadline = w.clockNow() + w.readTimeout
+		c.readDeadline = time.Now().UnixNano() + w.readTimeout // the batch clock can be older than the send
 	}
 	if c.readN > 0 {
 		w.parseAfterSend(c)
@@ -2259,8 +2259,10 @@ func (w *worker) handleSend(ev event) {
 		w.discardInput(c)
 	}
 	w.directSend(c)
-	if c.bodyNeed > 0 && w.conns[c.fd] == c {
-		w.drainBodyAccum(c) // body bytes this event may have hidden
+	if c.bodyNeed > 0 && !c.sending() && w.conns[c.fd] == c {
+		// Body bytes this event may have hidden. Not before the send completes:
+		// an EOF there closes, over whatever was still queued.
+		w.drainBodyAccum(c)
 	}
 }
 

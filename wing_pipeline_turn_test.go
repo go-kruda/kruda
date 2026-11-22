@@ -77,7 +77,7 @@ func TestWingPipelineTurnIsBounded(t *testing.T) {
 			}
 			_, _ = rw.Write([]byte("ok"))
 		})
-		w, c, p, _ := socketWorker(t, 512, h)
+		w, c, p, eng := socketWorker(t, 512, h)
 		peer = p
 		// All queued before the event: many more read batches than one turn.
 		if _, err := io.WriteString(p, strings.Repeat(paddedGet(size), 48<<10/size)); err != nil {
@@ -89,7 +89,7 @@ func TestWingPipelineTurnIsBounded(t *testing.T) {
 			t.Fatalf("size %d: one event ran %d requests %d frames deep", size, calls, deepest)
 		}
 		if size == 256 || runtime.GOOS == "linux" {
-			if !c.resumeParse {
+			if !c.resumeParse || eng.sendArmed == 0 {
 				t.Fatalf("size %d: turn ended after %d requests with no wakeup", size, calls)
 			}
 			before := calls
@@ -140,9 +140,13 @@ func TestWingPipelineFloodSharesWorker(t *testing.T) {
 // TestWingPipelineSurvivesYield pipelines more than one turn of requests and
 // sends nothing after them.
 func TestWingPipelineSurvivesYield(t *testing.T) {
-	for _, size := range []int{256, 300} {
+	for _, tc := range []struct {
+		size, reply int
+		readAfter   time.Duration // the send buffer fills meanwhile
+	}{{256, 2, 0}, {300, 2, 0}, {256, 4096, 500 * time.Millisecond}, {300, 4096, 500 * time.Millisecond}} {
+		size, reply := tc.size, strings.Repeat("r", tc.reply)
 		h := transport.HandlerFunc(func(rw transport.ResponseWriter, r transport.Request) {
-			_, _ = rw.Write([]byte("ok"))
+			_, _ = rw.Write([]byte(reply))
 		})
 		addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Bolt, ReadBufSize: 512}, h)
 		defer stop()
@@ -154,6 +158,7 @@ func TestWingPipelineSurvivesYield(t *testing.T) {
 		_ = c.SetDeadline(time.Now().Add(10 * time.Second))
 		const n = 5000
 		go func() { _, _ = io.WriteString(c, strings.Repeat(paddedGet(size), n)) }()
+		time.Sleep(tc.readAfter)
 		br := bufio.NewReader(c)
 		for i := range n {
 			res, err := http.ReadResponse(br, nil)

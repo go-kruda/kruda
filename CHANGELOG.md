@@ -345,9 +345,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Problem | Effect | Confirmed in |
   |---|---|---|
   | A read into a full receive buffer while a response waited | panic, process exit | v1.8.2, v1.8.5 (Linux) |
-  | Parsing and sending called each other without a bound | stack overflow, process exit | v1.4.0, v1.7.2, v1.8.2 to v1.8.5 |
+  | Parsing and sending called each other without a bound | one client could hold a worker and grow its stack until the process exited | nesting without a bound in v1.4.0, v1.7.2 and v1.8.2 to v1.8.5; fatal stack overflow reproduced in v1.8.5 with the stack limited to 64 MiB |
   | Responses queued for a client that read none | unbounded memory, `WriteTimeout` never fired | v1.8.5 |
-  | A partial request behind a complete one | no timeout applied, connection held | v1.8.5 |
+  | A partial request behind a complete one (see the `ReadTimeout` entry under Fixed) | no timeout applied, connection held | v1.8.5 |
   | No 10 MiB body ceiling when `BodyLimit` is 0 | memory follows the declared length | v1.8.5 |
 
   Versions not listed were not tested and should not be assumed safe. With

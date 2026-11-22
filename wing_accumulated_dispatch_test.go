@@ -177,6 +177,28 @@ func TestWingAccumulatedTakeoverQueuesBehindUnsentResponse(t *testing.T) {
 	}
 }
 
+// TestWingAccumulatedTakeoverWaitsOverQueueLimit leaves more than the limit
+// unsent in front of a POST. Nothing may be dispatched until that is sent.
+func TestWingAccumulatedTakeoverWaitsOverQueueLimit(t *testing.T) {
+	big := strings.Repeat("g", 512<<10)
+	calls := 0
+	w, c, peer, _ := socketWorker(t, 8192, transport.HandlerFunc(func(rw transport.ResponseWriter, r transport.Request) {
+		calls++
+		_, _ = rw.Write([]byte(big))
+	}))
+	w.presets = NewPresetTable(map[string]Preset{"POST /slow": Spear}, Bolt)
+	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(peer, "GET /big HTTP/1.1\r\nHost: x\r\n\r\nPOST /slow HTTP/1.1\r\nHost: x\r\nContent-Length: 20000\r\n\r\n"+strings.Repeat("b", 20000)); err != nil {
+		t.Fatal(err)
+	}
+	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	if calls != 1 || c.pending != 0 || c.bodyNeed != 0 {
+		t.Fatalf("ran behind a reply over the queue limit: calls=%d pending=%d bodyNeed=%d", calls, c.pending, c.bodyNeed)
+	}
+}
+
 // TestWingAccumulatedTakeoverBehindUnsentResponse pipelines a fragmented POST
 // to a Takeover route behind a GET reply over the queue limit. The POST waits
 // for that reply, then must run off the event loop and reply in order.
@@ -236,11 +258,6 @@ func TestWingAccumulatedTakeoverBehindUnsentResponse(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("reply out of order or wrong: %d bytes, want %d", len(got), len(want))
 		}
-	}
-	select {
-	case <-entered:
-		t.Fatal("ran behind a reply over the queue limit")
-	case <-time.After(100 * time.Millisecond):
 	}
 	read(big)
 	select {

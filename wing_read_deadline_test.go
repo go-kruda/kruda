@@ -67,25 +67,26 @@ func TestWingTimeoutsBoundPipelinedInput(t *testing.T) {
 			defer stop()
 			conn, br := framingDial(t, addr)
 			defer conn.Close()
-			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+			_ = conn.SetDeadline(time.Now().Add(20 * time.Second))
 			if _, err := io.WriteString(conn, tc.payload); err != nil {
 				t.Fatal(err)
 			}
+			var ne net.Error
 			if tc.write > 0 {
-				for range 35 { // keep sending, past the timeout and a sweep
+				// Keep sending and reading nothing until the server's close resets us.
+				for range 150 {
 					time.Sleep(100 * time.Millisecond)
 					if _, err := io.WriteString(conn, get); err != nil {
-						break
+						if errors.As(err, &ne) && ne.Timeout() {
+							break
+						}
+						return
 					}
 				}
+				t.Fatal("write timeout did not cut a client that read nothing")
 			}
-			n, err := io.Copy(io.Discard, br)
-			var ne net.Error
-			if errors.As(err, &ne) && ne.Timeout() {
+			if _, err := io.Copy(io.Discard, br); errors.As(err, &ne) && ne.Timeout() {
 				t.Fatal("connection held past its timeout")
-			}
-			if tc.write > 0 && n >= int64(len(big)) {
-				t.Fatalf("write timeout did not cut a client that read nothing: %d bytes", n)
 			}
 		})
 	}

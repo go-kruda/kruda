@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -145,18 +146,26 @@ func TestWingBackpressureResumes(t *testing.T) {
 					Workers: 1, HandlerPoolSize: 2, DefaultPreset: Bolt,
 					Presets: map[string]Preset{"GET /mixed": tc.preset},
 				}, transport.HandlerFunc(func(rw transport.ResponseWriter, r transport.Request) {
-					_, _ = rw.Write([]byte(body))
+					id := r.Header("X-N")
+					_, _ = rw.Write([]byte(id + body[len(id):]))
 				}))
 				defer stop()
 				conn, br := framingDial(t, addr)
 				defer conn.Close()
 				_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
-				half := strings.Repeat(framingGet("/inline"), requests/4) + strings.Repeat(framingGet("/mixed"), requests/4)
-				for i := range 2 {
+				var halves [2]strings.Builder
+				for i := range requests {
+					path := "/inline"
+					if i%(requests/2) >= requests/4 {
+						path = "/mixed"
+					}
+					halves[i/(requests/2)].WriteString("GET " + path + " HTTP/1.1\r\nHost: x\r\nX-N: " + strconv.Itoa(i) + "|\r\n\r\n")
+				}
+				for i := range halves {
 					if i > 0 {
 						time.Sleep(100 * time.Millisecond) // arrives while the responses wait
 					}
-					if _, err := io.WriteString(conn, half); err != nil {
+					if _, err := io.WriteString(conn, halves[i].String()); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -171,8 +180,12 @@ func TestWingBackpressureResumes(t *testing.T) {
 					if err != nil {
 						t.Fatalf("response %d of %d: %v", i, requests, err)
 					}
-					if n, err := io.Copy(io.Discard, res.Body); err != nil || n != bodySize {
-						t.Fatalf("response %d: %d bytes, %v", i, n, err)
+					got, err := io.ReadAll(res.Body)
+					if err != nil || len(got) != bodySize {
+						t.Fatalf("response %d: %d bytes, %v", i, len(got), err)
+					}
+					if id, _, _ := strings.Cut(string(got[:16]), "|"); id != strconv.Itoa(i) {
+						t.Fatalf("response %d answers request %s", i, id)
 					}
 				}
 				if halfClose {

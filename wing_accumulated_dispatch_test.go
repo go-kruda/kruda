@@ -237,6 +237,11 @@ func TestWingAccumulatedTakeoverBehindUnsentResponse(t *testing.T) {
 			t.Fatalf("reply out of order or wrong: %d bytes, want %d", len(got), len(want))
 		}
 	}
+	select {
+	case <-entered:
+		t.Fatal("ran behind a reply over the queue limit")
+	case <-time.After(100 * time.Millisecond):
+	}
 	read(big)
 	select {
 	case <-entered:

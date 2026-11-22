@@ -684,7 +684,7 @@ func (w *worker) sweepTimeouts(now int64) {
 		if c.pending > 0 {
 			continue // handler in flight — don't close
 		}
-		sending := c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0
+		sending := c.sending()
 		// Read timeout: partial request sitting too long. Its clock restarts while
 		// a reply is being sent, because nothing is read then, body bytes excepted.
 		if w.readTimeout > 0 && c.readDeadline > 0 {
@@ -706,7 +706,7 @@ func (w *worker) sweepTimeouts(now int64) {
 			continue
 		}
 		// Write timeout: sendBuf stuck (partial send not draining).
-		if w.writeTimeout > 0 && (len(c.sendBuf) > 0 || c.fileStream != nil || c.sendFileFd > 0) && now-c.lastActive > w.writeTimeout {
+		if w.writeTimeout > 0 && sending && now-c.lastActive > w.writeTimeout {
 			w.closeConn(fd)
 		}
 	}
@@ -862,7 +862,9 @@ func (w *worker) handleRecv(ev event) {
 		if now == 0 {
 			now = time.Now().UnixNano()
 		}
-		c.lastActive = now
+		if !queued {
+			c.lastActive = now // body bytes behind an unsent reply must not extend its write timeout
+		}
 		// Set the read deadline once, on the first byte of a request, and do not
 		// refresh it while accumulating a body — otherwise a slow client trickling
 		// body bytes resets the deadline forever (slowloris). The deadline then
@@ -1636,6 +1638,11 @@ func (w *worker) directSend(c *conn) {
 		w.closeConn(c.fd)
 		return
 	}
+	if c.readDeadline > 0 {
+		// Nothing was read during the send, so a partial request behind it
+		// gets its whole interval from here.
+		c.readDeadline = w.clockNow() + w.readTimeout
+	}
 	if c.readN > 0 {
 		w.parseAfterSend(c)
 		return
@@ -2190,6 +2197,12 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 // further pipelined requests. One response may pass it.
 const maxQueuedSend = 256 << 10
 
+// sending reports output the client has yet to make room for. A yielded turn
+// counts: it waits for the socket to be writable.
+func (c *conn) sending() bool {
+	return c.sendN < len(c.sendBuf) || c.fileStream != nil || c.sendFileFd > 0 || c.resumeParse
+}
+
 func (c *conn) suppressRead() {
 	c.readSuppressed = true
 	c.readDrained = false
@@ -2224,8 +2237,10 @@ func (w *worker) handleSend(ev event) {
 		c = w.conns[ev.Fd]
 	}
 	if c != nil {
-		// EPOLLOUT takes priority over a simultaneous EPOLLIN in the engine.
+		// EPOLLOUT takes priority over a simultaneous EPOLLIN in the engine, so
+		// this event may hide input or an EOF that gets no other edge.
 		c.readDrained = false
+		c.readSuppressed = true
 	}
 	if c == nil || (len(c.sendBuf) == 0 && c.sendFileFd == 0 && c.fileStream == nil) {
 		// No pending data or sendfile — remove EPOLLOUT, listen for EPOLLIN.
@@ -2244,6 +2259,9 @@ func (w *worker) handleSend(ev event) {
 		w.discardInput(c)
 	}
 	w.directSend(c)
+	if c.bodyNeed > 0 && w.conns[c.fd] == c {
+		w.drainBodyAccum(c) // body bytes this event may have hidden
+	}
 }
 
 // removeConnBookkeeping is the single chokepoint for releasing a connection's

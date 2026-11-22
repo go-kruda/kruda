@@ -77,24 +77,19 @@ func TestWingPipelineTurnIsBounded(t *testing.T) {
 			}
 			_, _ = rw.Write([]byte("ok"))
 		})
-		w, c, p, eng := socketWorker(t, 512, h)
+		w, c, p, _ := socketWorker(t, 512, h)
 		peer = p
-		batch := strings.Repeat(paddedGet(size), 1000)
-		go func() {
-			for {
-				if _, err := io.WriteString(p, batch); err != nil {
-					return
-				}
-			}
-		}()
+		// All queued before the event: many more read batches than one turn.
+		if _, err := io.WriteString(p, strings.Repeat(paddedGet(size), 48<<10/size)); err != nil {
+			t.Fatal(err)
+		}
 		go func() { _, _ = io.CopyBuffer(io.Discard, p, make([]byte, 1<<20)) }()
-		time.Sleep(50 * time.Millisecond)
 		w.handleRecv(event{Op: opRecv, Fd: c.fd})
 		if deepest > 200 || calls >= 2000 {
 			t.Fatalf("size %d: one event ran %d requests %d frames deep", size, calls, deepest)
 		}
-		if size == 256 {
-			if eng.sendArmed == 0 {
+		if size == 256 || runtime.GOOS == "linux" {
+			if !c.resumeParse {
 				t.Fatalf("size %d: turn ended after %d requests with no wakeup", size, calls)
 			}
 			before := calls

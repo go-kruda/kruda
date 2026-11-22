@@ -72,7 +72,12 @@ func TestWingTimeoutsBoundPipelinedInput(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.write > 0 {
-				time.Sleep(3500 * time.Millisecond) // past the timeout and a sweep
+				for range 35 { // keep sending, past the timeout and a sweep
+					time.Sleep(100 * time.Millisecond)
+					if _, err := io.WriteString(conn, get); err != nil {
+						break
+					}
+				}
 			}
 			n, err := io.Copy(io.Discard, br)
 			var ne net.Error

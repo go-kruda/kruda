@@ -33,10 +33,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Client pipelines and reads slowly or not at all | every request read ran, and responses queued without limit | parsing pauses at 256 KiB unsent (one response may pass it), reading pauses until the send completes |
   | Request pipelined behind a response over 256 KiB | could run while that response was being sent | runs after it is sent |
   | `WriteTimeout` with a client that keeps sending but does not read | refreshed by each request, so it never fired | fires |
-  | Client half-closes while responses wait | cut the responses, or kept the connection until `IdleTimeout` | sends the responses, then closes |
+  | Client half-closes after complete requests, while their responses wait | cut the responses, or kept the connection until `IdleTimeout` | sends the responses, then closes |
   | `ReadTimeout` with part of the next request behind a response being sent | could cut that response | counts once the send completes |
-  | Pipelining client that never pauses | one connection could keep its worker | yields after 16 read batches |
-  | Body over 10 MiB declared with `BodyLimit` 0 | waited for and buffered the body, then failed | `413` from the header |
+  | Pipelining client that never pauses | one connection could keep its worker | yields after 16 rounds of sending and parsing |
+  | Body over 10 MiB declared with `BodyLimit` 0 | waited for and buffered the body, then failed | `413` from the header; a length that does not fit an `int` closes the connection |
 
   A long pipeline of large responses takes longer to start its later handlers,
   and a client has to read responses for its later requests to run.

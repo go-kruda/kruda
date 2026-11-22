@@ -131,11 +131,12 @@ func TestWingRecvLeavesInputWhenBufferIsFull(t *testing.T) {
 	if _, err := syscall.Write(fds[1], []byte("next")); err != nil {
 		t.Fatal(err)
 	}
-	c := &conn{fd: int32(fds[0]), keepAlive: true, readBuf: make([]byte, 64), readN: 64, sendBuf: []byte("queued")}
+	// Nothing is queued, so only the space check can stop the read.
+	c := &conn{fd: int32(fds[0]), keepAlive: true, readBuf: make([]byte, 64), readN: 64}
 	w := &worker{conns: map[int32]*conn{c.fd: c}}
 	w.handleRecv(event{Fd: c.fd})
-	if !c.readSuppressed || c.readN != len(c.readBuf) || string(c.sendBuf) != "queued" {
-		t.Fatalf("suppressed=%v readN=%d sendBuf=%q", c.readSuppressed, c.readN, c.sendBuf)
+	if !c.readSuppressed || c.readN != len(c.readBuf) {
+		t.Fatalf("suppressed=%v readN=%d", c.readSuppressed, c.readN)
 	}
 	var got [8]byte
 	if n, err := syscall.Read(fds[0], got[:]); err != nil || string(got[:n]) != "next" {

@@ -130,3 +130,36 @@ func TestWingWriteEventKeepsHiddenEOF(t *testing.T) {
 		t.Fatalf("calls=%d closed=%v, want the request served and the EOF seen", calls, eng.closedFds)
 	}
 }
+
+// TestWingReplyIsSentBeforeWaitingForUpload parks on a body behind a complete
+// request. Its reply must not wait for, or time out under, the upload.
+func TestWingReplyIsSentBeforeWaitingForUpload(t *testing.T) {
+	w, c, peer, _ := socketWorker(t, 512, transport.HandlerFunc(func(rw transport.ResponseWriter, r transport.Request) {
+		_, _ = rw.Write([]byte("ok"))
+	}))
+	if _, err := io.WriteString(peer, "GET / HTTP/1.1\r\nHost: x\r\n\r\nPOST /up HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\npart"); err != nil {
+		t.Fatal(err)
+	}
+	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	if c.bodyNeed != 100 {
+		t.Fatalf("bodyNeed = %d, want an upload in progress", c.bodyNeed)
+	}
+	_ = peer.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := peer.Read(make([]byte, 256)); err != nil {
+		t.Fatalf("reply held back for the upload: %v", err)
+	}
+}
+
+// TestWingReadDeadlineArmsFromFreshClock sees a partial request for the first
+// time after a send, late in a slow event batch.
+func TestWingReadDeadlineArmsFromFreshClock(t *testing.T) {
+	w, c, _, _ := socketWorker(t, 512, nil)
+	w.readTimeout = int64(time.Second)
+	w.now = int64(5 * time.Second) // the batch's clock
+	c.keepAlive = true
+	c.readN = copy(c.readBuf, "GET /par")
+	w.tryParse(c)
+	if c.readDeadline <= time.Now().UnixNano() {
+		t.Fatal("deadline armed in the past")
+	}
+}

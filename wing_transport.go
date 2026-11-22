@@ -901,7 +901,7 @@ func (w *worker) tryParse(c *conn) {
 			if w.readTimeout > 0 && c.readDeadline == 0 {
 				// Bytes left behind an earlier request in the same read start
 				// this one; recv only sets the deadline on an empty buffer.
-				c.readDeadline = w.clockNow() + w.readTimeout
+				c.readDeadline = time.Now().UnixNano() + w.readTimeout // the batch clock can be older than a send
 			}
 			if c.readN < len(c.readBuf) {
 				// Buffer has room — classify to decide whether to wait or error.
@@ -1289,10 +1289,14 @@ func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
 	} else {
 		c.readN = 0
 	}
-	if expectContinue && len(c.bodyBuf) < c.bodyNeed {
-		c.sendBuf = append(c.sendBuf, wing100Continue...)
+	if len(c.bodyBuf) < c.bodyNeed {
+		if expectContinue {
+			c.sendBuf = append(c.sendBuf, wing100Continue...)
+		}
 		// Flush only after this request owns its body budget, but before draining
-		// can complete it and recursively parse a later pipelined request.
+		// can complete it and recursively parse a later pipelined request. Earlier
+		// replies go out here too: they must not wait, on the write timeout's
+		// clock, for the upload behind them.
 		if c.sendN < len(c.sendBuf) {
 			w.directSend(c) // non-blocking; rest of buf stays queued if partial
 			if c.bodyNeed == 0 {

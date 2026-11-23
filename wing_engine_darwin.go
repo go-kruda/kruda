@@ -120,18 +120,31 @@ func (e *kqueueEngine) SubmitClose(fd int32) {
 
 func (e *kqueueEngine) Detach(fd int32) { e.forget(fd) }
 
-// forget drops fd's state, including a registration still queued for the next
-// kevent call: submitted after the close, it would watch whatever socket
-// reuses the number, with no buffer to read it into.
+// forget drops fd's state. A registration for fd may still be queued: Wait
+// drops it, as it would otherwise watch whatever socket reuses the number.
 func (e *kqueueEngine) forget(fd int32) {
 	delete(e.recvBufs, fd)
 	delete(e.sendBufs, fd)
+}
+
+// liveChanges keeps the queued changes whose socket is still registered: a
+// read or write interest stays only while its buffer entry does. The listener
+// and the wake pipe are not sockets Wing closes.
+func (e *kqueueEngine) liveChanges() {
 	kept := e.changes[:0]
 	for _, ch := range e.changes {
-		if ch.Ident != uint64(fd) {
+		fd := int32(ch.Ident)
+		live := int(ch.Ident) == e.listenFd || int(ch.Ident) == e.pipeR
+		if !live && ch.Filter == syscall.EVFILT_READ {
+			_, live = e.recvBufs[fd]
+		} else if !live && ch.Filter == syscall.EVFILT_WRITE {
+			_, live = e.sendBufs[fd]
+		}
+		if live {
 			kept = append(kept, ch)
 		}
 	}
+	clear(e.changes[len(kept):])
 	e.changes = kept
 }
 
@@ -142,6 +155,7 @@ func (e *kqueueEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
 func (e *kqueueEngine) Wait(events []event) (int, error) {
 	var changes []syscall.Kevent_t
 	if len(e.changes) > 0 {
+		e.liveChanges()
 		changes = e.changes
 		e.changes = e.changes[:0]
 	}

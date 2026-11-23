@@ -666,17 +666,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 	}
 
 	for !shutdown.Load() {
-		{
-		drain:
-			for {
-				select {
-				case msg := <-w.doneCh:
-					w.handleDone(msg)
-				default:
-					break drain
-				}
-			}
-		}
+		w.drainCompletions()
 
 		n, err := w.eng.Wait(w.events[:])
 		if err != nil {
@@ -748,6 +738,22 @@ func (w *worker) sweepLinger(now int64) {
 		n := copy(q, q[w.lingerHead:]) // amortized: each entry moves at most once per halving
 		clear(q[n:])
 		w.lingerQ, w.lingerHead = q[:n], 0
+	}
+}
+
+// drainCompletions handles the completions handlers have sent. A steady
+// stream of them must not hold a linger open past its deadline.
+func (w *worker) drainCompletions() {
+	for {
+		select {
+		case msg := <-w.doneCh:
+			w.handleDone(msg)
+			if w.lingering > 0 {
+				w.sweepLinger(monoNow())
+			}
+		default:
+			return
+		}
 	}
 }
 
@@ -1310,6 +1316,7 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 			copy(leftover, c.readBuf[:c.readN])
 			c.readN = 0
 		}
+		c.readBuf = nil // the goroutine reads into its own buffer from here on
 		w.dispatchWG.Add(1)
 		go func() {
 			defer w.dispatchWG.Done()
@@ -2337,7 +2344,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 done:
 	if final {
-		lingerTakeover(f, fd, buf)
+		bodyBuf = nil
+		if grewBuf {
+			buf = nil // not kept through the wait: a pooled buffer is enough to drain
+			lingerTakeoverConn(f, fd)
+		} else {
+			lingerTakeover(f, fd, buf)
+		}
 	}
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
 	// and then closes through the File. Do NOT close here — the kernel

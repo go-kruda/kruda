@@ -884,3 +884,21 @@ func lingerShortensWait(t *testing.T, expire bool) {
 		t.Fatalf("open %v, engine wait %d ms, queued %d", w.conns[c.fd] == c, eng.waitMs, len(w.lingerQ))
 	}
 }
+
+// TestWingCompletionsDoNotHoldLinger handles a completion while a connection's
+// linger deadline has passed. Completions can keep coming without a pause, so
+// the linger must end there rather than after them.
+func TestWingCompletionsDoNotHoldLinger(t *testing.T) {
+	w, _ := newTestWorker(0)
+	w.doneCh = make(chan doneMsg, 1)
+	c := newTestConn(100)
+	c.lingerUntil = monoNow() - 1
+	w.conns[c.fd] = c
+	w.lingering = 1
+	w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
+	w.doneCh <- doneMsg{fd: 999} // a completion for a connection already gone
+	w.drainCompletions()
+	if w.conns[c.fd] == c {
+		t.Fatal("linger past its deadline survived a completion")
+	}
+}

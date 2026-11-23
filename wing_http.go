@@ -1779,6 +1779,9 @@ func (r *wingResponse) closeRequested() bool {
 	if r.staticResp != nil {
 		return r.staticClose
 	}
+	if r.fileFd > 0 || r.fileStream != nil {
+		return r.headers.connectionClose() // sent ahead of the string and JSON lanes, as in buildZeroCopy
+	}
 	return !r.stringFast && !r.jsonFast && r.headers.connectionClose()
 }
 

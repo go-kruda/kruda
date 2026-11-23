@@ -14,6 +14,7 @@ import (
 // for a hijacked writer, which is blocked on a client that does not read.
 // Shutdown must cut that writer while it waits for the Pool, or neither ends.
 func TestWingShutdownPoolWaitingOnTakeoverWriter(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1") // the Pool handler must block the writer's own worker
 	writing, writerDone, poolEntered := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	app := New(Wing())
 	app.Get("/ws", func(c *Ctx) error {
@@ -42,7 +43,11 @@ func TestWingShutdownPoolWaitingOnTakeoverWriter(t *testing.T) {
 	if tc, ok := ws.(*net.TCPConn); ok {
 		_ = tc.SetReadBuffer(1024)
 	}
-	<-writing
+	select {
+	case <-writing:
+	case <-time.After(3 * time.Second):
+		t.Fatal("writer never ran")
+	}
 	pool, _ := framingDial(t, addr)
 	if _, err := pool.Write([]byte(framingGet("/pool"))); err != nil {
 		t.Fatal(err)
@@ -59,7 +64,9 @@ func TestWingShutdownPoolWaitingOnTakeoverWriter(t *testing.T) {
 	if err := app.transport.Shutdown(ctx); err != nil {
 		t.Fatalf("Shutdown after %v: %v", time.Since(start), err)
 	}
-	if took := time.Since(start); took > 3*time.Second {
-		t.Fatalf("Shutdown took %v", took)
+	// Sooner than the grace means the writer's socket was cut before the Pool
+	// drained, so the deadlock was never set up.
+	if took := time.Since(start); took < shutdownTakeoverGrace*8/10 || took > 3*time.Second {
+		t.Fatalf("Shutdown took %v, want about %v", took, shutdownTakeoverGrace)
 	}
 }

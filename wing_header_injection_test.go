@@ -200,3 +200,34 @@ func TestWingFrameworkHeaderSourcesAreClean(t *testing.T) {
 		t.Fatalf("security header added X-Injected %q (all: %v)", got, res.Header)
 	}
 }
+
+// TestWingFileResponseConnectionCloseEndsConnection fills a retained raw
+// header map with Connection: close after selecting the string lane, then
+// ends with a file stream, which is what gets sent. The close must hold.
+func TestWingFileResponseConnectionCloseEndsConnection(t *testing.T) {
+	var ranNext atomic.Int32
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/next" {
+			ranNext.Add(1)
+			return
+		}
+		h := w.Header()
+		w.(transport.StringResponder).SetStringBody(200, "text/plain", "string")
+		h.Set("Connection", "close")
+		w.(transport.FileStreamer).SetFileStream(io.NopCloser(strings.NewReader("first")), 5)
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1}, handler)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/first")+framingGet("/next")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	if _, err := br.ReadByte(); err != io.EOF || ranNext.Load() != 0 {
+		t.Fatalf("Connection: close sent but kept open: %v, next ran %d times", err, ranNext.Load())
+	}
+}

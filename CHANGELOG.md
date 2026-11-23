@@ -335,9 +335,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   completes while the Pool drains still delivers a response it writes to the
   socket itself while the socket is still open for writing. Takeover
   handlers get at most one second of that while the Pool drains; then their
-  write side is shut, so a Pool handler that waits on one cannot stall
-  Shutdown. A Takeover connection starts no new request, and sends no error
-  status or `100 Continue` for input it has buffered, once shutdown begins. Not covered: a response the stopped event loop would
+  write side is shut, so a Pool handler waiting on a Takeover write that is
+  blocked on its client cannot stall Shutdown. A Pool handler waiting on
+  other work still holds Shutdown until it returns or the deadline passes.
+  Once a Takeover connection sees that shutdown began, it starts no further
+  request and sends no error status or `100 Continue` for input it has
+  buffered; a reply already past that check still goes out. Not covered: a response the stopped event loop would
   have sent, such as the rest of one the socket could not take at once or a
   Pool or Spawn response queued behind an earlier unsent reply, and, on a
   worker without a Pool, a Takeover response finished after the sockets are

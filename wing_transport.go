@@ -360,6 +360,8 @@ type worker struct {
 	hasTimeout      bool
 	lingering       int // connections in closeAfterFinal's linger; they need the sweep
 	lingerQ         []lingerEntry
+	lingerHead      int        // lingerQ[:lingerHead] is consumed
+	baseWaitMillis  int        // the engine wait when nothing lingers
 	wakeMu          sync.Mutex // orders Shutdown's wake against the wake fd closing
 	wakeClosed      bool
 	discardBuf      []byte       // shared by discardInput, so a small ReadBufSize does not mean many reads
@@ -546,9 +548,10 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		eng.Close()
 		return nil, err
 	}
-	// The wait ends twice a second so the sweep can run: for timeouts, and
-	// for a lingering close, which happens whatever the timeouts are.
-	waitMillis := 500
+	waitMillis := 0
+	if cfg.ReadTimeout > 0 || cfg.WriteTimeout > 0 || cfg.IdleTimeout > 0 {
+		waitMillis = 1000
+	}
 	if err := eng.Init(engineConfig{WaitTimeoutMillis: waitMillis, RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
 		closeFd(wakeR)
 		if wakeW != wakeR {
@@ -575,6 +578,7 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		id:              id,
 		listenFd:        listenFd,
 		eng:             eng,
+		baseWaitMillis:  waitMillis,
 		handler:         handler,
 		config:          cfg,
 		limits:          parserLimits{maxHeaderCount: cfg.MaxHeaderCount, maxHeaderSize: cfg.MaxHeaderSize, bodyLimit: cfg.BodyLimit},
@@ -686,9 +690,7 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
-		if w.lingering > 0 {
-			w.sweepLinger(monoNow())
-		}
+		w.tickLinger()
 		if hasTimeout {
 			if w.now >= w.sweepAt {
 				w.sweepTimeouts(w.now)
@@ -705,6 +707,17 @@ var monoBase = time.Now()
 
 func monoNow() int64 { return int64(time.Since(monoBase)) }
 
+// lingerWaitMillis caps the engine wait while a connection lingers, so the
+// sweep runs within that of its deadline.
+const lingerWaitMillis = 500
+
+// setWait changes how long the engine waits for events, when it can.
+func (w *worker) setWait(ms int) {
+	if e, ok := w.eng.(interface{ setWaitTimeout(ms int) }); ok {
+		e.setWaitTimeout(ms)
+	}
+}
+
 // lingerEntry is a lingering connection and the deadline it was queued with.
 type lingerEntry struct {
 	c     *conn
@@ -716,19 +729,37 @@ type lingerEntry struct {
 // at the first one still due; entries for connections that closed sooner are
 // skipped.
 func (w *worker) sweepLinger(now int64) {
-	i := 0
-	for ; i < len(w.lingerQ); i++ {
-		e := w.lingerQ[i]
-		if e.c.lingerUntil != e.until || w.conns[e.c.fd] != e.c {
-			continue
+	q := w.lingerQ
+	for w.lingerHead < len(q) {
+		e := q[w.lingerHead]
+		if e.c.lingerUntil == e.until && w.conns[e.c.fd] == e.c {
+			if now < e.until {
+				break
+			}
+			w.closeConn(e.c.fd)
 		}
-		if now < e.until {
-			break
-		}
-		w.closeConn(e.c.fd)
+		q[w.lingerHead] = lingerEntry{} // the queue must not keep a closed connection
+		w.lingerHead++
 	}
-	if i > 0 {
-		w.lingerQ = append(w.lingerQ[:0], w.lingerQ[i:]...)
+	if w.lingerHead == len(q) {
+		w.lingerQ, w.lingerHead = q[:0], 0
+	} else if w.lingerHead >= 64 && w.lingerHead > len(q)/2 {
+		n := copy(q, q[w.lingerHead:]) // amortized: each entry moves at most once per halving
+		clear(q[n:])
+		w.lingerQ, w.lingerHead = q[:n], 0
+	}
+}
+
+// tickLinger runs after each event batch. Once no connection lingers, what is
+// left in the queue refers to connections that closed sooner: it is released,
+// and the engine waits as long as it did before.
+func (w *worker) tickLinger() {
+	if w.lingering > 0 {
+		w.sweepLinger(monoNow())
+	} else if len(w.lingerQ) > 0 {
+		clear(w.lingerQ)
+		w.lingerQ, w.lingerHead = w.lingerQ[:0], 0
+		w.setWait(w.baseWaitMillis)
 	}
 }
 
@@ -1641,8 +1672,7 @@ func (w *worker) discardInput(c *conn) discardResult {
 // closeAfterFinal ends a connection whose final response is fully written. With
 // unread input it ends the write side and drops input until the peer closes,
 // as net/http's closeWriteAndWait: the peer reads the response and an EOF, not
-// a reset that can discard it. lingerDelay bounds the wait when the worker has
-// timeouts; without them it is bounded by the peer, as an idle connection is.
+// a reset that can discard it. lingerDelay bounds the wait, timeouts or not.
 func (w *worker) closeAfterFinal(c *conn) {
 	if w.discardInput(c) != discardDrained || c.discarded == 0 {
 		w.closeConn(c.fd) // nothing unread, or the peer is gone or sent too much
@@ -1655,8 +1685,7 @@ func (w *worker) closeAfterFinal(c *conn) {
 		}
 		c.lingerUntil = monoNow() + lingerDelay
 		if w.lingering == 0 {
-			clear(w.lingerQ)
-			w.lingerQ = w.lingerQ[:0] // only entries of closed connections were left
+			w.setWait(lingerWaitMillis)
 		}
 		w.lingering++
 		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
@@ -2386,17 +2415,16 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	cancel()
 	_ = f.SetReadDeadline(time.Now()) // ends the watcher's read, so one reader owns the socket again
 	<-watched
+	// Return the request to the pool, matching the other dispatch paths. Safe
+	// here: the handler has returned, the watcher has stopped, and what follows
+	// uses only fd + the *os.File — nothing references first afterward.
+	releaseRequest(first)
 	if testStreamTeardownHook != nil {
 		testStreamTeardownHook()
 	}
 	if sw.headersSent && !sw.broken {
 		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
 	}
-
-	// Return the request to the pool, matching the other dispatch paths. Safe
-	// here: the handler has returned, the watcher is cancelled, and the close
-	// below uses only fd + the *os.File — nothing references first afterward.
-	releaseRequest(first)
 
 	// Close the fd exactly once via the shared takeover-done path. The conn is
 	// already takenOver, so handleDone removes bookkeeping and closes through

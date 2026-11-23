@@ -194,6 +194,7 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 
 	// Phase 3 state machine: not hijacked → serialize the buffered response;
 	// hijacked → the handler already wrote everything to the raw connection.
+	rejected := false
 	if !hw.hijacked {
 		// The fd is closed right after this write, so advertise Connection: close
 		// rather than letting an HTTP/1.1 client treat the socket as reusable.
@@ -202,12 +203,14 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 		if w.writeTimeout > 0 {
 			_ = f.SetWriteDeadline(time.Now().Add(time.Duration(w.writeTimeout)))
 		}
-		if _, err := f.Write(data); err == nil {
-			lingerTakeoverConn(f, fd)
-		}
+		_, err := f.Write(data)
+		rejected = err == nil
 	}
 	releaseResponse(resp)
 	releaseRequest(first) // handler returned; the adapter holds ctx/remote independently
+	if rejected {
+		lingerTakeoverConn(f, fd) // after the release: the response is sent, and the wait can take 500 ms
+	}
 
 	// Hijacked: the app owns the connection. Wait until it closes the adapter
 	// (done) or the server shuts down (ctx) before reclaiming the fd, so an app

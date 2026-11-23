@@ -104,6 +104,8 @@ func (e *epollEngine) Detach(fd int32) {
 	syscall.EpollCtl(e.epfd, epollCtlDel, int(fd), nil)
 }
 
+func (e *epollEngine) setWaitTimeout(ms int) { e.waitTimeoutMillis = ms }
+
 func (e *epollEngine) Wait(events []event) (int, error) {
 	// Adaptive: non-blocking first when busy, block when idle.
 	msec := 0

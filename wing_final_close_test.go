@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -750,18 +751,22 @@ func TestWingLingerSweepFollowsDeadlines(t *testing.T) {
 	}
 	w.closeConn(cs[1].fd) // its peer closed first
 	w.sweepLinger(now + 250*int64(time.Millisecond))
-	if w.conns[cs[0].fd] != nil || w.conns[cs[2].fd] != cs[2] || w.lingering != 1 || len(w.lingerQ) != 1 {
-		t.Fatalf("open %v %v, lingering %d, queued %d", w.conns[cs[0].fd] != nil, w.conns[cs[2].fd] != nil, w.lingering, len(w.lingerQ))
+	if queued := len(w.lingerQ) - w.lingerHead; w.conns[cs[0].fd] != nil || w.conns[cs[2].fd] != cs[2] || w.lingering != 1 || queued != 1 {
+		t.Fatalf("open %v %v, lingering %d, queued %d", w.conns[cs[0].fd] != nil, w.conns[cs[2].fd] != nil, w.lingering, queued)
 	}
 }
 
 // TestWingStreamEndLingersOverUnreadInput sends input after a Stream's
-// disconnect watcher has stopped and before the connection closes. Closing
-// over it would reset the connection and cut the streamed response.
+// disconnect watcher has stopped and before the connection closes, with a
+// limit of one connection. Closing over that input would reset the connection
+// and cut the streamed response; lingering holds the slot until the client
+// closes.
 func TestWingStreamEndLingersOverUnreadInput(t *testing.T) {
-	atTeardown, release := make(chan struct{}), make(chan struct{})
+	atTeardown, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	releaseOnce := func() { once.Do(func() { close(release) }) }
 	testStreamTeardownHook = func() {
-		close(atTeardown)
+		atTeardown <- struct{}{}
 		<-release
 	}
 	defer func() { testStreamTeardownHook = nil }()
@@ -769,22 +774,31 @@ func TestWingStreamEndLingersOverUnreadInput(t *testing.T) {
 	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
 		_, _ = w.Write([]byte(body))
 	})
-	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Stream}, handler)
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, MaxConns: 1, DefaultPreset: Stream}, handler)
 	defer stop()
-	conn, br := framingDial(t, addr)
-	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-atTeardown:
-	case <-time.After(3 * time.Second):
-		t.Fatal("stream never ended")
+	defer releaseOnce() // a failure below must not leave the server waiting
+	var conn net.Conn
+	var br *bufio.Reader
+	for attempt := 0; conn == nil; attempt++ { // the start-up probe may still hold the slot
+		if attempt == 20 {
+			t.Fatal("never admitted")
+		}
+		c, r := framingDial(t, addr)
+		if _, err := io.WriteString(c, framingGet("/")); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-atTeardown:
+			conn, br = c, r
+		case <-time.After(200 * time.Millisecond):
+			c.Close()
+		}
 	}
 	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(50 * time.Millisecond) // the input reaches the server, which no longer reads
-	close(release)
+	releaseOnce()
 	time.Sleep(100 * time.Millisecond) // a reset reaches the client before it reads
 	res, err := http.ReadResponse(br, nil)
 	if err != nil {
@@ -793,5 +807,67 @@ func TestWingStreamEndLingersOverUnreadInput(t *testing.T) {
 	got, err := io.ReadAll(res.Body)
 	if err != nil || string(got) != body {
 		t.Fatalf("stream cut at %d of %d bytes: %v", len(got), len(body), err)
+	}
+	held, hbr := framingDial(t, addr) // lingering, so the only slot is still taken
+	if _, err := io.WriteString(held, framingGet("/held")); err == nil {
+		if _, err := http.ReadResponse(hbr, nil); err == nil {
+			t.Fatal("served a second client: the stream closed without lingering")
+		}
+	}
+	conn.Close()
+	time.Sleep(100 * time.Millisecond)
+	next, nbr := framingDial(t, addr)
+	if _, err := io.WriteString(next, framingGet("/next")); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := http.ReadResponse(nbr, nil); err != nil {
+		t.Fatalf("next client not served after the lingering one closed: %v", err)
+	} else {
+		_, _ = io.ReadAll(res.Body)
+	}
+}
+
+// TestWingLingerQueueDropsClosedConnections expires a burst of lingering
+// connections in one sweep. The queue must not keep them, or their buffers.
+func TestWingLingerQueueDropsClosedConnections(t *testing.T) {
+	w, _ := newTestWorker(0)
+	now := monoNow()
+	for i := range 100 {
+		c := newTestConn(int32(100 + i))
+		c.lingerUntil = now + int64(i)
+		w.conns[c.fd] = c
+		w.lingering++
+		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
+	}
+	w.sweepLinger(now + 1000)
+	for i, e := range w.lingerQ[:cap(w.lingerQ)] {
+		if e.c != nil {
+			t.Fatalf("queue slot %d still holds a closed connection", i)
+		}
+	}
+	if len(w.lingerQ) != 0 || w.lingerHead != 0 || w.lingering != 0 {
+		t.Fatalf("queue %d, head %d, lingering %d", len(w.lingerQ), w.lingerHead, w.lingering)
+	}
+}
+
+// TestWingLingerShortensWaitOnlyWhileNeeded lingers a connection on a worker
+// with no timeouts, whose engine otherwise waits without a limit. The wait is
+// capped while it lingers and restored once it is gone.
+func TestWingLingerShortensWaitOnlyWhileNeeded(t *testing.T) {
+	w, c, peer, eng := socketWorker(t, 4096, nil)
+	c.keepAlive = false
+	c.sendBuf = []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+	if _, err := io.WriteString(peer, framingGet("/unread")); err != nil {
+		t.Fatal(err)
+	}
+	w.directSend(c)
+	if c.lingerUntil == 0 || eng.waitMs != lingerWaitMillis {
+		t.Fatalf("lingering %v, engine wait %d ms", c.lingerUntil != 0, eng.waitMs)
+	}
+	peer.Close()
+	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	w.tickLinger()
+	if w.conns[c.fd] == c || eng.waitMs != 0 || len(w.lingerQ) != 0 {
+		t.Fatalf("open %v, engine wait %d ms, queued %d", w.conns[c.fd] == c, eng.waitMs, len(w.lingerQ))
 	}
 }

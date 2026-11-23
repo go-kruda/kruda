@@ -38,6 +38,14 @@ func newEngine() engine {
 	}
 }
 
+func (e *kqueueEngine) setWaitTimeout(ms int) {
+	e.waitTimeout = nil
+	if ms > 0 {
+		ts := syscall.NsecToTimespec(int64(ms) * 1000000)
+		e.waitTimeout = &ts
+	}
+}
+
 func (e *kqueueEngine) Init(cfg engineConfig) error {
 	if cfg.WaitTimeoutMillis > 0 {
 		ts := syscall.NsecToTimespec(int64(cfg.WaitTimeoutMillis) * 1000000)

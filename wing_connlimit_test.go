@@ -22,7 +22,10 @@ type mockEngine struct {
 	sendArmed   int
 	closedFds   []int32
 	wakes       int
+	waitMs      int
 }
+
+func (m *mockEngine) setWaitTimeout(ms int) { m.waitMs = ms }
 
 func (m *mockEngine) Init(_ engineConfig) error              { return nil }
 func (m *mockEngine) SubmitAccept(_ int)                     { m.acceptArmed++ }

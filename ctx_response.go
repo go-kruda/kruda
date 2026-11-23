@@ -277,12 +277,13 @@ func (c *Ctx) HTML(html string) error {
 	if c.responded {
 		return ErrAlreadyResponded
 	}
-	if sr, ok := c.writer.(ctxStringResponder); ok && c.canBypassHeaderWrite(true) {
-		c.responded = true
-		sr.ctxStringBody(c.status, "text/html; charset=utf-8", html)
-		return nil
-	}
-	if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
+	if sr, ok := c.writer.(ctxStringResponder); ok {
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			sr.ctxStringBody(c.status, "text/html; charset=utf-8", html)
+			return nil
+		}
+	} else if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
 		c.responded = true
 		sr.SetStringBody(c.status, "text/html; charset=utf-8", html)
 		return nil

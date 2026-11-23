@@ -320,10 +320,20 @@ type fhHeaderAdapter struct {
 	ctx *fasthttp.RequestCtx
 }
 
-func (h *fhHeaderAdapter) Set(key, value string) { h.ctx.Response.Header.Set(key, value) }
+// Set and Add drop a field whose name is not a token, as net/http does:
+// fasthttp cleans line breaks out of values but writes names as given.
+func (h *fhHeaderAdapter) Set(key, value string) {
+	if isValidHeaderKey(key) {
+		h.ctx.Response.Header.Set(key, value)
+	}
+}
 func (h *fhHeaderAdapter) Get(key string) string { return string(h.ctx.Response.Header.Peek(key)) }
 func (h *fhHeaderAdapter) Del(key string)        { h.ctx.Response.Header.Del(key) }
-func (h *fhHeaderAdapter) Add(key, value string) { h.ctx.Response.Header.Add(key, value) }
+func (h *fhHeaderAdapter) Add(key, value string) {
+	if isValidHeaderKey(key) {
+		h.ctx.Response.Header.Add(key, value)
+	}
+}
 
 // tryFastHTTPText attempts to send text response directly via fasthttp without transport interface.
 // Returns true if successful (fasthttp context available), false otherwise.

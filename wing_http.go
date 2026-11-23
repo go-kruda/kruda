@@ -1320,29 +1320,6 @@ func (r *wingResponse) setStatic(data []byte, close bool) {
 	r.staticResp, r.staticClose = data, close
 }
 
-// staticResponseCloses reports whether a prebuilt response's header block has
-// a Connection header that lists close.
-func staticResponseCloses(resp []byte) bool {
-	if end := bytes.Index(resp, crlfcrlf); end >= 0 {
-		resp = resp[:end]
-	}
-	for len(resp) > 0 {
-		line := resp
-		if i := bytes.Index(resp, []byte("\r\n")); i >= 0 {
-			line, resp = resp[:i], resp[i+2:]
-		} else {
-			resp = nil
-		}
-		name, value, ok := bytes.Cut(line, []byte(":"))
-		if ok && headerIs(string(name), "Connection") {
-			if hasClose, _ := scanConnectionTokens(value); hasClose {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // SetStringBody implements transport.StringResponder — the zero-copy string
 // fast lane (twin of SetJSON). The response is serialized in one pass as
 // status + Date + Content-Type + Content-Length + body; the body string is
@@ -1760,18 +1737,21 @@ func (h *wingHeaders) contentLength() string {
 
 // connectionClose reports whether a Connection header in h lists close.
 func (h *wingHeaders) connectionClose() bool {
+	closes := func(val string) bool {
+		if strings.IndexByte(val, '\n') >= 0 || strings.IndexByte(val, '\r') >= 0 {
+			val = sanitizeHeaderValue(val) // as appendHeaderField sends it
+		}
+		hasClose, _ := scanConnectionTokens([]byte(val))
+		return hasClose
+	}
 	for i := 0; i < h.count; i++ {
-		if headerIs(h.keys[i], "Connection") {
-			if hasClose, _ := scanConnectionTokens([]byte(h.vals[i])); hasClose {
-				return true
-			}
+		if headerIs(h.keys[i], "Connection") && closes(h.vals[i]) {
+			return true
 		}
 	}
 	for i := range h.extra {
-		if headerIs(h.extra[i].key, "Connection") {
-			if hasClose, _ := scanConnectionTokens([]byte(h.extra[i].val)); hasClose {
-				return true
-			}
+		if headerIs(h.extra[i].key, "Connection") && closes(h.extra[i].val) {
+			return true
 		}
 	}
 	return false

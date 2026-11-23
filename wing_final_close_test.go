@@ -3,7 +3,10 @@
 package kruda
 
 import (
+	"bufio"
+	"bytes"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -37,6 +40,7 @@ func TestWingFinalResponseSurvivesUnreadInput(t *testing.T) {
 		{name: "Takeover request close", preset: Spear, body: small, requestClose: true},
 		{name: "Takeover large", preset: Spear, body: big},
 		{name: "Takeover file stream", preset: Spear, body: small, stream: true},
+		{name: "rejected Hijack", preset: Hijack, body: small, requestClose: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			entered, release := make(chan struct{}, 1), make(chan struct{})
@@ -97,24 +101,35 @@ func TestWingFinalResponseSurvivesUnreadInput(t *testing.T) {
 }
 
 // TestWingDiscardBehindFinalResponseIsBounded keeps sending while a final
-// response waits to be sent. Dropping that input costs the worker a copy per
-// byte, so the connection closes once the peer has sent too much of it.
+// response waits to be sent. Wing drops at most maxDiscardInput of that input
+// in all, leaves the rest unread, still sends the response, and then closes.
 func TestWingDiscardBehindFinalResponseIsBounded(t *testing.T) {
 	w, c, peer, _ := socketWorker(t, 4096, nil)
 	c.keepAlive = false
-	c.sendBuf = []byte("final response the peer has not read")
+	const response = "final response the peer has not read"
+	c.sendBuf = []byte(response)
 	chunk := make([]byte, 16<<10)
-	sent := 0
-	for w.conns[c.fd] == c && sent <= maxDiscardInput+len(chunk) {
+	for sent := 0; sent <= maxDiscardInput+len(chunk); {
 		n, err := peer.Write(chunk)
 		if err != nil {
 			t.Fatal(err)
 		}
 		sent += n
 		w.handleRecv(event{Op: opRecv, Fd: c.fd})
+		if c.discarded > maxDiscardInput {
+			t.Fatalf("dropped %d bytes, over the %d budget", c.discarded, maxDiscardInput)
+		}
 	}
+	if w.conns[c.fd] != c || c.discarded != maxDiscardInput {
+		t.Fatalf("open %v, dropped %d: want the response still queued after %d", w.conns[c.fd] == c, c.discarded, maxDiscardInput)
+	}
+	w.handleSend(event{Op: opSend, Fd: c.fd})
 	if w.conns[c.fd] == c {
-		t.Fatalf("still open after the peer sent %d bytes behind its final response", sent)
+		t.Fatal("still open after the response was sent past the budget")
+	}
+	got := make([]byte, len(response))
+	if _, err := io.ReadFull(peer, got); err != nil || string(got) != response {
+		t.Fatalf("peer read %q, %v", got, err)
 	}
 }
 
@@ -361,43 +376,298 @@ func TestWingPeerShutdownReadinessIsKept(t *testing.T) {
 }
 
 // TestWingUploadEOFKeepsQueuedResponse ends the peer's input in the middle of a
-// body while an earlier response is still queued. The response must stay
-// queued and the connection must end once it is sent.
+// body while an earlier response is still queued. The response must arrive
+// whole, and the connection must end once it is sent.
 func TestWingUploadEOFKeepsQueuedResponse(t *testing.T) {
+	for _, early := range []bool{false, true} {
+		t.Run(map[bool]string{false: "EOF after the upload starts", true: "EOF before"}[early], func(t *testing.T) { uploadEOFKeepsQueuedResponse(t, early) })
+	}
+}
+
+func uploadEOFKeepsQueuedResponse(t *testing.T, early bool) {
 	big := strings.Repeat("b", 200<<10)
 	h := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte(big)) })
 	w, c, peer, _ := socketWorker(t, 4096, h)
 	c.keepAlive = true
-	for _, fd := range []int{int(c.fd)} {
-		if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
-			t.Fatal(err)
-		}
+	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := io.WriteString(peer, framingGet("/big")+"POST /upload HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\nabc"); err != nil {
 		t.Fatal(err)
 	}
-	w.handleRecv(event{Op: opRecv, Fd: c.fd})
-	if c.bodyNeed == 0 || c.sendN >= len(c.sendBuf) {
-		t.Skipf("setup: body %d, queued %d", c.bodyNeed, len(c.sendBuf)-c.sendN)
-	}
-	if err := peer.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
-		t.Fatal(err)
-	}
-	w.handleRecv(event{Op: opRecv, Fd: c.fd, Flags: evPeerShut})
-	if w.conns[c.fd] != c || c.sendN >= len(c.sendBuf) {
-		t.Fatal("the EOF in the upload dropped the queued response")
-	}
-	got := 0
-	buf := make([]byte, 64<<10)
-	for w.conns[c.fd] == c {
-		n, err := peer.Read(buf)
-		if err != nil {
+	if early {
+		// The EOF is already there when the upload starts: the body drain
+		// finds it, not a later read event.
+		if err := peer.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
 			t.Fatal(err)
 		}
-		got += n
-		w.handleSend(event{Op: opSend, Fd: c.fd})
 	}
-	if got < len(big) {
-		t.Fatalf("peer got %d bytes, want the whole response", got)
+	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	if !early {
+		if c.bodyNeed == 0 || c.sendN >= len(c.sendBuf) {
+			t.Fatalf("setup: want an upload behind a queued response, got body %d, queued %d", c.bodyNeed, len(c.sendBuf)-c.sendN)
+		}
+		if err := peer.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
+			t.Fatal(err)
+		}
+		w.handleRecv(event{Op: opRecv, Fd: c.fd, Flags: evPeerShut})
+	} else if w.conns[c.fd] != c || c.sendN >= len(c.sendBuf) {
+		t.Fatal("the EOF found by the body drain dropped the queued response")
+	}
+	var got bytes.Buffer
+	buf := make([]byte, 64<<10)
+	for {
+		if w.conns[c.fd] != c {
+			_ = peer.SetReadDeadline(time.Now().Add(100 * time.Millisecond)) // the mock engine leaves the fd open
+		}
+		n, err := peer.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			if w.conns[c.fd] == c {
+				t.Fatal(err)
+			}
+			break
+		}
+		if w.conns[c.fd] == c {
+			w.handleSend(event{Op: opSend, Fd: c.fd})
+		}
+	}
+	res, err := http.ReadResponse(bufio.NewReader(&got), nil)
+	if err != nil {
+		t.Fatalf("no whole response in %d bytes: %v", got.Len(), err)
+	}
+	if body, err := io.ReadAll(res.Body); err != nil || string(body) != big {
+		t.Fatalf("response body %d of %d bytes: %v", len(body), len(big), err)
+	}
+	if w.conns[c.fd] == c {
+		t.Fatal("still open after the response was sent")
+	}
+}
+
+// TestWingLingerEndsWithoutTimeouts leaves a lingering connection open on the
+// client side, with every Wing timeout off, and a limit of one connection.
+// Wing must still close it, or the next client is never served.
+func TestWingLingerEndsWithoutTimeouts(t *testing.T) {
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/first" {
+			entered <- struct{}{}
+			<-release
+			w.Header().Set("Connection", "close")
+		}
+		_, _ = w.Write([]byte("ok"))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, MaxConns: 1}, handler)
+	defer stop()
+	var conn net.Conn
+	var br *bufio.Reader
+	for attempt := 0; conn == nil; attempt++ { // the start-up probe may still hold the slot
+		if attempt == 20 {
+			t.Fatal("never admitted")
+		}
+		c, r := framingDial(t, addr)
+		if _, err := io.WriteString(c, framingGet("/first")); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-entered:
+			conn, br = c, r
+		case <-time.After(100 * time.Millisecond):
+			c.Close()
+		}
+	}
+	if _, err := io.WriteString(conn, framingGet("/second")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	if _, err := br.ReadByte(); err != io.EOF {
+		t.Fatalf("after the response: %v, want EOF", err)
+	}
+	time.Sleep(2500 * time.Millisecond) // lingerDelay plus the sweep and wait intervals; conn stays open here
+	next, nbr := framingDial(t, addr)
+	if _, err := io.WriteString(next, framingGet("/next")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := http.ReadResponse(nbr, nil); err != nil {
+		t.Fatalf("next client not served, the lingering connection still holds the only slot: %v", err)
+	}
+}
+
+// TestWingShutdownStartsNoTakeoverRequest sends a new request on an idle
+// Takeover connection after Shutdown began, while a Pool handler still holds it
+// up. That request must not run.
+func TestWingShutdownStartsNoTakeoverRequest(t *testing.T) {
+	poolEntered, poolRelease := make(chan struct{}), make(chan struct{})
+	var ranTake atomic.Int32
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/pool" {
+			close(poolEntered)
+			<-poolRelease
+		} else {
+			ranTake.Add(1)
+		}
+		_, _ = w.Write([]byte("ok"))
+	})
+	cfg := WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Spear, Presets: map[string]Preset{"GET /pool": Arrow}}
+	addr, stop := startWingServerWithConfig(t, cfg, handler)
+	takeConn, br := framingDial(t, addr)
+	if _, err := io.WriteString(takeConn, framingGet("/take")); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := http.ReadResponse(br, nil); err != nil {
+		t.Fatal(err)
+	} else {
+		_, _ = io.ReadAll(res.Body)
+	}
+	poolConn, _ := framingDial(t, addr)
+	if _, err := io.WriteString(poolConn, framingGet("/pool")); err != nil {
+		t.Fatal(err)
+	}
+	<-poolEntered
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	time.Sleep(100 * time.Millisecond) // Shutdown has started and waits for the Pool
+	_, _ = io.WriteString(takeConn, framingGet("/take"))
+	time.Sleep(100 * time.Millisecond)
+	close(poolRelease)
+	<-stopped
+	if n := ranTake.Load(); n != 1 {
+		t.Fatalf("Takeover ran %d requests, want only the one before Shutdown", n)
+	}
+}
+
+// TestWingStaticHijackRouteWithSplitBody posts to a static route registered
+// with the Hijack preset, the body after the headers. The prebuilt response
+// must answer, as it does when the body comes with the headers.
+func TestWingStaticHijackRouteWithSplitBody(t *testing.T) {
+	static := []byte("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nstatic")
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte("handler")) })
+	cfg := WingConfig{Workers: 1, DefaultPreset: Bolt, Presets: map[string]Preset{"POST /static": Hijack.With(Static(static))}}
+	addr, stop := startWingServerWithConfig(t, cfg, handler)
+	defer stop()
+	for _, split := range []bool{false, true} {
+		conn, br := framingDial(t, addr)
+		head, body := "POST /static HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\n", "body"
+		if !split {
+			head, body = head+body, ""
+		}
+		if _, err := io.WriteString(conn, head); err != nil {
+			t.Fatal(err)
+		}
+		if split {
+			time.Sleep(50 * time.Millisecond)
+			if _, err := io.WriteString(conn, body); err != nil {
+				t.Fatal(err)
+			}
+		}
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			t.Fatalf("split %v: %v", split, err)
+		}
+		if got, err := io.ReadAll(res.Body); err != nil || string(got) != "static" {
+			t.Fatalf("split %v: %d %q %v", split, res.StatusCode, got, err)
+		}
+	}
+}
+
+// TestWingPoolFinalCloseLingers finishes a Pool response that the handler wrote
+// itself, with input in the socket that no read event has reported yet.
+func TestWingPoolFinalCloseLingers(t *testing.T) {
+	w, c, peer, _ := socketWorker(t, 4096, nil)
+	w.hasTimeout = true
+	c.pending = 1
+	if _, err := io.WriteString(peer, framingGet("/unread")); err != nil {
+		t.Fatal(err)
+	}
+	w.handleDone(doneMsg{fd: c.fd, keepAlive: false})
+	if w.conns[c.fd] != c || c.lingerUntil == 0 {
+		t.Fatal("closed over input the Pool handler left unread")
+	}
+}
+
+// TestWingLingeringConnectionRunsNothing sends a whole request to a connection
+// that is lingering after its final response. It must not reach a handler.
+func TestWingLingeringConnectionRunsNothing(t *testing.T) {
+	var ran atomic.Int32
+	h := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { ran.Add(1) })
+	w, c, peer, _ := socketWorker(t, 4096, h)
+	w.hasTimeout = true
+	c.keepAlive = false
+	c.sendBuf = []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+	if _, err := io.WriteString(peer, framingGet("/unread")); err != nil {
+		t.Fatal(err)
+	}
+	w.directSend(c)
+	if c.lingerUntil == 0 {
+		t.Fatal("setup: not lingering")
+	}
+	if _, err := io.WriteString(peer, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	if n := ran.Load(); n != 0 {
+		t.Fatalf("a request on a lingering connection ran %d times", n)
+	}
+}
+
+// TestWingLingerEndsWhenClientCloses closes the client side of a lingering
+// connection, with a limit of one connection. Wing must notice at once, not
+// at the linger deadline, so the next client is served right away.
+func TestWingLingerEndsWhenClientCloses(t *testing.T) {
+	entered, release := make(chan struct{}, 1), make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/first" {
+			entered <- struct{}{}
+			<-release
+			w.Header().Set("Connection", "close")
+		}
+		_, _ = w.Write([]byte("ok"))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, MaxConns: 1}, handler)
+	defer stop()
+	var conn net.Conn
+	var br *bufio.Reader
+	for attempt := 0; conn == nil; attempt++ { // the start-up probe may still hold the slot
+		if attempt == 20 {
+			t.Fatal("never admitted")
+		}
+		c, r := framingDial(t, addr)
+		if _, err := io.WriteString(c, framingGet("/first")); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-entered:
+			conn, br = c, r
+		case <-time.After(100 * time.Millisecond):
+			c.Close()
+		}
+	}
+	if _, err := io.WriteString(conn, framingGet("/second")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	if _, err := br.ReadByte(); err != io.EOF {
+		t.Fatalf("after the response: %v, want EOF", err)
+	}
+	conn.Close()
+	time.Sleep(100 * time.Millisecond) // well inside lingerDelay
+	next, nbr := framingDial(t, addr)
+	if _, err := io.WriteString(next, framingGet("/next")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := http.ReadResponse(nbr, nil); err != nil {
+		t.Fatalf("next client not served after the lingering one closed: %v", err)
 	}
 }

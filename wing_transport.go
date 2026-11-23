@@ -349,6 +349,7 @@ type worker struct {
 	advisor         advisorCache
 	shutdown        *atomic.Bool
 	hasTimeout      bool
+	lingering       int          // connections in closeAfterFinal's linger; they need the sweep
 	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
 	readTimeout     int64        // nanoseconds (0 = disabled)
 	writeTimeout    int64
@@ -532,10 +533,9 @@ func newWorker(id, listenFd int, cfg WingConfig, handler transport.Handler, conn
 		eng.Close()
 		return nil, err
 	}
-	waitMillis := 0
-	if cfg.ReadTimeout > 0 || cfg.WriteTimeout > 0 || cfg.IdleTimeout > 0 {
-		waitMillis = 1000
-	}
+	// The wait ends at least once a second so the sweep can run: for timeouts,
+	// and for a lingering close, which happens whatever the timeouts are.
+	waitMillis := 1000
 	if err := eng.Init(engineConfig{WaitTimeoutMillis: waitMillis, RingSize: cfg.RingSize, PipeW: wakeW, EventFd: wakeR, RawMode: !cfg.needsAsync()}); err != nil {
 		closeFd(wakeR)
 		if wakeW != wakeR {
@@ -669,10 +669,14 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
-		if hasTimeout {
-			if w.now >= w.sweepAt {
-				w.sweepTimeouts(w.now)
-				w.sweepAt = w.now + int64(time.Second)
+		if hasTimeout || w.lingering > 0 {
+			now := w.now
+			if !hasClock {
+				now = time.Now().UnixNano() // w.now stays 0: clockNow reads a live clock
+			}
+			if now >= w.sweepAt {
+				w.sweepTimeouts(now)
+				w.sweepAt = now + int64(time.Second)
 			}
 		}
 	}
@@ -843,10 +847,10 @@ func (w *worker) handleRecv(ev event) {
 	}
 	queued := c.sendN < len(c.sendBuf)
 	if queued && c.sendingFinal() {
-		if !w.discardInput(c) && c.discarded > maxDiscardInput {
-			w.closeConn(c.fd)
-		}
-		return // an EOF or a failed socket is left to the send
+		// An EOF or a failed socket is left to the send. So is input past the
+		// budget: it stays unread, and the close after the send handles it.
+		w.discardInput(c)
+		return
 	}
 	// Input waits in the socket behind unsent output, so a client that does not
 	// read cannot grow the queue. A body being accumulated still reads. A full
@@ -1550,26 +1554,37 @@ func (c *conn) sendingFinal() bool {
 	return !c.keepAlive && c.pending == 0 && c.bodyNeed == 0
 }
 
+// discardResult is what discardInput found when it stopped.
+type discardResult uint8
+
+const (
+	discardDrained discardResult = iota // no more input for now
+	discardEnded                        // EOF or a failed socket
+	discardFull                         // maxDiscardInput dropped; the rest stays unread
+)
+
 // discardInput drops input that arrives behind a connection's final response.
 // Running it would revive a connection that promised to close, and closing
-// over unread input would reset it and cut that response. It reports whether
-// the socket has no more input for now; false means EOF, a failed socket, or
-// more input than maxDiscardInput.
-func (w *worker) discardInput(c *conn) bool {
+// over unread input would reset it and cut that response. A connection drops
+// at most maxDiscardInput in all, so a peer cannot keep the worker copying.
+func (w *worker) discardInput(c *conn) discardResult {
 	c.readN = 0
 	c.readSuppressed = false
 	c.readDrained = false
-	for c.discarded <= maxDiscardInput {
-		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+	for {
+		room := min(len(c.readBuf), maxDiscardInput-c.discarded)
+		if room <= 0 {
+			return discardFull
+		}
+		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(room))
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
-			return true
+			return discardDrained
 		}
 		if e != 0 || n == 0 {
-			return false
+			return discardEnded
 		}
 		c.discarded += int(n)
 	}
-	return false
 }
 
 // closeAfterFinal ends a connection whose final response is fully written. With
@@ -1578,8 +1593,8 @@ func (w *worker) discardInput(c *conn) bool {
 // a reset that can discard it. lingerDelay bounds the wait when the worker has
 // timeouts; without them it is bounded by the peer, as an idle connection is.
 func (w *worker) closeAfterFinal(c *conn) {
-	if !w.discardInput(c) || c.discarded == 0 {
-		w.closeConn(c.fd)
+	if w.discardInput(c) != discardDrained || c.discarded == 0 {
+		w.closeConn(c.fd) // nothing unread, or the peer is gone or sent too much
 		return
 	}
 	if c.lingerUntil == 0 {
@@ -1588,6 +1603,9 @@ func (w *worker) closeAfterFinal(c *conn) {
 			return
 		}
 		c.lingerUntil = time.Now().UnixNano() + lingerDelay
+		w.lingering++
+		w.sweepAt = min(w.sweepAt, c.lingerUntil)
+		c.sendBuf, c.sendN = nil, 0 // sent; a lingering connection keeps only its read buffer
 	}
 	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
 }
@@ -1931,6 +1949,10 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
+		if served && connCtx.Err() != nil {
+			releaseRequest(req) // shutting down: no new request starts
+			goto done
+		}
 		if served {
 			// A later request on this connection may be a static route, which
 			// runs no handler whatever its mode, as on a fresh connection, or
@@ -2250,6 +2272,13 @@ func lingerTakeover(f *os.File, fd int32, buf []byte) {
 	}
 }
 
+// lingerTakeoverConn is lingerTakeover for a path that holds no read buffer.
+func lingerTakeoverConn(f *os.File, fd int32) {
+	bp := takeoverBufPool.Get().(*[]byte)
+	lingerTakeover(f, fd, *bp)
+	takeoverBufPool.Put(bp)
+}
+
 // streamTakeover runs a single streaming response (Stream preset) over the
 // takeover fd f. Unlike the keep-alive takeover loop, it gives the handler a
 // flushing wingStreamWriter so c.SSE()/c.Stream() write incrementally, installs
@@ -2267,7 +2296,11 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	sw := newWingStreamWriter(f, time.Duration(w.writeTimeout))
 	sw.head = first.method == "HEAD"
 
-	go watchStreamDisconnect(f, cancel)
+	watched := make(chan struct{})
+	go func() {
+		watchStreamDisconnect(f, cancel)
+		close(watched)
+	}()
 
 	func() {
 		defer func() {
@@ -2285,7 +2318,12 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	}()
 	sw.finish() // a handler that wrote no body has not sent its headers yet
 
-	cancel() // stop the watcher; it parks on f.Read until the fd closes below
+	cancel()
+	_ = f.SetReadDeadline(time.Now()) // ends the watcher's read, so one reader owns the socket again
+	<-watched
+	if sw.headersSent && !sw.broken {
+		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
+	}
 
 	// Return the request to the pool, matching the other dispatch paths. Safe
 	// here: the handler has returned, the watcher is cancelled, and the close
@@ -2363,11 +2401,10 @@ func (w *worker) handleSend(ev event) {
 		}
 		return
 	}
-	if c.sendingFinal() && !w.discardInput(c) && c.discarded > maxDiscardInput {
-		// kqueue does not watch for reads while a send waits, so input is
-		// dropped here before the send can finish and close over it.
-		w.closeConn(c.fd)
-		return
+	if c.sendingFinal() {
+		// kqueue does not watch for reads while a send waits, so drop input
+		// here before the send can finish and close over it.
+		w.discardInput(c)
 	}
 	w.directSend(c)
 	if c.bodyNeed > 0 && !c.sending() && w.conns[c.fd] == c {
@@ -2418,6 +2455,10 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	c.bodyNeed = 0
 	c.bodyBuf = nil
 	c.headerSnapshot = nil
+	if c.lingerUntil > 0 {
+		w.lingering--
+		c.lingerUntil = 0
+	}
 	if c.cancel != nil {
 		c.cancel()
 	}
@@ -2473,34 +2514,52 @@ func (w *worker) cleanup() {
 	}
 	for _, c := range w.conns {
 		c.fileStream.close()
+		if c.pending > 0 && c.takenOver {
+			// Only the read side: an idle keep-alive read ends now, while a
+			// handler still running can write its response. Its goroutine still
+			// owns the fd, so the number is not recycled yet.
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
+		}
 	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave
 	// of Spawn/Takeover goroutines completing simultaneously can fill the
 	// 4096-slot doneCh buffer; the next sender blocks on the channel send
 	// before reaching its `defer dispatchWG.Done()`, and Wait deadlocks.
 	// Bounded by typical workloads but real for high-concurrency shutdowns.
-	drainStop := make(chan struct{})
-	drained := make(chan []*os.File)
-	go func() {
+	drainStop, socketsShut, drained := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	go func(shut <-chan struct{}) {
+		defer close(drained)
 		var held []*os.File
 		for {
 			select {
 			case msg := <-w.doneCh:
 				msg.stream.close()
-				// A Takeover completion carries the fd's *os.File. It is closed
-				// once every socket is shut; discarding it would leak the File
-				// to a finalizer that later closes a recycled fd. Non-Takeover
-				// completions carry no file and are simply dropped (ioLoop has
-				// stopped, nothing left to process).
-				if msg.file != nil {
-					held = append(held, msg.file)
+				// A Takeover completion carries the fd's *os.File. It stays open
+				// until every socket is shut, then closes at once; discarding it
+				// would leak the File to a finalizer that later closes a
+				// recycled fd. Non-Takeover completions carry no file and are
+				// simply dropped (ioLoop has stopped, nothing left to process).
+				if msg.file == nil {
+					continue
 				}
+				if shut != nil {
+					held = append(held, msg.file)
+				} else {
+					msg.file.Close()
+				}
+			case <-shut:
+				for _, f := range held {
+					f.Close()
+				}
+				held, shut = nil, nil
 			case <-drainStop:
-				drained <- held
+				for _, f := range held {
+					f.Close() // drainStop can win the select against shut
+				}
 				return
 			}
 		}
-	}()
+	}(socketsShut)
 	if w.pool != nil {
 		close(w.pool.jobs)
 		// Wait for pool goroutines to finish any in-flight job's RawSyscall
@@ -2516,12 +2575,11 @@ func (w *worker) cleanup() {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}
+	close(socketsShut) // no raw fd use is left, so a finished Takeover's File can close
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()
 	close(drainStop)
-	for _, f := range <-drained {
-		f.Close()
-	}
+	<-drained
 	// Close any Takeover Files still buffered in doneCh that the concurrent
 	// drain did not consume before it stopped — same recycled-fd hazard.
 drainBuffered:

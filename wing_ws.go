@@ -202,7 +202,9 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 		if w.writeTimeout > 0 {
 			_ = f.SetWriteDeadline(time.Now().Add(time.Duration(w.writeTimeout)))
 		}
-		_, _ = f.Write(data)
+		if _, err := f.Write(data); err == nil {
+			lingerTakeoverConn(f, fd)
+		}
 	}
 	releaseResponse(resp)
 	releaseRequest(first) // handler returned; the adapter holds ctx/remote independently

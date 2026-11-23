@@ -154,11 +154,25 @@ func TestWingShutdownKeepsFinishedTakeoverFD(t *testing.T) {
 		_, err := file.Stat()
 		openDuringDrain <- err == nil
 	}()
+	// A Spawn handler that never returns must not keep the File open: only the
+	// raw shutdown pass needs it.
+	closedBeforeDispatch := make(chan bool, 1)
+	w.dispatchWG.Add(1)
+	go func() {
+		defer w.dispatchWG.Done()
+		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			if _, err := file.Stat(); err != nil {
+				closedBeforeDispatch <- true
+				return
+			}
+		}
+		closedBeforeDispatch <- false
+	}()
 	w.cleanup()
 	if !<-openDuringDrain {
 		t.Fatal("Takeover fd closed while the Pool was draining")
 	}
-	if _, err := file.Stat(); err == nil {
-		t.Fatal("Takeover fd never closed")
+	if !<-closedBeforeDispatch {
+		t.Fatal("Takeover fd kept open while a dispatched handler ran")
 	}
 }

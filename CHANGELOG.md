@@ -51,13 +51,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Response has `Connection: close` (Inline, Pool, Spawn, Takeover) | connection kept, next pipelined request ran | response sent, connection closed |
   | Request asked to close, more input arrived while the response drained | that request could run and keep the connection | input dropped, connection closed |
   | A `Static` preset response with `Connection: close` | connection kept, next pipelined request ran | response sent, connection closed |
-  | Input still unread when the final response is sent (a pipelined request, or the rest of a rejected upload) | the close could reset the connection and the client lose the response | Wing ends its write side, drops up to 256 KiB more input, and closes when the client does or after 0.5 s |
+  | Input still unread when the final response is sent (a pipelined request, the rest of a rejected upload, after a `Stream` response or a rejected `Hijack` upgrade) | the close could reset the connection and the client lose the response | Wing ends its write side, drops up to 256 KiB more input, and closes when the client does or after 0.5 s |
 
   In the last case the connection stays open until the client closes it, for
-  up to 0.5 s (a little longer, as the timeout sweep runs once a second).
-  With every Wing timeout set to 0 there is no sweep, and the client alone
-  decides, as for an idle connection. A client that sends more than 256 KiB
-  after the final response is closed at once.
+  0.5 s and at most about 1.5 s, as the sweep runs once a second; this holds
+  with every Wing timeout set to 0 too. Without unread input Wing closes at
+  once, as before. Input past 256 KiB is left unread, so the response is
+  still sent, but the close that follows can then reset it.
 
   A proxy handler that copies upstream hop-by-hop headers now closes the
   client connection whenever the upstream closes. Do not copy `Connection`
@@ -232,8 +232,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wing: a `StaticText` or `StaticJSON` route requested on a connection a
   Takeover route owned ran its handler. It now sends the static response, as
   on a fresh connection, so its handler and middleware no longer run there.
-  That includes a static response composed with `Stream` or `Hijack`, which
-  ran the handler there.
+  A static response composed with `Stream` or `Hijack` is now always sent as
+  is. It ran the handler after Takeover, and a `Hijack` one answered `400`
+  when the request body arrived after its headers.
 - Wing: a `Stream` handler that set `Content-Length: 5` and wrote nothing
   sent `200` with that length and closed, so the client waited for five
   bytes and saw a truncated body. It now closes without a response, as a
@@ -324,7 +325,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
   it gave up on its own. Contexts are now cancelled first; Pool, Spawn and
   Takeover sockets stay open until the Pool finishes, so a handler that
-  completes during shutdown still delivers its response. A handler that ignores its context still holds
+  completes while the Pool drains still delivers a response the socket takes
+  in one write. A Takeover connection starts no new request once shutdown
+  begins. Not covered: the rest of a response the socket could not take at
+  once, which the stopped event loop no longer sends, and, on a worker
+  without a Pool, a Takeover response finished after the sockets are shut. A handler that ignores its context still holds
   shutdown until it returns or the `Shutdown` deadline passes.
 - Wing: a file stream with a negative size sent `Content-Length: -1`. It now
   answers 500 and closes the reader off the event loop. Kruda's own callers always pass a known
@@ -391,7 +396,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `"v\r\nX-Injected: 1"` is sent as `v  X-Injected: 1`. On the fasthttp
   transport, the macOS default, values were already cleaned but a header name
   with a line break added a field the same way; such names are now dropped
-  there too. The net/http transport was not affected. Confirmed on Wing in
+  there too. A raw `Connection` value that becomes `close` once cleaned now
+  also ends the connection. The net/http transport was not affected. Confirmed on Wing in
   v1.8.5; the fasthttp adapter and its fasthttp v1.70.0 are unchanged since.
 
 - **The router matches the whole HTTP method name.** Before, it checked only

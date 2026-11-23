@@ -46,6 +46,10 @@ func TestWingStreamCompletesBodylessResponse(t *testing.T) {
 		{"empty Stream", "GET", 200, func(c *Ctx) error { return c.Stream(strings.NewReader("")) }},
 		{"empty Stream with status", "GET", 206, func(c *Ctx) error { return c.Status(206).Stream(strings.NewReader("")) }},
 		{"empty Stream HEAD", "HEAD", 200, func(c *Ctx) error { return c.Stream(strings.NewReader("")) }},
+		{"empty Stream with padded zero length", "GET", 200, func(c *Ctx) error {
+			c.SetHeader("Content-Length", "0 ")
+			return c.Stream(strings.NewReader(""))
+		}},
 		{"NoContent", "GET", 204, func(c *Ctx) error { return c.NoContent() }},
 		{"no response written", "GET", 200, func(c *Ctx) error { return nil }},
 	} {

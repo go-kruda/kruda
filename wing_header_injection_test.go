@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-kruda/kruda/transport"
@@ -85,5 +86,33 @@ func TestWingStringResponderContentTypeCannotAddFields(t *testing.T) {
 	}
 	if res.Header.Get("X-Injected") != "" || res.Header.Get("Content-Type") != "text/plain  X-Injected: 1" {
 		t.Fatalf("headers %v", res.Header)
+	}
+}
+
+// TestWingCleanedConnectionCloseEndsConnection sets a raw Connection value
+// that becomes "close" once its line break is cleaned. What is sent decides:
+// the next pipelined request must not run.
+func TestWingCleanedConnectionCloseEndsConnection(t *testing.T) {
+	var ranNext atomic.Int32
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/next" {
+			ranNext.Add(1)
+		}
+		w.Header().Set("Connection", "close\r")
+		_, _ = w.Write([]byte("first"))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1}, handler)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/first")+framingGet("/next")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	if _, err := br.ReadByte(); err != io.EOF || ranNext.Load() != 0 {
+		t.Fatalf("Connection %q sent but kept open: %v, next ran %d times", res.Header.Get("Connection"), err, ranNext.Load())
 	}
 }

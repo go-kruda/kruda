@@ -109,7 +109,7 @@ func (w *wingStreamWriter) finish() {
 	if w.headersSent || w.broken || w.copying {
 		return
 	}
-	if !w.head && !statusHasNoBody(w.status) && strings.TrimLeft(w.headers.contentLength(), "0") != "" {
+	if !w.head && !statusHasNoBody(w.status) && strings.TrimLeft(strings.Trim(w.headers.contentLength(), " \t"), "0") != "" {
 		return
 	}
 	_ = w.flushHeaders()

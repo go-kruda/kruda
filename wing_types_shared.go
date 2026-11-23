@@ -7,6 +7,7 @@
 package kruda
 
 import (
+	"bytes"
 	"log/slog"
 	"runtime"
 	"sync/atomic"
@@ -160,7 +161,30 @@ func (f *Preset) defaults() {
 	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
+	if f.StaticResponse != nil && (f.ResponseMode == responseStream || f.ResponseMode == responseHijack) {
+		f.ResponseMode = responseGeneric // the prebuilt response is sent whatever the request
+	}
 	f.staticClose = staticResponseCloses(f.StaticResponse)
+}
+
+// staticResponseCloses reports whether a prebuilt response's header block has
+// a Connection header that lists close.
+func staticResponseCloses(resp []byte) bool {
+	if end := bytes.Index(resp, []byte("\r\n\r\n")); end >= 0 {
+		resp = resp[:end]
+	}
+	for _, line := range bytes.Split(resp, []byte("\r\n")) {
+		name, value, ok := bytes.Cut(line, []byte(":"))
+		if !ok || !bytes.EqualFold(name, []byte("Connection")) {
+			continue
+		}
+		for _, token := range bytes.Split(value, []byte(",")) {
+			if bytes.EqualFold(bytes.Trim(token, " \t"), []byte("close")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Dispatch returns a PresetOption that sets the dispatch mode.

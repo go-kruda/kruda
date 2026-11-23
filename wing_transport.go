@@ -2194,6 +2194,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 					keepAlive = false
 					goto done
 				}
+				if w.stopping() {
+					goto done // that deadline may have replaced Shutdown's wake-up
+				}
 			}
 			if readN > 0 {
 				r, consumed, ok := parseHTTPRequest(buf[:readN], w.limits)
@@ -2837,6 +2840,7 @@ type takeoverGate struct {
 	draining bool // in the final drain: its deadline and the peer decide the close
 	hijacked bool // handed to Hijack: the app reads, and may retry a timeout
 	woken    bool
+	wrShut   bool // Shutdown ended the write side; the drain reuses that
 }
 
 // wake ends an idle read at the start of Shutdown. A deadline, not a shutdown,
@@ -2859,8 +2863,11 @@ func (g *takeoverGate) wake(f *os.File, fd int32) {
 	g.woken = true
 }
 
-// shut cuts the socket once the Pool has finished or the grace has passed. A
-// draining socket is left to its drain, which ends by itself.
+// shut cuts the socket once the Pool has finished or the grace has passed,
+// which ends a handler blocked on a write. A draining socket is left to its
+// drain, which ends by itself. A socket Wing reads keeps its read side, so the
+// final drain that may follow still sees a late request rather than an EOF;
+// its reads were woken by the deadline already.
 func (g *takeoverGate) shut(fd int32) {
 	if g == nil {
 		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
@@ -2872,20 +2879,24 @@ func (g *takeoverGate) shut(fd int32) {
 	case g.draining:
 	case g.hijacked && g.woken:
 		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR) // darwin refuses SHUT_RDWR after SHUT_RD
-	default:
+	case g.hijacked:
 		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
+	default:
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR)
+		g.wrShut = true
 	}
 }
 
 // startDrain begins the final drain: the write side ends and the read deadline
 // becomes the drain's. Under the gate, so Shutdown cannot replace it.
 func (g *takeoverGate) startDrain(f *os.File, fd int32) bool {
+	shut := false
 	if g != nil {
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		g.draining = true
+		g.draining, shut = true, g.wrShut
 	}
-	return syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil &&
+	return (shut || syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil) &&
 		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) == nil
 }
 

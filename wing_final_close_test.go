@@ -1119,3 +1119,65 @@ func TestWingShutdownKeepsTheFinalDrain(t *testing.T) {
 		t.Fatalf("response %d of %d bytes, %v; want it whole and a clean EOF", r.n, len(big), r.err)
 	}
 }
+
+// TestWingShutdownBeforeTheFinalDrain starts Shutdown after a Takeover
+// connection's final probe found nothing unread but before its drain began,
+// with nothing holding Shutdown back, then sends a late request. Shutdown's
+// cut must leave the read side to the drain, or the drain sees an EOF, the
+// close lands over that request, and the response tail is reset.
+func TestWingShutdownBeforeTheFinalDrain(t *testing.T) {
+	big := strings.Repeat("e", 1<<20)
+	probed, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	testFinalDrainHook = func() {
+		select {
+		case probed <- struct{}{}:
+			<-release
+		default:
+		}
+	}
+	defer func() { testFinalDrainHook = nil }()
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.Header().Set("Connection", "close")
+		_, _ = w.Write([]byte(big))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Spear}, handler)
+	defer once.Do(func() { close(release) })
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/a")); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		n   int
+		err error
+	}
+	got := make(chan result, 1)
+	go func() { // a slow reader: the reply is still in flight at the close
+		time.Sleep(300 * time.Millisecond)
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			got <- result{0, err}
+			return
+		}
+		body, err := io.ReadAll(res.Body)
+		got <- result{len(body), err}
+	}()
+	select {
+	case <-probed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("final probe never ran")
+	}
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	time.Sleep(100 * time.Millisecond) // Shutdown has woken and cut the socket
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	once.Do(func() { close(release) })
+	r := <-got
+	<-stopped
+	if r.err != nil || r.n != len(big) {
+		t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
+	}
+}

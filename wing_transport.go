@@ -258,17 +258,18 @@ type conn struct {
 	pending         int      // in-flight handler goroutines
 	takenOver       bool     // fd detached to a Takeover goroutine and owned by its *os.File
 	takeoverFile    *os.File // the Takeover goroutine's; Shutdown only sets its read deadline
-	closePending    bool     // close after async ownership returns; prevents fd reuse
-	remoteAddr      string   // lazy peer address cache, filled only if Request.RemoteAddr is used
-	lastActive      int64    // unix nano — updated on accept + each recv
-	lastSent        int64    // unix nano — last write that sent bytes; idle time counts from here after a response
-	readDeadline    int64    // unix nano — set when first byte arrives, cleared on full request
-	readSuppressed  bool     // readiness was not acted on; stays until a read finds EAGAIN or EOF
-	readDrained     bool     // socket input exhausted during synchronous inline dispatch
-	parseDepth      uint8    // parses nested through completed sends
-	resumeParse     bool     // yielded with input to parse; the next write event resumes
-	discarded       int      // input dropped behind the final response
-	lingerUntil     int64    // monoNow nanos — the write side is shut; close by then at the latest
+	takeoverGate    *takeoverGate
+	closePending    bool   // close after async ownership returns; prevents fd reuse
+	remoteAddr      string // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive      int64  // unix nano — updated on accept + each recv
+	lastSent        int64  // unix nano — last write that sent bytes; idle time counts from here after a response
+	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
+	readSuppressed  bool   // readiness was not acted on; stays until a read finds EAGAIN or EOF
+	readDrained     bool   // socket input exhausted during synchronous inline dispatch
+	parseDepth      uint8  // parses nested through completed sends
+	resumeParse     bool   // yielded with input to parse; the next write event resumes
+	discarded       int    // input dropped behind the final response
+	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
 	sendFileFd      int32 // sendfile: source fd (0 = none)
@@ -293,6 +294,10 @@ var testSuppressedRecvHook func(fd int32)
 // testTakeoverParseHook runs in takeoverLoop after its shutdown check, before
 // it parses buffered input. Always nil in production.
 var testTakeoverParseHook func()
+
+// testDrainingHook runs in lingerTakeover once the drain owns the read
+// deadline. Always nil in production.
+var testDrainingHook func()
 
 // testFinalDrainHook runs in lingerTakeover after its first look for unread
 // input. Always nil in production.
@@ -1328,11 +1333,12 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 		c.readBuf = nil // the goroutine reads into its own buffer from here on
 		// The File is made here so Shutdown can wake its reads; the goroutine owns it.
 		file := os.NewFile(uintptr(c.fd), "wing-takeover")
-		c.takeoverFile = file
+		gate := &takeoverGate{}
+		c.takeoverFile, c.takeoverGate = file, gate
 		w.dispatchWG.Add(1)
 		go func() {
 			defer w.dispatchWG.Done()
-			w.takeoverLoop(req, c.fd, file, leftover, f.ResponseMode)
+			w.takeoverLoop(req, c.fd, file, gate, leftover, f.ResponseMode)
 		}()
 	}
 }
@@ -2007,7 +2013,7 @@ func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
 // per request at c256 on /db) — identical CPU per request to this model,
 // but scheduler pressure inflated the time a pgx pool conn stayed checked
 // out, costing ~6% throughput (results/forensics-20260612T150500Z).
-func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, leftover []byte, mode responseMode) {
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte, mode responseMode) {
 	// fds arrive non-blocking from accept4/SetNonblock. os.NewFile registers
 	// a non-blocking fd with the runtime poller, so Read/Write below park
 	// the goroutine, never the thread.
@@ -2023,12 +2029,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, leftover
 	// first request as a stream and return — all other dispatch paths fall
 	// through to the byte-unchanged keep-alive loop below.
 	if mode == responseStream {
-		w.streamTakeover(first, fd, f, false)
+		w.streamTakeover(first, fd, f, g, false)
 		return
 	}
 
 	if mode == responseHijack {
-		w.hijackTakeover(first, fd, f, leftover)
+		w.hijackTakeover(first, fd, f, g, leftover)
 		return
 	}
 
@@ -2085,19 +2091,19 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, leftover
 				static = preset
 			case preset.ResponseMode == responseStream:
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f, served)
+				w.streamTakeover(req, fd, f, g, served)
 				return
 			case preset.ResponseMode == responseHijack:
 				leftover := append([]byte(nil), buf[:readN]...)
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.hijackTakeover(req, fd, f, leftover)
+				w.hijackTakeover(req, fd, f, g, leftover)
 				return
 			}
 		}
 		if mode == responseKeepAliveStream && static.StaticResponse == nil {
 			if !keepAlive || req.method != "GET" {
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f, served)
+				w.streamTakeover(req, fd, f, g, served)
 				return
 			}
 			reuse, sent := w.writeKeepAliveStream(req, f)
@@ -2391,9 +2397,9 @@ done:
 		bodyBuf = nil
 		if grewBuf {
 			buf = nil // not kept through the wait: a pooled buffer is enough to drain
-			lingerTakeoverConn(f, fd)
+			lingerTakeoverConn(f, fd, g)
 		} else {
-			lingerTakeover(f, fd, buf)
+			lingerTakeover(f, fd, buf, g)
 		}
 	}
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
@@ -2405,7 +2411,7 @@ done:
 
 // lingerTakeover is closeAfterFinal for a Takeover socket, which this goroutine
 // owns: buf is free, and the read deadline bounds the wait.
-func lingerTakeover(f *os.File, fd int32, buf []byte) {
+func lingerTakeover(f *os.File, fd int32, buf []byte, g *takeoverGate) {
 	discarded := 0
 	for {
 		if discarded >= maxDiscardInput {
@@ -2428,9 +2434,11 @@ func lingerTakeover(f *os.File, fd int32, buf []byte) {
 	// and reset it, and with it any response bytes still in the send queue.
 	// A goroutine can afford to wait for the peer's FIN; the slot is held
 	// until then, lingerDelay at most.
-	if syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
-		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) != nil {
+	if !g.startDrain(f, fd) {
 		return
+	}
+	if testDrainingHook != nil {
+		testDrainingHook()
 	}
 	for discarded < maxDiscardInput {
 		n, err := f.Read(buf[:min(len(buf), maxDiscardInput-discarded)])
@@ -2452,9 +2460,9 @@ func releaseTakeoverBuffers(buf, bodyBuf *[]byte, grew bool) {
 }
 
 // lingerTakeoverConn is lingerTakeover for a path that holds no read buffer.
-func lingerTakeoverConn(f *os.File, fd int32) {
+func lingerTakeoverConn(f *os.File, fd int32, g *takeoverGate) {
 	bp := takeoverBufPool.Get().(*[]byte)
-	lingerTakeover(f, fd, *bp)
+	lingerTakeover(f, fd, *bp, g)
 	takeoverBufPool.Put(bp)
 }
 
@@ -2465,7 +2473,7 @@ func lingerTakeoverConn(f *os.File, fd int32) {
 // read-watcher that cancels that context when the client closes its half. The
 // streaming response is not keep-alive-reused; on return the fd is closed
 // exactly once via the shared takeover-done path (doneMsg.file).
-func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File, afterResponse bool) {
+func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File, g *takeoverGate, afterResponse bool) {
 	// Make the handler's c.Context() cancellable from the conn context so the
 	// disconnect watcher can fire SSEStream.Done(). first.ctx flows into c.ctx
 	// during ServeKruda (app_serve.go: c.ctx = r.Context()).
@@ -2508,7 +2516,7 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File, afterR
 		testStreamTeardownHook()
 	}
 	if sw.headersSent && !sw.broken || afterResponse {
-		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
+		lingerTakeoverConn(f, fd, g) // the watcher may not have taken the last input
 	}
 
 	// Close the fd exactly once via the shared takeover-done path. The conn is
@@ -2708,12 +2716,8 @@ func (w *worker) cleanup() {
 	}
 	for _, c := range w.conns {
 		c.fileStream.close()
-		if c.pending > 0 && c.takenOver && c.takeoverFile != nil {
-			// A deadline, not a shutdown: an idle read ends now, a handler still
-			// running can write its response, and the final drain can set a
-			// deadline of its own to wait for the peer. Its goroutine still owns
-			// the fd, so the number is not recycled yet.
-			_ = c.takeoverFile.SetReadDeadline(time.Now())
+		if c.pending > 0 && c.takenOver {
+			c.takeoverGate.wake(c.takeoverFile, c.fd) // its goroutine still owns the fd, so the number is not recycled yet
 		}
 	}
 	w.dropLingerQueue()
@@ -2821,7 +2825,82 @@ const shutdownTakeoverGrace = time.Second
 func (w *worker) shutTakeoverWrites() {
 	for _, c := range w.conns {
 		if c.pending > 0 && c.takenOver {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+			c.takeoverGate.shut(c.fd)
 		}
+	}
+}
+
+// takeoverGate orders Shutdown against a Takeover goroutine's own use of its
+// socket. A nil gate (tests that drive a loop directly) does nothing.
+type takeoverGate struct {
+	mu       sync.Mutex
+	draining bool // in the final drain: its deadline and the peer decide the close
+	hijacked bool // handed to Hijack: the app reads, and may retry a timeout
+	woken    bool
+}
+
+// wake ends an idle read at the start of Shutdown. A deadline, not a shutdown,
+// for Wing's own reads: a handler still running can write its response, and
+// the final drain can set a deadline of its own. A hijacked socket gets its read
+// side shut, which an app's read loop cannot retry past.
+func (g *takeoverGate) wake(f *os.File, fd int32) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	switch {
+	case g.draining:
+	case g.hijacked:
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_RD)
+	case f != nil:
+		_ = f.SetReadDeadline(time.Now())
+	}
+	g.woken = true
+}
+
+// shut cuts the socket once the Pool has finished or the grace has passed. A
+// draining socket is left to its drain, which ends by itself.
+func (g *takeoverGate) shut(fd int32) {
+	if g == nil {
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	switch {
+	case g.draining:
+	case g.hijacked && g.woken:
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR) // darwin refuses SHUT_RDWR after SHUT_RD
+	default:
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
+	}
+}
+
+// startDrain begins the final drain: the write side ends and the read deadline
+// becomes the drain's. Under the gate, so Shutdown cannot replace it.
+func (g *takeoverGate) startDrain(f *os.File, fd int32) bool {
+	if g != nil {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		g.draining = true
+	}
+	return syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil &&
+		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) == nil
+}
+
+// markHijacked records that the app owns the socket's reads from now on. If
+// Shutdown already set a read deadline, that becomes a shutdown of the read
+// side, which the app's read loop cannot retry past.
+func (g *takeoverGate) markHijacked(f *os.File, fd int32) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.hijacked = true
+	if g.woken {
+		_ = f.SetReadDeadline(time.Time{})
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_RD)
 	}
 }

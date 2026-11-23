@@ -1030,7 +1030,7 @@ func TestWingShutdownMidParseKeepsEarlierResponse(t *testing.T) {
 	}
 	stopped := make(chan struct{})
 	go func() { stop(); close(stopped) }()
-	time.Sleep(50 * time.Millisecond) // Shutdown has begun and waits for the Pool
+	time.Sleep(50 * time.Millisecond)                             // Shutdown has begun and waits for the Pool
 	if _, err := io.WriteString(conn, "0123456789"); err != nil { // unread when the loop stops
 		t.Fatal(err)
 	}
@@ -1044,5 +1044,78 @@ func TestWingShutdownMidParseKeepsEarlierResponse(t *testing.T) {
 	}
 	if len(r.rest) != 0 {
 		t.Fatalf("sent %q after the response, want nothing (no 100 Continue)", r.rest)
+	}
+}
+
+// TestWingShutdownKeepsTheFinalDrain starts Shutdown while a Takeover
+// connection is in its final drain behind a large response to a slow reader,
+// then sends a late request. Shutdown must not cut the drain short, or the
+// close lands over that request and resets the response.
+func TestWingShutdownKeepsTheFinalDrain(t *testing.T) {
+	big := strings.Repeat("d", 1<<20)
+	draining, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	testDrainingHook = func() {
+		select {
+		case draining <- struct{}{}:
+			<-release
+		default:
+		}
+	}
+	defer func() { testDrainingHook = nil }()
+	poolEntered, poolRelease := make(chan struct{}), make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/pool" {
+			close(poolEntered)
+			<-poolRelease
+			return
+		}
+		w.Header().Set("Connection", "close")
+		_, _ = w.Write([]byte(big))
+	})
+	cfg := WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Spear, Presets: map[string]Preset{"GET /pool": Arrow}}
+	addr, stop := startWingServerWithConfig(t, cfg, handler)
+	defer once.Do(func() { close(release) })
+	poolConn, _ := framingDial(t, addr)
+	if _, err := io.WriteString(poolConn, framingGet("/pool")); err != nil {
+		t.Fatal(err)
+	}
+	<-poolEntered // holds Shutdown in its Pool wait, after the wake-up
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/a")); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		n   int
+		err error
+	}
+	got := make(chan result, 1)
+	go func() { // a slow reader: the reply is still in flight at the close
+		time.Sleep(300 * time.Millisecond)
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			got <- result{0, err}
+			return
+		}
+		body, err := io.ReadAll(res.Body)
+		got <- result{len(body), err}
+	}()
+	select {
+	case <-draining:
+	case <-time.After(3 * time.Second):
+		t.Fatal("final drain never started")
+	}
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	time.Sleep(100 * time.Millisecond) // Shutdown has woken the Takeover sockets
+	once.Do(func() { close(release) })
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	r := <-got
+	close(poolRelease)
+	<-stopped
+	if r.err != nil || r.n != len(big) {
+		t.Fatalf("response %d of %d bytes, %v; want it whole and a clean EOF", r.n, len(big), r.err)
 	}
 }

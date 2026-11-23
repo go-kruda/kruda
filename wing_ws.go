@@ -107,6 +107,7 @@ type wingHijackWriter struct {
 	ctx          context.Context
 	hijacked     bool
 	hijackedConn *wingHijackConn // set by Hijack(); hijackTakeover waits on its done
+	gate         *takeoverGate
 }
 
 func newWingHijackWriter(resp *wingResponse, f *os.File, fd int32, leftover []byte, remote string, ctx context.Context) *wingHijackWriter {
@@ -143,6 +144,7 @@ func (hw *wingHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return nil, nil, http.ErrHijacked
 	}
 	hw.hijacked = true
+	hw.gate.markHijacked(hw.f, hw.fd)
 	nc := newWingHijackConn(hw.f, hw.fd, hw.remote, hw.ctx)
 	hw.hijackedConn = nc
 	var r io.Reader = nc
@@ -167,7 +169,7 @@ func (hw *wingHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // the single physical close via the shared takeover-done path (doneMsg.file).
 // This is what makes a late Conn.Close() from an app goroutine safe — the fd is
 // never reclaimed (and thus never recycled) while the app still references it.
-func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftover []byte) {
+func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte) {
 	// Cancellable conn context so shutdown (Task 6) can fire Conn.Done().
 	ctx, cancel := context.WithCancel(first.ctx)
 	first.ctx = ctx
@@ -179,6 +181,7 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 
 	resp := acquireResponseFor(first)
 	hw := newWingHijackWriter(resp, f, fd, leftover, remote, ctx)
+	hw.gate = g
 
 	func() {
 		defer func() {
@@ -209,7 +212,7 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 	releaseResponse(resp)
 	releaseRequest(first) // handler returned; the adapter holds ctx/remote independently
 	if rejected {
-		lingerTakeoverConn(f, fd) // after the release: the response is sent, and the wait can take 500 ms
+		lingerTakeoverConn(f, fd, g) // after the release: the response is sent, and the wait can take 500 ms
 	}
 
 	// Hijacked: the app owns the connection. Wait until it closes the adapter

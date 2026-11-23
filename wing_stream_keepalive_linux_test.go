@@ -337,7 +337,7 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	if err := raw.Control(func(v uintptr) { fd = int32(v) }); err != nil { // Fd() would make it blocking
 		t.Fatal(err)
 	}
-	lingerTakeover(f, fd, make([]byte, 4096)) // as takeoverLoop does before the close
+	lingerTakeover(f, fd, make([]byte, 4096), nil) // as takeoverLoop does before the close
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}

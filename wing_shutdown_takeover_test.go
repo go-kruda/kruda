@@ -4,6 +4,7 @@ package kruda
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"testing"
@@ -68,5 +69,45 @@ func TestWingShutdownPoolWaitingOnTakeoverWriter(t *testing.T) {
 	// drained, so the deadlock was never set up.
 	if took := time.Since(start); took < shutdownTakeoverGrace*8/10 || took > 3*time.Second {
 		t.Fatalf("Shutdown took %v, want about %v", took, shutdownTakeoverGrace)
+	}
+}
+
+// TestWingShutdownEndsHijackReaderThatRetriesTimeouts runs a hijacked handler
+// that reads until EOF and retries a timeout, as a raw protocol loop may.
+// Shutdown must still end it.
+func TestWingShutdownEndsHijackReaderThatRetriesTimeouts(t *testing.T) {
+	reading := make(chan struct{})
+	app := New(Wing())
+	app.Get("/ws", func(c *Ctx) error {
+		nc, _, err := c.ResponseWriter().(http.Hijacker).Hijack()
+		if err != nil {
+			return nil
+		}
+		close(reading)
+		buf := make([]byte, 16)
+		for {
+			if _, err := nc.Read(buf); err != nil {
+				var ne net.Error
+				if errors.As(err, &ne) && ne.Timeout() {
+					continue
+				}
+				return nil
+			}
+		}
+	}, Hijack)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	conn := dialRawHijack(t, addr)
+	defer conn.Close()
+	select {
+	case <-reading:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler never hijacked")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	if err := app.transport.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown after %v: %v", time.Since(start), err)
 	}
 }

@@ -59,3 +59,7 @@ const (
 // events without a worker-level re-arm. On kqueue this is always 0, so re-arm
 // happens every time.
 const cqeFMore uint32 = 1 << 1
+
+// evPeerShut marks a read event that also reports the peer shut its write
+// side. Under edge triggering no later event reports that EOF.
+const evPeerShut uint32 = 1 << 2

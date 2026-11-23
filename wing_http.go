@@ -1222,7 +1222,7 @@ func acquireResponse() *wingResponse {
 	r.headers.reset()
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
-	r.staticResp = nil
+	r.staticResp, r.staticClose = nil, false
 	r.jsonFast = false
 	r.sendFileEnabled = false
 	r.fileFd = 0
@@ -1254,7 +1254,7 @@ func releaseResponse(r *wingResponse) {
 	}
 	r.status = 0
 	r.headRequest = false
-	r.staticResp = nil
+	r.staticResp, r.staticClose = nil, false
 	r.jsonFast = false
 	r.responseMode = responseGeneric
 	r.stringFast = false
@@ -1291,6 +1291,7 @@ type wingResponse struct {
 	buf               []byte // scratch buffer for serialization
 	jsonBuf           bytes.Buffer
 	staticResp        []byte // pre-built full response (if set, buildZeroCopy returns this)
+	staticClose       bool   // staticResp asks to close the connection
 	jsonFast          bool   // SetJSON fast path — skip header interface, write status+json directly
 	responseMode      responseMode
 	stringFast        bool
@@ -1310,7 +1311,37 @@ func (r *wingResponse) Write(data []byte) (int, error) {
 	r.body = append(r.body, data...)
 	return len(data), nil
 }
-func (r *wingResponse) SetStaticResponse(data []byte) { r.staticResp = data }
+func (r *wingResponse) SetStaticResponse(data []byte) {
+	r.setStatic(data, staticResponseCloses(data))
+}
+
+// setStatic is SetStaticResponse for a preset, whose close flag is known.
+func (r *wingResponse) setStatic(data []byte, close bool) {
+	r.staticResp, r.staticClose = data, close
+}
+
+// staticResponseCloses reports whether a prebuilt response's header block has
+// a Connection header that lists close.
+func staticResponseCloses(resp []byte) bool {
+	if end := bytes.Index(resp, crlfcrlf); end >= 0 {
+		resp = resp[:end]
+	}
+	for len(resp) > 0 {
+		line := resp
+		if i := bytes.Index(resp, []byte("\r\n")); i >= 0 {
+			line, resp = resp[:i], resp[i+2:]
+		} else {
+			resp = nil
+		}
+		name, value, ok := bytes.Cut(line, []byte(":"))
+		if ok && headerIs(string(name), "Connection") {
+			if hasClose, _ := scanConnectionTokens(value); hasClose {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // SetStringBody implements transport.StringResponder — the zero-copy string
 // fast lane (twin of SetJSON). The response is serialized in one pass as
@@ -1320,10 +1351,13 @@ func (r *wingResponse) SetStringBody(status int, contentType, body string) {
 	r.status = status
 	r.headers.reset()
 	r.body = r.body[:0]
-	r.staticResp = nil
+	r.staticResp, r.staticClose = nil, false
 	r.jsonFast = false
 	r.stringFast = true
 	r.stringBody = body
+	if strings.IndexByte(contentType, '\n') >= 0 || strings.IndexByte(contentType, '\r') >= 0 {
+		contentType = strings.Trim(sanitizeHeaderValue(contentType), " \t") // a caller of this interface may skip Ctx
+	}
 	r.stringContentType = contentType
 }
 
@@ -1664,10 +1698,7 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 		} else if headerIs(h.keys[i], "Transfer-Encoding") {
 			continue
 		}
-		b = append(b, h.keys[i]...)
-		b = append(b, ": "...)
-		b = append(b, h.vals[i]...)
-		b = append(b, "\r\n"...)
+		b = appendHeaderField(b, h.keys[i], h.vals[i])
 	}
 	for i := 0; i < len(h.extra); i++ {
 		if headerIs(h.extra[i].key, "Content-Length") {
@@ -1679,12 +1710,25 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 		} else if headerIs(h.extra[i].key, "Transfer-Encoding") {
 			continue
 		}
-		b = append(b, h.extra[i].key...)
-		b = append(b, ": "...)
-		b = append(b, h.extra[i].val...)
-		b = append(b, "\r\n"...)
+		b = appendHeaderField(b, h.extra[i].key, h.extra[i].val)
 	}
 	return b, hasCL
+}
+
+// appendHeaderField appends one header field. As net/http does, it drops a
+// field whose name is not a token and turns each line break in a value into a
+// space, so a raw header cannot start a field of its own.
+func appendHeaderField(b []byte, key, val string) []byte {
+	if !isValidHeaderKey(key) {
+		return b
+	}
+	b = append(b, key...)
+	b = append(b, ": "...)
+	if strings.IndexByte(val, '\n') >= 0 || strings.IndexByte(val, '\r') >= 0 {
+		val = strings.Trim(sanitizeHeaderValue(val), " \t")
+	}
+	b = append(b, val...)
+	return append(b, "\r\n"...)
 }
 
 // contentLength returns the length every Content-Length in h agrees on, or ""
@@ -1736,7 +1780,10 @@ func (h *wingHeaders) connectionClose() bool {
 // closeRequested reports whether the response as sent asks to end the
 // connection. The fast lanes and static responses send none of r.headers.
 func (r *wingResponse) closeRequested() bool {
-	return !r.stringFast && !r.jsonFast && r.staticResp == nil && r.headers.connectionClose()
+	if r.staticResp != nil {
+		return r.staticClose
+	}
+	return !r.stringFast && !r.jsonFast && r.headers.connectionClose()
 }
 
 // headerIs matches a header key case-insensitively. Keys set through Ctx are

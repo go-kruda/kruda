@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -219,8 +220,34 @@ type fasthttpHeaderMap struct {
 	ctx *fasthttp.RequestCtx
 }
 
-func (m *fasthttpHeaderMap) Set(key, value string) { m.ctx.Response.Header.Set(key, value) }
-func (m *fasthttpHeaderMap) Add(key, value string) { m.ctx.Response.Header.Add(key, value) }
+// Set and Add drop a field whose name is not a token, as net/http does:
+// fasthttp cleans line breaks out of values but writes names as given.
+func (m *fasthttpHeaderMap) Set(key, value string) {
+	if validFieldName(key) {
+		m.ctx.Response.Header.Set(key, value)
+	}
+}
+
+func (m *fasthttpHeaderMap) Add(key, value string) {
+	if validFieldName(key) {
+		m.ctx.Response.Header.Add(key, value)
+	}
+}
+
+// validFieldName reports whether name is an RFC 9110 token.
+func validFieldName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0 {
+			continue
+		}
+		return false
+	}
+	return true
+}
 func (m *fasthttpHeaderMap) Get(key string) string { return string(m.ctx.Response.Header.Peek(key)) }
 func (m *fasthttpHeaderMap) Del(key string)        { m.ctx.Response.Header.Del(key) }
 

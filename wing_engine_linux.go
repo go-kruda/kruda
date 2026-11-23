@@ -14,6 +14,8 @@ import (
 const (
 	epollin      = 0x1
 	epollout     = 0x4
+	epollhup     = 0x10
+	epollrdhup   = 0x2000
 	epollet      = 0x80000000
 	epolloneshot = 0x40000000
 
@@ -77,18 +79,18 @@ func (e *epollEngine) SubmitPipeRecv(_ int, _ []byte) {
 func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
 	e.connPtrs[fd] = ptr
 	// Edge-triggered read — fires when new data arrives. No re-arm needed.
-	e.epollMod(fd, epollin|epollet)
+	e.epollMod(fd, epollin|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitRecv(fd int32, _ []byte, _ int) {
 	// Edge-triggered EPOLLIN persists — only need epollMod to remove EPOLLOUT
 	// after a partial write fallback. Track with hasOut flag on conn.
-	e.epollModPtr(fd, epollin|epollet)
+	e.epollModPtr(fd, epollin|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitSend(fd int32, _ []byte) {
 	// Add EPOLLOUT for partial write fallback.
-	e.epollModPtr(fd, epollin|epollout|epollet)
+	e.epollModPtr(fd, epollin|epollout|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitClose(fd int32) {
@@ -175,6 +177,9 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 
 		if ev.Events&epollin != 0 {
 			events[count] = event{Op: opRecv, ConnPtr: ptr}
+			if ev.Events&(epollrdhup|epollhup) != 0 {
+				events[count].Flags = evPeerShut
+			}
 			count++
 		}
 	}

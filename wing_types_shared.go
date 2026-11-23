@@ -126,6 +126,7 @@ type Preset struct {
 	Dispatch       DispatchMode
 	StaticResponse []byte // pre-built full HTTP response; bypasses handler entirely
 	ResponseMode   responseMode
+	staticClose    bool // StaticResponse asks to close the connection
 	handlers       []HandlerFunc
 	path           string
 	pathClean      bool
@@ -159,6 +160,7 @@ func (f *Preset) defaults() {
 	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
+	f.staticClose = staticResponseCloses(f.StaticResponse)
 }
 
 // Dispatch returns a PresetOption that sets the dispatch mode.

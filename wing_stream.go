@@ -10,7 +10,9 @@ package kruda
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-kruda/kruda/transport"
@@ -75,6 +77,9 @@ func (w *wingStreamWriter) flushHeaders() error {
 	if w.headersSent {
 		return nil
 	}
+	if w.broken {
+		return errStreamPreamble // a retry would follow the part already sent
+	}
 	// The stream path never reuses the connection, and the stream length is
 	// the handler's to state.
 	w.headers.Set("Connection", "close")
@@ -95,14 +100,25 @@ func (w *wingStreamWriter) flushHeaders() error {
 // failed or panicked is not completed as an empty success.
 func (w *wingStreamWriter) setCopyUnfinished(v bool) { w.copying = v }
 
-// finish sends the preamble of a response whose handler wrote no body.
+var errStreamPreamble = errors.New("kruda: stream preamble was not fully written")
+
+// finish sends the preamble of a response whose handler wrote no body. Not when
+// that response declared a body: the client would wait for bytes that never
+// come, so it gets the connection closed instead, as for a failed copy.
 func (w *wingStreamWriter) finish() {
-	if !w.headersSent && !w.broken && !w.copying {
-		_ = w.flushHeaders()
+	if w.headersSent || w.broken || w.copying {
+		return
 	}
+	if !w.head && !statusHasNoBody(w.status) && strings.TrimLeft(w.headers.contentLength(), "0") != "" {
+		return
+	}
+	_ = w.flushHeaders()
 }
 
 func (w *wingStreamWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 && w.copying {
+		return 0, nil // commits nothing: the copy may still fail
+	}
 	if err := w.flushHeaders(); err != nil {
 		return 0, err
 	}

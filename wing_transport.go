@@ -261,6 +261,8 @@ type conn struct {
 	readDrained     bool   // socket input exhausted during synchronous inline dispatch
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
+	discarded       int    // input dropped behind the final response
+	lingerUntil     int64  // unix nano — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
 	sendFileFd      int32 // sendfile: source fd (0 = none)
@@ -465,7 +467,7 @@ func (w *worker) serveRoute(resp *wingResponse, req *wingRequest, f Preset) {
 	if f.StaticResponse != nil {
 		// The inline branch sends these itself; a request whose body arrives
 		// after the headers reaches here, and the route may have no handler.
-		resp.SetStaticResponse(f.StaticResponse)
+		resp.setStatic(f.StaticResponse, f.staticClose)
 		return
 	}
 	if len(f.handlers) > 0 && (f.pathClean || (f.path == "" && !containsDotPercent(req.path))) {
@@ -681,6 +683,12 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 // Called at most once per second — zero cost when no timeouts configured.
 func (w *worker) sweepTimeouts(now int64) {
 	for fd, c := range w.conns {
+		if c.lingerUntil > 0 {
+			if now > c.lingerUntil {
+				w.closeConn(fd)
+			}
+			continue
+		}
 		if c.pending > 0 {
 			continue // handler in flight — don't close
 		}
@@ -825,14 +833,20 @@ func (w *worker) handleRecv(ev event) {
 	if c == nil {
 		return
 	}
+	if c.lingerUntil > 0 {
+		w.closeAfterFinal(c)
+		return
+	}
 	if c.pending > 0 || c.fileStream != nil || c.sendFileFd > 0 {
 		c.suppressRead()
 		return
 	}
 	queued := c.sendN < len(c.sendBuf)
 	if queued && c.sendingFinal() {
-		w.discardInput(c)
-		return
+		if !w.discardInput(c) && c.discarded > maxDiscardInput {
+			w.closeConn(c.fd)
+		}
+		return // an EOF or a failed socket is left to the send
 	}
 	// Input waits in the socket behind unsent output, so a client that does not
 	// read cannot grow the queue. A body being accumulated still reads. A full
@@ -851,11 +865,18 @@ func (w *worker) handleRecv(ev event) {
 		submitIdleRecv(w.eng, c.fd, nil, 0)
 		return
 	}
+	if e == 0 && nr == 0 && c.bodyNeed > 0 && c.sending() {
+		w.endIncompleteBody(c)
+		return
+	}
 	if e != 0 || nr <= 0 {
 		w.closeConn(c.fd)
 		return
 	}
 	c.readDrained = c.bodyNeed == 0 && int(nr) < requested
+	if ev.Flags&evPeerShut != 0 {
+		c.readSuppressed = true // the EOF behind this input is still to be read
+	}
 	c.readN += int(nr)
 	if w.hasTimeout {
 		now := w.now
@@ -1026,7 +1047,7 @@ func (w *worker) tryParse(c *conn) {
 		switch f.Dispatch {
 		case Inline:
 			if f.StaticResponse != nil {
-				c.keepAlive = req.keepAlive
+				c.keepAlive = req.keepAlive && !f.staticClose
 				c.sendBuf = append(c.sendBuf, f.StaticResponse...)
 				releaseRequest(req)
 			} else {
@@ -1321,6 +1342,10 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 			break
 		}
+		if e == 0 && rn == 0 && c.sending() {
+			w.endIncompleteBody(c)
+			return false
+		}
 		if e != 0 || rn <= 0 {
 			w.closeConn(c.fd)
 			return true
@@ -1346,6 +1371,18 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 		submitIdleRecv(w.eng, c.fd, nil, 0)
 	}
 	return false
+}
+
+// endIncompleteBody handles an EOF in the middle of a request body while
+// earlier responses are still being sent. That request can never complete, but
+// those responses are sent before the connection closes.
+func (w *worker) endIncompleteBody(c *conn) {
+	if w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	c.bodyNeed, c.bodyBuf, c.headerSnapshot = 0, nil, nil
+	c.readN = 0
+	c.keepAlive = false
 }
 
 // drainPipelinedAfterBody appends socket bytes that follow a just-completed body
@@ -1498,10 +1535,7 @@ func (w *worker) handleDone(msg doneMsg) {
 				submitIdleRecv(w.eng, c.fd, nil, 0)
 			}
 		} else {
-			if c.readSuppressed && c.sendingFinal() {
-				w.discardInput(c) // it arrived while the handler ran
-			}
-			w.closeConn(c.fd)
+			w.closeAfterFinal(c)
 		}
 		return
 	}
@@ -1518,21 +1552,53 @@ func (c *conn) sendingFinal() bool {
 
 // discardInput drops input that arrives behind a connection's final response.
 // Running it would revive a connection that promised to close, and closing
-// over unread input would reset it and cut that response. The read count
-// bounds a peer that keeps sending.
-func (w *worker) discardInput(c *conn) {
+// over unread input would reset it and cut that response. It reports whether
+// the socket has no more input for now; false means EOF, a failed socket, or
+// more input than maxDiscardInput.
+func (w *worker) discardInput(c *conn) bool {
 	c.readN = 0
 	c.readSuppressed = false
 	c.readDrained = false
-	for range maxDiscardReads {
+	for c.discarded <= maxDiscardInput {
 		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
-		if e != 0 || n == 0 {
-			return // drained, or the pending send reports the failed socket
+		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
+			return true
 		}
+		if e != 0 || n == 0 {
+			return false
+		}
+		c.discarded += int(n)
 	}
+	return false
 }
 
-const maxDiscardReads = 64
+// closeAfterFinal ends a connection whose final response is fully written. With
+// unread input it ends the write side and drops input until the peer closes,
+// as net/http's closeWriteAndWait: the peer reads the response and an EOF, not
+// a reset that can discard it. lingerDelay bounds the wait when the worker has
+// timeouts; without them it is bounded by the peer, as an idle connection is.
+func (w *worker) closeAfterFinal(c *conn) {
+	if !w.discardInput(c) || c.discarded == 0 {
+		w.closeConn(c.fd)
+		return
+	}
+	if c.lingerUntil == 0 {
+		if syscall.Shutdown(int(c.fd), syscall.SHUT_WR) != nil {
+			w.closeConn(c.fd)
+			return
+		}
+		c.lingerUntil = time.Now().UnixNano() + lingerDelay
+	}
+	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
+}
+
+// maxDiscardInput bounds the input a closing connection drops. A peer that
+// sends more is not waiting for its response, and the connection closes.
+const maxDiscardInput = 256 << 10
+
+// lingerDelay is how long a connection that ended its write side waits for the
+// peer to close, as net/http's rstAvoidanceDelay.
+const lingerDelay = int64(500 * time.Millisecond)
 
 // directSend attempts a non-blocking write. If partial, falls back to epoll EPOLLOUT.
 func (w *worker) directSend(c *conn) {
@@ -1639,7 +1705,7 @@ func (w *worker) directSend(c *conn) {
 		return
 	}
 	if !c.keepAlive {
-		w.closeConn(c.fd)
+		w.closeAfterFinal(c)
 		return
 	}
 	if c.readDeadline > 0 {
@@ -1861,20 +1927,23 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	requestStarted := false
 	// out is serialized into again once the synchronous write has returned.
 	var out []byte
+	final := false // the last response was written; unread input must not reset it
 
 	for served := false; ; served = true {
-		var static []byte // the route's prebuilt response, if it has one
+		var static Preset // the route's, when it has a prebuilt response
 		if served {
-			// A later request on this connection may be a Stream or Hijack
-			// route, which needs its own writer rather than a buffered one, or
-			// a static route, which runs no handler.
+			// A later request on this connection may be a static route, which
+			// runs no handler whatever its mode, as on a fresh connection, or
+			// a Stream or Hijack route, which needs its own writer rather than
+			// a buffered one.
 			preset := w.presets.Lookup(req.method, req.path)
-			static = preset.StaticResponse
-			switch preset.ResponseMode {
-			case responseStream:
+			switch {
+			case preset.StaticResponse != nil:
+				static = preset
+			case preset.ResponseMode == responseStream:
 				w.streamTakeover(req, fd, f)
 				return
-			case responseHijack:
+			case preset.ResponseMode == responseHijack:
 				w.hijackTakeover(req, fd, f, append([]byte(nil), buf[:readN]...))
 				return
 			}
@@ -1888,8 +1957,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					resp.Write([]byte("Internal Server Error\n"))
 				}
 			}()
-			if static != nil {
-				resp.SetStaticResponse(static)
+			if static.StaticResponse != nil {
+				resp.setStatic(static.StaticResponse, static.staticClose)
 				return
 			}
 			w.handler.ServeKruda(resp, req)
@@ -1924,6 +1993,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		}
 
 		if !keepAlive {
+			final = true
 			goto done
 		}
 		if readN == 0 && w.idleTimeout > 0 {
@@ -1975,20 +2045,20 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					// Need more header bytes — keep reading.
 					if readN >= len(buf) {
 						// Buffer full but headers still incomplete: 431.
-						_ = w.writeTakeover(f, wingStatusClose(431))
+						final = w.writeTakeover(f, wingStatusClose(431)) == nil
 						keepAlive = false
 						goto done
 					}
 				case parseBadRequest:
-					_ = w.writeTakeover(f, wingStatusClose(400))
+					final = w.writeTakeover(f, wingStatusClose(400)) == nil
 					keepAlive = false
 					goto done
 				case parseChunked:
-					_ = w.writeTakeover(f, wingStatusClose(501))
+					final = w.writeTakeover(f, wingStatusClose(501)) == nil
 					keepAlive = false
 					goto done
 				case parseBodyTooLarge:
-					_ = w.writeTakeover(f, wingStatusClose(413))
+					final = w.writeTakeover(f, wingStatusClose(413)) == nil
 					keepAlive = false
 					goto done
 				case parseNeedBody:
@@ -2007,7 +2077,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if w.maxInflightBody > 0 {
 						if atomic.AddInt64(&w.inflightBody, int64(need)) > int64(w.maxInflightBody) {
 							atomic.AddInt64(&w.inflightBody, -int64(need))
-							_ = w.writeTakeover(f, wingStatusClose(503))
+							final = w.writeTakeover(f, wingStatusClose(503)) == nil
 							keepAlive = false
 							goto done
 						}
@@ -2095,7 +2165,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					keepAlive = req.keepAlive
 					goto next
 				case parseHeaderTooLarge:
-					_ = w.writeTakeover(f, wingStatusClose(431))
+					final = w.writeTakeover(f, wingStatusClose(431)) == nil
 					keepAlive = false
 					goto done
 				default:
@@ -2141,11 +2211,43 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	}
 
 done:
+	if final {
+		lingerTakeover(f, fd, buf)
+	}
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
 	// and then closes through the File. Do NOT close here — the kernel
 	// could recycle the fd number while the conns map still references it.
 	w.doneCh <- doneMsg{fd: fd, keepAlive: false, file: f}
 	w.wake()
+}
+
+// lingerTakeover is closeAfterFinal for a Takeover socket, which this goroutine
+// owns: buf is free, and the read deadline bounds the wait.
+func lingerTakeover(f *os.File, fd int32, buf []byte) {
+	discarded := 0
+	for {
+		n, err := syscall.Read(int(fd), buf)
+		if n > 0 {
+			if discarded += n; discarded > maxDiscardInput {
+				return
+			}
+			continue
+		}
+		if err != syscall.EAGAIN {
+			return // EOF or a failed socket: nothing to protect
+		}
+		break
+	}
+	if discarded == 0 || syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
+		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) != nil {
+		return
+	}
+	for discarded <= maxDiscardInput {
+		n, err := f.Read(buf)
+		if discarded += n; err != nil {
+			return
+		}
+	}
 }
 
 // streamTakeover runs a single streaming response (Stream preset) over the
@@ -2240,6 +2342,10 @@ func (w *worker) handleSend(ev event) {
 	} else {
 		c = w.conns[ev.Fd]
 	}
+	if c != nil && c.lingerUntil > 0 {
+		w.closeAfterFinal(c) // nothing is left to send; the event may hide input
+		return
+	}
 	if c != nil {
 		// EPOLLOUT takes priority over a simultaneous EPOLLIN in the engine, so
 		// this event may hide input or an EOF that gets no other edge.
@@ -2257,10 +2363,11 @@ func (w *worker) handleSend(ev event) {
 		}
 		return
 	}
-	if c.sendingFinal() {
-		// kqueue does not watch for reads while a send waits, so drop input
-		// here before the send can finish and close over it.
-		w.discardInput(c)
+	if c.sendingFinal() && !w.discardInput(c) && c.discarded > maxDiscardInput {
+		// kqueue does not watch for reads while a send waits, so input is
+		// dropped here before the send can finish and close over it.
+		w.closeConn(c.fd)
+		return
 	}
 	w.directSend(c)
 	if c.bodyNeed > 0 && !c.sending() && w.conns[c.fd] == c {
@@ -2355,10 +2462,10 @@ func (w *worker) cleanup() {
 	// Either way takeoverLoop exits and dispatchWG.Done fires. SHUT_* doesn't
 	// free the fd number, so kernel won't recycle it — Spawn's write side
 	// stays valid until we run closeFd below.
-	// Cancel first and shut Pool and Spawn sockets only after the Pool has
-	// finished, so a Pool handler that completes during shutdown still writes
-	// its response. Takeover sockets must be shut before the drain starts: the
-	// drain closes their fds, and the number can then be any socket in the process.
+	// Cancel first and shut the sockets only after the Pool has finished, so a
+	// Pool or Takeover handler that completes during shutdown still writes its
+	// response. The drain below keeps each finished Takeover's File open until
+	// then: a closed fd number can be any socket in the process.
 	for _, c := range w.conns {
 		if c.pending > 0 && c.cancel != nil {
 			c.cancel()
@@ -2366,9 +2473,6 @@ func (w *worker) cleanup() {
 	}
 	for _, c := range w.conns {
 		c.fileStream.close()
-		if c.pending > 0 && c.takenOver {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
-		}
 	}
 	// Drain doneCh concurrently with dispatchWG.Wait. Without this, a wave
 	// of Spawn/Takeover goroutines completing simultaneously can fill the
@@ -2376,20 +2480,23 @@ func (w *worker) cleanup() {
 	// before reaching its `defer dispatchWG.Done()`, and Wait deadlocks.
 	// Bounded by typical workloads but real for high-concurrency shutdowns.
 	drainStop := make(chan struct{})
+	drained := make(chan []*os.File)
 	go func() {
+		var held []*os.File
 		for {
 			select {
 			case msg := <-w.doneCh:
 				msg.stream.close()
-				// A Takeover completion carries the fd's *os.File. Close it here
-				// to release the fd now; discarding it would leak the File to a
-				// finalizer that later closes a recycled fd. Non-Takeover
+				// A Takeover completion carries the fd's *os.File. It is closed
+				// once every socket is shut; discarding it would leak the File
+				// to a finalizer that later closes a recycled fd. Non-Takeover
 				// completions carry no file and are simply dropped (ioLoop has
 				// stopped, nothing left to process).
 				if msg.file != nil {
-					msg.file.Close()
+					held = append(held, msg.file)
 				}
 			case <-drainStop:
+				drained <- held
 				return
 			}
 		}
@@ -2405,13 +2512,16 @@ func (w *worker) cleanup() {
 		w.pool.wg.Wait()
 	}
 	for _, c := range w.conns {
-		if c.pending > 0 && !c.takenOver {
+		if c.pending > 0 {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	w.dispatchWG.Wait()
 	close(drainStop)
+	for _, f := range <-drained {
+		f.Close()
+	}
 	// Close any Takeover Files still buffered in doneCh that the concurrent
 	// drain did not consume before it stopped — same recycled-fd hazard.
 drainBuffered:

@@ -87,10 +87,79 @@ func TestWingStreamFailedCopyIsNotAnEmptySuccess(t *testing.T) {
 			if _, err := io.WriteString(conn, framingGet("/x")); err != nil {
 				t.Fatal(err)
 			}
-			if res, err := http.ReadResponse(br, nil); err == nil && res.StatusCode < 500 {
-				t.Fatalf("failed copy answered %d", res.StatusCode)
-			}
+			expectNoSuccess(t, br)
 		})
+	}
+}
+
+// zeroWriteThenFail commits nothing but an empty write before it fails, as an
+// io.WriterTo may.
+type zeroWriteThenFail struct{}
+
+func (zeroWriteThenFail) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func (zeroWriteThenFail) WriteTo(w io.Writer) (int64, error) {
+	_, _ = w.Write(nil)
+	return 0, io.ErrUnexpectedEOF
+}
+
+// expectNoSuccess reads what a failed response left: EOF before any byte, or a
+// whole 5xx.
+func expectNoSuccess(t *testing.T, br *bufio.Reader) {
+	t.Helper()
+	if _, err := br.Peek(1); err == io.EOF {
+		return
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("incomplete response: %v", err)
+	}
+	if body, err := io.ReadAll(res.Body); err != nil || res.StatusCode < 500 {
+		t.Fatalf("failed copy answered %d with %q, %v", res.StatusCode, body, err)
+	}
+}
+
+// TestWingStreamUnkeptPromiseIsNotSent ends Stream handlers without the body
+// they declared. A preamble would promise bytes that never come.
+func TestWingStreamUnkeptPromiseIsNotSent(t *testing.T) {
+	for name, handler := range map[string]HandlerFunc{
+		"declared length": func(c *Ctx) error {
+			c.SetHeader("Content-Length", "5")
+			return c.Stream(strings.NewReader(""))
+		},
+		"empty write before failure": func(c *Ctx) error { return c.Stream(zeroWriteThenFail{}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := New(Wing())
+			app.Get("/x", handler, Stream)
+			addr, stop := startWingApp(t, app)
+			defer stop()
+			conn, br := framingDial(t, addr)
+			if _, err := io.WriteString(conn, framingGet("/x")); err != nil {
+				t.Fatal(err)
+			}
+			expectNoSuccess(t, br)
+		})
+	}
+}
+
+// TestWingStreamHeadKeepsDeclaredLength answers HEAD for a Stream route that
+// declares its length. HEAD sends that length and no body.
+func TestWingStreamHeadKeepsDeclaredLength(t *testing.T) {
+	app := New(Wing())
+	app.Head("/x", func(c *Ctx) error {
+		c.SetHeader("Content-Length", "5")
+		return c.Stream(strings.NewReader(""))
+	}, Stream)
+	addr, stop := startWingApp(t, app)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, "HEAD /x HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, &http.Request{Method: "HEAD"})
+	if err != nil || res.StatusCode != 200 || res.ContentLength != 5 {
+		t.Fatalf("HEAD: %v %+v", err, res)
 	}
 }
 
@@ -113,6 +182,8 @@ func TestWingStreamDoesNotResendFailedPreamble(t *testing.T) {
 	sw.setCopyUnfinished(true)
 	sw.setCopyUnfinished(false)
 	sw.finish()
+	sw.Flush()
+	_, _ = sw.Write([]byte("x"))
 	if conn.writes != 1 {
 		t.Fatalf("preamble written %d times", conn.writes)
 	}

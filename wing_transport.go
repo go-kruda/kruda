@@ -1970,7 +1970,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
-		if served && (w.stopping() || connCtx.Err() != nil) {
+		if served && w.stopping() {
 			releaseRequest(req) // shutting down: no new request starts
 			goto done
 		}

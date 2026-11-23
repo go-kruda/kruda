@@ -969,3 +969,80 @@ func takeoverCloseSurvivesLateRequest(t *testing.T, preset Preset, want string) 
 		t.Fatalf("body %d of %d bytes, %v; want it whole and a clean EOF", len(r.body), len(want), r.err)
 	}
 }
+
+// TestWingShutdownMidParseKeepsEarlierResponse starts Shutdown while a Takeover
+// connection, having sent a large response to a slow reader, is about to parse
+// an upload that expects 100 Continue, and more input waits in the kernel. No
+// interim reply may go out, and the close must not reset the response.
+func TestWingShutdownMidParseKeepsEarlierResponse(t *testing.T) {
+	big := strings.Repeat("a", 1<<20)
+	atParse, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	testTakeoverParseHook = func() {
+		select {
+		case atParse <- struct{}{}:
+			<-release
+		default:
+		}
+	}
+	defer func() { testTakeoverParseHook = nil }()
+	poolEntered, poolRelease := make(chan struct{}), make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/pool" {
+			close(poolEntered)
+			<-poolRelease
+		}
+		_, _ = w.Write([]byte(big))
+	})
+	cfg := WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Spear, Presets: map[string]Preset{"GET /pool": Arrow}}
+	addr, stop := startWingServerWithConfig(t, cfg, handler)
+	defer once.Do(func() { close(release) })
+	poolConn, _ := framingDial(t, addr)
+	if _, err := io.WriteString(poolConn, framingGet("/pool")); err != nil {
+		t.Fatal(err)
+	}
+	<-poolEntered // holds Shutdown open, so the Takeover socket can still write
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/a")+"POST /up HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\nExpect: 100-continue\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		body []byte
+		rest []byte
+		err  error
+	}
+	got := make(chan result, 1)
+	go func() { // a slow reader: the reply is still in flight at the close
+		time.Sleep(300 * time.Millisecond)
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			got <- result{err: err}
+			return
+		}
+		body, err := io.ReadAll(res.Body)
+		rest, _ := io.ReadAll(br)
+		got <- result{body, rest, err}
+	}()
+	select {
+	case <-atParse:
+	case <-time.After(3 * time.Second):
+		t.Fatal("never reached the upload's parse")
+	}
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	time.Sleep(50 * time.Millisecond) // Shutdown has begun and waits for the Pool
+	if _, err := io.WriteString(conn, "0123456789"); err != nil { // unread when the loop stops
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	once.Do(func() { close(release) })
+	r := <-got
+	close(poolRelease)
+	<-stopped
+	if r.err != nil || len(r.body) != len(big) {
+		t.Fatalf("response %d of %d bytes, %v; want it whole", len(r.body), len(big), r.err)
+	}
+	if len(r.rest) != 0 {
+		t.Fatalf("sent %q after the response, want nothing (no 100 Continue)", r.rest)
+	}
+}

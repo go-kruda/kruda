@@ -254,20 +254,21 @@ type conn struct {
 	sendBuf         []byte
 	sendN           int
 	keepAlive       bool
-	admitted        bool   // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
-	pending         int    // in-flight handler goroutines
-	takenOver       bool   // fd detached to a Takeover goroutine and owned by its *os.File
-	closePending    bool   // close after async ownership returns; prevents fd reuse
-	remoteAddr      string // lazy peer address cache, filled only if Request.RemoteAddr is used
-	lastActive      int64  // unix nano — updated on accept + each recv
-	lastSent        int64  // unix nano — last write that sent bytes; idle time counts from here after a response
-	readDeadline    int64  // unix nano — set when first byte arrives, cleared on full request
-	readSuppressed  bool   // readiness was not acted on; stays until a read finds EAGAIN or EOF
-	readDrained     bool   // socket input exhausted during synchronous inline dispatch
-	parseDepth      uint8  // parses nested through completed sends
-	resumeParse     bool   // yielded with input to parse; the next write event resumes
-	discarded       int    // input dropped behind the final response
-	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
+	admitted        bool     // true once accepted; cleared once by removeConnBookkeeping (idempotency guard)
+	pending         int      // in-flight handler goroutines
+	takenOver       bool     // fd detached to a Takeover goroutine and owned by its *os.File
+	takeoverFile    *os.File // the Takeover goroutine's; Shutdown only sets its read deadline
+	closePending    bool     // close after async ownership returns; prevents fd reuse
+	remoteAddr      string   // lazy peer address cache, filled only if Request.RemoteAddr is used
+	lastActive      int64    // unix nano — updated on accept + each recv
+	lastSent        int64    // unix nano — last write that sent bytes; idle time counts from here after a response
+	readDeadline    int64    // unix nano — set when first byte arrives, cleared on full request
+	readSuppressed  bool     // readiness was not acted on; stays until a read finds EAGAIN or EOF
+	readDrained     bool     // socket input exhausted during synchronous inline dispatch
+	parseDepth      uint8    // parses nested through completed sends
+	resumeParse     bool     // yielded with input to parse; the next write event resumes
+	discarded       int      // input dropped behind the final response
+	lingerUntil     int64    // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
 	sendFileFd      int32 // sendfile: source fd (0 = none)
@@ -288,6 +289,10 @@ var testAcceptPeerHook func(ip netip.Addr, ok bool)
 // testSuppressedRecvHook lets Linux integration tests prove that an EPOLLIN
 // event reached the worker while an async handler still owned the connection.
 var testSuppressedRecvHook func(fd int32)
+
+// testTakeoverParseHook runs in takeoverLoop after its shutdown check, before
+// it parses buffered input. Always nil in production.
+var testTakeoverParseHook func()
 
 // testFinalDrainHook runs in lingerTakeover after its first look for unread
 // input. Always nil in production.
@@ -1321,10 +1326,13 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 			c.readN = 0
 		}
 		c.readBuf = nil // the goroutine reads into its own buffer from here on
+		// The File is made here so Shutdown can wake its reads; the goroutine owns it.
+		file := os.NewFile(uintptr(c.fd), "wing-takeover")
+		c.takeoverFile = file
 		w.dispatchWG.Add(1)
 		go func() {
 			defer w.dispatchWG.Done()
-			w.takeoverLoop(req, c.fd, leftover, f.ResponseMode)
+			w.takeoverLoop(req, c.fd, file, leftover, f.ResponseMode)
 		}()
 	}
 }
@@ -1999,11 +2007,10 @@ func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
 // per request at c256 on /db) — identical CPU per request to this model,
 // but scheduler pressure inflated the time a pgx pool conn stayed checked
 // out, costing ~6% throughput (results/forensics-20260612T150500Z).
-func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mode responseMode) {
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, leftover []byte, mode responseMode) {
 	// fds arrive non-blocking from accept4/SetNonblock. os.NewFile registers
 	// a non-blocking fd with the runtime poller, so Read/Write below park
 	// the goroutine, never the thread.
-	f := os.NewFile(uintptr(fd), "wing-takeover")
 	if f == nil {
 		w.doneCh <- doneMsg{fd: fd, keepAlive: false}
 		w.wake()
@@ -2061,7 +2068,6 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
-		answered = answered || served
 		if served && w.stopping() {
 			releaseRequest(req) // shutting down: no new request starts
 			final = true        // the previous response is complete: drain behind it
@@ -2099,7 +2105,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			if !reuse {
 				// A response that never got its preamble out has nothing to
 				// protect, unless an earlier one on this connection does.
-				final = sent || served
+				final = sent || answered
 				goto done
 			}
 		} else {
@@ -2148,6 +2154,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			}
 		}
 
+		answered = true // from here on, every exit must drain behind this response
 		if !keepAlive {
 			final = true
 			goto done
@@ -2157,6 +2164,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 				keepAlive = false
 				goto done
 			}
+			if w.stopping() {
+				goto done // that deadline may have replaced Shutdown's wake-up
+			}
 		}
 
 		// Read next request — parks the goroutine until data arrives.
@@ -2164,6 +2174,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			if w.stopping() {
 				final = true // after a complete response: drain behind it
 				goto done    // not even a 100 Continue or an error reply once Shutdown began
+			}
+			if testTakeoverParseHook != nil && readN > 0 {
+				testTakeoverParseHook()
 			}
 			if readN > 0 && !requestStarted {
 				requestStarted = true
@@ -2695,11 +2708,12 @@ func (w *worker) cleanup() {
 	}
 	for _, c := range w.conns {
 		c.fileStream.close()
-		if c.pending > 0 && c.takenOver {
-			// Only the read side: an idle keep-alive read ends now, while a
-			// handler still running can write its response. Its goroutine still
-			// owns the fd, so the number is not recycled yet.
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
+		if c.pending > 0 && c.takenOver && c.takeoverFile != nil {
+			// A deadline, not a shutdown: an idle read ends now, a handler still
+			// running can write its response, and the final drain can set a
+			// deadline of its own to wait for the peer. Its goroutine still owns
+			// the fd, so the number is not recycled yet.
+			_ = c.takeoverFile.SetReadDeadline(time.Now())
 		}
 	}
 	w.dropLingerQueue()
@@ -2800,14 +2814,14 @@ func (w *worker) close() { w.cleanup() }
 // Shutdown waits for the Pool.
 const shutdownTakeoverGrace = time.Second
 
-// shutTakeoverWrites ends the write side of the Takeover sockets still open.
-// Their read side is shut already, and darwin then refuses SHUT_RDWR. Only
-// cleanup calls it, the goroutine that also retires finished Takeovers, so no
-// number here can belong to another socket yet.
+// shutTakeoverWrites shuts the Takeover sockets still open, both ways: a
+// handler blocked on a write, or a read whose deadline was set again after
+// Shutdown's, ends now. Only cleanup calls it, the goroutine that also retires
+// finished Takeovers, so no number here can belong to another socket yet.
 func (w *worker) shutTakeoverWrites() {
 	for _, c := range w.conns {
 		if c.pending > 0 && c.takenOver {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_WR)
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}
 }

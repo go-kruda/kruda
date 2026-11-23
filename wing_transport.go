@@ -362,6 +362,7 @@ type worker struct {
 	lingerQ         []lingerEntry
 	lingerHead      int        // lingerQ[:lingerHead] is consumed
 	baseWaitMillis  int        // the engine wait when nothing lingers
+	waitShortened   bool       // the engine wait is lingerWaitMillis until nothing lingers
 	wakeMu          sync.Mutex // orders Shutdown's wake against the wake fd closing
 	wakeClosed      bool
 	discardBuf      []byte       // shared by discardInput, so a small ReadBufSize does not mean many reads
@@ -756,11 +757,17 @@ func (w *worker) sweepLinger(now int64) {
 func (w *worker) tickLinger() {
 	if w.lingering > 0 {
 		w.sweepLinger(monoNow())
-	} else if len(w.lingerQ) > 0 {
-		clear(w.lingerQ)
-		w.lingerQ, w.lingerHead = w.lingerQ[:0], 0
-		w.setWait(w.baseWaitMillis)
 	}
+	if w.lingering == 0 && w.waitShortened {
+		w.dropLingerQueue()
+		w.setWait(w.baseWaitMillis)
+		w.waitShortened = false
+	}
+}
+
+func (w *worker) dropLingerQueue() {
+	clear(w.lingerQ)
+	w.lingerQ, w.lingerHead = w.lingerQ[:0], 0
 }
 
 // sweepTimeouts closes connections that have exceeded their timeout.
@@ -1684,12 +1691,14 @@ func (w *worker) closeAfterFinal(c *conn) {
 			return
 		}
 		c.lingerUntil = monoNow() + lingerDelay
-		if w.lingering == 0 {
+		if !w.waitShortened {
 			w.setWait(lingerWaitMillis)
+			w.waitShortened = true
 		}
 		w.lingering++
 		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
-		c.sendBuf, c.sendN = nil, 0 // sent; a lingering connection keeps only its read buffer
+		c.sendBuf, c.sendN = nil, 0 // sent
+		c.readBuf, c.readN = nil, 0 // discardInput reads into the worker's buffer
 	}
 	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
 }
@@ -1699,8 +1708,9 @@ func (w *worker) closeAfterFinal(c *conn) {
 const maxDiscardInput = 256 << 10
 
 // lingerDelay is how long a connection that ended its write side waits for the
-// peer to close, as net/http's rstAvoidanceDelay.
-const lingerDelay = int64(500 * time.Millisecond)
+// peer to close, as net/http's rstAvoidanceDelay. A variable only so a test can
+// hold a linger open while it checks it.
+var lingerDelay = int64(500 * time.Millisecond)
 
 // directSend attempts a non-blocking write. If partial, falls back to epoll EPOLLOUT.
 func (w *worker) directSend(c *conn) {
@@ -2630,6 +2640,7 @@ func (w *worker) cleanup() {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RD)
 		}
 	}
+	w.dropLingerQueue()
 	// Completions are taken here while the Pool and the dispatched handlers
 	// finish: a full doneCh would block a sender before its dispatchWG.Done.
 	// A Takeover completion carries the fd's *os.File; this goroutine removes

@@ -762,6 +762,9 @@ func TestWingLingerSweepFollowsDeadlines(t *testing.T) {
 // and cut the streamed response; lingering holds the slot until the client
 // closes.
 func TestWingStreamEndLingersOverUnreadInput(t *testing.T) {
+	saved := lingerDelay
+	lingerDelay = int64(5 * time.Second) // the slot checks below must finish well inside it
+	defer func() { lingerDelay = saved }()
 	atTeardown, release := make(chan struct{}, 1), make(chan struct{})
 	var once sync.Once
 	releaseOnce := func() { once.Do(func() { close(release) }) }
@@ -854,6 +857,12 @@ func TestWingLingerQueueDropsClosedConnections(t *testing.T) {
 // with no timeouts, whose engine otherwise waits without a limit. The wait is
 // capped while it lingers and restored once it is gone.
 func TestWingLingerShortensWaitOnlyWhileNeeded(t *testing.T) {
+	for _, expire := range []bool{false, true} {
+		t.Run(map[bool]string{false: "peer closes", true: "deadline passes"}[expire], func(t *testing.T) { lingerShortensWait(t, expire) })
+	}
+}
+
+func lingerShortensWait(t *testing.T, expire bool) {
 	w, c, peer, eng := socketWorker(t, 4096, nil)
 	c.keepAlive = false
 	c.sendBuf = []byte("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -864,8 +873,12 @@ func TestWingLingerShortensWaitOnlyWhileNeeded(t *testing.T) {
 	if c.lingerUntil == 0 || eng.waitMs != lingerWaitMillis {
 		t.Fatalf("lingering %v, engine wait %d ms", c.lingerUntil != 0, eng.waitMs)
 	}
-	peer.Close()
-	w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	if expire {
+		w.sweepLinger(monoNow() + lingerDelay + 1) // the peer never closes
+	} else {
+		peer.Close()
+		w.handleRecv(event{Op: opRecv, Fd: c.fd})
+	}
 	w.tickLinger()
 	if w.conns[c.fd] == c || eng.waitMs != 0 || len(w.lingerQ) != 0 {
 		t.Fatalf("open %v, engine wait %d ms, queued %d", w.conns[c.fd] == c, eng.waitMs, len(w.lingerQ))

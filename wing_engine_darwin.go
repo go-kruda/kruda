@@ -114,14 +114,25 @@ func (e *kqueueEngine) SubmitSend(fd int32, data []byte) {
 }
 
 func (e *kqueueEngine) SubmitClose(fd int32) {
-	delete(e.recvBufs, fd)
-	delete(e.sendBufs, fd)
+	e.forget(fd)
 	syscall.Close(int(fd))
 }
 
-func (e *kqueueEngine) Detach(fd int32) {
+func (e *kqueueEngine) Detach(fd int32) { e.forget(fd) }
+
+// forget drops fd's state, including a registration still queued for the next
+// kevent call: submitted after the close, it would watch whatever socket
+// reuses the number, with no buffer to read it into.
+func (e *kqueueEngine) forget(fd int32) {
 	delete(e.recvBufs, fd)
 	delete(e.sendBufs, fd)
+	kept := e.changes[:0]
+	for _, ch := range e.changes {
+		if ch.Ident != uint64(fd) {
+			kept = append(kept, ch)
+		}
+	}
+	e.changes = kept
 }
 
 func (e *kqueueEngine) SubmitPipeRecv(_ int, _ []byte) {}

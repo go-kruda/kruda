@@ -54,11 +54,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Input still unread when the final response is sent (a pipelined request, the rest of a rejected upload, after a `Stream` response or a rejected `Hijack` upgrade) | the close could reset the connection and the client lose the response | Wing ends its write side, drops up to 256 KiB more input, and closes when the client does or after 0.5 s |
 
   In the last case the connection stays open until the client closes it, for
-  0.5 s and at most about 1 s; this holds with every Wing timeout set to 0
-  too. Without unread input Wing closes at
+  0.5 s and, while the worker is not busy in a handler, at most about 1 s;
+  this holds with every Wing timeout set to 0 too. Without unread input Wing closes at
   once, as before. Input past 256 KiB is left unread, so the response is
   still sent, but the close that follows can then reset it. Checking for
-  unread input costs one `read` per closed connection: with `wrk -H
+  unread input costs one `read` per closed connection that has none left
+  (more when it has): with `wrk -H
   "Connection: close"` on loopback (Linux, 4 workers, 16 alternating rounds)
   requests per second fell 2.7%, borderline significant (p = 0.046).
   Keep-alive traffic was unchanged within noise.
@@ -256,6 +257,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   connection and cut that response. It now sends it under `WriteTimeout`,
   then closes. With `WriteTimeout` 0 it still closes at once, since a client
   that also stopped reading would otherwise hold the connection for good.
+- Wing on macOS: closing a connection right after a read was re-armed left
+  that registration queued for the next `kevent` call, which then watched
+  whatever socket reused the fd number, with nothing set up to read it.
+  Closing now drops queued changes for that fd.
 - Wing: calling `Shutdown` a second time woke the stopped workers again,
   which wrote to their closed wake descriptors, or to whatever reused those
   numbers. The first call could do the same to a worker that had already
@@ -344,7 +349,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   other work still holds Shutdown until it returns or the deadline passes.
   Once a Takeover connection sees that shutdown began, it starts no further
   request and sends no error status or `100 Continue` for input it has
-  buffered; a reply already past that check still goes out. Not covered: a response the stopped event loop would
+  buffered; a reply already past that check may still be attempted. Not covered: a response the stopped event loop would
   have sent, such as the rest of one the socket could not take at once or a
   Pool or Spawn response queued behind an earlier unsent reply, and, on a
   worker without a Pool, a Takeover response finished after the sockets are

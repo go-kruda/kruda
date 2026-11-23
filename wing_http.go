@@ -1332,7 +1332,7 @@ func (r *wingResponse) setStatic(data []byte, close bool) {
 // status + Date + Content-Type + Content-Length + body; the body string is
 // referenced until serialization, never copied.
 func (r *wingResponse) SetStringBody(status int, contentType, body string) {
-	if strings.IndexByte(contentType, '\n') >= 0 || strings.IndexByte(contentType, '\r') >= 0 {
+	if strings.ContainsAny(contentType, "\r\n") {
 		contentType = strings.Trim(sanitizeHeaderValue(contentType), " \t") // a caller of this interface may skip Ctx
 	}
 	r.ctxStringBody(status, contentType, body)

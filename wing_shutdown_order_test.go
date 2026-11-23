@@ -268,3 +268,21 @@ func TestWingShutdownClosesLingering(t *testing.T) {
 		t.Fatal("lingering connection kept open while Shutdown waited")
 	}
 }
+
+// TestWingShutdownSkipsStoppedWorker calls Shutdown for a worker that has
+// already stopped and closed its wake fd. Waking it would write to whatever
+// reused that number.
+func TestWingShutdownSkipsStoppedWorker(t *testing.T) {
+	w, eng := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	w.cleanup()
+	tr := &Transport{workers: []*worker{w}, ready: make(chan struct{})}
+	close(tr.ready)
+	if err := tr.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if eng.wakes != 0 {
+		t.Fatalf("stopped worker woken %d times", eng.wakes)
+	}
+}

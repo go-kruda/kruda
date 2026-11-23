@@ -155,7 +155,7 @@ func (app *App) staticHandler(prefix string, fsys fs.FS, cfg staticConfig) *App 
 
 		// Content-Type from extension
 		ext := filepath.Ext(stat.Name())
-		ct := mime.TypeByExtension(ext)
+		ct := sanitizeHeaderValue(mime.TypeByExtension(ext)) // an app may register its own types
 		if ct == "" {
 			ct = "application/octet-stream"
 		}

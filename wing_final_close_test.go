@@ -161,11 +161,11 @@ func TestWingFinalCloseLingersOverUnreadInput(t *testing.T) {
 			}
 			continue
 		}
-		w.sweepTimeouts(time.Now().UnixNano())
+		w.sweepLinger(monoNow())
 		if w.conns[c.fd] != c {
 			t.Fatal("closed before lingerDelay")
 		}
-		w.sweepTimeouts(time.Now().UnixNano() + lingerDelay + 1)
+		w.sweepLinger(monoNow() + lingerDelay + 1)
 		if w.conns[c.fd] == c {
 			t.Fatal("still open after lingerDelay")
 		}
@@ -725,19 +725,64 @@ func TestWingShutdownAnswersNoBufferedTakeoverInput(t *testing.T) {
 	}
 }
 
-// TestWingSweepReportsNextLinger leaves two connections lingering. The sweep
-// must report the earlier deadline, so the loop sweeps then rather than a
-// second later.
-func TestWingSweepReportsNextLinger(t *testing.T) {
+// TestWingLingerSweepFollowsDeadlines queues three lingering connections, one
+// of which closed sooner. The sweep closes only those past their deadline.
+func TestWingLingerSweepFollowsDeadlines(t *testing.T) {
 	w, _ := newTestWorker(0)
-	now := time.Now().UnixNano()
-	for i, after := range []int64{300, 100} {
+	now := monoNow()
+	var cs []*conn
+	for i, after := range []int64{100, 200, 300} {
 		c := newTestConn(int32(100 + i))
 		c.lingerUntil = now + after*int64(time.Millisecond)
 		w.conns[c.fd] = c
 		w.lingering++
+		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
+		cs = append(cs, c)
 	}
-	if next := w.sweepTimeouts(now); next != now+100*int64(time.Millisecond) {
-		t.Fatalf("next linger deadline %d, want %d", next-now, 100*int64(time.Millisecond))
+	w.closeConn(cs[1].fd) // its peer closed first
+	w.sweepLinger(now + 250*int64(time.Millisecond))
+	if w.conns[cs[0].fd] != nil || w.conns[cs[2].fd] != cs[2] || w.lingering != 1 || len(w.lingerQ) != 1 {
+		t.Fatalf("open %v %v, lingering %d, queued %d", w.conns[cs[0].fd] != nil, w.conns[cs[2].fd] != nil, w.lingering, len(w.lingerQ))
+	}
+}
+
+// TestWingStreamEndLingersOverUnreadInput sends input after a Stream's
+// disconnect watcher has stopped and before the connection closes. Closing
+// over it would reset the connection and cut the streamed response.
+func TestWingStreamEndLingersOverUnreadInput(t *testing.T) {
+	atTeardown, release := make(chan struct{}), make(chan struct{})
+	testStreamTeardownHook = func() {
+		close(atTeardown)
+		<-release
+	}
+	defer func() { testStreamTeardownHook = nil }()
+	body := strings.Repeat("s", 64<<10)
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		_, _ = w.Write([]byte(body))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Stream}, handler)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-atTeardown:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stream never ended")
+	}
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond) // the input reaches the server, which no longer reads
+	close(release)
+	time.Sleep(100 * time.Millisecond) // a reset reaches the client before it reads
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("response lost: %v", err)
+	}
+	got, err := io.ReadAll(res.Body)
+	if err != nil || string(got) != body {
+		t.Fatalf("stream cut at %d of %d bytes: %v", len(got), len(body), err)
 	}
 }

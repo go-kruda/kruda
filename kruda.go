@@ -186,6 +186,9 @@ func (app *App) prepareCompiledState() {
 			headers = append(headers, [2]string{textproto.CanonicalMIMEHeaderKey("Strict-Transport-Security"), "max-age=" + strconv.Itoa(sec.HSTSMaxAge)})
 		}
 
+		for i := range headers {
+			headers[i][1] = sanitizeHeaderValue(headers[i][1]) // sent as fields Ctx vouches for
+		}
 		app.secHeaders = headers
 	}
 

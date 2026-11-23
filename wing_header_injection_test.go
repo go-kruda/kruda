@@ -154,3 +154,49 @@ func TestWingCtxHeadersCannotAddFields(t *testing.T) {
 		})
 	}
 }
+
+// TestWingRetainedRawHeaderMapStaysChecked keeps the raw header map, switches
+// to the string lane, fills the map, and ends with a file stream, which sends
+// that map. Its fields must still be checked.
+func TestWingRetainedRawHeaderMapStaysChecked(t *testing.T) {
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		h := w.Header()
+		w.(transport.StringResponder).SetStringBody(200, "text/plain", "string")
+		h.Set("X-Bad\r\nX-Injected", "1")
+		w.(transport.FileStreamer).SetFileStream(io.NopCloser(strings.NewReader("body")), 4)
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1}, handler)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Header.Get("X-Injected") != "" {
+		t.Fatalf("headers %v", res.Header)
+	}
+}
+
+// TestWingFrameworkHeaderSourcesAreClean puts a line break in a security
+// header from the config, which the framework sends through Ctx unchecked.
+func TestWingFrameworkHeaderSourcesAreClean(t *testing.T) {
+	app := New(Wing(), WithSecureHeaders())
+	app.config.Security.XFrameOptions = "DENY\r\nX-Injected: 1"
+	app.Get("/", func(c *Ctx) error { return c.SendBytes([]byte("body")) })
+	addr, stop := startWingApp(t, app)
+	defer stop()
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Header.Values("X-Injected"); len(got) != 0 {
+		t.Fatalf("security header added X-Injected %q (all: %v)", got, res.Header)
+	}
+}

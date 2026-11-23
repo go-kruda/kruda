@@ -211,7 +211,7 @@ func (t *Transport) Shutdown(ctx context.Context) error {
 		// write to whatever reused that number.
 		for _, w := range t.workers {
 			if w != nil {
-				w.wake()
+				w.externalWake()
 			}
 		}
 	})
@@ -267,7 +267,7 @@ type conn struct {
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
 	discarded       int    // input dropped behind the final response
-	lingerUntil     int64  // unix nano — the write side is shut; close by then at the latest
+	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
 	sendFileFd      int32 // sendfile: source fd (0 = none)
@@ -288,6 +288,10 @@ var testAcceptPeerHook func(ip netip.Addr, ok bool)
 // testSuppressedRecvHook lets Linux integration tests prove that an EPOLLIN
 // event reached the worker while an async handler still owned the connection.
 var testSuppressedRecvHook func(fd int32)
+
+// testStreamTeardownHook runs once a Stream's disconnect watcher has stopped,
+// before the final drain. Always nil in production.
+var testStreamTeardownHook func()
 
 var resp503 = []byte("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -354,7 +358,10 @@ type worker struct {
 	advisor         advisorCache
 	shutdown        *atomic.Bool
 	hasTimeout      bool
-	lingering       int          // connections in closeAfterFinal's linger; they need the sweep
+	lingering       int // connections in closeAfterFinal's linger; they need the sweep
+	lingerQ         []lingerEntry
+	wakeMu          sync.Mutex // orders Shutdown's wake against the wake fd closing
+	wakeClosed      bool
 	discardBuf      []byte       // shared by discardInput, so a small ReadBufSize does not mean many reads
 	bucket          *tokenBucket // per-worker accept-rate limiter; nil when AcceptRatePerSec==0
 	readTimeout     int64        // nanoseconds (0 = disabled)
@@ -679,34 +686,58 @@ func (w *worker) ioLoop(shutdown *atomic.Bool) {
 		for i := 0; i < n; i++ {
 			w.handleEvent(w.events[i])
 		}
-		if hasTimeout || w.lingering > 0 {
-			now := w.now
-			if !hasClock {
-				now = time.Now().UnixNano() // w.now stays 0: clockNow reads a live clock
-			}
-			if now >= w.sweepAt {
-				w.sweepAt = now + int64(time.Second)
-				if next := w.sweepTimeouts(now); next > 0 && next < w.sweepAt {
-					w.sweepAt = next // the earliest linger deadline, not a second later
-				}
+		if w.lingering > 0 {
+			w.sweepLinger(monoNow())
+		}
+		if hasTimeout {
+			if w.now >= w.sweepAt {
+				w.sweepTimeouts(w.now)
+				w.sweepAt = w.now + int64(time.Second)
 			}
 		}
 	}
 	w.cleanup()
 }
 
-// sweepTimeouts closes connections that have exceeded their timeout, and
-// returns the earliest linger deadline still pending (0 for none). Called about
-// once per second when timeouts are configured or a connection lingers.
-func (w *worker) sweepTimeouts(now int64) (nextLinger int64) {
+// monoBase anchors monoNow, a monotonic clock: a wall-clock step back must not
+// stretch a linger.
+var monoBase = time.Now()
+
+func monoNow() int64 { return int64(time.Since(monoBase)) }
+
+// lingerEntry is a lingering connection and the deadline it was queued with.
+type lingerEntry struct {
+	c     *conn
+	until int64
+}
+
+// sweepLinger closes lingering connections whose deadline has passed. The
+// queue is in deadline order, as every linger lasts lingerDelay, so it stops
+// at the first one still due; entries for connections that closed sooner are
+// skipped.
+func (w *worker) sweepLinger(now int64) {
+	i := 0
+	for ; i < len(w.lingerQ); i++ {
+		e := w.lingerQ[i]
+		if e.c.lingerUntil != e.until || w.conns[e.c.fd] != e.c {
+			continue
+		}
+		if now < e.until {
+			break
+		}
+		w.closeConn(e.c.fd)
+	}
+	if i > 0 {
+		w.lingerQ = append(w.lingerQ[:0], w.lingerQ[i:]...)
+	}
+}
+
+// sweepTimeouts closes connections that have exceeded their timeout.
+// Called at most once per second — zero cost when no timeouts configured.
+func (w *worker) sweepTimeouts(now int64) {
 	for fd, c := range w.conns {
 		if c.lingerUntil > 0 {
-			if now >= c.lingerUntil {
-				w.closeConn(fd)
-			} else if nextLinger == 0 || c.lingerUntil < nextLinger {
-				nextLinger = c.lingerUntil
-			}
-			continue
+			continue // sweepLinger's
 		}
 		if c.pending > 0 {
 			continue // handler in flight — don't close
@@ -737,7 +768,6 @@ func (w *worker) sweepTimeouts(now int64) (nextLinger int64) {
 			w.closeConn(fd)
 		}
 	}
-	return nextLinger
 }
 
 func (w *worker) handleEvent(ev event) {
@@ -1623,9 +1653,13 @@ func (w *worker) closeAfterFinal(c *conn) {
 			w.closeConn(c.fd)
 			return
 		}
-		c.lingerUntil = time.Now().UnixNano() + lingerDelay
+		c.lingerUntil = monoNow() + lingerDelay
+		if w.lingering == 0 {
+			clear(w.lingerQ)
+			w.lingerQ = w.lingerQ[:0] // only entries of closed connections were left
+		}
 		w.lingering++
-		w.sweepAt = min(w.sweepAt, c.lingerUntil)
+		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
 		c.sendBuf, c.sendN = nil, 0 // sent; a lingering connection keeps only its read buffer
 	}
 	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
@@ -1819,6 +1853,12 @@ const maxReusedTakeoverBody = 64 << 10
 
 // takeoverBufPool provides read buffers for Takeover goroutines.
 var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); return &b }}
+
+// takeoverReply sends a reply Wing makes itself, such as an error status or
+// 100 Continue, unless Shutdown has begun: then no request is answered any more.
+func (w *worker) takeoverReply(f *os.File, data []byte) bool {
+	return !w.stopping() && w.writeTakeover(f, data) == nil
+}
 
 func (w *worker) writeTakeover(f *os.File, data []byte) error {
 	if w.writeTimeout > 0 {
@@ -2091,20 +2131,20 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					// Need more header bytes — keep reading.
 					if readN >= len(buf) {
 						// Buffer full but headers still incomplete: 431.
-						final = w.writeTakeover(f, wingStatusClose(431)) == nil
+						final = w.takeoverReply(f, wingStatusClose(431))
 						keepAlive = false
 						goto done
 					}
 				case parseBadRequest:
-					final = w.writeTakeover(f, wingStatusClose(400)) == nil
+					final = w.takeoverReply(f, wingStatusClose(400))
 					keepAlive = false
 					goto done
 				case parseChunked:
-					final = w.writeTakeover(f, wingStatusClose(501)) == nil
+					final = w.takeoverReply(f, wingStatusClose(501))
 					keepAlive = false
 					goto done
 				case parseBodyTooLarge:
-					final = w.writeTakeover(f, wingStatusClose(413)) == nil
+					final = w.takeoverReply(f, wingStatusClose(413))
 					keepAlive = false
 					goto done
 				case parseNeedBody:
@@ -2123,13 +2163,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					if w.maxInflightBody > 0 {
 						if atomic.AddInt64(&w.inflightBody, int64(need)) > int64(w.maxInflightBody) {
 							atomic.AddInt64(&w.inflightBody, -int64(need))
-							final = w.writeTakeover(f, wingStatusClose(503)) == nil
+							final = w.takeoverReply(f, wingStatusClose(503))
 							keepAlive = false
 							goto done
 						}
 					}
 					if expectContinue {
-						if werr := w.writeTakeover(f, wing100Continue); werr != nil {
+						if !w.takeoverReply(f, wing100Continue) {
 							if w.maxInflightBody > 0 {
 								atomic.AddInt64(&w.inflightBody, -int64(need))
 							}
@@ -2211,7 +2251,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 					keepAlive = req.keepAlive
 					goto next
 				case parseHeaderTooLarge:
-					final = w.writeTakeover(f, wingStatusClose(431)) == nil
+					final = w.takeoverReply(f, wingStatusClose(431))
 					keepAlive = false
 					goto done
 				default:
@@ -2346,6 +2386,9 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	cancel()
 	_ = f.SetReadDeadline(time.Now()) // ends the watcher's read, so one reader owns the socket again
 	<-watched
+	if testStreamTeardownHook != nil {
+		testStreamTeardownHook()
+	}
 	if sw.headersSent && !sw.broken {
 		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
 	}
@@ -2481,8 +2524,8 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	c.bodyBuf = nil
 	c.headerSnapshot = nil
 	if c.lingerUntil > 0 {
-		w.lingering--
 		c.lingerUntil = 0
+		w.lingering--
 	}
 	if c.cancel != nil {
 		c.cancel()
@@ -2506,6 +2549,16 @@ func (w *worker) closeConn(fd int32) {
 }
 
 func (w *worker) wake() { w.eng.PostWake() }
+
+// externalWake is wake for Shutdown, which can reach a worker that has
+// already stopped and closed its wake fd.
+func (w *worker) externalWake() {
+	w.wakeMu.Lock()
+	if !w.wakeClosed {
+		w.wake()
+	}
+	w.wakeMu.Unlock()
+}
 
 func (w *worker) cleanup() {
 	w.fileReadOnce.Do(func() {
@@ -2555,7 +2608,7 @@ func (w *worker) cleanup() {
 	// the connection before closing it, so the raw shutdown pass below never
 	// reaches a number the kernel may have reused. Other completions are
 	// dropped: the stopped loop sends nothing more.
-	drainUntil := func(done <-chan struct{}) {
+	drainUntil := func(done <-chan struct{}, grace <-chan time.Time) {
 		for {
 			select {
 			case msg := <-w.doneCh:
@@ -2565,6 +2618,12 @@ func (w *worker) cleanup() {
 					delete(w.conns, msg.fd)
 					msg.file.Close()
 				}
+			case <-grace:
+				// A Pool handler may be waiting on a Takeover writer that is
+				// blocked on its client, so the Takeover sockets cannot wait for
+				// the Pool past this.
+				w.shutTakeoverWrites()
+				grace = nil
 			case <-done:
 				return
 			}
@@ -2583,18 +2642,18 @@ func (w *worker) cleanup() {
 		// only after the conn contexts are cancelled, so a Pool handler
 		// waiting on its context, or blocked publishing a completion, can
 		// return. Sockets are still open here.
-		drainUntil(waitFor(w.pool.wg.Wait))
+		grace := time.NewTimer(shutdownTakeoverGrace)
+		drainUntil(waitFor(w.pool.wg.Wait), grace.C)
+		grace.Stop()
 	}
+	w.shutTakeoverWrites()
 	for _, c := range w.conns {
-		if c.pending > 0 && c.takenOver {
-			// Its read side is shut already; darwin then refuses SHUT_RDWR.
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_WR)
-		} else if c.pending > 0 {
+		if c.pending > 0 && !c.takenOver {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
-	drainUntil(waitFor(w.dispatchWG.Wait))
+	drainUntil(waitFor(w.dispatchWG.Wait), nil)
 	// What was queued before the last sender returned.
 drainBuffered:
 	for {
@@ -2626,9 +2685,28 @@ drainBuffered:
 		}
 		closeFd(int(fd))
 	}
+	w.wakeMu.Lock()
+	w.wakeClosed = true
 	w.eng.Close()
 	closeFd(w.evfd)
+	w.wakeMu.Unlock()
 	closeFd(w.listenFd)
 }
 
 func (w *worker) close() { w.cleanup() }
+
+// shutdownTakeoverGrace is how long Takeover handlers may keep writing while
+// Shutdown waits for the Pool.
+const shutdownTakeoverGrace = time.Second
+
+// shutTakeoverWrites ends the write side of the Takeover sockets still open.
+// Their read side is shut already, and darwin then refuses SHUT_RDWR. Only
+// cleanup calls it, the goroutine that also retires finished Takeovers, so no
+// number here can belong to another socket yet.
+func (w *worker) shutTakeoverWrites() {
+	for _, c := range w.conns {
+		if c.pending > 0 && c.takenOver {
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_WR)
+		}
+	}
+}

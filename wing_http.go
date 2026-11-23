@@ -1332,17 +1332,23 @@ func (r *wingResponse) setStatic(data []byte, close bool) {
 // status + Date + Content-Type + Content-Length + body; the body string is
 // referenced until serialization, never copied.
 func (r *wingResponse) SetStringBody(status int, contentType, body string) {
+	if strings.IndexByte(contentType, '\n') >= 0 || strings.IndexByte(contentType, '\r') >= 0 {
+		contentType = strings.Trim(sanitizeHeaderValue(contentType), " \t") // a caller of this interface may skip Ctx
+	}
+	r.ctxStringBody(status, contentType, body)
+}
+
+// ctxStringBody is SetStringBody for Ctx, which passes its own constant
+// content types. rawHeaders stays as it is: a header map already handed out
+// can still be filled, and a later file response would send it.
+func (r *wingResponse) ctxStringBody(status int, contentType, body string) {
 	r.status = status
 	r.headers.reset()
 	r.body = r.body[:0]
 	r.staticResp, r.staticClose = nil, false
-	r.rawHeaders = false
 	r.jsonFast = false
 	r.stringFast = true
 	r.stringBody = body
-	if strings.IndexByte(contentType, '\n') >= 0 || strings.IndexByte(contentType, '\r') >= 0 {
-		contentType = strings.Trim(sanitizeHeaderValue(contentType), " \t") // a caller of this interface may skip Ctx
-	}
 	r.stringContentType = contentType
 }
 

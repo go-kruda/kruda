@@ -226,7 +226,13 @@ func (c *Ctx) Text(s string) error {
 		return nil
 	}
 	// Fast path for transports with a zero-copy string lane (e.g., Wing)
-	if sr, ok := c.writer.(transport.StringResponder); ok {
+	if sr, ok := c.writer.(ctxStringResponder); ok {
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			sr.ctxStringBody(c.status, "text/plain; charset=utf-8", s)
+			return nil
+		}
+	} else if sr, ok := c.writer.(transport.StringResponder); ok {
 		if c.canBypassHeaderWrite(true) {
 			c.responded = true
 			sr.SetStringBody(c.status, "text/plain; charset=utf-8", s)
@@ -270,6 +276,11 @@ func (c *Ctx) canBypassHeaderWrite(includeSecurityHeaders bool) bool {
 func (c *Ctx) HTML(html string) error {
 	if c.responded {
 		return ErrAlreadyResponded
+	}
+	if sr, ok := c.writer.(ctxStringResponder); ok && c.canBypassHeaderWrite(true) {
+		c.responded = true
+		sr.ctxStringBody(c.status, "text/html; charset=utf-8", html)
+		return nil
 	}
 	if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
 		c.responded = true
@@ -826,6 +837,12 @@ func (c *Ctx) writeHeadersNetHTTP() {
 			}
 		}
 	}
+}
+
+// ctxStringResponder is a string lane that skips the line-break check
+// transport.StringResponder does, for content types Ctx passes as constants.
+type ctxStringResponder interface {
+	ctxStringBody(status int, contentType, body string)
 }
 
 // ctxHeaderWriter is a writer that checks raw header fields when it sends

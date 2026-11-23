@@ -57,7 +57,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   0.5 s and at most about 1 s; this holds with every Wing timeout set to 0
   too. Without unread input Wing closes at
   once, as before. Input past 256 KiB is left unread, so the response is
-  still sent, but the close that follows can then reset it.
+  still sent, but the close that follows can then reset it. Checking for
+  unread input costs one `read` per closed connection: with `wrk -H
+  "Connection: close"` on loopback (Linux, 4 workers, 16 alternating rounds)
+  requests per second fell 2.7%, borderline significant (p = 0.046).
+  Keep-alive traffic was unchanged within noise.
 
   A proxy handler that copies upstream hop-by-hop headers now closes the
   client connection whenever the upstream closes. Do not copy `Connection`

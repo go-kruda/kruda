@@ -902,3 +902,42 @@ func TestWingCompletionsDoNotHoldLinger(t *testing.T) {
 		t.Fatal("linger past its deadline survived a completion")
 	}
 }
+
+// TestWingTakeoverCloseSurvivesLateRequest sends a request after the final
+// drain found nothing unread and before the close. A close-delimited body
+// needs EOF; a reset there loses it.
+func TestWingTakeoverCloseSurvivesLateRequest(t *testing.T) {
+	probed, release := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	testFinalDrainHook = func() {
+		probed <- struct{}{}
+		<-release
+	}
+	defer func() { testFinalDrainHook = nil }()
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte("body")) })
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Stream}, handler)
+	defer stop()
+	defer once.Do(func() { close(release) })
+	conn, br := framingDial(t, addr)
+	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-probed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("final drain never ran")
+	}
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond) // it reaches the server, which already looked
+	once.Do(func() { close(release) })
+	time.Sleep(100 * time.Millisecond) // a reset reaches the client before it reads
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, err := io.ReadAll(res.Body); err != nil || string(body) != "body" {
+		t.Fatalf("body %q, %v; want it whole and a clean EOF", body, err)
+	}
+}

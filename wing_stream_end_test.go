@@ -132,6 +132,11 @@ func TestWingStreamUnkeptPromiseIsNotSent(t *testing.T) {
 			return c.Stream(strings.NewReader(""))
 		},
 		"empty write before failure": func(c *Ctx) error { return c.Stream(zeroWriteThenFail{}) },
+		"empty write after failure": func(c *Ctx) error {
+			err := c.Stream(failingReader{io.ErrUnexpectedEOF})
+			_, _ = c.ResponseWriter().Write(nil)
+			return err
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			app := New(Wing())

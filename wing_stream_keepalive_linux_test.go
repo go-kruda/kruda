@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -321,8 +322,8 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	req := acquireRequest()
 	defer releaseRequest(req)
 	req.ctx = context.Background()
-	if w.writeKeepAliveStream(req, f) {
-		t.Fatal("reused a close-delimited response")
+	if reuse, sent := w.writeKeepAliveStream(req, f); reuse || !sent {
+		t.Fatalf("reuse %v sent %v; want a sent close-delimited response, not reused", reuse, sent)
 	}
 	if _, err := io.WriteString(client, "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n"); err != nil {
 		t.Fatal(err)
@@ -383,5 +384,51 @@ func TestWingStreamKeepAliveUnframedDrainsDuringStream(t *testing.T) {
 	body, err := io.ReadAll(conn)
 	if err != nil || !strings.HasSuffix(string(body), "headtail") {
 		t.Fatalf("got %q, %v; want the whole stream and a clean EOF", body[max(0, len(body)-40):], err)
+	}
+}
+
+// TestWingStreamKeepAliveNeedsTheCopyToFinishTheBody completes a declared
+// body outside c.Stream, or panics after an exact copy. Neither handler
+// finished as reuse requires, so the pipelined request must not run.
+func TestWingStreamKeepAliveNeedsTheCopyToFinishTheBody(t *testing.T) {
+	for name, handler := range map[string]HandlerFunc{
+		"short copy, then a direct write": func(c *Ctx) error {
+			c.SetHeader("Content-Length", "4")
+			err := c.Stream(strings.NewReader("ab"))
+			_, _ = c.ResponseWriter().Write([]byte("cd"))
+			return err
+		},
+		"panic after an exact copy": func(c *Ctx) error {
+			c.SetHeader("Content-Length", "4")
+			_ = c.Stream(strings.NewReader("abcd"))
+			panic("after the copy")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := New(Wing())
+			var ranNext atomic.Int32
+			app.Get("/s", handler, Stream.With(StreamKeepAlive()))
+			app.Get("/next", func(c *Ctx) error { ranNext.Add(1); return c.Text("next") })
+			addr, shutdown := startWingApp(t, app)
+			defer shutdown()
+			conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+			if _, err := io.WriteString(conn, "GET /s HTTP/1.1\r\nHost: x\r\n\r\nGET /next HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
+				t.Fatal(err)
+			}
+			br := bufio.NewReader(conn)
+			res, err := http.ReadResponse(br, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.ReadAll(res.Body)
+			if _, err := br.ReadByte(); err != io.EOF || ranNext.Load() != 0 {
+				t.Fatalf("after the response: %v, next ran %d times; want the connection closed", err, ranNext.Load())
+			}
+		})
 	}
 }

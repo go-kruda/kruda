@@ -107,6 +107,10 @@ func (w *wingStreamWriter) flushHeaders() error {
 		w.headers.Set("Connection", "keep-alive") // HTTP/1.0 needs the token
 	} else {
 		w.headers.Set("Connection", "close")
+		if w.onUnframed != nil {
+			// Before the write, which can block: input must drain meanwhile.
+			w.onUnframed()
+		}
 	}
 	// Raw fields are always checked here: this runs once per stream.
 	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers, true, true)
@@ -125,23 +129,25 @@ func (w *wingStreamWriter) flushHeaders() error {
 		return err
 	}
 	w.headersSent = true
-	if !w.framed && w.onUnframed != nil {
-		w.onUnframed()
-	}
 	return nil
 }
 
 // streamCopyStart and streamCopyResult bracket c.Stream's copy, so a copy
 // that failed or panicked is not completed as an empty success, and a reused
 // connection knows its body was written whole.
-func (w *wingStreamWriter) streamCopyStart() { w.copying = true }
+func (w *wingStreamWriter) streamCopyStart() { w.copying, w.copied = true, false }
 
 func (w *wingStreamWriter) streamCopyResult(err error) {
 	w.copying, w.copyFailed, w.copied = false, err != nil, err == nil
-	// Only a framed body is spoiled by a failed copy. An unframed one is a
-	// close-delimited stream the handler may still write to.
-	w.failed = w.failed || w.framed && err != nil
+	// Only a framed body is spoiled by a failed copy, or by one that ended
+	// short of the length. An unframed one is a close-delimited stream the
+	// handler may still write to.
+	w.failed = w.failed || w.framed && (err != nil || w.remaining != 0)
 }
+
+// abortReuse is for a panic Ctx recovered: the response may look complete,
+// but the handler did not finish.
+func (w *wingStreamWriter) abortReuse() { w.failed = true }
 
 var errStreamPreamble = errors.New("kruda: stream preamble was not fully written")
 
@@ -159,8 +165,8 @@ func (w *wingStreamWriter) finish() {
 }
 
 func (w *wingStreamWriter) Write(p []byte) (int, error) {
-	if len(p) == 0 && w.copying {
-		return 0, nil // commits nothing: the copy may still fail
+	if len(p) == 0 && (w.copying || w.copyFailed) {
+		return 0, nil // commits nothing: the copy may still fail, or did
 	}
 	if err := w.flushHeaders(); err != nil {
 		return 0, err
@@ -238,10 +244,10 @@ func streamContentLength(status int, headers *wingHeaders) (int64, bool) {
 // switches to a watcher that drains input as soon as its preamble is sent, as
 // the ordinary Stream path does, so input cannot pile up behind a long stream.
 // When the connection is not reused, the caller's final drain closes it.
-func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse bool) {
+func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse, sent bool) {
 	raw, err := f.SyscallConn()
 	if err != nil {
-		return false
+		return false, false
 	}
 	ctx, cancel := context.WithCancel(req.ctx)
 	defer cancel()
@@ -303,6 +309,7 @@ func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse bool)
 				_, _ = sw.Write([]byte("Internal Server Error\n"))
 			}
 		}
+		sent = sw.headersSent && !sw.broken
 		if reuse {
 			return
 		}
@@ -317,13 +324,13 @@ func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse bool)
 	}()
 	w.handler.ServeKruda(sw, req)
 	sw.finish()
-	if !sw.framed || !sw.copied || sw.failed || sw.remaining != 0 || ctx.Err() != nil {
-		return false
+	if !sw.framed || !sw.copied || sw.copying || sw.failed || sw.remaining != 0 || ctx.Err() != nil {
+		return false, false // sent is set by the deferred function
 	}
 	if !endPeek() || ctx.Err() != nil {
-		return false
+		return false, false
 	}
-	return f.SetWriteDeadline(time.Time{}) == nil
+	return f.SetWriteDeadline(time.Time{}) == nil, false
 }
 
 // streamReader is the minimal read surface the disconnect watcher needs.

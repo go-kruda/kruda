@@ -289,6 +289,10 @@ var testAcceptPeerHook func(ip netip.Addr, ok bool)
 // event reached the worker while an async handler still owned the connection.
 var testSuppressedRecvHook func(fd int32)
 
+// testFinalDrainHook runs in lingerTakeover after its first look for unread
+// input. Always nil in production.
+var testFinalDrainHook func()
+
 // testStreamTeardownHook runs once a Stream's disconnect watcher has stopped,
 // before the final drain. Always nil in production.
 var testStreamTeardownHook func()
@@ -2058,6 +2062,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		var static Preset // the route's, when it has a prebuilt response
 		if served && w.stopping() {
 			releaseRequest(req) // shutting down: no new request starts
+			final = true        // the previous response is complete: drain behind it
 			goto done
 		}
 		if served {
@@ -2087,8 +2092,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 				w.streamTakeover(req, fd, f)
 				return
 			}
-			keepAlive = w.writeKeepAliveStream(req, f)
+			reuse, sent := w.writeKeepAliveStream(req, f)
 			releaseRequest(req)
+			if !reuse {
+				final = sent // a response that never got its preamble out has nothing to protect
+				goto done
+			}
 		} else {
 			// Handle request.
 			resp := acquireResponseFor(req)
@@ -2149,7 +2158,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		// Read next request — parks the goroutine until data arrives.
 		for {
 			if w.stopping() {
-				goto done // not even a 100 Continue or an error reply once Shutdown began
+				final = true // after a complete response: drain behind it
+				goto done    // not even a 100 Continue or an error reply once Shutdown began
 			}
 			if readN > 0 && !requestStarted {
 				requestStarted = true
@@ -2391,7 +2401,12 @@ func lingerTakeover(f *os.File, fd int32, buf []byte) {
 		}
 		break
 	}
-	if discarded == 0 || syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
+	if testFinalDrainHook != nil {
+		testFinalDrainHook()
+	}
+	// Even with nothing unread now, a request can still land before the close
+	// and reset it. A goroutine can afford to wait for the peer's FIN.
+	if syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
 		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) != nil {
 		return
 	}

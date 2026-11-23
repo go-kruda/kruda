@@ -724,3 +724,20 @@ func TestWingShutdownAnswersNoBufferedTakeoverInput(t *testing.T) {
 		t.Fatalf("after the response: %v, want EOF and no reply to the buffered upload", err)
 	}
 }
+
+// TestWingSweepReportsNextLinger leaves two connections lingering. The sweep
+// must report the earlier deadline, so the loop sweeps then rather than a
+// second later.
+func TestWingSweepReportsNextLinger(t *testing.T) {
+	w, _ := newTestWorker(0)
+	now := time.Now().UnixNano()
+	for i, after := range []int64{300, 100} {
+		c := newTestConn(int32(100 + i))
+		c.lingerUntil = now + after*int64(time.Millisecond)
+		w.conns[c.fd] = c
+		w.lingering++
+	}
+	if next := w.sweepTimeouts(now); next != now+100*int64(time.Millisecond) {
+		t.Fatalf("next linger deadline %d, want %d", next-now, 100*int64(time.Millisecond))
+	}
+}

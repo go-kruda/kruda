@@ -2070,10 +2070,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			case preset.StaticResponse != nil:
 				static = preset
 			case preset.ResponseMode == responseStream:
+				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
 				w.streamTakeover(req, fd, f)
 				return
 			case preset.ResponseMode == responseHijack:
-				w.hijackTakeover(req, fd, f, append([]byte(nil), buf[:readN]...))
+				leftover := append([]byte(nil), buf[:readN]...)
+				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
+				w.hijackTakeover(req, fd, f, leftover)
 				return
 			}
 		}
@@ -2387,6 +2390,17 @@ func lingerTakeover(f *os.File, fd int32, buf []byte) {
 			return
 		}
 	}
+}
+
+// releaseTakeoverBuffers lets go of the keep-alive loop's buffers before a
+// Stream or Hijack takes the connection, as they would otherwise stay
+// reachable for that whole session. A pool-sized read buffer is kept: the
+// loop returns it to the pool when it ends.
+func releaseTakeoverBuffers(buf, bodyBuf *[]byte, grew bool) {
+	if grew {
+		*buf = nil
+	}
+	*bodyBuf = nil
 }
 
 // lingerTakeoverConn is lingerTakeover for a path that holds no read buffer.

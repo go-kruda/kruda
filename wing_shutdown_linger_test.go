@@ -8,10 +8,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
-
-	"github.com/go-kruda/kruda/transport"
 )
 
 type readResult struct {
@@ -37,36 +36,72 @@ func readBodyAfter(br *bufio.Reader, start <-chan struct{}) <-chan readResult {
 	return got
 }
 
-// TestWingShutdownKeepsAnEventLoopLinger shuts down while the event loop
-// lingers behind a final response. Input that arrives after Shutdown begins
-// must still be dropped, or closing over it resets the response's unread tail.
+// TestWingShutdownKeepsAnEventLoopLinger runs Shutdown's linger pass over a
+// connection lingering behind its final response. It must keep dropping input
+// until the peer closes, not close at once: closing over input that arrives
+// can reset the response's unread tail.
 func TestWingShutdownKeepsAnEventLoopLinger(t *testing.T) {
-	big := strings.Repeat("l", 256<<10)
-	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
-		w.Header().Set("Connection", "close")
-		_, _ = w.Write([]byte(big))
-	})
-	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1}, handler)
-	conn, br := framingDial(t, addr)
-	defer conn.Close()
-	if _, err := io.WriteString(conn, framingGet("/a")+"trailing"); err != nil {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
-	start := make(chan struct{})
-	got := readBodyAfter(br, start)
-	time.Sleep(100 * time.Millisecond) // the response is written and the loop lingers
-	stopped := make(chan struct{})
-	go func() { stop(); close(stopped) }()
-	time.Sleep(50 * time.Millisecond)
-	if _, err := io.WriteString(conn, "more input after Shutdown began"); err != nil {
+	defer syscall.Close(fds[0])
+	defer syscall.Close(fds[1])
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
-	close(start)
-	r := <-got
-	<-stopped
-	if r.err != nil || r.n != len(big) {
-		t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
+	w, _ := newTestWorker(0)
+	c := newTestConn(int32(fds[0]))
+	c.lingerUntil = monoNow() + int64(5*time.Second)
+	w.conns[c.fd] = c
+	w.lingering++
+	done := make(chan struct{})
+	go func() { w.lingerAtShutdown(true); close(done) }()
+	late := []byte("input after Shutdown began")
+	time.Sleep(20 * time.Millisecond)
+	if _, err := syscall.Write(fds[1], late); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("closed while the peer was still sending")
+	default:
+	}
+	if err := syscall.Shutdown(fds[1], syscall.SHUT_WR); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("still lingering after the peer closed")
+	}
+	if c.discarded != len(late) || w.conns[c.fd] != nil {
+		t.Fatalf("discarded %d of %d, still open %v", c.discarded, len(late), w.conns[c.fd] != nil)
+	}
+}
+
+// TestWingFinalCloseCountsBufferedInput ends a connection whose trailing input
+// was read along with its request. That input is unread by any handler too, so
+// the close must linger rather than reset the response.
+func TestWingFinalCloseCountsBufferedInput(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[0])
+	defer syscall.Close(fds[1])
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := newTestWorker(0)
+	c := newTestConn(int32(fds[0]))
+	c.readBuf = make([]byte, 64)
+	c.readN = copy(c.readBuf, "trailing")
+	w.conns[c.fd] = c
+	w.closeAfterFinal(c)
+	if c.lingerUntil == 0 || w.conns[c.fd] != c {
+		t.Fatalf("closed at once over %d buffered bytes", len("trailing"))
 	}
 }
 

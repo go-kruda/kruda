@@ -1683,6 +1683,7 @@ const (
 // over unread input would reset it and cut that response. A connection drops
 // at most maxDiscardInput in all, so a peer cannot keep the worker copying.
 func (w *worker) discardInput(c *conn) discardResult {
+	c.discarded += c.readN // input already read is unread by the handler too
 	c.readN = 0
 	c.readSuppressed = false
 	c.readDrained = false

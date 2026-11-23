@@ -169,7 +169,7 @@ func (hw *wingHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // the single physical close via the shared takeover-done path (doneMsg.file).
 // This is what makes a late Conn.Close() from an app goroutine safe — the fd is
 // never reclaimed (and thus never recycled) while the app still references it.
-func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte) {
+func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte, afterResponse bool) {
 	// Cancellable conn context so shutdown (Task 6) can fire Conn.Done().
 	ctx, cancel := context.WithCancel(first.ctx)
 	first.ctx = ctx
@@ -211,8 +211,10 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, g *tak
 	}
 	releaseResponse(resp)
 	releaseRequest(first) // handler returned; the adapter holds ctx/remote independently
-	if rejected {
-		lingerTakeoverConn(f, fd, g) // after the release: the response is sent, and the wait can take 500 ms
+	if !hw.hijacked && (rejected || afterResponse) {
+		// After the release: the wait can take 500 ms. A rejection whose write
+		// failed still drains behind an earlier response on this connection.
+		lingerTakeoverConn(f, fd, g)
 	}
 
 	// Hijacked: the app owns the connection. Wait until it closes the adapter

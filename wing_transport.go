@@ -2034,7 +2034,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 	}
 
 	if mode == responseHijack {
-		w.hijackTakeover(first, fd, f, g, leftover)
+		w.hijackTakeover(first, fd, f, g, leftover, false)
 		return
 	}
 
@@ -2096,7 +2096,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 			case preset.ResponseMode == responseHijack:
 				leftover := append([]byte(nil), buf[:readN]...)
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.hijackTakeover(req, fd, f, g, leftover)
+				w.hijackTakeover(req, fd, f, g, leftover, served)
 				return
 			}
 		}
@@ -2882,8 +2882,7 @@ func (g *takeoverGate) shut(fd int32) {
 	case g.hijacked:
 		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
 	default:
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR)
-		g.wrShut = true
+		g.wrShut = syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil
 	}
 }
 

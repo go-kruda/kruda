@@ -322,8 +322,8 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	req := acquireRequest()
 	defer releaseRequest(req)
 	req.ctx = context.Background()
-	if reuse, sent := w.writeKeepAliveStream(req, f); reuse || !sent {
-		t.Fatalf("reuse %v sent %v; want a sent close-delimited response, not reused", reuse, sent)
+	if reuse, sent, delimited := w.writeKeepAliveStream(req, f); reuse || !sent || !delimited {
+		t.Fatalf("reuse %v sent %v close-delimited %v; want a sent close-delimited response, not reused", reuse, sent, delimited)
 	}
 	if _, err := io.WriteString(client, "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n"); err != nil {
 		t.Fatal(err)
@@ -337,7 +337,7 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	if err := raw.Control(func(v uintptr) { fd = int32(v) }); err != nil { // Fd() would make it blocking
 		t.Fatal(err)
 	}
-	lingerTakeover(f, fd, make([]byte, 4096)) // as takeoverLoop does before the close
+	lingerTakeover(f, fd, make([]byte, 4096), true) // as takeoverLoop does before the close
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,18 @@ func TestWingStreamKeepAliveUnframedDrainsDuringStream(t *testing.T) {
 	if _, err := io.WriteString(conn, "GET /live HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
 		t.Fatal(err)
 	}
-	<-sent
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release) // a failure below must not leave the handler waiting
+		}
+	}()
+	select {
+	case <-sent:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stream never started")
+	}
 	junk := make([]byte, 2*maxDiscardInput)
 	if _, err := conn.Write(junk); err != nil { // it fits only if the server reads it
 		t.Fatal(err)
@@ -391,20 +402,28 @@ func TestWingStreamKeepAliveUnframedDrainsDuringStream(t *testing.T) {
 // body outside c.Stream, or panics after an exact copy. Neither handler
 // finished as reuse requires, so the pipelined request must not run.
 func TestWingStreamKeepAliveNeedsTheCopyToFinishTheBody(t *testing.T) {
-	for name, handler := range map[string]HandlerFunc{
-		"short copy, then a direct write": func(c *Ctx) error {
+	for _, tc := range []struct {
+		name, body string
+		status     int
+		handler    HandlerFunc
+	}{
+		{"short copy, then a direct write", "abcd", 200, func(c *Ctx) error {
 			c.SetHeader("Content-Length", "4")
 			err := c.Stream(strings.NewReader("ab"))
 			_, _ = c.ResponseWriter().Write([]byte("cd"))
 			return err
-		},
-		"panic after an exact copy": func(c *Ctx) error {
+		}},
+		{"panic after an exact copy", "abcd", 200, func(c *Ctx) error {
 			c.SetHeader("Content-Length", "4")
 			_ = c.Stream(strings.NewReader("abcd"))
 			panic("after the copy")
-		},
+		}},
+		{"panic before any response", `{"code":500,"message":"internal server error"}`, 500, func(c *Ctx) error {
+			panic("before the response")
+		}},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := tc.handler
 			app := New(Wing())
 			var ranNext atomic.Int32
 			app.Get("/s", handler, Stream.With(StreamKeepAlive()))
@@ -425,7 +444,9 @@ func TestWingStreamKeepAliveNeedsTheCopyToFinishTheBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _ = io.ReadAll(res.Body)
+			if body, err := io.ReadAll(res.Body); err != nil || res.StatusCode != tc.status || strings.TrimSpace(string(body)) != tc.body {
+				t.Fatalf("got %d %q, %v; want %d %q in full", res.StatusCode, body, err, tc.status, tc.body)
+			}
 			if _, err := br.ReadByte(); err != io.EOF || ranNext.Load() != 0 {
 				t.Fatalf("after the response: %v, next ran %d times; want the connection closed", err, ranNext.Load())
 			}

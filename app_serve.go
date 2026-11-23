@@ -218,8 +218,8 @@ func (app *App) serveKrudaSingleHandler(w transport.ResponseWriter, r transport.
 	defer func() {
 		if rec := recover(); rec != nil {
 			app.config.Logger.Error("unrecovered panic in ServeKruda", "panic", fmt.Sprintf("%v", rec))
-			if a, ok := c.writer.(interface{ abortReuse() }); ok {
-				a.abortReuse() // the handler did not finish, whatever it wrote
+			if a, ok := c.writer.(interface{ AbortReuse() }); ok {
+				a.AbortReuse() // the handler did not finish, whatever it wrote
 			}
 			if !c.responded {
 				c.Status(500)
@@ -248,8 +248,8 @@ func (app *App) serveKruda(w transport.ResponseWriter, r transport.Request, rout
 	defer func() {
 		if rec := recover(); rec != nil {
 			app.config.Logger.Error("unrecovered panic in ServeKruda", "panic", fmt.Sprintf("%v", rec))
-			if a, ok := c.writer.(interface{ abortReuse() }); ok {
-				a.abortReuse() // the handler did not finish, whatever it wrote
+			if a, ok := c.writer.(interface{ AbortReuse() }); ok {
+				a.AbortReuse() // the handler did not finish, whatever it wrote
 			}
 			if !c.responded {
 				c.Status(500)

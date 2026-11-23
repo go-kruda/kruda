@@ -1907,7 +1907,10 @@ var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); retur
 // takeoverReply sends a reply Wing makes itself, such as an error status or
 // 100 Continue, unless Shutdown has begun: then no request is answered any more.
 func (w *worker) takeoverReply(f *os.File, data []byte) bool {
-	return !w.stopping() && w.writeTakeover(f, data) == nil
+	if w.stopping() {
+		return true // nothing more is sent, but an earlier response still needs the drain
+	}
+	return w.writeTakeover(f, data) == nil
 }
 
 func (w *worker) writeTakeover(f *os.File, data []byte) error {
@@ -2056,7 +2059,8 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	requestStarted := false
 	// out is serialized into again once the synchronous write has returned.
 	var out []byte
-	final := false // the last response was written; unread input must not reset it
+	final := false          // the last response was written; unread input must not reset it
+	closeDelimited := false // and it ends at the close, so its EOF must arrive whole
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
@@ -2092,10 +2096,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 				w.streamTakeover(req, fd, f)
 				return
 			}
-			reuse, sent := w.writeKeepAliveStream(req, f)
+			reuse, sent, delimited := w.writeKeepAliveStream(req, f)
 			releaseRequest(req)
 			if !reuse {
-				final = sent // a response that never got its preamble out has nothing to protect
+				// A response that never got its preamble out has nothing to
+				// protect, unless an earlier one on this connection does.
+				final, closeDelimited = sent || served, delimited
 				goto done
 			}
 		} else {
@@ -2369,11 +2375,13 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 done:
 	if final {
 		bodyBuf = nil
+		// At shutdown a close can follow a request the loop did not answer.
+		closeDelimited = closeDelimited || w.stopping()
 		if grewBuf {
 			buf = nil // not kept through the wait: a pooled buffer is enough to drain
-			lingerTakeoverConn(f, fd)
+			lingerTakeoverConn(f, fd, closeDelimited)
 		} else {
-			lingerTakeover(f, fd, buf)
+			lingerTakeover(f, fd, buf, closeDelimited)
 		}
 	}
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
@@ -2385,7 +2393,7 @@ done:
 
 // lingerTakeover is closeAfterFinal for a Takeover socket, which this goroutine
 // owns: buf is free, and the read deadline bounds the wait.
-func lingerTakeover(f *os.File, fd int32, buf []byte) {
+func lingerTakeover(f *os.File, fd int32, buf []byte, closeDelimited bool) {
 	discarded := 0
 	for {
 		if discarded >= maxDiscardInput {
@@ -2404,8 +2412,13 @@ func lingerTakeover(f *os.File, fd int32, buf []byte) {
 	if testFinalDrainHook != nil {
 		testFinalDrainHook()
 	}
-	// Even with nothing unread now, a request can still land before the close
-	// and reset it. A goroutine can afford to wait for the peer's FIN.
+	// With nothing unread, a framed response closes now, as on the event
+	// loop: its slot is free at once. A close-delimited one needs its EOF to
+	// arrive whole, and a request can still land before the close and reset
+	// it, so it waits for the peer's FIN.
+	if discarded == 0 && !closeDelimited {
+		return
+	}
 	if syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
 		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) != nil {
 		return
@@ -2430,9 +2443,9 @@ func releaseTakeoverBuffers(buf, bodyBuf *[]byte, grew bool) {
 }
 
 // lingerTakeoverConn is lingerTakeover for a path that holds no read buffer.
-func lingerTakeoverConn(f *os.File, fd int32) {
+func lingerTakeoverConn(f *os.File, fd int32, closeDelimited bool) {
 	bp := takeoverBufPool.Get().(*[]byte)
-	lingerTakeover(f, fd, *bp)
+	lingerTakeover(f, fd, *bp, closeDelimited)
 	takeoverBufPool.Put(bp)
 }
 
@@ -2486,7 +2499,7 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 		testStreamTeardownHook()
 	}
 	if sw.headersSent && !sw.broken {
-		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
+		lingerTakeoverConn(f, fd, sw.closeDelimited()) // the watcher may not have taken the last input
 	}
 
 	// Close the fd exactly once via the shared takeover-done path. The conn is

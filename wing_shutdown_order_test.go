@@ -186,7 +186,7 @@ func TestWingShutdownNeverShutsARecycledFD(t *testing.T) {
 	w.conns[c.fd] = c
 
 	// The Pool finishes only after the Takeover's fd was closed and reused.
-	recycled := -1
+	recycled, closedDuringDrain := -1, false
 	w.pool = &workerPool{jobs: make(chan handlerJob)}
 	w.pool.wg.Add(1)
 	go func() {
@@ -196,6 +196,7 @@ func TestWingShutdownNeverShutsARecycledFD(t *testing.T) {
 		w.doneCh <- doneMsg{fd: c.fd, file: file}
 		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
 			if _, err := file.Stat(); err != nil {
+				closedDuringDrain = true
 				n, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(other[0]), syscall.F_DUPFD_CLOEXEC, uintptr(fd))
 				if errno == 0 {
 					recycled = int(n)
@@ -208,8 +209,11 @@ func TestWingShutdownNeverShutsARecycledFD(t *testing.T) {
 	if recycled >= 0 {
 		defer syscall.Close(recycled)
 	}
+	if !closedDuringDrain {
+		t.Fatal("finished Takeover File kept open while the Pool drained")
+	}
 	if recycled != fd {
-		t.Skipf("fd %d was not recycled (got %d)", fd, recycled)
+		t.Skipf("setup: fd %d was closed but the duplicate landed on %d", fd, recycled)
 	}
 	if _, err := syscall.Write(recycled, []byte("x")); err != nil {
 		t.Fatalf("Shutdown shut down an unrelated socket on the recycled fd: %v", err)

@@ -378,6 +378,17 @@ func TestWingPeerShutdownReadinessIsKept(t *testing.T) {
 // TestWingUploadEOFKeepsQueuedResponse ends the peer's input in the middle of a
 // body while an earlier response is still queued. The response must arrive
 // whole, and the connection must end once it is sent.
+// shutWriteEngine ends the write side where a real engine closes the fd, so
+// the peer reads EOF while the test's File still owns the descriptor.
+type shutWriteEngine struct{ *mockEngine }
+
+func (e shutWriteEngine) SubmitClose(fd int32) {
+	e.mockEngine.SubmitClose(fd)
+	if err := syscall.Shutdown(int(fd), syscall.SHUT_WR); err != nil {
+		panic(err)
+	}
+}
+
 func TestWingUploadEOFKeepsQueuedResponse(t *testing.T) {
 	for _, early := range []bool{false, true} {
 		t.Run(map[bool]string{false: "EOF after the upload starts", true: "EOF before"}[early], func(t *testing.T) { uploadEOFKeepsQueuedResponse(t, early) })
@@ -387,7 +398,8 @@ func TestWingUploadEOFKeepsQueuedResponse(t *testing.T) {
 func uploadEOFKeepsQueuedResponse(t *testing.T, early bool) {
 	big := strings.Repeat("b", 200<<10)
 	h := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte(big)) })
-	w, c, peer, _ := socketWorker(t, 4096, h)
+	w, c, peer, eng := socketWorker(t, 4096, h)
+	w.eng = shutWriteEngine{eng} // the peer sees the close the engine would make
 	w.hasTimeout, w.writeTimeout = true, int64(time.Minute)
 	c.keepAlive = true
 	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
@@ -418,16 +430,13 @@ func uploadEOFKeepsQueuedResponse(t *testing.T, early bool) {
 	var got bytes.Buffer
 	buf := make([]byte, 64<<10)
 	for {
-		if w.conns[c.fd] != c {
-			_ = peer.SetReadDeadline(time.Now().Add(100 * time.Millisecond)) // the mock engine leaves the fd open
-		}
 		n, err := peer.Read(buf)
 		got.Write(buf[:n])
-		if err != nil {
-			if w.conns[c.fd] == c {
-				t.Fatal(err)
-			}
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			t.Fatal(err)
 		}
 		if w.conns[c.fd] == c {
 			w.handleSend(event{Op: opSend, Fd: c.fd})

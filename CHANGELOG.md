@@ -254,7 +254,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   that also stopped reading would otherwise hold the connection for good.
 - Wing: calling `Shutdown` a second time woke the stopped workers again,
   which wrote to their closed wake descriptors, or to whatever reused those
-  numbers. Only the first call wakes them now; later calls wait.
+  numbers. The first call could do the same to a worker that had already
+  stopped. Only the first call wakes, and only workers still running; later
+  calls wait.
 
 - Bindgen preserves the source when the output resolves to the same file.
 - `kruda new` handles explicit filesystem paths, and the MCP scaffolder keeps
@@ -331,9 +333,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   it gave up on its own. Contexts are now cancelled first; Pool, Spawn and
   Takeover sockets stay open until the Pool finishes, so a handler that
   completes while the Pool drains still delivers a response it writes to the
-  socket itself while the socket is still open for writing. A Takeover
-  connection starts no new request, and answers no input it has buffered,
-  once shutdown begins. Not covered: a response the stopped event loop would
+  socket itself while the socket is still open for writing. Takeover
+  handlers get at most one second of that while the Pool drains; then their
+  write side is shut, so a Pool handler that waits on one cannot stall
+  Shutdown. A Takeover connection starts no new request, and sends no error
+  status or `100 Continue` for input it has buffered, once shutdown begins. Not covered: a response the stopped event loop would
   have sent, such as the rest of one the socket could not take at once or a
   Pool or Spawn response queued behind an earlier unsent reply, and, on a
   worker without a Pool, a Takeover response finished after the sockets are
@@ -404,7 +408,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `"v\r\nX-Injected: 1"` is sent as `v  X-Injected: 1`. Wing checks the
   fields only on a response whose raw header map was handed out, as fields
   set through `Ctx` are clean already; `c.SendBytesWithType` and its
-  variants now clean their content type too. On the fasthttp
+  variants now clean their content type too, as do static file MIME types
+  and the configured security header values. On the fasthttp
   transport, the macOS default, values were already cleaned but a header name
   with a line break added a field the same way; such names are now dropped
   there too. A raw `Connection` value that becomes `close` once cleaned now

@@ -399,7 +399,7 @@ func (c *Ctx) SendBytesWithType(contentType string, data []byte) error {
 	}
 
 	// net/http and generic transport paths
-	c.contentType = contentType
+	c.contentType = sanitizeHeaderValue(contentType) // sent as a field Ctx vouches for
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -425,7 +425,7 @@ func (c *Ctx) SendBytesWithTypeBytes(contentType []byte, data []byte) error {
 
 	// net/http and generic transport paths — convert back to string
 	c.contentLength = len(data)
-	c.contentType = string(contentType)
+	c.contentType = sanitizeHeaderValue(string(contentType))
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -455,7 +455,7 @@ func (c *Ctx) SendStaticWithTypeBytes(contentType []byte, data []byte) error {
 
 	// net/http and generic transport paths — same as SendBytesWithTypeBytes
 	c.contentLength = len(data)
-	c.contentType = string(contentType)
+	c.contentType = sanitizeHeaderValue(string(contentType))
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -828,11 +828,20 @@ func (c *Ctx) writeHeadersNetHTTP() {
 	}
 }
 
+// ctxHeaderWriter is a writer that checks raw header fields when it sends
+// them. Ctx has checked its own fields as they were set, so it skips that.
+type ctxHeaderWriter interface{ ctxHeader() transport.HeaderMap }
+
 // writeHeadersGeneric writes all response headers using the transport interface
 // methods. Used as fallback for custom transports that are not the embedded
 // net/http adapter.
 func (c *Ctx) writeHeadersGeneric() {
-	h := c.writer.Header()
+	var h transport.HeaderMap
+	if cw, ok := c.writer.(ctxHeaderWriter); ok {
+		h = cw.ctxHeader()
+	} else {
+		h = c.writer.Header()
+	}
 
 	if c.contentType != "" {
 		h.Set("Content-Type", c.contentType)

@@ -83,7 +83,8 @@ func (w *wingStreamWriter) flushHeaders() error {
 	// The stream path never reuses the connection, and the stream length is
 	// the handler's to state.
 	w.headers.Set("Connection", "close")
-	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers, true)
+	// Raw fields are always checked here: this runs once per stream.
+	hdr, _ := appendStatusAndHeaders(nil, w.status, &w.headers, true, true)
 	hdr = append(hdr, "\r\n"...) // blank line terminates the header section
 	if w.writeTimeout > 0 {
 		_ = w.conn.SetWriteDeadline(time.Now().Add(w.writeTimeout))

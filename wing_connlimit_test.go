@@ -21,6 +21,7 @@ type mockEngine struct {
 	recvArmed   int
 	sendArmed   int
 	closedFds   []int32
+	wakes       int
 }
 
 func (m *mockEngine) Init(_ engineConfig) error              { return nil }
@@ -31,7 +32,7 @@ func (m *mockEngine) SubmitClose(fd int32)                   { m.closedFds = app
 func (m *mockEngine) Detach(_ int32)                         {}
 func (m *mockEngine) SubmitPipeRecv(_ int, _ []byte)         {}
 func (m *mockEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
-func (m *mockEngine) PostWake()                              {}
+func (m *mockEngine) PostWake()                              { m.wakes++ }
 func (m *mockEngine) Wait(_ []event) (int, error)            { return 0, nil }
 func (m *mockEngine) WaitNonBlock(_ []event) (int, error)    { return 0, nil }
 func (m *mockEngine) Flush() error                           { return nil }

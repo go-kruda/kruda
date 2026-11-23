@@ -388,6 +388,7 @@ func uploadEOFKeepsQueuedResponse(t *testing.T, early bool) {
 	big := strings.Repeat("b", 200<<10)
 	h := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte(big)) })
 	w, c, peer, _ := socketWorker(t, 4096, h)
+	w.hasTimeout, w.writeTimeout = true, int64(time.Minute)
 	c.keepAlive = true
 	if err := syscall.SetsockoptInt(int(c.fd), syscall.SOL_SOCKET, syscall.SO_SNDBUF, 4096); err != nil {
 		t.Fatal(err)
@@ -489,7 +490,13 @@ func TestWingLingerEndsWithoutTimeouts(t *testing.T) {
 	if _, err := br.ReadByte(); err != io.EOF {
 		t.Fatalf("after the response: %v, want EOF", err)
 	}
-	time.Sleep(2500 * time.Millisecond) // lingerDelay plus the sweep and wait intervals; conn stays open here
+	held, hbr := framingDial(t, addr) // the lingering connection still holds the only slot
+	if _, err := io.WriteString(held, framingGet("/held")); err == nil {
+		if _, err := http.ReadResponse(hbr, nil); err == nil {
+			t.Fatal("served a second client while the first lingered: it closed at once")
+		}
+	}
+	time.Sleep(1200 * time.Millisecond) // lingerDelay plus one wait interval and margin; conn stays open here
 	next, nbr := framingDial(t, addr)
 	if _, err := io.WriteString(next, framingGet("/next")); err != nil {
 		t.Fatal(err)
@@ -669,5 +676,51 @@ func TestWingLingerEndsWhenClientCloses(t *testing.T) {
 	}
 	if _, err := http.ReadResponse(nbr, nil); err != nil {
 		t.Fatalf("next client not served after the lingering one closed: %v", err)
+	}
+}
+
+// TestWingShutdownAnswersNoBufferedTakeoverInput leaves an upload that expects
+// 100 Continue in a Takeover connection's buffer, behind a request whose
+// handler is still running when Shutdown begins. After that handler's
+// response, Wing must send nothing more, not even the 100 Continue.
+func TestWingShutdownAnswersNoBufferedTakeoverInput(t *testing.T) {
+	poolEntered, poolRelease := make(chan struct{}), make(chan struct{})
+	takeEntered, takeRelease := make(chan struct{}), make(chan struct{})
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		if r.Path() == "/pool" {
+			close(poolEntered)
+			<-poolRelease
+		} else {
+			close(takeEntered)
+			<-takeRelease
+		}
+		_, _ = w.Write([]byte("ok"))
+	})
+	cfg := WingConfig{Workers: 1, HandlerPoolSize: 2, DefaultPreset: Spear, Presets: map[string]Preset{"GET /pool": Arrow}}
+	addr, stop := startWingServerWithConfig(t, cfg, handler)
+	poolConn, _ := framingDial(t, addr)
+	if _, err := io.WriteString(poolConn, framingGet("/pool")); err != nil {
+		t.Fatal(err)
+	}
+	<-poolEntered
+	takeConn, br := framingDial(t, addr)
+	if _, err := io.WriteString(takeConn, framingGet("/take")+"POST /upload HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\nExpect: 100-continue\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	<-takeEntered
+	stopped := make(chan struct{})
+	go func() { stop(); close(stopped) }()
+	time.Sleep(100 * time.Millisecond) // Shutdown has started and waits for the Pool
+	close(takeRelease)
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("the running handler's response: %v", err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	_, err = br.ReadByte()
+	close(poolRelease)
+	<-stopped
+	if err != io.EOF {
+		t.Fatalf("after the response: %v, want EOF and no reply to the buffered upload", err)
 	}
 }

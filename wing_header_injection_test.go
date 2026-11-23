@@ -116,3 +116,41 @@ func TestWingCleanedConnectionCloseEndsConnection(t *testing.T) {
 		t.Fatalf("Connection %q sent but kept open: %v, next ran %d times", res.Header.Get("Connection"), err, ranNext.Load())
 	}
 }
+
+// TestWingCtxHeadersCannotAddFields goes through Ctx, whose fields Wing sends
+// unchecked unless raw header access was handed out.
+func TestWingCtxHeadersCannotAddFields(t *testing.T) {
+	for name, handler := range map[string]HandlerFunc{
+		"SetHeader": func(c *Ctx) error {
+			c.SetHeader("X-Value", "v\r\nX-Injected: 1")
+			return c.SendBytes([]byte("body"))
+		},
+		"SendBytesWithType": func(c *Ctx) error {
+			return c.SendBytesWithType("text/plain\r\nX-Injected: 1", []byte("body"))
+		},
+		"raw header then Ctx": func(c *Ctx) error {
+			c.ResponseWriter().Header().Set("X-Bad\r\nX-Injected", "1")
+			c.SetHeader("X-Other", "o")
+			return c.SendBytes([]byte("body"))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := New(Wing())
+			app.Get("/", handler)
+			addr, stop := startWingApp(t, app)
+			defer stop()
+			conn, br := framingDial(t, addr)
+			if _, err := io.WriteString(conn, framingGet("/")); err != nil {
+				t.Fatal(err)
+			}
+			res, err := http.ReadResponse(br, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(res.Body)
+			if res.Header.Get("X-Injected") != "" || string(body) != "body" {
+				t.Fatalf("headers %v body %q", res.Header, body)
+			}
+		})
+	}
+}

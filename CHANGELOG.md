@@ -54,8 +54,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | Input still unread when the final response is sent (a pipelined request, the rest of a rejected upload, after a `Stream` response or a rejected `Hijack` upgrade) | the close could reset the connection and the client lose the response | Wing ends its write side, drops up to 256 KiB more input, and closes when the client does or after 0.5 s |
 
   In the last case the connection stays open until the client closes it, for
-  0.5 s and at most about 1.5 s, as the sweep runs once a second; this holds
-  with every Wing timeout set to 0 too. Without unread input Wing closes at
+  0.5 s and at most about 1 s; this holds with every Wing timeout set to 0
+  too. Without unread input Wing closes at
   once, as before. Input past 256 KiB is left unread, so the response is
   still sent, but the close that follows can then reset it.
 
@@ -249,7 +249,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   loopback). Wing now closes after the response.
 - Wing: when a client's input ended in the middle of an upload while an
   earlier response on the connection was still being sent, Wing closed the
-  connection and cut that response. It now sends it, then closes.
+  connection and cut that response. It now sends it under `WriteTimeout`,
+  then closes. With `WriteTimeout` 0 it still closes at once, since a client
+  that also stopped reading would otherwise hold the connection for good.
+- Wing: calling `Shutdown` a second time woke the stopped workers again,
+  which wrote to their closed wake descriptors, or to whatever reused those
+  numbers. Only the first call wakes them now; later calls wait.
 
 - Bindgen preserves the source when the output resolves to the same file.
 - `kruda new` handles explicit filesystem paths, and the MCP scaffolder keeps
@@ -325,11 +330,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
   it gave up on its own. Contexts are now cancelled first; Pool, Spawn and
   Takeover sockets stay open until the Pool finishes, so a handler that
-  completes while the Pool drains still delivers a response the socket takes
-  in one write. A Takeover connection starts no new request once shutdown
-  begins. Not covered: the rest of a response the socket could not take at
-  once, which the stopped event loop no longer sends, and, on a worker
-  without a Pool, a Takeover response finished after the sockets are shut. A handler that ignores its context still holds
+  completes while the Pool drains still delivers a response it writes to the
+  socket itself while the socket is still open for writing. A Takeover
+  connection starts no new request, and answers no input it has buffered,
+  once shutdown begins. Not covered: a response the stopped event loop would
+  have sent, such as the rest of one the socket could not take at once or a
+  Pool or Spawn response queued behind an earlier unsent reply, and, on a
+  worker without a Pool, a Takeover response finished after the sockets are
+  shut. A handler that ignores its context still holds
   shutdown until it returns or the `Shutdown` deadline passes.
 - Wing: a file stream with a negative size sent `Content-Length: -1`. It now
   answers 500 and closes the reader off the event loop. Kruda's own callers always pass a known
@@ -393,7 +401,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and the other `Ctx` methods already cleaned their values. Wing now does
   what net/http does: a header whose name is not a valid token is dropped,
   and each `\r` or `\n` in a value becomes a space, so
-  `"v\r\nX-Injected: 1"` is sent as `v  X-Injected: 1`. On the fasthttp
+  `"v\r\nX-Injected: 1"` is sent as `v  X-Injected: 1`. Wing checks the
+  fields only on a response whose raw header map was handed out, as fields
+  set through `Ctx` are clean already; `c.SendBytesWithType` and its
+  variants now clean their content type too. On the fasthttp
   transport, the macOS default, values were already cleaned but a header name
   with a line break added a field the same way; such names are now dropped
   there too. A raw `Connection` value that becomes `close` once cleaned now

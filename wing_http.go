@@ -1223,6 +1223,7 @@ func acquireResponse() *wingResponse {
 	r.body = r.body[:0]
 	r.buf = r.buf[:0]
 	r.staticResp, r.staticClose = nil, false
+	r.rawHeaders = false
 	r.jsonFast = false
 	r.sendFileEnabled = false
 	r.fileFd = 0
@@ -1255,6 +1256,7 @@ func releaseResponse(r *wingResponse) {
 	r.status = 0
 	r.headRequest = false
 	r.staticResp, r.staticClose = nil, false
+	r.rawHeaders = false
 	r.jsonFast = false
 	r.responseMode = responseGeneric
 	r.stringFast = false
@@ -1292,6 +1294,7 @@ type wingResponse struct {
 	jsonBuf           bytes.Buffer
 	staticResp        []byte // pre-built full response (if set, buildZeroCopy returns this)
 	staticClose       bool   // staticResp asks to close the connection
+	rawHeaders        bool   // Header() was handed out: fields are checked when sent
 	jsonFast          bool   // SetJSON fast path — skip header interface, write status+json directly
 	responseMode      responseMode
 	stringFast        bool
@@ -1306,7 +1309,11 @@ type wingResponse struct {
 }
 
 func (r *wingResponse) WriteHeader(code int)        { r.status = code }
-func (r *wingResponse) Header() transport.HeaderMap { return &r.headers }
+func (r *wingResponse) Header() transport.HeaderMap { r.rawHeaders = true; return &r.headers }
+
+// ctxHeader is Header for Ctx, whose fields are clean already: Ctx checks
+// names and removes line breaks from values when they are set.
+func (r *wingResponse) ctxHeader() transport.HeaderMap { return &r.headers }
 func (r *wingResponse) Write(data []byte) (int, error) {
 	r.body = append(r.body, data...)
 	return len(data), nil
@@ -1329,6 +1336,7 @@ func (r *wingResponse) SetStringBody(status int, contentType, body string) {
 	r.headers.reset()
 	r.body = r.body[:0]
 	r.staticResp, r.staticClose = nil, false
+	r.rawHeaders = false
 	r.jsonFast = false
 	r.stringFast = true
 	r.stringBody = body
@@ -1632,7 +1640,7 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 	// The body is buffered, so its length is known; a handler value only
 	// stands for a HEAD that wrote no body.
 	keepCL := r.headRequest && len(r.body) == 0
-	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers, keepCL)
+	b, hasCL := appendStatusAndHeaders(b, r.status, &r.headers, keepCL, r.rawHeaders)
 	if !(keepCL && hasCL) && !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = appendContentLengthValue(b, len(r.body))
@@ -1657,7 +1665,7 @@ func (r *wingResponse) appendTo(b []byte) []byte {
 // caller that knows the body length passes false and writes its own. A
 // Transfer-Encoding in h is always left out: Wing never chunk-encodes, so the
 // body would not match it.
-func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (out []byte, hasCL bool) {
+func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL, raw bool) (out []byte, hasCL bool) {
 	b = append(b, wingStatusLine(status)...)
 	b = append(b, dateHdr()...)
 	noBody := statusHasNoBody(status)
@@ -1675,7 +1683,7 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 		} else if headerIs(h.keys[i], "Transfer-Encoding") {
 			continue
 		}
-		b = appendHeaderField(b, h.keys[i], h.vals[i])
+		b = appendHeaderField(b, h.keys[i], h.vals[i], raw)
 	}
 	for i := 0; i < len(h.extra); i++ {
 		if headerIs(h.extra[i].key, "Content-Length") {
@@ -1687,23 +1695,25 @@ func appendStatusAndHeaders(b []byte, status int, h *wingHeaders, keepCL bool) (
 		} else if headerIs(h.extra[i].key, "Transfer-Encoding") {
 			continue
 		}
-		b = appendHeaderField(b, h.extra[i].key, h.extra[i].val)
+		b = appendHeaderField(b, h.extra[i].key, h.extra[i].val, raw)
 	}
 	return b, hasCL
 }
 
-// appendHeaderField appends one header field. As net/http does, it drops a
-// field whose name is not a token and turns each line break in a value into a
-// space, so a raw header cannot start a field of its own.
-func appendHeaderField(b []byte, key, val string) []byte {
-	if !isValidHeaderKey(key) {
-		return b
+// appendHeaderField appends one header field. A raw field is checked as
+// net/http does: a field whose name is not a token is dropped and each line
+// break in a value becomes a space, so it cannot start a field of its own.
+func appendHeaderField(b []byte, key, val string, raw bool) []byte {
+	if raw {
+		if !isValidHeaderKey(key) {
+			return b
+		}
+		if strings.IndexByte(val, '\n') >= 0 || strings.IndexByte(val, '\r') >= 0 {
+			val = strings.Trim(sanitizeHeaderValue(val), " \t")
+		}
 	}
 	b = append(b, key...)
 	b = append(b, ": "...)
-	if strings.IndexByte(val, '\n') >= 0 || strings.IndexByte(val, '\r') >= 0 {
-		val = strings.Trim(sanitizeHeaderValue(val), " \t")
-	}
 	b = append(b, val...)
 	return append(b, "\r\n"...)
 }
@@ -1884,7 +1894,7 @@ func (r *wingResponse) build() []byte {
 
 // buildHeadersOnly builds HTTP headers without body (for sendfile responses).
 func (r *wingResponse) buildHeadersOnly() []byte {
-	b, _ := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers, false)
+	b, _ := appendStatusAndHeaders(r.buf[:0], r.status, &r.headers, false, r.rawHeaders)
 	if !statusHasNoBody(r.status) {
 		b = append(b, "Content-Length: "...)
 		b = strconv.AppendInt(b, r.fileSize, 10)

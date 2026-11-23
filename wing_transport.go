@@ -2571,7 +2571,10 @@ func (w *worker) cleanup() {
 		w.pool.wg.Wait()
 	}
 	for _, c := range w.conns {
-		if c.pending > 0 {
+		if c.pending > 0 && c.takenOver {
+			// Its read side is shut already; darwin then refuses SHUT_RDWR.
+			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_WR)
+		} else if c.pending > 0 {
 			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
 		}
 	}

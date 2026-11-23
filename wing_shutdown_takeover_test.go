@@ -3,15 +3,11 @@
 package kruda
 
 import (
-	"bufio"
 	"context"
-	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/go-kruda/kruda/transport"
 )
 
 // TestWingShutdownPoolWaitingOnTakeoverWriter runs a Pool handler that waits
@@ -72,47 +68,5 @@ func TestWingShutdownPoolWaitingOnTakeoverWriter(t *testing.T) {
 	// drained, so the deadlock was never set up.
 	if took := time.Since(start); took < shutdownTakeoverGrace*8/10 || took > 3*time.Second {
 		t.Fatalf("Shutdown took %v, want about %v", took, shutdownTakeoverGrace)
-	}
-}
-
-// TestWingFramedTakeoverCloseFreesSlot closes a Takeover connection after a
-// framed response, with nothing unread and a client that keeps its write side
-// open. That close needs no linger, so with one connection allowed the next
-// client is served at once.
-func TestWingFramedTakeoverCloseFreesSlot(t *testing.T) {
-	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
-		w.Header().Set("Connection", "close")
-		_, _ = w.Write([]byte("ok"))
-	})
-	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, MaxConns: 1, DefaultPreset: Spear}, handler)
-	defer stop()
-	var conn net.Conn
-	var br *bufio.Reader
-	for attempt := 0; conn == nil; attempt++ { // the start-up probe may still hold the slot
-		if attempt == 20 {
-			t.Fatal("never admitted")
-		}
-		c, r := framingDial(t, addr)
-		if _, err := io.WriteString(c, framingGet("/")); err != nil {
-			t.Fatal(err)
-		}
-		if res, err := http.ReadResponse(r, nil); err == nil {
-			_, _ = io.ReadAll(res.Body)
-			conn, br = c, r
-		} else {
-			c.Close()
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-	if _, err := br.ReadByte(); err != io.EOF {
-		t.Fatalf("after the response: %v, want EOF", err)
-	}
-	time.Sleep(100 * time.Millisecond) // well inside lingerDelay; conn stays open
-	next, nbr := framingDial(t, addr)
-	if _, err := io.WriteString(next, framingGet("/")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := http.ReadResponse(nbr, nil); err != nil {
-		t.Fatalf("next client not served while the first kept its write side open: %v", err)
 	}
 }

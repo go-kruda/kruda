@@ -209,7 +209,7 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, leftov
 	releaseResponse(resp)
 	releaseRequest(first) // handler returned; the adapter holds ctx/remote independently
 	if rejected {
-		lingerTakeoverConn(f, fd, false) // after the release: the response is sent, and the wait can take 500 ms
+		lingerTakeoverConn(f, fd) // after the release: the response is sent, and the wait can take 500 ms
 	}
 
 	// Hijacked: the app owns the connection. Wait until it closes the adapter

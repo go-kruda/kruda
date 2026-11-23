@@ -322,8 +322,8 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	req := acquireRequest()
 	defer releaseRequest(req)
 	req.ctx = context.Background()
-	if reuse, sent, delimited := w.writeKeepAliveStream(req, f); reuse || !sent || !delimited {
-		t.Fatalf("reuse %v sent %v close-delimited %v; want a sent close-delimited response, not reused", reuse, sent, delimited)
+	if reuse, sent := w.writeKeepAliveStream(req, f); reuse || !sent {
+		t.Fatalf("reuse %v sent %v; want a sent close-delimited response, not reused", reuse, sent)
 	}
 	if _, err := io.WriteString(client, "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n"); err != nil {
 		t.Fatal(err)
@@ -337,7 +337,7 @@ func TestWingStreamKeepAliveDrainsUntilClose(t *testing.T) {
 	if err := raw.Control(func(v uintptr) { fd = int32(v) }); err != nil { // Fd() would make it blocking
 		t.Fatal(err)
 	}
-	lingerTakeover(f, fd, make([]byte, 4096), true) // as takeoverLoop does before the close
+	lingerTakeover(f, fd, make([]byte, 4096)) // as takeoverLoop does before the close
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}

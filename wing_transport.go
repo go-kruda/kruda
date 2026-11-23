@@ -1907,10 +1907,7 @@ var takeoverBufPool = sync.Pool{New: func() any { b := make([]byte, 8192); retur
 // takeoverReply sends a reply Wing makes itself, such as an error status or
 // 100 Continue, unless Shutdown has begun: then no request is answered any more.
 func (w *worker) takeoverReply(f *os.File, data []byte) bool {
-	if w.stopping() {
-		return true // nothing more is sent, but an earlier response still needs the drain
-	}
-	return w.writeTakeover(f, data) == nil
+	return !w.stopping() && w.writeTakeover(f, data) == nil
 }
 
 func (w *worker) writeTakeover(f *os.File, data []byte) error {
@@ -2019,7 +2016,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	// first request as a stream and return — all other dispatch paths fall
 	// through to the byte-unchanged keep-alive loop below.
 	if mode == responseStream {
-		w.streamTakeover(first, fd, f)
+		w.streamTakeover(first, fd, f, false)
 		return
 	}
 
@@ -2059,11 +2056,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	requestStarted := false
 	// out is serialized into again once the synchronous write has returned.
 	var out []byte
-	final := false          // the last response was written; unread input must not reset it
-	closeDelimited := false // and it ends at the close, so its EOF must arrive whole
+	final := false    // the last response was written; unread input must not reset it
+	answered := false // some response on this connection was written
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
+		answered = answered || served
 		if served && w.stopping() {
 			releaseRequest(req) // shutting down: no new request starts
 			final = true        // the previous response is complete: drain behind it
@@ -2081,7 +2079,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 				static = preset
 			case preset.ResponseMode == responseStream:
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f)
+				w.streamTakeover(req, fd, f, served)
 				return
 			case preset.ResponseMode == responseHijack:
 				leftover := append([]byte(nil), buf[:readN]...)
@@ -2093,15 +2091,15 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 		if mode == responseKeepAliveStream && static.StaticResponse == nil {
 			if !keepAlive || req.method != "GET" {
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f)
+				w.streamTakeover(req, fd, f, served)
 				return
 			}
-			reuse, sent, delimited := w.writeKeepAliveStream(req, f)
+			reuse, sent := w.writeKeepAliveStream(req, f)
 			releaseRequest(req)
 			if !reuse {
 				// A response that never got its preamble out has nothing to
 				// protect, unless an earlier one on this connection does.
-				final, closeDelimited = sent || served, delimited
+				final = sent || served
 				goto done
 			}
 		} else {
@@ -2373,15 +2371,16 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 	}
 
 done:
+	// At shutdown the loop can stop before a request it did not answer; the
+	// response before it still needs the drain.
+	final = final || answered && w.stopping()
 	if final {
 		bodyBuf = nil
-		// At shutdown a close can follow a request the loop did not answer.
-		closeDelimited = closeDelimited || w.stopping()
 		if grewBuf {
 			buf = nil // not kept through the wait: a pooled buffer is enough to drain
-			lingerTakeoverConn(f, fd, closeDelimited)
+			lingerTakeoverConn(f, fd)
 		} else {
-			lingerTakeover(f, fd, buf, closeDelimited)
+			lingerTakeover(f, fd, buf)
 		}
 	}
 	// Hand the File to the worker loop: it deletes conn bookkeeping first
@@ -2393,7 +2392,7 @@ done:
 
 // lingerTakeover is closeAfterFinal for a Takeover socket, which this goroutine
 // owns: buf is free, and the read deadline bounds the wait.
-func lingerTakeover(f *os.File, fd int32, buf []byte, closeDelimited bool) {
+func lingerTakeover(f *os.File, fd int32, buf []byte) {
 	discarded := 0
 	for {
 		if discarded >= maxDiscardInput {
@@ -2412,13 +2411,10 @@ func lingerTakeover(f *os.File, fd int32, buf []byte, closeDelimited bool) {
 	if testFinalDrainHook != nil {
 		testFinalDrainHook()
 	}
-	// With nothing unread, a framed response closes now, as on the event
-	// loop: its slot is free at once. A close-delimited one needs its EOF to
-	// arrive whole, and a request can still land before the close and reset
-	// it, so it waits for the peer's FIN.
-	if discarded == 0 && !closeDelimited {
-		return
-	}
+	// Even with nothing unread now, a request can still land before the close
+	// and reset it, and with it any response bytes still in the send queue.
+	// A goroutine can afford to wait for the peer's FIN; the slot is held
+	// until then, lingerDelay at most.
 	if syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil ||
 		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) != nil {
 		return
@@ -2443,9 +2439,9 @@ func releaseTakeoverBuffers(buf, bodyBuf *[]byte, grew bool) {
 }
 
 // lingerTakeoverConn is lingerTakeover for a path that holds no read buffer.
-func lingerTakeoverConn(f *os.File, fd int32, closeDelimited bool) {
+func lingerTakeoverConn(f *os.File, fd int32) {
 	bp := takeoverBufPool.Get().(*[]byte)
-	lingerTakeover(f, fd, *bp, closeDelimited)
+	lingerTakeover(f, fd, *bp)
 	takeoverBufPool.Put(bp)
 }
 
@@ -2456,7 +2452,7 @@ func lingerTakeoverConn(f *os.File, fd int32, closeDelimited bool) {
 // read-watcher that cancels that context when the client closes its half. The
 // streaming response is not keep-alive-reused; on return the fd is closed
 // exactly once via the shared takeover-done path (doneMsg.file).
-func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
+func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File, afterResponse bool) {
 	// Make the handler's c.Context() cancellable from the conn context so the
 	// disconnect watcher can fire SSEStream.Done(). first.ctx flows into c.ctx
 	// during ServeKruda (app_serve.go: c.ctx = r.Context()).
@@ -2498,8 +2494,8 @@ func (w *worker) streamTakeover(first *wingRequest, fd int32, f *os.File) {
 	if testStreamTeardownHook != nil {
 		testStreamTeardownHook()
 	}
-	if sw.headersSent && !sw.broken {
-		lingerTakeoverConn(f, fd, sw.closeDelimited()) // the watcher may not have taken the last input
+	if sw.headersSent && !sw.broken || afterResponse {
+		lingerTakeoverConn(f, fd) // the watcher may not have taken the last input
 	}
 
 	// Close the fd exactly once via the shared takeover-done path. The conn is

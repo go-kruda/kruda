@@ -101,7 +101,7 @@ func (w *wingStreamWriter) flushHeaders() error {
 	// Reuse needs one unambiguous response boundary and a c.Stream copy whose
 	// result Wing sees. The preamble announces the decision. Otherwise the
 	// stream path closes the connection, and the length is the handler's to state.
-	if w.tryKeepAlive && w.copying {
+	if w.tryKeepAlive && w.copying && !w.noReuse {
 		w.remaining, w.framed = streamContentLength(w.status, &w.headers)
 	}
 	if w.framed {
@@ -153,11 +153,6 @@ func (w *wingStreamWriter) streamCopyResult(err error) {
 // the handler did not finish, so the connection must not carry another
 // request. Output, such as a 500 not yet sent, still goes out.
 func (w *wingStreamWriter) AbortReuse() { w.noReuse = true }
-
-// closeDelimited reports whether the body ends at the close.
-func (w *wingStreamWriter) closeDelimited() bool {
-	return !w.head && !statusHasNoBody(w.status) && w.headers.contentLength() == ""
-}
 
 var errStreamPreamble = errors.New("kruda: stream preamble was not fully written")
 
@@ -254,10 +249,10 @@ func streamContentLength(status int, headers *wingHeaders) (int64, bool) {
 // switches to a watcher that drains input as soon as its preamble is sent, as
 // the ordinary Stream path does, so input cannot pile up behind a long stream.
 // When the connection is not reused, the caller's final drain closes it.
-func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse, sent, closeDelimited bool) {
+func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse, sent bool) {
 	raw, err := f.SyscallConn()
 	if err != nil {
-		return false, false, false
+		return false, false
 	}
 	ctx, cancel := context.WithCancel(req.ctx)
 	defer cancel()
@@ -320,7 +315,6 @@ func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse, sent
 			}
 		}
 		sent = sw.headersSent && !sw.broken
-		closeDelimited = sent && !sw.framed && sw.closeDelimited()
 		if reuse {
 			return
 		}
@@ -336,12 +330,12 @@ func (w *worker) writeKeepAliveStream(req *wingRequest, f *os.File) (reuse, sent
 	w.handler.ServeKruda(sw, req)
 	sw.finish()
 	if !sw.framed || !sw.copied || sw.copying || sw.failed || sw.noReuse || sw.remaining != 0 || ctx.Err() != nil {
-		return false, false, false // sent and closeDelimited are set by the deferred function
+		return false, false // sent is set by the deferred function
 	}
 	if !endPeek() || ctx.Err() != nil {
-		return false, false, false
+		return false, false
 	}
-	return f.SetWriteDeadline(time.Time{}) == nil, false, false
+	return f.SetWriteDeadline(time.Time{}) == nil, false
 }
 
 // streamReader is the minimal read surface the disconnect watcher needs.

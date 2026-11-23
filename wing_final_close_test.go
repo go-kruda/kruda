@@ -904,9 +904,23 @@ func TestWingCompletionsDoNotHoldLinger(t *testing.T) {
 }
 
 // TestWingTakeoverCloseSurvivesLateRequest sends a request after the final
-// drain found nothing unread and before the close. A close-delimited body
-// needs EOF; a reset there loses it.
+// drain found nothing unread and before the close. A reset there loses a
+// close-delimited body's EOF, or the part of a framed body still queued for a
+// slow reader.
 func TestWingTakeoverCloseSurvivesLateRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		preset Preset
+		body   string
+	}{
+		{"close-delimited Stream", Stream, "body"},
+		{"framed Takeover reply", Spear, strings.Repeat("f", 1<<20)},
+	} {
+		t.Run(tc.name, func(t *testing.T) { takeoverCloseSurvivesLateRequest(t, tc.preset, tc.body) })
+	}
+}
+
+func takeoverCloseSurvivesLateRequest(t *testing.T, preset Preset, want string) {
 	probed, release := make(chan struct{}, 1), make(chan struct{})
 	var once sync.Once
 	testFinalDrainHook = func() {
@@ -914,14 +928,32 @@ func TestWingTakeoverCloseSurvivesLateRequest(t *testing.T) {
 		<-release
 	}
 	defer func() { testFinalDrainHook = nil }()
-	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) { _, _ = w.Write([]byte("body")) })
-	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: Stream}, handler)
+	handler := transport.HandlerFunc(func(w transport.ResponseWriter, r transport.Request) {
+		w.Header().Set("Connection", "close")
+		_, _ = w.Write([]byte(want))
+	})
+	addr, stop := startWingServerWithConfig(t, WingConfig{Workers: 1, DefaultPreset: preset}, handler)
 	defer stop()
 	defer once.Do(func() { close(release) })
 	conn, br := framingDial(t, addr)
 	if _, err := io.WriteString(conn, framingGet("/")); err != nil {
 		t.Fatal(err)
 	}
+	type result struct {
+		body []byte
+		err  error
+	}
+	got := make(chan result, 1)
+	go func() { // a slow reader: a large reply is still in flight at the close
+		time.Sleep(200 * time.Millisecond)
+		res, err := http.ReadResponse(br, nil)
+		if err != nil {
+			got <- result{nil, err}
+			return
+		}
+		body, err := io.ReadAll(res.Body)
+		got <- result{body, err}
+	}()
 	select {
 	case <-probed:
 	case <-time.After(3 * time.Second):
@@ -932,12 +964,8 @@ func TestWingTakeoverCloseSurvivesLateRequest(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond) // it reaches the server, which already looked
 	once.Do(func() { close(release) })
-	time.Sleep(100 * time.Millisecond) // a reset reaches the client before it reads
-	res, err := http.ReadResponse(br, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body, err := io.ReadAll(res.Body); err != nil || string(body) != "body" {
-		t.Fatalf("body %q, %v; want it whole and a clean EOF", body, err)
+	r := <-got
+	if r.err != nil || string(r.body) != want {
+		t.Fatalf("body %d of %d bytes, %v; want it whole and a clean EOF", len(r.body), len(want), r.err)
 	}
 }

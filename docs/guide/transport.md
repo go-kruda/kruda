@@ -77,9 +77,12 @@ and honest trade.
 
 Use `kruda.Stream.With(kruda.StreamKeepAlive())` for a Linux Wing GET route that streams
 a fixed-length HTTP 200 or 206 response. HLS segments and byte-range reads are
-good candidates. It reuses the connection after `c.Stream` finishes successfully
-and sends exactly the declared `Content-Length`. Set that header from a trusted
-upstream response that describes the bytes you actually send.
+good candidates. It reuses the connection only when the response states one
+valid, positive `Content-Length`, the body comes from `c.Stream`, and that copy
+writes exactly the declared length. A handler that sends the headers before
+`c.Stream` (a `Flush`, or a body write) closes the connection even if the
+length turns out right. Set the header from a trusted upstream response that
+describes the bytes you actually send.
 
 ```go
 app.Get("/media/:name", streamSegment,

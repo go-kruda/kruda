@@ -7,6 +7,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Wing on Linux: `kruda.Stream.With(kruda.StreamKeepAlive())`** keeps the
+  connection after a streamed GET 200 or 206, for HLS segments and byte-range
+  reads. The connection is reused only when the response states one valid,
+  positive `Content-Length`, its body comes from `c.Stream`, and that copy
+  writes exactly that many bytes. Anything else closes the connection, as
+  `kruda.Stream` does: an unknown length, a short or failed copy, a handler
+  that wrote the body outside `c.Stream` or panicked, HEAD, and a client that
+  disconnects or shuts its write side. On other platforms and transports the
+  option changes nothing. Measured on Linux with 5,120 simulated viewers at
+  4 Mbps (3 MB segments, one proxy CPU, Go client and origin), each run five
+  alternating 60 s rounds of Wing and net/http: the final tree met the gate
+  in every round on both (zero failed requests, every origin hit, segment
+  p99 under 13 ms). Across all seven runs on earlier revisions too, Wing
+  missed it in 2 of 35 rounds and net/http in 1 of 35, with the same
+  overload pattern on both.
+
 - `kruda generate binder` runs the generated-binding tool from the CLI:
   `kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`.
   It runs `cmd/bindgen` from the Kruda version your project's `go.mod`
@@ -55,12 +71,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   In the last case the connection stays open until the client closes it, for
   0.5 s and, while the worker is not busy in a handler, at most about 1 s;
-  this holds with every Wing timeout set to 0 too. Without unread input Wing closes at
-  once, as before. Input past 256 KiB is left unread, so the response is
+  this holds with every Wing timeout set to 0 too. On the event loop (Inline,
+  Pool and Spawn routes), a connection with no unread input closes at once,
+  as before. A Takeover route (`Spear`, `DB`, `Stream`, `Hijack`) always
+  ends its write side and waits for the client to close, 0.5 s at most,
+  because a request can still arrive before the close and reset the end of
+  the response: a client that keeps its side open holds its connection slot
+  until then. Input past 256 KiB is left unread, so the response is
   still sent, but the close that follows can then reset it. Checking for
-  unread input costs one `read` per closed connection whose response went
-  out without waiting for the socket and that has no input left (more
-  otherwise): with `wrk -H
+  unread input on the event loop costs one `read` per closed connection whose
+  response went out without waiting for the socket and that has no input
+  left (more otherwise): with `wrk -H
   "Connection: close"` on loopback (Linux, 4 workers, 16 alternating rounds)
   requests per second fell 2.7%, borderline significant (p = 0.046).
   Keep-alive traffic was unchanged within noise.

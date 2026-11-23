@@ -2066,6 +2066,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 			// a Stream or Hijack route, which needs its own writer rather than
 			// a buffered one.
 			preset := w.presets.Lookup(req.method, req.path)
+			mode = preset.ResponseMode
 			switch {
 			case preset.StaticResponse != nil:
 				static = preset
@@ -2080,47 +2081,57 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, leftover []byte, mod
 				return
 			}
 		}
-		// Handle request.
-		resp := acquireResponseFor(req)
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					resp.WriteHeader(500)
-					resp.Write([]byte("Internal Server Error\n"))
-				}
-			}()
-			if static.StaticResponse != nil {
-				resp.setStatic(static.StaticResponse, static.staticClose)
+		if mode == responseKeepAliveStream && static.StaticResponse == nil {
+			if !keepAlive || req.method != "GET" {
+				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
+				w.streamTakeover(req, fd, f)
 				return
 			}
-			w.handler.ServeKruda(resp, req)
-		}()
-		keepAlive = keepAlive && !resp.closeRequested()
-		resp.buf = out[:0]
-		data := resp.buildZeroCopy()
-		builtIntoOut := resp.staticResp == nil
-		resp.buf = nil // out stays with this loop, never with the pooled response
-		stream := resp.fileStream
-		resp.fileStream = nil
-		releaseResponse(resp)
-		releaseRequest(req)
+			keepAlive = w.writeKeepAliveStream(req, f)
+			releaseRequest(req)
+		} else {
+			// Handle request.
+			resp := acquireResponseFor(req)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						resp.WriteHeader(500)
+						resp.Write([]byte("Internal Server Error\n"))
+					}
+				}()
+				if static.StaticResponse != nil {
+					resp.setStatic(static.StaticResponse, static.staticClose)
+					return
+				}
+				w.handler.ServeKruda(resp, req)
+			}()
+			keepAlive = keepAlive && !resp.closeRequested()
+			resp.buf = out[:0]
+			data := resp.buildZeroCopy()
+			builtIntoOut := resp.staticResp == nil
+			resp.buf = nil // out stays with this loop, never with the pooled response
+			stream := resp.fileStream
+			resp.fileStream = nil
+			releaseResponse(resp)
+			releaseRequest(req)
 
-		// Write full response — os.File loops over partial writes and parks
-		// on EAGAIN via the runtime poller.
-		if werr := w.writeTakeover(f, data); werr != nil {
-			stream.close()
-			keepAlive = false
-			goto done
-		}
-		if builtIntoOut && cap(data) <= maxReusedTakeoverOut {
-			out = data[:0]
-		}
-		if stream != nil {
-			err := w.writeFileStream(f, stream)
-			stream.close()
-			if err != nil {
+			// Write full response — os.File loops over partial writes and parks
+			// on EAGAIN via the runtime poller.
+			if werr := w.writeTakeover(f, data); werr != nil {
+				stream.close()
 				keepAlive = false
 				goto done
+			}
+			if builtIntoOut && cap(data) <= maxReusedTakeoverOut {
+				out = data[:0]
+			}
+			if stream != nil {
+				err := w.writeFileStream(f, stream)
+				stream.close()
+				if err != nil {
+					keepAlive = false
+					goto done
+				}
 			}
 		}
 

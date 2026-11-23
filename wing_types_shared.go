@@ -119,6 +119,7 @@ const (
 	responseRender // intent/diagnostics tag for the Render preset; does not gate the lane
 	responseStream // Stream preset: incremental streaming writer on the Takeover path
 	responseHijack // Hijack preset: hand the raw connection to the handler via http.Hijacker
+	responseKeepAliveStream
 )
 
 // Preset is the per-route tuning hint passed to Wing. Construct via the
@@ -161,7 +162,7 @@ func (f *Preset) defaults() {
 	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
-	if f.StaticResponse != nil && (f.ResponseMode == responseStream || f.ResponseMode == responseHijack) {
+	if f.StaticResponse != nil && (f.ResponseMode == responseStream || f.ResponseMode == responseKeepAliveStream || f.ResponseMode == responseHijack) {
 		f.ResponseMode = responseGeneric // the prebuilt response is sent whatever the request
 	}
 	f.staticClose = staticResponseCloses(f.StaticResponse)
@@ -193,6 +194,17 @@ func Dispatch(m DispatchMode) PresetOption { return func(f *Preset) { f.Dispatch
 // Static returns a PresetOption that sets a pre-built static response,
 // allowing Wing to skip the handler entirely on supported platforms.
 func Static(resp []byte) PresetOption { return func(f *Preset) { f.StaticResponse = resp } }
+
+// StreamKeepAlive opts a Stream route into connection reuse after a complete,
+// fixed-length response. Linux Wing supports this option for GET 200/206.
+// Other configurations retain the Stream preset's ordinary behavior.
+func StreamKeepAlive() PresetOption {
+	return func(f *Preset) {
+		if runtime.GOOS == "linux" && f.ResponseMode == responseStream {
+			f.ResponseMode = responseKeepAliveStream
+		}
+	}
+}
 
 // Presets — pick by what the route does. Structural presets (Bolt, Arrow,
 // Spear) name the dispatch; semantic presets name the workload.

@@ -7,6 +7,7 @@ Kruda ships with three transports. The default is **Wing** on Linux, **fasthttp*
 | Feature needed | Transport | Why |
 |---------------|-----------|-----|
 | Maximum throughput (plaintext, JSON, DB) | **Wing** (default on Linux) | epoll+eventfd, zero-copy, no goroutine-per-conn |
+| Fixed-length media segments with HTTP/1.1 connection reuse | **Wing** on Linux | Opt in per route with `kruda.Stream.With(kruda.StreamKeepAlive())` |
 | SSE (Server-Sent Events) | **Wing** or **net/http** | Wing requires the `kruda.Stream` route preset |
 | Session cookies / Set-Cookie headers | **Wing** or **net/http** | Wing keeps headers by falling back from its zero-copy fast path when needed |
 | HTTP/2, TLS termination | **net/http** | Wing is HTTP/1.1 only |
@@ -71,6 +72,31 @@ and make the proxy strip/overwrite inbound `X-Forwarded-For` so clients cannot
 spoof it. If you need TLS directly on the app process (no proxy), use
 `kruda.WithTLS(...)` and accept the net/http transport — that is the supported
 and honest trade.
+
+## Choose a Wing stream preset
+
+Use `kruda.Stream.With(kruda.StreamKeepAlive())` for a Linux Wing GET route that streams
+a fixed-length HTTP 200 or 206 response. HLS segments and byte-range reads are
+good candidates. It reuses the connection after `c.Stream` finishes successfully
+and sends exactly the declared `Content-Length`. Set that header from a trusted
+upstream response that describes the bytes you actually send.
+
+```go
+app.Get("/media/:name", streamSegment,
+    kruda.Stream.With(kruda.StreamKeepAlive()))
+app.Get("/events", streamEvents, kruda.Stream)
+```
+
+Use `kruda.Stream` for SSE, live feeds and streams whose final length is unknown.
+A stream with unknown length, an incomplete body, a write failure or a request
+to close the connection uses the close path. On platforms or transports where
+the Wing option is unavailable, the route uses the transport's ordinary
+streaming behavior. For an upstream HTTP request, use `c.Context()` so a client
+disconnect can cancel the upstream work.
+
+When comparing presets for your app, use the same segment size, viewer rate
+and CPU budget. Check completed downloads, connection reuse, CPU, RSS and p99
+time to read the complete segment.
 
 ## Wing limitations
 

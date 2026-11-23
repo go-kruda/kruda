@@ -183,8 +183,8 @@ func TestWingStreamDoesNotResendFailedPreamble(t *testing.T) {
 	sw := newWingStreamWriter(conn, 0)
 	sw.Flush()
 	// An empty c.Stream afterwards succeeds without writing.
-	sw.setCopyUnfinished(true)
-	sw.setCopyUnfinished(false)
+	sw.streamCopyStart()
+	sw.streamCopyResult(nil)
 	sw.finish()
 	sw.Flush()
 	_, _ = sw.Write([]byte("x"))

@@ -269,6 +269,7 @@ type conn struct {
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
 	discarded       int    // input dropped behind the final response
+	requests        int    // requests dispatched; past one, a response may still be in the socket
 	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -1151,6 +1152,7 @@ func (w *worker) tryParse(c *conn) {
 			copy(c.readBuf, c.readBuf[consumed:c.readN])
 		}
 		c.readN = remaining
+		c.requests++
 
 		switch f.Dispatch {
 		case Inline:
@@ -1335,10 +1337,11 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 		file := os.NewFile(uintptr(c.fd), "wing-takeover")
 		gate := &takeoverGate{}
 		c.takeoverFile, c.takeoverGate = file, gate
+		answered := c.requests > 1 // the event loop wrote an earlier response
 		w.dispatchWG.Add(1)
 		go func() {
 			defer w.dispatchWG.Done()
-			w.takeoverLoop(req, c.fd, file, gate, leftover, f.ResponseMode)
+			w.takeoverLoop(req, c.fd, file, gate, leftover, f.ResponseMode, answered)
 		}()
 	}
 }
@@ -1559,6 +1562,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 // runs as Spawn, since the fd cannot be detached yet.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	c.readDrained = false
+	c.requests++
 	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
 	// inline accumulation, where c.ResponseWriter() is not an http.Hijacker — so
 	// reject it cleanly (400) rather than letting the upgrade fail opaquely.
@@ -2013,7 +2017,7 @@ func (w *worker) writeFileStream(f *os.File, stream *fileStream) error {
 // per request at c256 on /db) — identical CPU per request to this model,
 // but scheduler pressure inflated the time a pgx pool conn stayed checked
 // out, costing ~6% throughput (results/forensics-20260612T150500Z).
-func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte, mode responseMode) {
+func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeoverGate, leftover []byte, mode responseMode, answered bool) {
 	// fds arrive non-blocking from accept4/SetNonblock. os.NewFile registers
 	// a non-blocking fd with the runtime poller, so Read/Write below park
 	// the goroutine, never the thread.
@@ -2029,12 +2033,12 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 	// first request as a stream and return — all other dispatch paths fall
 	// through to the byte-unchanged keep-alive loop below.
 	if mode == responseStream {
-		w.streamTakeover(first, fd, f, g, false)
+		w.streamTakeover(first, fd, f, g, answered)
 		return
 	}
 
 	if mode == responseHijack {
-		w.hijackTakeover(first, fd, f, g, leftover, false)
+		w.hijackTakeover(first, fd, f, g, leftover, answered)
 		return
 	}
 
@@ -2069,8 +2073,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 	requestStarted := false
 	// out is serialized into again once the synchronous write has returned.
 	var out []byte
-	final := false    // the last response was written; unread input must not reset it
-	answered := false // some response on this connection was written
+	final := false // the last response was written; unread input must not reset it
 
 	for served := false; ; served = true {
 		var static Preset // the route's, when it has a prebuilt response
@@ -2091,19 +2094,19 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 				static = preset
 			case preset.ResponseMode == responseStream:
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f, g, served)
+				w.streamTakeover(req, fd, f, g, answered)
 				return
 			case preset.ResponseMode == responseHijack:
 				leftover := append([]byte(nil), buf[:readN]...)
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.hijackTakeover(req, fd, f, g, leftover, served)
+				w.hijackTakeover(req, fd, f, g, leftover, answered)
 				return
 			}
 		}
 		if mode == responseKeepAliveStream && static.StaticResponse == nil {
 			if !keepAlive || req.method != "GET" {
 				releaseTakeoverBuffers(&buf, &bodyBuf, grewBuf)
-				w.streamTakeover(req, fd, f, g, served)
+				w.streamTakeover(req, fd, f, g, answered)
 				return
 			}
 			reuse, sent := w.writeKeepAliveStream(req, f)
@@ -2393,9 +2396,9 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 	}
 
 done:
-	// At shutdown the loop can stop before a request it did not answer; the
-	// response before it still needs the drain.
-	final = final || answered && w.stopping()
+	// The loop can stop before a request it did not answer, at Shutdown or on
+	// a failed write; the response before it still needs the drain.
+	final = final || answered
 	if final {
 		bodyBuf = nil
 		if grewBuf {
@@ -2666,6 +2669,28 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	}
 }
 
+// lingerPoll is how often Shutdown reads lingering connections; the stopped
+// loop no longer reports their input.
+const lingerPoll = 5 * time.Millisecond
+
+// lingerAtShutdown keeps dropping input behind final responses that linger,
+// as the running loop would: closing one early can reset the response's
+// unread tail. With wait it returns once all have closed, each by its deadline.
+func (w *worker) lingerAtShutdown(wait bool) {
+	for w.lingering > 0 {
+		now := monoNow()
+		for fd, c := range w.conns {
+			if c.lingerUntil > 0 && (now >= c.lingerUntil || w.discardInput(c) != discardDrained) {
+				w.closeConn(fd)
+			}
+		}
+		if !wait || w.lingering == 0 {
+			return
+		}
+		time.Sleep(lingerPoll)
+	}
+}
+
 func (w *worker) closeConn(fd int32) {
 	w.removeConnBookkeeping(fd)
 	delete(w.conns, fd)
@@ -2708,11 +2733,7 @@ func (w *worker) cleanup() {
 	// Cancel first and shut the sockets only after the Pool has finished, so a
 	// Pool or Takeover handler that completes during shutdown still writes its
 	// response.
-	for fd, c := range w.conns {
-		if c.lingerUntil > 0 {
-			w.closeConn(fd) // its response is sent; the stopped loop would never sweep it
-			continue
-		}
+	for _, c := range w.conns {
 		if c.pending > 0 && c.cancel != nil {
 			c.cancel()
 		}
@@ -2730,6 +2751,12 @@ func (w *worker) cleanup() {
 	// the connection before closing it, so the raw shutdown pass below never
 	// reaches a number the kernel may have reused. Other completions are
 	// dropped: the stopped loop sends nothing more.
+	var lingerTick <-chan time.Time
+	if w.lingering > 0 {
+		t := time.NewTicker(lingerPoll)
+		defer t.Stop()
+		lingerTick = t.C
+	}
 	drainUntil := func(done <-chan struct{}, grace <-chan time.Time) {
 		for {
 			select {
@@ -2740,6 +2767,8 @@ func (w *worker) cleanup() {
 					delete(w.conns, msg.fd)
 					msg.file.Close()
 				}
+			case <-lingerTick:
+				w.lingerAtShutdown(false)
 			case <-grace:
 				// A Pool handler may be waiting on a Takeover writer that is
 				// blocked on its client, so the Takeover sockets cannot wait for
@@ -2776,6 +2805,7 @@ func (w *worker) cleanup() {
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	drainUntil(waitFor(w.dispatchWG.Wait), nil)
+	w.lingerAtShutdown(true)
 	// What was queued before the last sender returned.
 drainBuffered:
 	for {

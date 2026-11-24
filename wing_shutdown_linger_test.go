@@ -236,3 +236,41 @@ func TestWingFinalCloseEndsWriteSideAtTheCap(t *testing.T) {
 		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
 	}
 }
+
+// TestWingRetireDrainsBehindAnAnswer ends live connections for a timeout or a
+// malformed request. Once a response may be in the socket, each must linger
+// behind it, as a final close does; one that never answered closes at once.
+func TestWingRetireDrainsBehindAnAnswer(t *testing.T) {
+	retires := map[string]func(w *worker, c *conn){
+		"read timeout": func(w *worker, c *conn) {
+			w.readTimeout = int64(time.Second)
+			c.readDeadline = 1
+			w.sweepTimeouts(int64(time.Hour))
+		},
+		"idle timeout": func(w *worker, c *conn) {
+			w.idleTimeout = int64(time.Second)
+			w.sweepTimeouts(int64(time.Hour))
+		},
+		"write timeout": func(w *worker, c *conn) {
+			w.writeTimeout = int64(time.Second)
+			c.sendBuf, c.sendN = []byte("unsent"), 0
+			w.sweepTimeouts(int64(time.Hour))
+		},
+		"malformed request": func(w *worker, c *conn) {
+			c.readN = copy(c.readBuf, "\n\r\n\r\n")
+			w.tryParse(c)
+		},
+	}
+	for name, retire := range retires {
+		for _, answered := range []bool{true, false} {
+			w, c, _ := finalClosePair(t)
+			if answered {
+				c.responses = 1
+			}
+			retire(w, c)
+			if open := w.conns[c.fd] == c; open != answered || answered && c.lingerUntil == 0 {
+				t.Errorf("%s, answered %v: open %v, lingering %v", name, answered, open, c.lingerUntil != 0)
+			}
+		}
+	}
+}

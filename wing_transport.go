@@ -795,7 +795,7 @@ func (w *worker) dropLingerQueue() {
 // sweepTimeouts closes connections that have exceeded their timeout.
 // Called at most once per second — zero cost when no timeouts configured.
 func (w *worker) sweepTimeouts(now int64) {
-	for fd, c := range w.conns {
+	for _, c := range w.conns {
 		if c.lingerUntil > 0 {
 			continue // sweepLinger's
 		}
@@ -809,7 +809,7 @@ func (w *worker) sweepTimeouts(now int64) {
 			if sending && c.bodyNeed == 0 {
 				c.readDeadline = now + w.readTimeout
 			} else if now > c.readDeadline {
-				w.closeConn(fd)
+				w.retire(c)
 				continue
 			}
 		}
@@ -820,12 +820,12 @@ func (w *worker) sweepTimeouts(now int64) {
 		// since the last write does not show whether the client is reading.
 		readingBody := c.bodyNeed > 0 && w.readTimeout > 0 && c.readDeadline > 0
 		if w.idleTimeout > 0 && c.readN == 0 && !readingBody && !sending && now-max(c.lastActive, c.lastSent) > w.idleTimeout {
-			w.closeConn(fd)
+			w.retire(c)
 			continue
 		}
 		// Write timeout: sendBuf stuck (partial send not draining).
 		if w.writeTimeout > 0 && sending && now-c.lastActive > w.writeTimeout {
-			w.closeConn(fd)
+			w.retire(c)
 		}
 	}
 }
@@ -1089,7 +1089,7 @@ func (w *worker) tryParse(c *conn) {
 					w.writeAndClose(c, wingStatusClose(431))
 					return
 				default: // parseMalformed
-					w.closeConn(c.fd)
+					w.retire(c)
 					return
 				}
 			} else {
@@ -1540,7 +1540,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 	c.bodyBuf = nil
 	req, ok := parseHTTPRequestOwnedBody(header, body, w.limits)
 	if !ok {
-		w.closeConn(c.fd)
+		w.retire(c)
 		return
 	}
 	req.fd = c.fd
@@ -1612,7 +1612,7 @@ func (w *worker) handleDone(msg doneMsg) {
 		}
 		msg.readStream.reading = false
 		if msg.readErr != nil {
-			w.failSend(c)
+			w.retire(c)
 			return
 		}
 		msg.readStream.remaining -= int64(len(msg.data))
@@ -1639,7 +1639,7 @@ func (w *worker) handleDone(msg doneMsg) {
 	if c.closePending {
 		msg.stream.close()
 		if c.pending == 0 {
-			w.closeConn(c.fd)
+			w.retire(c)
 		}
 		return
 	}
@@ -1769,7 +1769,7 @@ func (w *worker) directSend(c *conn) {
 				w.eng.SubmitSend(c.fd, nil)
 				return
 			}
-			w.failSend(c)
+			w.retire(c)
 			return
 		}
 		c.sendN += r
@@ -1838,11 +1838,11 @@ func (w *worker) directSend(c *conn) {
 					w.eng.SubmitSend(c.fd, nil)
 					return
 				}
-				w.failSend(c)
+				w.retire(c)
 				return
 			}
 			if n == 0 {
-				w.failSend(c)
+				w.retire(c)
 				return
 			}
 		}
@@ -1900,7 +1900,11 @@ func (w *worker) directSend(c *conn) {
 	submitIdleRecv(w.eng, c.fd, nil, 0)
 }
 
-func (w *worker) failSend(c *conn) {
+// retire ends a live connection, dropping output it has not sent yet. Once a
+// response may be in the socket, the close goes through closeAfterFinal, so
+// input arriving behind it cannot reset that response. With a handler in
+// flight the close waits for it.
+func (w *worker) retire(c *conn) {
 	c.fileStream.close()
 	c.fileStream = nil
 	c.sendBuf = c.sendBuf[:0]
@@ -1914,11 +1918,16 @@ func (w *worker) failSend(c *conn) {
 		}
 		c.sendFileSize = 0
 	}
+	c.keepAlive = false
 	if c.pending > 0 {
 		c.closePending = true
 		return
 	}
-	w.closeConn(c.fd)
+	if c.responses == 0 {
+		w.closeConn(c.fd)
+		return
+	}
+	w.closeAfterFinal(c)
 }
 
 // takeoverSpinReads bounds the non-blocking read attempts a Takeover keep-alive
@@ -2292,6 +2301,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 							keepAlive = false
 							goto done
 						}
+						answered = true // a provisional response is in the socket too
 					}
 					headerSnapshot := make([]byte, headerEnd)
 					copy(headerSnapshot, buf[:headerEnd])

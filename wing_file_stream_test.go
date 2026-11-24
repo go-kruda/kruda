@@ -36,7 +36,7 @@ func TestWingFileStreamOwnershipCleanup(t *testing.T) {
 				w.handleDone(doneMsg{fd: c.fd, stream: stream})
 			case "send failure":
 				c.fileStream = stream
-				w.failSend(c)
+				w.retire(c)
 			case "connection":
 				c.fileStream = stream
 				w.removeConnBookkeeping(c.fd)

@@ -478,8 +478,8 @@ func (p *workerPool) loop(h transport.Handler) {
 			continue
 		}
 		var remaining []byte
-		n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(job.fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
-		if e == 0 && int(n) == len(data) {
+		n, e := rawWrite(job.fd, data)
+		if e == 0 && n == len(data) {
 			// Full write succeeded — signal ioLoop to re-arm EPOLLIN only.
 			p.done <- doneMsg{fd: job.fd, keepAlive: keepAlive}
 		} else {
@@ -919,10 +919,10 @@ func (w *worker) handleAccept(ev event) {
 	}
 	w.eng.RegisterConn(fd, unsafe.Pointer(c))
 	// Try direct read — data often arrives with SYN-ACK.
-	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+	r, e := rawRead(fd, c.readBuf)
 	if e == 0 && r > 0 {
-		c.readN = int(r)
-		c.readDrained = int(r) < len(c.readBuf)
+		c.readN = r
+		c.readDrained = r < len(c.readBuf)
 		w.tryParse(c)
 		return
 	}
@@ -967,7 +967,7 @@ func (w *worker) handleRecv(ev event) {
 	}
 	c.readDrained = false
 	requested := len(c.readBuf) - c.readN
-	nr, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
+	nr, e := rawRead(c.fd, c.readBuf[c.readN:])
 	if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 		// An earlier read already took what this readiness reported.
 		c.readSuppressed = false
@@ -982,11 +982,11 @@ func (w *worker) handleRecv(ev event) {
 		w.closeConn(c.fd)
 		return
 	}
-	c.readDrained = c.bodyNeed == 0 && int(nr) < requested
+	c.readDrained = c.bodyNeed == 0 && nr < requested
 	if ev.Flags&evPeerShut != 0 {
 		c.readSuppressed = true // the EOF behind this input is still to be read
 	}
-	c.readN += int(nr)
+	c.readN += nr
 	if w.hasTimeout {
 		now := w.now
 		if now == 0 {
@@ -999,7 +999,7 @@ func (w *worker) handleRecv(ev event) {
 		// refresh it while accumulating a body — otherwise a slow client trickling
 		// body bytes resets the deadline forever (slowloris). The deadline then
 		// bounds the whole request read, matching net/http's ReadTimeout.
-		if c.readN == int(nr) && c.bodyNeed == 0 && w.readTimeout > 0 {
+		if c.readN == nr && c.bodyNeed == 0 && w.readTimeout > 0 {
 			c.readDeadline = now + w.readTimeout
 		}
 	}
@@ -1047,7 +1047,7 @@ func (w *worker) tryParse(c *conn) {
 							return
 						}
 						requested := len(c.readBuf) - c.readN
-						n, _, err := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(requested))
+						n, err := rawRead(c.fd, c.readBuf[c.readN:])
 						if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 							c.readSuppressed = false
 							c.readDrained = true
@@ -1064,8 +1064,8 @@ func (w *worker) tryParse(c *conn) {
 							}
 							return
 						} else {
-							c.readDrained = int(n) < requested
-							c.readN += int(n)
+							c.readDrained = n < requested
+							c.readN += n
 							continue
 						}
 					}
@@ -1302,8 +1302,8 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 				w.wake()
 				return
 			}
-			n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(fd), uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
-			if e == 0 && int(n) == len(data) {
+			n, e := rawWrite(fd, data)
+			if e == 0 && n == len(data) {
 				w.doneCh <- doneMsg{fd: fd, keepAlive: ka}
 			} else {
 				written := 0
@@ -1454,7 +1454,7 @@ func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
 func (w *worker) drainBodyAccum(c *conn) bool {
 	c.readDrained = false
 	for len(c.bodyBuf) < c.bodyNeed {
-		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+		rn, e := rawRead(c.fd, c.readBuf)
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 			break
 		}
@@ -1467,7 +1467,7 @@ func (w *worker) drainBodyAccum(c *conn) bool {
 			return true
 		}
 		var surplus []byte
-		c.bodyBuf, surplus = accumBody(c.bodyBuf, c.readBuf[:int(rn)], c.bodyNeed)
+		c.bodyBuf, surplus = accumBody(c.bodyBuf, c.readBuf[:rn], c.bodyNeed)
 		if len(surplus) > 0 {
 			// The read overshot the body — the body is now complete, so this loop
 			// exits. Relocate the trailing pipelined bytes to the front of readBuf
@@ -1512,7 +1512,7 @@ func (w *worker) endIncompleteBody(c *conn) {
 func (w *worker) drainPipelinedAfterBody(c *conn) {
 	c.readDrained = false
 	for c.readN < len(c.readBuf) {
-		rn, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[c.readN])), uintptr(len(c.readBuf)-c.readN))
+		rn, e := rawRead(c.fd, c.readBuf[c.readN:])
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 			return
 		}
@@ -1522,7 +1522,7 @@ func (w *worker) drainPipelinedAfterBody(c *conn) {
 			c.readSuppressed = true
 			return
 		}
-		c.readN += int(rn)
+		c.readN += rn
 	}
 }
 
@@ -1695,14 +1695,14 @@ func (w *worker) discardInput(c *conn) discardResult {
 		if room <= 0 {
 			return discardFull
 		}
-		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&w.discardBuf[0])), uintptr(room))
+		n, e := rawRead(c.fd, w.discardBuf[:room])
 		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 			return discardDrained
 		}
 		if e != 0 || n == 0 {
 			return discardEnded
 		}
-		c.discarded += int(n)
+		c.discarded += n
 	}
 }
 
@@ -1746,7 +1746,7 @@ var lingerDelay = int64(500 * time.Millisecond)
 func (w *worker) directSend(c *conn) {
 	for c.sendN < len(c.sendBuf) {
 		buf := c.sendBuf[c.sendN:]
-		r, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(c.fd), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		r, e := rawWrite(c.fd, buf)
 		if e != 0 {
 			if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
 				c.readDrained = false
@@ -1756,7 +1756,7 @@ func (w *worker) directSend(c *conn) {
 			w.failSend(c)
 			return
 		}
-		c.sendN += int(r)
+		c.sendN += r
 		if w.idleTimeout > 0 {
 			c.lastSent = w.now
 		}
@@ -1865,10 +1865,10 @@ func (w *worker) directSend(c *conn) {
 		return
 	}
 	c.readDrained = false
-	r, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(c.fd), uintptr(unsafe.Pointer(&c.readBuf[0])), uintptr(len(c.readBuf)))
+	r, e := rawRead(c.fd, c.readBuf)
 	if e == 0 && r > 0 {
-		c.readN = int(r)
-		c.readDrained = int(r) < len(c.readBuf)
+		c.readN = r
+		c.readDrained = r < len(c.readBuf)
 		w.parseAfterSend(c)
 		return
 	}
@@ -2373,7 +2373,7 @@ func (w *worker) takeoverLoop(first *wingRequest, fd int32, f *os.File, g *takeo
 					got = true
 					break
 				}
-				if serr == syscall.EAGAIN {
+				if serr == syscall.EAGAIN || serr == syscall.EINTR {
 					continue
 				}
 				// EOF (sn==0, serr==nil) or hard error: stop keep-alive.
@@ -2427,6 +2427,9 @@ func lingerTakeover(f *os.File, fd int32, buf []byte, g *takeoverGate) {
 		n, err := syscall.Read(int(fd), buf[:min(len(buf), maxDiscardInput-discarded)])
 		if n > 0 {
 			discarded += n
+			continue
+		}
+		if err == syscall.EINTR {
 			continue
 		}
 		if err != syscall.EAGAIN {
@@ -2689,6 +2692,28 @@ func (w *worker) lingerAtShutdown(wait bool) {
 			return
 		}
 		time.Sleep(lingerPoll)
+	}
+}
+
+// rawRead is read(2) on a non-blocking socket. A signal can interrupt it
+// without changing the socket, so EINTR is retried rather than taken for a
+// failed connection.
+func rawRead(fd int32, p []byte) (int, syscall.Errno) {
+	for {
+		n, _, e := syscall.RawSyscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(&p[0])), uintptr(len(p)))
+		if e != syscall.EINTR {
+			return int(n), e
+		}
+	}
+}
+
+// rawWrite is write(2) on a non-blocking socket, retried on EINTR as rawRead.
+func rawWrite(fd int32, p []byte) (int, syscall.Errno) {
+	for {
+		n, _, e := syscall.RawSyscall(syscall.SYS_WRITE, uintptr(fd), uintptr(unsafe.Pointer(&p[0])), uintptr(len(p)))
+		if e != syscall.EINTR {
+			return int(n), e
+		}
 	}
 }
 

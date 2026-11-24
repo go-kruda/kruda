@@ -17,11 +17,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   disconnects or shuts its write side. On other platforms and transports the
   option changes nothing. Measured on Linux with 5,120 simulated viewers at
   4 Mbps (3 MB segments, one proxy CPU, Go client and origin), each run five
-  alternating 60 s rounds of Wing and net/http: the final tree met the gate
-  in every round on both (zero failed requests, every origin hit, segment
-  p99 under 13 ms). Across all seven runs on earlier revisions too, Wing
-  missed it in 2 of 35 rounds and net/http in 1 of 35, with the same
-  overload pattern on both.
+  alternating 60 s rounds of Wing and net/http: the release tree (`82c65e4`)
+  met the gate in every round on both, with zero failed requests and every
+  origin hit. Segment p99 was 8.8 ms median for Wing (6.5 to 10.9 ms) and
+  6.2 ms for net/http (5.0 to 8.2 ms). Across the earlier runs on other
+  revisions, Wing missed the gate in 2 of 45 rounds and net/http in 1 of 45,
+  with the same overload pattern on both.
 
 - `kruda generate binder` runs the generated-binding tool from the CLI:
   `kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`.
@@ -71,25 +72,51 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   In the last case the connection stays open until the client closes it, for
   0.5 s and, while the worker is not busy in a handler, at most about 1 s;
-  this holds with every Wing timeout set to 0 too. On the event loop (Inline,
-  Pool and Spawn routes), a connection with no unread input closes at once,
-  as before. A Takeover route (`Spear`, `DB`, `Stream`, `Hijack`) always
-  ends its write side and waits for the client to close, 0.5 s at most,
-  because a request can still arrive before the close and reset the end of
-  the response: a client that keeps its side open holds its connection slot
-  until then. Input past 256 KiB is left unread, so the response is
-  still sent, but the close that follows can then reset it. Checking for
-  unread input on the event loop costs one `read` per closed connection whose
-  response went out without waiting for the socket and that has no input
-  left (more otherwise): with `wrk -H
-  "Connection: close"` on loopback (Linux, 4 workers, 16 alternating rounds)
-  requests per second fell 2.7%, borderline significant (p = 0.046).
-  Keep-alive traffic was unchanged within noise.
+  this holds with every Wing timeout set to 0 too. Every route now ends its
+  write side and waits for the client to close, 0.5 s at most, even with no
+  unread input yet, because a request can still arrive before the close and
+  reset the end of the response. A client that keeps its side open holds its
+  connection slot, and a file descriptor, until then. Past 256 KiB of input
+  Wing reads no more and stops watching the connection, but still keeps it
+  until the 0.5 s are up, so a client still reading gets the whole response.
+
+  Every `Connection: close` response now waits for the client's FIN. Measured
+  on Linux with `wrk -t4 -c64 -d10s -H "Connection: close"` against a
+  plaintext route (Wing, 8 workers, server and client on separate cores, 6
+  alternating runs per side, `main` at `fba66a1` against `82c65e4`): no
+  measurable change in requests per second (median 95,965 before, 100,861
+  after, with ranges 90,135 to 109,377 and 92,877 to 108,569), p50 180 to
+  182 µs, p99 732 to 880 µs (ranges 675 to 809 and 777 to 960 µs), and about
+  69 to 92 open descriptors at 64 connections. The same runs with keep-alive
+  showed no change (median 607,310 and 618,176 requests per second).
 
   A proxy handler that copies upstream hop-by-hop headers now closes the
   client connection whenever the upstream closes. Do not copy `Connection`
   from an upstream response. `c.Text`, `c.HTML` and `c.JSON` with no custom
   headers are unaffected.
+
+- **Wing drains behind a response whenever it ends a connection.** Check
+  before upgrading. When a connection may still have a response in the
+  socket, every close now ends the write side and waits for the client, as
+  the final close above does, so input arriving behind the response cannot
+  reset it before the client reads it.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | `ReadTimeout`, `IdleTimeout` or `WriteTimeout` fires after an earlier response | closed at once | drains, 0.5 s at most |
+  | A malformed request, a body that fails to parse again, or a file response whose reader fails, after an earlier response | closed at once | drains, 0.5 s at most |
+  | `Shutdown` with idle keep-alive connections, or Pool and Spawn connections that answered | closed at once; running Pool and Spawn sockets were shut both ways | each drains, 0.5 s at most; running ones lose only the write side |
+  | The app closes a hijacked connection (`contrib/ws`, `http.Hijacker`) | both directions shut, fd reclaimed over unread input | write side shut, Wing drains, then closes |
+  | `Shutdown` with a hijacked connection open | its read side was shut | its reads end, and it drains once the app or Shutdown closes it |
+
+  `Shutdown` can take up to 0.5 s longer while clients that keep idle
+  keep-alive connections open do not close them. A connection that never
+  answered still closes at once.
+
+  On a hijacked connection, after `Close` a `Read` returns `net.ErrClosed`
+  and a `Write` returns `net.ErrClosed`. Once `Shutdown` begins, a `Read`
+  returns `io.EOF`, and `SetReadDeadline` no longer changes anything, so a
+  read loop that retries timeouts still ends. `contrib/ws` handles both.
 
 - **`contrib/ws` accepts only the same origin by default.** Older versions
   accepted every origin when `AllowedOrigins` was empty. Now the origin must
@@ -283,6 +310,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   that registration queued for the next `kevent` call, which then watched
   whatever socket reused the fd number, with nothing set up to read it.
   Closing now drops queued changes for that fd.
+- Wing: a raw socket read or write that a signal interrupted (`EINTR`) was
+  taken for a failed connection, which closed it and could reset a response
+  in the socket; a drain ended early the same way. They are now retried.
+  Go installs its signal handlers with `SA_RESTART`, so this was unlikely in
+  practice.
 - Wing: calling `Shutdown` a second time woke the stopped workers again,
   which wrote to their closed wake descriptors, or to whatever reused those
   numbers. The first call could do the same to a worker that had already

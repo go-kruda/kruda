@@ -519,12 +519,9 @@ func TestWingTakeoverDrainHoldsWithoutADeadline(t *testing.T) {
 	if _, err := syscall.Write(fds[1], []byte("queued input")); err != nil {
 		t.Fatal(err)
 	}
-	old := lingerDelay
-	lingerDelay = int64(100 * time.Millisecond)
-	defer func() { lingerDelay = old }()
-	start := time.Now()
+	start := time.Now() // lingerDelay is left alone: a connection from an earlier test may still read it
 	lingerTakeover(f, int32(fds[0]), make([]byte, 64), &takeoverGate{})
-	if held := time.Since(start); held < 90*time.Millisecond {
+	if held := time.Since(start); held < time.Duration(lingerDelay)*9/10 {
 		t.Fatalf("held %v, want the linger", held)
 	}
 	if n, err := syscall.Read(fds[1], make([]byte, 8)); n != 0 || err != nil {

@@ -2851,13 +2851,24 @@ func (w *worker) cleanup() {
 		grace.Stop()
 	}
 	w.shutTakeoverWrites()
+	// The write side alone: Spawn writes are non-blocking, and a response may
+	// already be in the socket, which the read side must keep draining for.
 	for _, c := range w.conns {
 		if c.pending > 0 && !c.takenOver {
-			_ = syscall.Shutdown(int(c.fd), syscall.SHUT_RDWR)
+			c.shutWrite()
 		}
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
 	drainUntil(waitFor(w.dispatchWG.Wait), nil)
+	// Every handler has returned. A connection the loop left open may still
+	// have a response in its socket: it lingers too, rather than closing over
+	// input that arrives behind that response.
+	for _, c := range w.conns {
+		if !c.takenOver && c.lingerUntil == 0 {
+			c.pending = 0
+			w.retire(c)
+		}
+	}
 	w.lingerAtShutdown(true)
 	// What was queued before the last sender returned.
 drainBuffered:

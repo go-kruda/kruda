@@ -274,3 +274,61 @@ func TestWingRetireDrainsBehindAnAnswer(t *testing.T) {
 		}
 	}
 }
+
+// TestWingShutdownDrainsBehindAKeepAliveReply leaves a whole keep-alive reply
+// unread in the socket. A Pool handler on another connection holds Shutdown
+// while the stopped loop no longer reads, and a late request arrives. Closing
+// over it would reset the reply before the client reads it.
+func TestWingShutdownDrainsBehindAKeepAliveReply(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	reply := strings.Repeat("k", 256<<10)
+	entered, release := make(chan struct{}), make(chan struct{})
+	app := New(Wing())
+	app.Get("/reply", func(c *Ctx) error { return c.Text(reply) })
+	app.Get("/hold", func(c *Ctx) error {
+		close(entered)
+		<-release
+		return c.Text("held")
+	}, Arrow)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	conn, br := framingDial(t, addr)
+	defer conn.Close()
+	if _, err := io.WriteString(conn, framingGet("/reply")); err != nil {
+		t.Fatal(err)
+	}
+	hold, _ := framingDial(t, addr)
+	defer hold.Close()
+	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Pool handler never ran")
+	}
+	time.Sleep(50 * time.Millisecond) // the reply is written, and not read
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		stopped <- app.transport.Shutdown(ctx)
+	}()
+	time.Sleep(100 * time.Millisecond) // the loop has stopped; Shutdown waits for the Pool
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	time.Sleep(50 * time.Millisecond)
+	start := make(chan struct{})
+	got := readBodyAfter(br, start)
+	close(start)
+	r := <-got
+	if err := <-stopped; err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if r.err != nil || r.n != len(reply) {
+		t.Fatalf("reply %d of %d bytes, %v; want it whole", r.n, len(reply), r.err)
+	}
+}

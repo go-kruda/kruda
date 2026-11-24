@@ -155,3 +155,33 @@ func TestWingFirstTakeoverRejectionKeepsEarlierResponse(t *testing.T) {
 		t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
 	}
 }
+
+// TestWingContinueCountsAsAResponse begins an upload that asks for 100
+// Continue. Once that is written, a response is in the socket: a Takeover that
+// starts with this request must still drain behind it.
+func TestWingContinueCountsAsAResponse(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[0])
+	defer syscall.Close(fds[1])
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := newTestWorker(0)
+	c := newTestConn(int32(fds[0]))
+	c.readN = copy(c.readBuf, "POST /up HTTP/1.1\r\nHost: a\r\nContent-Length: 5\r\nExpect: 100-continue\r\n\r\n")
+	w.conns[c.fd] = c
+	if !w.beginBodyAccum(c, 5, true) {
+		t.Fatal("body not accepted")
+	}
+	got := make([]byte, 64)
+	n, _ := syscall.Read(fds[1], got)
+	if string(got[:n]) != string(wing100Continue) {
+		t.Fatalf("peer read %q, want 100 Continue", got[:n])
+	}
+	if c.responses != 1 {
+		t.Fatalf("responses %d after 100 Continue, want 1", c.responses)
+	}
+}

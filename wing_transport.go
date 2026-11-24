@@ -269,7 +269,7 @@ type conn struct {
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
 	discarded       int    // input dropped behind the final response
-	requests        int    // requests dispatched; past one, a response may still be in the socket
+	responses       int    // responses begun, provisional ones too; past one, an earlier one may still be in the socket
 	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -1152,7 +1152,7 @@ func (w *worker) tryParse(c *conn) {
 			copy(c.readBuf, c.readBuf[consumed:c.readN])
 		}
 		c.readN = remaining
-		c.requests++
+		c.responses++
 
 		switch f.Dispatch {
 		case Inline:
@@ -1337,7 +1337,7 @@ func (w *worker) dispatchAsync(c *conn, req *wingRequest, f Preset) {
 		file := os.NewFile(uintptr(c.fd), "wing-takeover")
 		gate := &takeoverGate{}
 		c.takeoverFile, c.takeoverGate = file, gate
-		answered := c.requests > 1 // the event loop wrote an earlier response
+		answered := c.responses > 1 // the event loop wrote an earlier response
 		w.dispatchWG.Add(1)
 		go func() {
 			defer w.dispatchWG.Done()
@@ -1429,6 +1429,7 @@ func (w *worker) beginBodyAccum(c *conn, need int, expectContinue bool) bool {
 	if len(c.bodyBuf) < c.bodyNeed {
 		if expectContinue {
 			c.sendBuf = append(c.sendBuf, wing100Continue...)
+			c.responses++
 		}
 		// Flush only after this request owns its body budget, but before draining
 		// can complete it and recursively parse a later pipelined request. Earlier
@@ -1562,7 +1563,7 @@ func (w *worker) finishBodyAccum(c *conn) {
 // runs as Spawn, since the fd cannot be detached yet.
 func (w *worker) dispatchAccumulated(c *conn, req *wingRequest, f Preset) {
 	c.readDrained = false
-	c.requests++
+	c.responses++
 	// A Hijack-preset route (WebSocket upgrade) is a bodyless GET. A body forces
 	// inline accumulation, where c.ResponseWriter() is not an http.Hijacker — so
 	// reject it cleanly (400) rather than letting the upgrade fail opaquely.

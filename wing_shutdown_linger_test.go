@@ -332,3 +332,48 @@ func TestWingShutdownDrainsBehindAKeepAliveReply(t *testing.T) {
 		t.Fatalf("reply %d of %d bytes, %v; want it whole", r.n, len(reply), r.err)
 	}
 }
+
+// TestWingHijackCloseDrainsBehindAnEarlierResponse pipelines a keep-alive
+// response and an upgrade the app hijacks, answers and closes while a client
+// frame is still unread. The response before the upgrade is still queued:
+// reclaiming the socket over that frame would reset it.
+func TestWingHijackCloseDrainsBehindAnEarlierResponse(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	big := strings.Repeat("h", 256<<10)
+	entered, release := make(chan struct{}), make(chan struct{})
+	app := New(Wing())
+	app.Get("/big", func(c *Ctx) error { return c.Text(big) }, Bolt)
+	app.Get("/ws", func(c *Ctx) error {
+		nc, _, err := c.ResponseWriter().(http.Hijacker).Hijack()
+		if err != nil {
+			return err
+		}
+		close(entered)
+		<-release
+		return nc.Close()
+	}, Hijack)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	conn, br := framingDial(t, addr)
+	defer conn.Close()
+	if _, err := io.WriteString(conn, framingGet("/big")+framingGet("/ws")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Hijack handler never ran")
+	}
+	if _, err := io.WriteString(conn, "a frame the app never reads"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	time.Sleep(100 * time.Millisecond)
+	start := make(chan struct{})
+	got := readBodyAfter(br, start)
+	close(start)
+	if r := <-got; r.err != nil || r.n != len(big) {
+		t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
+	}
+}

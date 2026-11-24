@@ -28,7 +28,7 @@ func TestWingHijackConn_SatisfiesNetConn(t *testing.T) {
 	af, bf := newSocketpairFiles(t)
 	defer af.Close()
 	defer bf.Close()
-	c := newWingHijackConn(af, int32(af.Fd()), "203.0.113.7:5555", context.Background())
+	c := newWingHijackConn(af, int32(af.Fd()), "203.0.113.7:5555", context.Background(), nil)
 	if c.RemoteAddr().String() != "203.0.113.7:5555" {
 		t.Errorf("RemoteAddr = %q", c.RemoteAddr().String())
 	}
@@ -47,7 +47,7 @@ func TestWingHijackConn_CloseIsCoordinated(t *testing.T) {
 	af, bf := newSocketpairFiles(t)
 	defer bf.Close()
 	fd := int32(af.Fd())
-	c := newWingHijackConn(af, fd, "", context.Background())
+	c := newWingHijackConn(af, fd, "", context.Background(), nil)
 
 	// Close half-closes the socket (peer sees EOF) but does NOT close the fd:
 	// af must still be a valid fd afterward (hijackTakeover owns the real close).
@@ -70,7 +70,7 @@ func TestWingHijackConn_Done(t *testing.T) {
 	defer af.Close()
 	defer bf.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	c := newWingHijackConn(af, int32(af.Fd()), "", ctx)
+	c := newWingHijackConn(af, int32(af.Fd()), "", ctx, nil)
 	select {
 	case <-c.Done():
 		t.Fatal("Done fired before cancel")

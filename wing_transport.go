@@ -2931,37 +2931,33 @@ func (w *worker) shutTakeoverWrites() {
 // socket. A nil gate (tests that drive a loop directly) does nothing.
 type takeoverGate struct {
 	mu       sync.Mutex
-	draining bool // in the final drain: its deadline and the peer decide the close
-	hijacked bool // handed to Hijack: the app reads, and may retry a timeout
-	woken    bool
-	wrShut   bool // Shutdown ended the write side; the drain reuses that
+	draining bool        // in the final drain: its deadline and the peer decide the close
+	woken    atomic.Bool // Shutdown has begun; a hijacked socket's reads end for good
+	wrShut   bool        // the write side is shut; darwin refuses a second SHUT_WR
 }
 
 // wake ends an idle read at the start of Shutdown. A deadline, not a shutdown,
-// for Wing's own reads: a handler still running can write its response, and
-// the final drain can set a deadline of its own. A hijacked socket gets its read
-// side shut, which an app's read loop cannot retry past.
+// so the read side stays open for the final drain that may follow: a handler
+// still running can write its response, and the drain sets a deadline of its
+// own. An app reading a hijacked socket cannot retry past it, as its reads
+// report an EOF once the gate is woken.
 func (g *takeoverGate) wake(f *os.File, fd int32) {
 	if g == nil {
 		return
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	switch {
-	case g.draining:
-	case g.hijacked:
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_RD)
-	case f != nil:
+	g.woken.Store(true)
+	if !g.draining && f != nil {
 		_ = f.SetReadDeadline(time.Now())
 	}
-	g.woken = true
 }
 
-// shut cuts the socket once the Pool has finished or the grace has passed,
+// shut cuts the write side once the Pool has finished or the grace has passed,
 // which ends a handler blocked on a write. A draining socket is left to its
-// drain, which ends by itself. A socket Wing reads keeps its read side, so the
-// final drain that may follow still sees a late request rather than an EOF;
-// its reads were woken by the deadline already.
+// drain, which ends by itself. The read side stays, so the final drain that
+// may follow still sees a late request rather than an EOF; its reads were
+// woken by the deadline already.
 func (g *takeoverGate) shut(fd int32) {
 	if g == nil {
 		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
@@ -2969,13 +2965,24 @@ func (g *takeoverGate) shut(fd int32) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	switch {
-	case g.draining:
-	case g.hijacked && g.woken:
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR) // darwin refuses SHUT_RDWR after SHUT_RD
-	case g.hijacked:
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_RDWR)
-	default:
+	if !g.draining {
+		g.shutWriteLocked(fd)
+	}
+}
+
+// shutWrite ends the write side once, for the app closing a hijacked socket.
+func (g *takeoverGate) shutWrite(fd int32) {
+	if g == nil {
+		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR)
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.shutWriteLocked(fd)
+}
+
+func (g *takeoverGate) shutWriteLocked(fd int32) {
+	if !g.wrShut {
 		g.wrShut = syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil
 	}
 }
@@ -2993,18 +3000,5 @@ func (g *takeoverGate) startDrain(f *os.File, fd int32) bool {
 		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) == nil
 }
 
-// markHijacked records that the app owns the socket's reads from now on. If
-// Shutdown already set a read deadline, that becomes a shutdown of the read
-// side, which the app's read loop cannot retry past.
-func (g *takeoverGate) markHijacked(f *os.File, fd int32) {
-	if g == nil {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.hijacked = true
-	if g.woken {
-		_ = f.SetReadDeadline(time.Time{})
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_RD)
-	}
-}
+// stopped reports whether Shutdown has ended a hijacked socket's reads.
+func (g *takeoverGate) stopped() bool { return g != nil && g.woken.Load() }

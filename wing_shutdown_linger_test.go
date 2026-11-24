@@ -7,6 +7,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -220,20 +221,73 @@ func TestWingFinalCloseLingersOnAnEmptySocket(t *testing.T) {
 	}
 }
 
-// TestWingFinalCloseEndsWriteSideAtTheCap ends a connection whose peer sends
-// past maxDiscardInput. It closes, but the response must still end in a FIN.
-func TestWingFinalCloseEndsWriteSideAtTheCap(t *testing.T) {
+// TestWingFinalCloseHoldsPastTheCap ends a connection whose peer sends past
+// maxDiscardInput. The write side ends first, and the connection reads no more
+// but still lingers: closing over the rest would reset the response.
+func TestWingFinalCloseHoldsPastTheCap(t *testing.T) {
 	w, c, peer := finalClosePair(t)
 	c.discarded = maxDiscardInput - 4
 	if _, err := syscall.Write(peer, make([]byte, 64)); err != nil {
 		t.Fatal(err)
 	}
 	w.closeAfterFinal(c)
-	if w.conns[c.fd] != nil {
-		t.Fatal("still open past the cap")
+	if c.lingerUntil == 0 || w.conns[c.fd] != c {
+		t.Fatal("closed at the cap")
 	}
 	if n, err := syscall.Read(peer, make([]byte, 8)); n != 0 || err != nil {
 		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
+	}
+}
+
+// TestWingLingerReleasesTheBodyBudget retires an upload that timed out after
+// an earlier response. Its body budget must come back while it lingers, or
+// the next upload is refused until the socket closes.
+func TestWingLingerReleasesTheBodyBudget(t *testing.T) {
+	w, c, _ := finalClosePair(t)
+	w.maxInflightBody, w.inflightBody = 64, 10
+	c.bodyNeed, c.bodyBuf, c.responses = 10, make([]byte, 0, 10), 1
+	w.readTimeout, c.readDeadline = int64(time.Second), 1
+	w.sweepTimeouts(int64(time.Hour))
+	if c.lingerUntil == 0 {
+		t.Fatal("did not linger")
+	}
+	if w.inflightBody != 0 || c.bodyNeed != 0 {
+		t.Fatalf("lingering upload holds %d of the budget, bodyNeed %d", w.inflightBody, c.bodyNeed)
+	}
+	w.closeConn(c.fd)
+	if w.inflightBody != 0 {
+		t.Fatalf("budget returned twice: %d", w.inflightBody)
+	}
+}
+
+// TestWingFinalResponseSurvivesInputPastTheCap pipelines a large response and
+// more input than maxDiscardInput behind it, from a client slow to read. Both
+// the event loop and a Takeover must end the write side before dropping that
+// input, and keep the socket until the client has read the response.
+func TestWingFinalResponseSurvivesInputPastTheCap(t *testing.T) {
+	for name, preset := range map[string]Preset{"event loop": Bolt, "Takeover": Spear} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("KRUDA_WORKERS", "1")
+			big := strings.Repeat("h", 256<<10)
+			app := New(Wing())
+			app.Get("/big", func(c *Ctx) error { return c.Text(big) }, preset)
+			app.Compile()
+			addr, _ := startWingHijackServer(t, app)
+			conn, br := framingDial(t, addr)
+			defer conn.Close()
+			req := "GET /big HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+			go func() {
+				_, _ = io.WriteString(conn, req)
+				_, _ = conn.Write(make([]byte, maxDiscardInput+(64<<10)))
+			}()
+			start := make(chan struct{})
+			got := readBodyAfter(br, start)
+			time.Sleep(150 * time.Millisecond)
+			close(start)
+			if r := <-got; r.err != nil || r.n != len(big) {
+				t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
+			}
+		})
 	}
 }
 
@@ -375,5 +429,68 @@ func TestWingHijackCloseDrainsBehindAnEarlierResponse(t *testing.T) {
 	close(start)
 	if r := <-got; r.err != nil || r.n != len(big) {
 		t.Fatalf("response %d of %d bytes, %v; want it whole", r.n, len(big), r.err)
+	}
+}
+
+// TestWingHijackReadsStayEndedPastAppDeadlines wakes a hijacked socket for
+// Shutdown while one app goroutine is blocked reading and another keeps
+// pushing the read deadline out, as a read loop with a timeout does. The
+// blocked read must still end, every later read must report EOF, and the
+// owner must be able to wait for app reads before it drains.
+func TestWingHijackReadsStayEndedPastAppDeadlines(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[1])
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
+		t.Fatal(err)
+	}
+	f := os.NewFile(uintptr(fds[0]), "hijacked")
+	defer f.Close()
+	g := &takeoverGate{}
+	nc := newWingHijackConn(f, int32(fds[0]), "", context.Background(), g)
+	blocked := make(chan error, 1)
+	go func() {
+		_, err := nc.Read(make([]byte, 8))
+		blocked <- err
+	}()
+	stop := make(chan struct{})
+	pushed := make(chan struct{})
+	go func() {
+		defer close(pushed)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = nc.SetReadDeadline(time.Now().Add(time.Hour))
+			}
+		}
+	}()
+	time.Sleep(20 * time.Millisecond)
+	g.wake(f, int32(fds[0]))
+	select {
+	case err := <-blocked:
+		if err != io.EOF {
+			t.Fatalf("blocked read ended with %v, want EOF", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a read blocked at Shutdown never ended")
+	}
+	close(stop)
+	<-pushed
+	if _, err := nc.Read(make([]byte, 8)); err != io.EOF {
+		t.Fatalf("read after Shutdown: %v, want EOF", err)
+	}
+	if err := nc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	joined := make(chan struct{})
+	go func() { nc.reads.Wait(); close(joined) }()
+	select {
+	case <-joined:
+	case <-time.After(2 * time.Second):
+		t.Fatal("app reads never returned after Close")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,19 +42,24 @@ type wingHijackConn struct {
 	fd     int32 // raw fd for syscall.Shutdown (avoids os.File.Fd()'s blocking side effect)
 	remote string
 	ctx    context.Context
-	gate   *takeoverGate
+	gate   *takeoverGate // its mu orders the app's reads and read deadlines against Shutdown and the drain
 	closed atomic.Bool
-	done   chan struct{} // closed once by Close() — tells hijackTakeover the app is done with the fd
+	reads  sync.WaitGroup // app reads in progress; the drain starts once they have returned
+	done   chan struct{}  // closed once by Close() — tells hijackTakeover the app is done with the fd
 }
 
 func newWingHijackConn(f *os.File, fd int32, remote string, ctx context.Context, g *takeoverGate) *wingHijackConn {
+	if g == nil {
+		g = &takeoverGate{}
+	}
 	return &wingHijackConn{f: f, fd: fd, remote: remote, ctx: ctx, gate: g, done: make(chan struct{})}
 }
 
 // Reads end for good once the app closes the adapter or Shutdown begins. Both
 // stop a blocked read with a deadline and keep the read side open, so Wing can
 // drain behind what was written; a later deadline from the app's read loop
-// must not revive it.
+// must not revive it. Read deadlines change only under the gate, so a setter
+// cannot slip in between the end of reads and the deadline that enforces it.
 func (c *wingHijackConn) readsEnded() error {
 	if c.closed.Load() {
 		return net.ErrClosed
@@ -65,16 +71,27 @@ func (c *wingHijackConn) readsEnded() error {
 }
 
 func (c *wingHijackConn) Read(b []byte) (int, error) {
-	if err := c.readsEnded(); err != nil {
+	if err := c.admitRead(); err != nil {
 		return 0, err
 	}
 	n, err := c.f.Read(b)
+	c.reads.Done()
 	if err != nil {
 		if ended := c.readsEnded(); ended != nil {
 			err = ended
 		}
 	}
 	return n, err
+}
+
+func (c *wingHijackConn) admitRead() error {
+	c.gate.mu.Lock()
+	defer c.gate.mu.Unlock()
+	if err := c.readsEnded(); err != nil {
+		return err
+	}
+	c.reads.Add(1)
+	return nil
 }
 
 func (c *wingHijackConn) Write(b []byte) (int, error) {
@@ -88,6 +105,8 @@ func (c *wingHijackConn) LocalAddr() net.Addr  { return wingAddr{"wing"} }
 func (c *wingHijackConn) RemoteAddr() net.Addr { return wingAddr{c.remote} }
 
 func (c *wingHijackConn) SetDeadline(t time.Time) error {
+	c.gate.mu.Lock()
+	defer c.gate.mu.Unlock()
 	if c.readsEnded() != nil {
 		return c.f.SetWriteDeadline(t)
 	}
@@ -95,6 +114,8 @@ func (c *wingHijackConn) SetDeadline(t time.Time) error {
 }
 
 func (c *wingHijackConn) SetReadDeadline(t time.Time) error {
+	c.gate.mu.Lock()
+	defer c.gate.mu.Unlock()
 	if c.readsEnded() != nil {
 		return nil
 	}
@@ -117,15 +138,18 @@ func (c *wingHijackConn) SetWriteDeadline(t time.Time) error { return c.f.SetWri
 // raw-fd Shutdown as complete before returning, or a losing closer could run
 // Shutdown on an already-recycled fd.
 func (c *wingHijackConn) Close() error {
+	c.gate.mu.Lock()
 	if c.closed.Swap(true) {
+		c.gate.mu.Unlock()
 		<-c.done // a concurrent closer won; wait until its Shutdown has completed
 		return nil
 	}
 	// Use the raw fd, not c.f.Fd(): os.File.Fd() can move the fd off the runtime
 	// poller (blocking mode), which would break concurrent parked I/O. Safe here
 	// because hijackTakeover has not closed the fd yet — it waits for done below.
-	c.gate.shutWrite(c.fd)
+	c.gate.shutWriteLocked(c.fd)
 	_ = c.f.SetReadDeadline(time.Now())
+	c.gate.mu.Unlock()
 	close(c.done)
 	return nil
 }
@@ -280,8 +304,10 @@ func (w *worker) hijackTakeover(first *wingRequest, fd int32, f *os.File, g *tak
 			// concurrent app Close races harmlessly: exactly one wins.
 			_ = hw.hijackedConn.Close()
 		}
-		// The app is done with the socket: drain behind what was written on it.
-		lingerTakeoverConn(f, fd, g)
+		// The app is done with the socket: once its reads have returned, which
+		// the expired deadline makes prompt, drain behind what was written on it.
+		hw.hijackedConn.reads.Wait()
+		lingerTakeoverConn(f, fd, hw.hijackedConn.gate)
 	}
 
 	cancel()

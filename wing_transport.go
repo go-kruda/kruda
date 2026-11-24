@@ -1712,22 +1712,17 @@ func (w *worker) discardInput(c *conn) discardResult {
 // ends the write side and drops input until the peer closes, as net/http's
 // closeWriteAndWait: the peer reads the response and an EOF, not a reset that
 // can discard it. That holds with nothing unread yet too, since a request can
-// still land before the close. lingerDelay bounds the wait, timeouts or not.
+// still land before the close. The write side ends before any input is dropped,
+// and past maxDiscardInput the connection reads no more but still waits out
+// its linger: closing then would reset a response the peer is still reading.
+// lingerDelay bounds the wait, timeouts or not.
 func (w *worker) closeAfterFinal(c *conn) {
-	switch w.discardInput(c) {
-	case discardEnded:
+	if !c.shutWrite() || w.discardInput(c) == discardEnded {
 		w.closeConn(c.fd) // the peer is gone: nothing left to protect
-		return
-	case discardFull:
-		c.shutWrite() // the response still ends in a FIN, ahead of the reset
-		w.closeConn(c.fd)
 		return
 	}
 	if c.lingerUntil == 0 {
-		if !c.shutWrite() {
-			w.closeConn(c.fd)
-			return
-		}
+		w.releaseBody(c) // an upload abandoned here must not hold the budget through the wait
 		c.lingerUntil = monoNow() + lingerDelay
 		if !w.waitShortened {
 			w.setWait(lingerWaitMillis)
@@ -2445,44 +2440,30 @@ done:
 // lingerTakeover is closeAfterFinal for a Takeover socket, which this goroutine
 // owns: buf is free, and the read deadline bounds the wait.
 func lingerTakeover(f *os.File, fd int32, buf []byte, g *takeoverGate) {
-	discarded := 0
-	for {
-		if discarded >= maxDiscardInput {
-			g.startDrain(f, fd) // the peer is not waiting, but the response still ends in a FIN
-			return
-		}
-		n, err := syscall.Read(int(fd), buf[:min(len(buf), maxDiscardInput-discarded)])
-		if n > 0 {
-			discarded += n
-			continue
-		}
-		if err == syscall.EINTR {
-			continue
-		}
-		if err != syscall.EAGAIN {
-			return // EOF or a failed socket: nothing to protect
-		}
-		break
-	}
 	if testFinalDrainHook != nil {
 		testFinalDrainHook()
 	}
 	// Even with nothing unread now, a request can still land before the close
 	// and reset it, and with it any response bytes still in the send queue.
-	// A goroutine can afford to wait for the peer's FIN; the slot is held
-	// until then, lingerDelay at most.
+	// The write side ends before any input is dropped. A goroutine can afford
+	// to wait for the peer's FIN; the slot is held until then, lingerDelay at
+	// most.
+	until := time.Now().Add(time.Duration(lingerDelay))
 	if !g.startDrain(f, fd) {
 		return
 	}
 	if testDrainingHook != nil {
 		testDrainingHook()
 	}
-	for discarded < maxDiscardInput {
+	for discarded := 0; discarded < maxDiscardInput; {
 		n, err := f.Read(buf[:min(len(buf), maxDiscardInput-discarded)])
 		if discarded += n; err != nil {
 			return
 		}
 	}
+	// Past the cap nothing more is read, but closing now would reset a
+	// response the peer is still reading.
+	time.Sleep(time.Until(until))
 }
 
 // releaseTakeoverBuffers lets go of the keep-alive loop's buffers before a
@@ -2671,16 +2652,7 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 		}
 		c.admitted = false
 	}
-	// Release any in-flight body reservation so a connection closed mid-
-	// accumulation (timeout, disconnect, parse failure) does not leak the
-	// per-worker budget. finishBodyAccum zeroes bodyNeed before any close,
-	// so this cannot double-decrement.
-	if c.bodyNeed > 0 && w.maxInflightBody > 0 {
-		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
-	}
-	c.bodyNeed = 0
-	c.bodyBuf = nil
-	c.headerSnapshot = nil
+	w.releaseBody(c)
 	if c.lingerUntil > 0 {
 		c.lingerUntil = 0
 		w.lingering--
@@ -2711,7 +2683,7 @@ func (w *worker) lingerAtShutdown(wait bool) {
 	for w.lingering > 0 {
 		now := monoNow()
 		for fd, c := range w.conns {
-			if c.lingerUntil > 0 && (now >= c.lingerUntil || w.discardInput(c) != discardDrained) {
+			if c.lingerUntil > 0 && (now >= c.lingerUntil || w.discardInput(c) == discardEnded) {
 				w.closeConn(fd)
 			}
 		}
@@ -2742,6 +2714,19 @@ func rawWrite(fd int32, p []byte) (int, syscall.Errno) {
 			return int(n), e
 		}
 	}
+}
+
+// releaseBody gives back c's in-flight body reservation, so a connection that
+// ends mid-upload (timeout, disconnect, parse failure, linger) does not keep
+// the per-worker budget. It zeroes bodyNeed, as finishBodyAccum does, so the
+// reservation is never returned twice.
+func (w *worker) releaseBody(c *conn) {
+	if c.bodyNeed > 0 && w.maxInflightBody > 0 {
+		atomic.AddInt64(&w.inflightBody, -int64(c.bodyNeed))
+	}
+	c.bodyNeed = 0
+	c.bodyBuf = nil
+	c.headerSnapshot = nil
 }
 
 func (w *worker) closeConn(fd int32) {
@@ -2970,17 +2955,7 @@ func (g *takeoverGate) shut(fd int32) {
 	}
 }
 
-// shutWrite ends the write side once, for the app closing a hijacked socket.
-func (g *takeoverGate) shutWrite(fd int32) {
-	if g == nil {
-		_ = syscall.Shutdown(int(fd), syscall.SHUT_WR)
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.shutWriteLocked(fd)
-}
-
+// shutWriteLocked ends the write side once; the caller holds g.mu.
 func (g *takeoverGate) shutWriteLocked(fd int32) {
 	if !g.wrShut {
 		g.wrShut = syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil

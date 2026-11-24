@@ -103,7 +103,8 @@ func TestWingFinalResponseSurvivesUnreadInput(t *testing.T) {
 
 // TestWingDiscardBehindFinalResponseIsBounded keeps sending while a final
 // response waits to be sent. Wing drops at most maxDiscardInput of that input
-// in all, leaves the rest unread, still sends the response, and then closes.
+// in all, leaves the rest unread, still sends the response, and then lingers
+// without reading more: closing over the rest would reset that response.
 func TestWingDiscardBehindFinalResponseIsBounded(t *testing.T) {
 	w, c, peer, _ := socketWorker(t, 4096, nil)
 	c.keepAlive = false
@@ -125,8 +126,8 @@ func TestWingDiscardBehindFinalResponseIsBounded(t *testing.T) {
 		t.Fatalf("open %v, dropped %d: want the response still queued after %d", w.conns[c.fd] == c, c.discarded, maxDiscardInput)
 	}
 	w.handleSend(event{Op: opSend, Fd: c.fd})
-	if w.conns[c.fd] == c {
-		t.Fatal("still open after the response was sent past the budget")
+	if w.conns[c.fd] != c || c.lingerUntil == 0 || c.discarded != maxDiscardInput {
+		t.Fatalf("open %v, lingering %v, dropped %d: want a linger that reads no more", w.conns[c.fd] == c, c.lingerUntil != 0, c.discarded)
 	}
 	got := make([]byte, len(response))
 	if _, err := io.ReadFull(peer, got); err != nil || string(got) != response {
@@ -385,7 +386,8 @@ type shutWriteEngine struct{ *mockEngine }
 
 func (e shutWriteEngine) SubmitClose(fd int32) {
 	e.mockEngine.SubmitClose(fd)
-	if err := syscall.Shutdown(int(fd), syscall.SHUT_WR); err != nil {
+	// The final close may have ended the write side already; darwin refuses it twice.
+	if err := syscall.Shutdown(int(fd), syscall.SHUT_WR); err != nil && err != syscall.ENOTCONN {
 		panic(err)
 	}
 }

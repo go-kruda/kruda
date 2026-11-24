@@ -230,9 +230,15 @@ func TestWingFinalCloseHoldsPastTheCap(t *testing.T) {
 	if _, err := syscall.Write(peer, make([]byte, 64)); err != nil {
 		t.Fatal(err)
 	}
+	eng := w.eng.(*mockEngine)
 	w.closeAfterFinal(c)
 	if c.lingerUntil == 0 || w.conns[c.fd] != c {
 		t.Fatal("closed at the cap")
+	}
+	// The unread rest keeps the socket readable: re-arming it would hand the
+	// worker the same event until the deadline.
+	if eng.recvArmed != 0 || eng.detached != 1 {
+		t.Fatalf("read armed %d times, detached %d; want no events until the deadline", eng.recvArmed, eng.detached)
 	}
 	if n, err := syscall.Read(peer, make([]byte, 8)); n != 0 || err != nil {
 		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
@@ -492,5 +498,36 @@ func TestWingHijackReadsStayEndedPastAppDeadlines(t *testing.T) {
 	case <-joined:
 	case <-time.After(2 * time.Second):
 		t.Fatal("app reads never returned after Close")
+	}
+}
+
+// TestWingTakeoverDrainHoldsWithoutADeadline drains a Takeover socket whose
+// file cannot take a read deadline, as when it never reached the runtime
+// poller. Its write side still ends, and the socket must be held through the
+// linger rather than closed over the input queued on it.
+func TestWingTakeoverDrainHoldsWithoutADeadline(t *testing.T) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[1])
+	f := os.NewFile(uintptr(fds[0]), "blocking") // a blocking fd: no deadlines
+	defer f.Close()
+	if err := f.SetReadDeadline(time.Now()); err == nil {
+		t.Skip("this platform gave a blocking file a deadline")
+	}
+	if _, err := syscall.Write(fds[1], []byte("queued input")); err != nil {
+		t.Fatal(err)
+	}
+	old := lingerDelay
+	lingerDelay = int64(100 * time.Millisecond)
+	defer func() { lingerDelay = old }()
+	start := time.Now()
+	lingerTakeover(f, int32(fds[0]), make([]byte, 64), &takeoverGate{})
+	if held := time.Since(start); held < 90*time.Millisecond {
+		t.Fatalf("held %v, want the linger", held)
+	}
+	if n, err := syscall.Read(fds[1], make([]byte, 8)); n != 0 || err != nil {
+		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
 	}
 }

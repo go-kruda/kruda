@@ -1717,8 +1717,13 @@ func (w *worker) discardInput(c *conn) discardResult {
 // its linger: closing then would reset a response the peer is still reading.
 // lingerDelay bounds the wait, timeouts or not.
 func (w *worker) closeAfterFinal(c *conn) {
-	if !c.shutWrite() || w.discardInput(c) == discardEnded {
+	if !c.shutWrite() {
 		w.closeConn(c.fd) // the peer is gone: nothing left to protect
+		return
+	}
+	got := w.discardInput(c)
+	if got == discardEnded {
+		w.closeConn(c.fd)
 		return
 	}
 	if c.lingerUntil == 0 {
@@ -1732,6 +1737,13 @@ func (w *worker) closeAfterFinal(c *conn) {
 		w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
 		c.sendBuf, c.sendN = nil, 0 // sent
 		c.readBuf, c.readN = nil, 0 // discardInput reads into the worker's buffer
+	}
+	if got == discardFull {
+		// The unread rest keeps the socket readable, and a read armed again
+		// would hand this worker the same event until the deadline. The
+		// linger sweep closes it then.
+		w.eng.Detach(c.fd)
+		return
 	}
 	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
 }
@@ -2448,21 +2460,22 @@ func lingerTakeover(f *os.File, fd int32, buf []byte, g *takeoverGate) {
 	// The write side ends before any input is dropped. A goroutine can afford
 	// to wait for the peer's FIN; the slot is held until then, lingerDelay at
 	// most.
-	until := time.Now().Add(time.Duration(lingerDelay))
-	if !g.startDrain(f, fd) {
+	until, timed, ok := g.startDrain(f, fd)
+	if !ok {
 		return
 	}
 	if testDrainingHook != nil {
 		testDrainingHook()
 	}
-	for discarded := 0; discarded < maxDiscardInput; {
+	// Without a read deadline a read could outlast the linger, so the socket
+	// is only held. Past the cap nothing more is read either. Closing in
+	// either case would reset a response the peer may still be reading.
+	for discarded := 0; timed && discarded < maxDiscardInput; {
 		n, err := f.Read(buf[:min(len(buf), maxDiscardInput-discarded)])
 		if discarded += n; err != nil {
 			return
 		}
 	}
-	// Past the cap nothing more is read, but closing now would reset a
-	// response the peer is still reading.
 	time.Sleep(time.Until(until))
 }
 
@@ -2962,17 +2975,25 @@ func (g *takeoverGate) shutWriteLocked(fd int32) {
 	}
 }
 
-// startDrain begins the final drain: the write side ends and the read deadline
-// becomes the drain's. Under the gate, so Shutdown cannot replace it.
-func (g *takeoverGate) startDrain(f *os.File, fd int32) bool {
+// startDrain begins the final drain: the write side ends, and the drain lasts
+// until lingerDelay from then. Under the gate, so Shutdown cannot replace the
+// deadline. ok is false when the write side could not be shut: the socket has
+// failed. timed is false when reads cannot take the deadline.
+func (g *takeoverGate) startDrain(f *os.File, fd int32) (until time.Time, timed, ok bool) {
 	shut := false
 	if g != nil {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		g.draining, shut = true, g.wrShut
 	}
-	return (shut || syscall.Shutdown(int(fd), syscall.SHUT_WR) == nil) &&
-		f.SetReadDeadline(time.Now().Add(time.Duration(lingerDelay))) == nil
+	if !shut && syscall.Shutdown(int(fd), syscall.SHUT_WR) != nil {
+		return time.Time{}, false, false
+	}
+	if g != nil {
+		g.wrShut = true
+	}
+	until = time.Now().Add(time.Duration(lingerDelay))
+	return until, f.SetReadDeadline(until) == nil, true
 }
 
 // stopped reports whether Shutdown has ended a hijacked socket's reads.

@@ -269,6 +269,7 @@ type conn struct {
 	parseDepth      uint8  // parses nested through completed sends
 	resumeParse     bool   // yielded with input to parse; the next write event resumes
 	discarded       int    // input dropped behind the final response
+	wrShut          bool   // the write side is shut
 	responses       int    // responses begun, provisional ones too; past one, an earlier one may still be in the socket
 	lingerUntil     int64  // monoNow nanos — the write side is shut; close by then at the latest
 	ctx             context.Context
@@ -1707,17 +1708,23 @@ func (w *worker) discardInput(c *conn) discardResult {
 	}
 }
 
-// closeAfterFinal ends a connection whose final response is fully written. With
-// unread input it ends the write side and drops input until the peer closes,
-// as net/http's closeWriteAndWait: the peer reads the response and an EOF, not
-// a reset that can discard it. lingerDelay bounds the wait, timeouts or not.
+// closeAfterFinal ends a connection whose final response is fully written. It
+// ends the write side and drops input until the peer closes, as net/http's
+// closeWriteAndWait: the peer reads the response and an EOF, not a reset that
+// can discard it. That holds with nothing unread yet too, since a request can
+// still land before the close. lingerDelay bounds the wait, timeouts or not.
 func (w *worker) closeAfterFinal(c *conn) {
-	if w.discardInput(c) != discardDrained || c.discarded == 0 {
-		w.closeConn(c.fd) // nothing unread, or the peer is gone or sent too much
+	switch w.discardInput(c) {
+	case discardEnded:
+		w.closeConn(c.fd) // the peer is gone: nothing left to protect
+		return
+	case discardFull:
+		c.shutWrite() // the response still ends in a FIN, ahead of the reset
+		w.closeConn(c.fd)
 		return
 	}
 	if c.lingerUntil == 0 {
-		if syscall.Shutdown(int(c.fd), syscall.SHUT_WR) != nil {
+		if !c.shutWrite() {
 			w.closeConn(c.fd)
 			return
 		}
@@ -1732,6 +1739,14 @@ func (w *worker) closeAfterFinal(c *conn) {
 		c.readBuf, c.readN = nil, 0 // discardInput reads into the worker's buffer
 	}
 	w.eng.SubmitRecv(c.fd, nil, 0) // drops a write interest; kqueue needs the read armed
+}
+
+// shutWrite ends c's write side once. darwin refuses a second SHUT_WR.
+func (c *conn) shutWrite() bool {
+	if !c.wrShut {
+		c.wrShut = syscall.Shutdown(int(c.fd), syscall.SHUT_WR) == nil
+	}
+	return c.wrShut
 }
 
 // maxDiscardInput bounds the input a closing connection drops. A peer that
@@ -2423,7 +2438,8 @@ func lingerTakeover(f *os.File, fd int32, buf []byte, g *takeoverGate) {
 	discarded := 0
 	for {
 		if discarded >= maxDiscardInput {
-			return // the peer is not waiting for its response
+			g.startDrain(f, fd) // the peer is not waiting, but the response still ends in a FIN
+			return
 		}
 		n, err := syscall.Read(int(fd), buf[:min(len(buf), maxDiscardInput-discarded)])
 		if n > 0 {

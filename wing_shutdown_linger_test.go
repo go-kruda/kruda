@@ -185,3 +185,54 @@ func TestWingContinueCountsAsAResponse(t *testing.T) {
 		t.Fatalf("responses %d after 100 Continue, want 1", c.responses)
 	}
 }
+
+// finalClosePair is a worker and a connection over a socketpair, with the
+// peer end non-blocking so the test can see what it has been sent.
+func finalClosePair(t *testing.T) (*worker, *conn, int) {
+	t.Helper()
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Close(fds[0]); syscall.Close(fds[1]) })
+	for _, fd := range fds {
+		if err := syscall.SetNonblock(fd, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, _ := newTestWorker(0)
+	c := newTestConn(int32(fds[0]))
+	w.conns[c.fd] = c
+	return w, c, fds[1]
+}
+
+// TestWingFinalCloseLingersOnAnEmptySocket ends a connection with nothing
+// unread yet. A request can still land before the close and reset the
+// response, so the close must end the write side and linger, not close.
+func TestWingFinalCloseLingersOnAnEmptySocket(t *testing.T) {
+	w, c, peer := finalClosePair(t)
+	w.closeAfterFinal(c)
+	if c.lingerUntil == 0 || w.conns[c.fd] != c {
+		t.Fatal("closed at once with nothing unread yet")
+	}
+	if n, err := syscall.Read(peer, make([]byte, 8)); n != 0 || err != nil {
+		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
+	}
+}
+
+// TestWingFinalCloseEndsWriteSideAtTheCap ends a connection whose peer sends
+// past maxDiscardInput. It closes, but the response must still end in a FIN.
+func TestWingFinalCloseEndsWriteSideAtTheCap(t *testing.T) {
+	w, c, peer := finalClosePair(t)
+	c.discarded = maxDiscardInput - 4
+	if _, err := syscall.Write(peer, make([]byte, 64)); err != nil {
+		t.Fatal(err)
+	}
+	w.closeAfterFinal(c)
+	if w.conns[c.fd] != nil {
+		t.Fatal("still open past the cap")
+	}
+	if n, err := syscall.Read(peer, make([]byte, 8)); n != 0 || err != nil {
+		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
+	}
+}

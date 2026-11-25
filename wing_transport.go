@@ -2761,6 +2761,9 @@ func (w *worker) externalWake() {
 }
 
 func (w *worker) cleanup() {
+	// The loop accepts no more. A connection left in the listen backlog would
+	// wait out every drain below unserved, then be reset.
+	closeFd(w.listenFd)
 	w.fileReadOnce.Do(func() {
 		if w.fileReadStop != nil {
 			close(w.fileReadStop)
@@ -2904,7 +2907,6 @@ drainBuffered:
 	w.eng.Close()
 	closeFd(w.evfd)
 	w.wakeMu.Unlock()
-	closeFd(w.listenFd)
 }
 
 func (w *worker) close() { w.cleanup() }

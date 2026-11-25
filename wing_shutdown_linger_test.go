@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -526,5 +527,43 @@ func TestWingTakeoverDrainHoldsWithoutADeadline(t *testing.T) {
 	}
 	if n, err := syscall.Read(fds[1], make([]byte, 8)); n != 0 || err != nil {
 		t.Fatalf("peer read %d, %v; want the EOF of the write side", n, err)
+	}
+}
+
+// TestWingShutdownStopsAcceptingAtOnce holds Shutdown on a Pool handler. A
+// connection made while Shutdown waits would sit in the listen backlog with
+// no loop to serve it, then be reset: the listener must close first.
+func TestWingShutdownStopsAcceptingAtOnce(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	entered, release := make(chan struct{}), make(chan struct{})
+	app := New(Wing())
+	app.Get("/hold", func(c *Ctx) error {
+		close(entered)
+		<-release
+		return c.Text("held")
+	}, Arrow)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	hold, _ := framingDial(t, addr)
+	defer hold.Close()
+	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Pool handler never ran")
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		stopped <- app.transport.Shutdown(ctx)
+	}()
+	defer func() { close(release); <-stopped }()
+	time.Sleep(100 * time.Millisecond) // the loop has stopped; Shutdown waits for the Pool
+	if late, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+		late.Close()
+		t.Fatal("a new connection was accepted while Shutdown waited")
 	}
 }

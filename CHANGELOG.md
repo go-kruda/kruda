@@ -80,14 +80,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Wing reads no more and stops watching the connection, but still keeps it
   until the 0.5 s are up, so a client still reading gets the whole response.
 
-  Every `Connection: close` response now waits for the client's FIN. Measured
-  on Linux with `wrk -t4 -c64 -d10s -H "Connection: close"` against a
-  plaintext route (Wing, 8 workers, server and client on separate cores, 6
-  alternating runs per side, `main` at `fba66a1` against `82c65e4`): no
-  measurable change in requests per second (median 95,965 before, 100,861
-  after, with ranges 90,135 to 109,377 and 92,877 to 108,569), p50 180 to
-  182 µs, p99 732 to 880 µs (ranges 675 to 809 and 777 to 960 µs), and about
-  69 to 92 open descriptors at 64 connections. The same runs with keep-alive
+  Every `Connection: close` response now waits for the client's FIN, which
+  raises tail latency for that traffic: p99 went from 732 to 880 µs, with no
+  overlap between the runs (675 to 809 µs before, 777 to 960 µs after), and
+  about 23 more descriptors stay open at 64 connections (69 to 92). Requests
+  per second showed no measurable change (median 95,965 before, 100,861 after,
+  ranges 90,135 to 109,377 and 92,877 to 108,569), and p50 went from 180 to
+  182 µs. Measured on Linux with `wrk -t4 -c64 -d10s -H "Connection: close"`
+  against a plaintext route (Wing, 8 workers, server and client on separate
+  cores, 6 alternating runs per side, `main` at `fba66a1` against `82c65e4`). The same runs with keep-alive
   showed no change (median 607,310 and 618,176 requests per second).
 
   A proxy handler that copies upstream hop-by-hop headers now closes the
@@ -110,8 +111,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | `Shutdown` with a hijacked connection open | its read side was shut | its reads end, and it drains once the app or Shutdown closes it |
 
   `Shutdown` can take up to 0.5 s longer while clients that keep idle
-  keep-alive connections open do not close them. A connection that never
-  answered still closes at once.
+  keep-alive connections open do not close them. It closes the listener
+  first, so no new connection waits in the backlog meanwhile. A connection
+  that never answered still closes at once.
 
   On a hijacked connection, after `Close` a `Read` returns `net.ErrClosed`
   and a `Write` returns `net.ErrClosed`. Once `Shutdown` begins, a `Read`

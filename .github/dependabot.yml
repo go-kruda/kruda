@@ -1,0 +1,14 @@
+# Version updates for GitHub Actions only. Go modules get security updates
+# from the repository's Dependabot security updates setting instead, so the
+# many go.mod files here do not each open routine bump PRs.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

@@ -7,6 +7,7 @@
 package kruda
 
 import (
+	"bytes"
 	"log/slog"
 	"runtime"
 	"sync/atomic"
@@ -118,6 +119,7 @@ const (
 	responseRender // intent/diagnostics tag for the Render preset; does not gate the lane
 	responseStream // Stream preset: incremental streaming writer on the Takeover path
 	responseHijack // Hijack preset: hand the raw connection to the handler via http.Hijacker
+	responseKeepAliveStream
 )
 
 // Preset is the per-route tuning hint passed to Wing. Construct via the
@@ -126,6 +128,7 @@ type Preset struct {
 	Dispatch       DispatchMode
 	StaticResponse []byte // pre-built full HTTP response; bypasses handler entirely
 	ResponseMode   responseMode
+	staticClose    bool // StaticResponse asks to close the connection
 	handlers       []HandlerFunc
 	path           string
 	pathClean      bool
@@ -159,6 +162,30 @@ func (f *Preset) defaults() {
 	if f.Dispatch < Inline || f.Dispatch > Takeover || f.StaticResponse != nil {
 		f.Dispatch = Inline
 	}
+	if f.StaticResponse != nil && (f.ResponseMode == responseStream || f.ResponseMode == responseKeepAliveStream || f.ResponseMode == responseHijack) {
+		f.ResponseMode = responseGeneric // the prebuilt response is sent whatever the request
+	}
+	f.staticClose = staticResponseCloses(f.StaticResponse)
+}
+
+// staticResponseCloses reports whether a prebuilt response's header block has
+// a Connection header that lists close.
+func staticResponseCloses(resp []byte) bool {
+	if end := bytes.Index(resp, []byte("\r\n\r\n")); end >= 0 {
+		resp = resp[:end]
+	}
+	for _, line := range bytes.Split(resp, []byte("\r\n")) {
+		name, value, ok := bytes.Cut(line, []byte(":"))
+		if !ok || !bytes.EqualFold(name, []byte("Connection")) {
+			continue
+		}
+		for _, token := range bytes.Split(value, []byte(",")) {
+			if bytes.EqualFold(bytes.Trim(token, " \t"), []byte("close")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Dispatch returns a PresetOption that sets the dispatch mode.
@@ -167,6 +194,17 @@ func Dispatch(m DispatchMode) PresetOption { return func(f *Preset) { f.Dispatch
 // Static returns a PresetOption that sets a pre-built static response,
 // allowing Wing to skip the handler entirely on supported platforms.
 func Static(resp []byte) PresetOption { return func(f *Preset) { f.StaticResponse = resp } }
+
+// StreamKeepAlive opts a Stream route into connection reuse after a complete,
+// fixed-length response. Linux Wing supports this option for GET 200/206.
+// Other configurations retain the Stream preset's ordinary behavior.
+func StreamKeepAlive() PresetOption {
+	return func(f *Preset) {
+		if runtime.GOOS == "linux" && f.ResponseMode == responseStream {
+			f.ResponseMode = responseKeepAliveStream
+		}
+	}
+}
 
 // Presets — pick by what the route does. Structural presets (Bolt, Arrow,
 // Spear) name the dispatch; semantic presets name the workload.

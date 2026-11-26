@@ -14,6 +14,8 @@ import (
 const (
 	epollin      = 0x1
 	epollout     = 0x4
+	epollhup     = 0x10
+	epollrdhup   = 0x2000
 	epollet      = 0x80000000
 	epolloneshot = 0x40000000
 
@@ -77,18 +79,18 @@ func (e *epollEngine) SubmitPipeRecv(_ int, _ []byte) {
 func (e *epollEngine) RegisterConn(fd int32, ptr unsafe.Pointer) {
 	e.connPtrs[fd] = ptr
 	// Edge-triggered read — fires when new data arrives. No re-arm needed.
-	e.epollMod(fd, epollin|epollet)
+	e.epollMod(fd, epollin|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitRecv(fd int32, _ []byte, _ int) {
 	// Edge-triggered EPOLLIN persists — only need epollMod to remove EPOLLOUT
 	// after a partial write fallback. Track with hasOut flag on conn.
-	e.epollModPtr(fd, epollin|epollet)
+	e.epollModPtr(fd, epollin|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitSend(fd int32, _ []byte) {
 	// Add EPOLLOUT for partial write fallback.
-	e.epollModPtr(fd, epollin|epollout|epollet)
+	e.epollModPtr(fd, epollin|epollout|epollrdhup|epollet)
 }
 
 func (e *epollEngine) SubmitClose(fd int32) {
@@ -102,6 +104,8 @@ func (e *epollEngine) Detach(fd int32) {
 	syscall.EpollCtl(e.epfd, epollCtlDel, int(fd), nil)
 }
 
+func (e *epollEngine) setWaitTimeout(ms int) { e.waitTimeoutMillis = ms }
+
 func (e *epollEngine) Wait(events []event) (int, error) {
 	// Adaptive: non-blocking first when busy, block when idle.
 	msec := 0
@@ -111,7 +115,7 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 			msec = e.waitTimeoutMillis
 		}
 	}
-	n, err := e.waitWithTimeout(events, msec)
+	n, err := e.waitWithTimeout(events, msec, e.rawMode)
 	if n > 0 {
 		e.idle = 0
 	} else {
@@ -123,16 +127,23 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 	return n, err
 }
 
-func (e *epollEngine) WaitNonBlock(events []event) (int, error) {
-	return e.waitWithTimeout(events, 0)
+// WaitFor always waits through the scheduler: Shutdown calls it while the
+// goroutine that would wake it may need this thread's P.
+func (e *epollEngine) WaitFor(events []event, ms int) (int, error) {
+	return e.waitWithTimeout(events, ms, false)
 }
 
-func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
+func (e *epollEngine) StopAccept() {
+	syscall.EpollCtl(e.epfd, epollCtlDel, e.listenFd, nil)
+	e.listenFd = -1
+}
+
+func (e *epollEngine) waitWithTimeout(events []event, msec int, raw bool) (int, error) {
 	kernelEvents := e.epevs
 	if len(kernelEvents) > len(events) {
 		kernelEvents = kernelEvents[:len(events)]
 	}
-	n, err := epollWait(e.epfd, kernelEvents, msec, e.rawMode)
+	n, err := epollWait(e.epfd, kernelEvents, msec, raw)
 	if err != nil {
 		if err == syscall.EINTR {
 			return 0, nil
@@ -175,6 +186,9 @@ func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
 
 		if ev.Events&epollin != 0 {
 			events[count] = event{Op: opRecv, ConnPtr: ptr}
+			if ev.Events&(epollrdhup|epollhup) != 0 {
+				events[count].Flags = evPeerShut
+			}
 			count++
 		}
 	}

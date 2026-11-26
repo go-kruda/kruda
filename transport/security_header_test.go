@@ -2,7 +2,12 @@ package transport
 
 import (
 	"bytes"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestStaticResponseDoesNotEmitServerHeader(t *testing.T) {
@@ -72,5 +77,31 @@ func TestStaticResponseOmitsBodyFor204And304(t *testing.T) {
 		if !bytes.HasSuffix(resp, []byte("\r\n\r\n")) {
 			t.Errorf("status %d: response %q does not end its header block", status, resp)
 		}
+	}
+}
+
+// TestNetHTTPRawHeadersCannotAddFields checks that net/http itself drops
+// invalid raw header names and cleans values, so the net/http transport needs
+// no filter of its own.
+func TestNetHTTPRawHeadersCannotAddFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		h := (&netHTTPResponseWriter{w: rw}).Header()
+		h.Set("X-Value", "v\r\nX-Injected: 1")
+		h.Add("X-Bad\r\nX-Injected", "2")
+		_, _ = rw.Write([]byte("body"))
+	}))
+	defer srv.Close()
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(conn)
+	if bytes.Contains(out, []byte("\r\nX-Injected")) {
+		t.Fatalf("response %q", out)
 	}
 }

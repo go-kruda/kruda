@@ -3,9 +3,26 @@
 All notable changes to Kruda are documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.9.0] — 2026-11-26
 
 ### Added
+
+- **Wing on Linux: `kruda.Stream.With(kruda.StreamKeepAlive())`** keeps the
+  connection after a streamed GET 200 or 206, for HLS segments and byte-range
+  reads. The connection is reused only when the response states one valid,
+  positive `Content-Length`, its body comes from `c.Stream`, and that copy
+  writes exactly that many bytes. Anything else closes the connection, as
+  `kruda.Stream` does: an unknown length, a short or failed copy, a handler
+  that wrote the body outside `c.Stream` or panicked, HEAD, and a client that
+  disconnects or shuts its write side. On other platforms and transports the
+  option changes nothing. Measured on Linux with 5,120 simulated viewers at
+  4 Mbps (3 MB segments, one proxy CPU, Go client and origin), each run five
+  alternating 60 s rounds of Wing and net/http: the release tree (`aa4fc99`)
+  met the gate in every round on both, with zero failed requests and every
+  origin hit. Segment p99 was 8.0 ms median for Wing (6.3 to 8.9 ms) and
+  6.2 ms for net/http (5.0 to 7.5 ms). Across the earlier runs on other
+  revisions, Wing missed the gate in 2 of 50 rounds and net/http in 1 of 50,
+  with the same overload pattern on both.
 
 - `kruda generate binder` runs the generated-binding tool from the CLI:
   `kruda generate binder --input input.go --type SearchInput --output search_generated.go --func bindSearchInput`.
@@ -24,6 +41,87 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   response by then, so a failure there only reaches the logs.
 
 ### Changed
+
+- **Wing stops reading while a connection's responses wait to be sent.** Check
+  before upgrading. This is part of the denial-of-service fixes under Security.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | Client pipelines and reads slowly or not at all | every request read ran, and responses queued without limit | parsing pauses at 256 KiB unsent (one response may pass it), reading pauses until the send completes |
+  | Request pipelined behind a response over 256 KiB | could run while that response was being sent | runs after it is sent |
+  | `WriteTimeout` with a client that keeps sending but does not read | refreshed by each request, so it never fired | fires |
+  | Client half-closes after complete requests, while their responses wait | cut the responses, or kept the connection until `IdleTimeout` | sends the responses, then closes |
+  | `ReadTimeout` with part of the next request behind a response being sent | could cut that response | counts once the send completes |
+  | Pipelining client that never pauses | one connection could keep its worker | yields after 16 rounds of sending and parsing |
+  | Body over 10 MiB declared with `BodyLimit` 0 | waited for and buffered the body, then failed | `413` from the header; a length that does not fit an `int` closes the connection |
+
+  A long pipeline of large responses takes longer to start its later handlers,
+  and a client has to read responses for its later requests to run. A body
+  already being uploaded is still read, under `ReadTimeout`, while an earlier
+  response waits. With `WriteTimeout` 0, a connection whose client does not
+  read waits without a limit, as any blocked send does.
+
+- **Wing honours `Connection: close` on a response.** Check before upgrading.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | Response has `Connection: close` (Inline, Pool, Spawn, Takeover) | connection kept, next pipelined request ran | response sent, connection closed |
+  | Request asked to close, more input arrived while the response drained | that request could run and keep the connection | input dropped, connection closed |
+  | A `Static` preset response with `Connection: close` | connection kept, next pipelined request ran | response sent, connection closed |
+  | Input still unread when the final response is sent (a pipelined request, the rest of a rejected upload, after a `Stream` response or a rejected `Hijack` upgrade) | the close could reset the connection and the client lose the response | Wing ends its write side, drops up to 256 KiB more input, and closes when the client does or after 0.5 s |
+
+  In the last case the connection stays open until the client closes it, for
+  0.5 s and, while the worker is not busy in a handler, at most about 1 s;
+  this holds with every Wing timeout set to 0 too. Every route now ends its
+  write side and waits for the client to close, 0.5 s at most, even with no
+  unread input yet, because a request can still arrive before the close and
+  reset the end of the response. A client that keeps its side open holds its
+  connection slot, and a file descriptor, until then. Past 256 KiB of input
+  Wing reads no more and stops watching the connection, but still keeps it
+  until the 0.5 s are up, so a client still reading gets the whole response.
+
+  Every `Connection: close` response now waits for the client's FIN, which
+  raises tail latency for that traffic: p99 went from 732 to 880 µs, with no
+  overlap between the runs (675 to 809 µs before, 777 to 960 µs after), and
+  about 23 more descriptors stay open at 64 connections (69 to 92). Requests
+  per second showed no measurable change (median 95,965 before, 100,861 after,
+  ranges 90,135 to 109,377 and 92,877 to 108,569), and p50 went from 180 to
+  182 µs. Measured on Linux with `wrk -t4 -c64 -d10s -H "Connection: close"`
+  against a plaintext route (Wing, 8 workers, server and client on separate
+  cores, 6 alternating runs per side, `main` at `fba66a1` against `82c65e4`). The same runs with keep-alive
+  showed no change (median 607,310 and 618,176 requests per second).
+
+  A proxy handler that copies upstream hop-by-hop headers now closes the
+  client connection whenever the upstream closes. Do not copy `Connection`
+  from an upstream response. `c.Text`, `c.HTML` and `c.JSON` with no custom
+  headers are unaffected.
+
+- **Wing drains behind a response whenever it ends a connection.** Check
+  before upgrading. When a connection may still have a response in the
+  socket, every close now ends the write side and waits for the client, as
+  the final close above does, so input arriving behind the response cannot
+  reset it before the client reads it.
+
+  | Case | Before | Now |
+  |---|---|---|
+  | `ReadTimeout`, `IdleTimeout` or `WriteTimeout` fires after an earlier response | closed at once | drains, 0.5 s at most |
+  | A malformed request, a body that fails to parse again, or a file response whose reader fails, after an earlier response | closed at once | drains, 0.5 s at most |
+  | `Shutdown` with idle keep-alive connections, or Pool and Spawn connections that answered | closed at once; running Pool and Spawn sockets were shut both ways | each drains, 0.5 s at most; running ones lose only the write side |
+  | The app closes a hijacked connection (`contrib/ws`, `http.Hijacker`) | both directions shut, fd reclaimed over unread input | write side shut, Wing drains, then closes |
+  | `Shutdown` with a hijacked connection open | its read side was shut | its reads end, and it drains once the app or Shutdown closes it |
+
+  Each worker closes its listener first, so no new connection waits in the
+  backlog during `Shutdown`. Idle connections that may have a response in
+  the socket start draining while handlers finish; a connection with a
+  running handler starts when that handler returns. Wing waits for socket
+  readiness and gives each drain up to 0.5 s from its start for the client
+  to close, so `Shutdown` can end about 0.5 s after its slowest handler. A
+  connection that never answered still closes at once.
+
+  On a hijacked connection, after `Close` a `Read` returns `net.ErrClosed`
+  and a `Write` returns `net.ErrClosed`. Once `Shutdown` begins, a `Read`
+  returns `io.EOF`, and `SetReadDeadline` no longer changes anything, so a
+  read loop that retries timeouts still ends. `contrib/ws` handles both.
 
 - **`contrib/ws` accepts only the same origin by default.** Older versions
   accepted every origin when `AllowedOrigins` was empty. Now the origin must
@@ -183,6 +281,51 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Wing: a `Stream` route whose handler wrote no body (an empty `c.Stream`,
+  `NoContent`) closed the connection without any response. It now sends the
+  status and headers. A copy that failed before its first byte still closes
+  without a response, so it is not mistaken for an empty success.
+- Wing: a stream, or a HEAD without a body, could send conflicting
+  `Content-Length` headers. An equal repeat is now sent once, and a
+  conflicting or invalid value is not sent.
+- Wing: a `StaticText` or `StaticJSON` route requested on a connection a
+  Takeover route owned ran its handler. It now sends the static response, as
+  on a fresh connection, so its handler and middleware no longer run there.
+  A static response composed with `Stream` or `Hijack` is now always sent as
+  is. It ran the handler after Takeover, and a `Hijack` one answered `400`
+  when the request body arrived after its headers.
+- Wing: a `Stream` handler that set `Content-Length: 5` and wrote nothing
+  sent `200` with that length and closed, so the client waited for five
+  bytes and saw a truncated body. It now closes without a response, as a
+  failed copy does. `HEAD` still sends the length.
+- Wing: `c.Stream` with an `io.WriterTo` source that wrote zero bytes and
+  then failed sent an empty `200`. Empty writes during the copy no longer
+  send the headers, so it closes without a response. After a preamble write
+  that failed part-way, a later `Flush` or `Write` no longer sends it again.
+- Wing on Linux: a client that sent a request and shut its write side at once
+  got its response, then waited for the connection to close until
+  `IdleTimeout`, or forever without one (4 to 8 of 30 such connections on
+  loopback). Wing now closes after the response.
+- Wing: when a client's input ended in the middle of an upload while an
+  earlier response on the connection was still being sent, Wing closed the
+  connection and cut that response. It now sends it under `WriteTimeout`,
+  then closes. With `WriteTimeout` 0 it still closes at once, since a client
+  that also stopped reading would otherwise hold the connection for good.
+- Wing on macOS: closing a connection right after a read was re-armed left
+  that registration queued for the next `kevent` call, which then watched
+  whatever socket reused the fd number, with nothing set up to read it.
+  Closing now drops queued changes for that fd.
+- Wing: a raw socket read or write that a signal interrupted (`EINTR`) was
+  taken for a failed connection, which closed it and could reset a response
+  in the socket; a drain ended early the same way. They are now retried.
+  Go installs its signal handlers with `SA_RESTART`, so this was unlikely in
+  practice.
+- Wing: calling `Shutdown` a second time woke the stopped workers again,
+  which wrote to their closed wake descriptors, or to whatever reused those
+  numbers. The first call could do the same to a worker that had already
+  stopped. Only the first call wakes, and only workers still running; later
+  calls wait.
+
 - Bindgen preserves the source when the output resolves to the same file.
 - `kruda new` handles explicit filesystem paths, and the MCP scaffolder keeps
   projects inside the working directory.
@@ -241,6 +384,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wing: a fragmented POST to a Takeover route ran inline on the event loop
   when an earlier pipelined reply on the same connection was still unsent. It
   now runs as Spawn, off the loop, and its reply follows the earlier one.
+  Behind more than 256 KiB of unsent reply it waits for the send first.
 - Wing: preset lookup ignored `:name<regex>` constraints, so a regex route's
   preset applied to values the router sent elsewhere. With `WithPathTraversal`,
   a percent-encoded path such as `/ev%65nts` reached the `/events` handler
@@ -254,9 +398,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   loop through an unchecked completion path.
 - Wing: `Shutdown` waited for Pool handlers before cancelling their request
   contexts, so a handler waiting on `r.Context().Done()` held shutdown until
-  it gave up on its own. Contexts are now cancelled first; sockets stay open
-  until the Pool finishes, so a handler that completes during shutdown still
-  delivers its response. A handler that ignores its context still holds
+  it gave up on its own. Contexts are now cancelled first; Pool, Spawn and
+  Takeover sockets stay open until the Pool finishes, so a handler that
+  completes while the Pool drains still delivers a response it writes to the
+  socket itself while the socket is still open for writing. Takeover
+  handlers get at most one second of that while the Pool drains; then their
+  write side is shut, so a Pool handler waiting on a Takeover write that is
+  blocked on its client cannot stall Shutdown. A Pool handler waiting on
+  other work still holds Shutdown until it returns or the deadline passes.
+  Once a Takeover connection sees that shutdown began, it starts no further
+  request and sends no error status or `100 Continue` for input it has
+  buffered; a reply already past that check may still be attempted. Not covered: a response the stopped event loop would
+  have sent, such as the rest of one the socket could not take at once or a
+  Pool or Spawn response queued behind an earlier unsent reply, and, on a
+  worker without a Pool, a Takeover response finished after the sockets are
+  shut. A handler that ignores its context still holds
   shutdown until it returns or the `Shutdown` deadline passes.
 - Wing: a file stream with a negative size sent `Content-Length: -1`. It now
   answers 500 and closes the reader off the event loop. Kruda's own callers always pass a known
@@ -293,6 +449,44 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- **Wing: an unauthenticated client could end the process or exhaust it.**
+  Apps on Wing, the Linux default, were affected whatever their routes or
+  presets. Upgrade, or run with `KRUDA_TRANSPORT=nethttp` until you can. That
+  variable has no effect when the app selects a transport in code; use
+  `kruda.NetHTTP()` there instead.
+
+  | Problem | Effect | Confirmed in |
+  |---|---|---|
+  | A read into a full receive buffer while a response waited | panic, process exit | v1.8.2, v1.8.5 (Linux) |
+  | Parsing and sending called each other without a bound | one client could hold a worker and grow its stack until the process exited | nesting without a bound in v1.4.0, v1.7.2 and v1.8.2 to v1.8.5; fatal stack overflow reproduced in v1.8.5 with the stack limited to 64 MiB |
+  | Responses queued for a client that read none | unbounded memory, `WriteTimeout` never fired | v1.8.5 |
+  | A partial request behind a complete one (see the `ReadTimeout` entry under Fixed) | no timeout applied, connection held | v1.8.5 |
+  | No 10 MiB body ceiling when `BodyLimit` is 0 | memory follows the declared length | v1.8.5 |
+
+  Versions not listed were not tested and should not be assumed safe. With
+  `BodyLimit` 0 there is still no per-worker budget for bodies in flight, so
+  each connection can buffer up to 10 MiB: keep a `BodyLimit`, or set
+  `WingConfig.MaxInflightBodyBytes`.
+
+- **Wing: raw response headers could add header fields.** A handler that
+  passed untrusted text to `ResponseWriter().Header()`, or to the content
+  type of the `transport.StringResponder` fast lane, could end a value with
+  `\r\n` and start fields of its own, such as a second `Content-Length` or
+  `Set-Cookie`, or end the header block and split the response. `c.SetHeader`
+  and the other `Ctx` methods already cleaned their values. Wing now does
+  what net/http does: a header whose name is not a valid token is dropped,
+  and each `\r` or `\n` in a value becomes a space, so
+  `"v\r\nX-Injected: 1"` is sent as `v  X-Injected: 1`. Wing checks the
+  fields only on a response whose raw header map was handed out, as fields
+  set through `Ctx` are clean already; `c.SendBytesWithType` and its
+  variants now clean their content type too, as do static file MIME types
+  and the configured security header values. On the fasthttp
+  transport, the macOS default, values were already cleaned but a header name
+  with a line break added a field the same way; such names are now dropped
+  there too. A raw `Connection` value that becomes `close` once cleaned now
+  also ends the connection. The net/http transport was not affected. Confirmed on Wing in
+  v1.8.5; the fasthttp adapter and its fasthttp v1.70.0 are unchanged since.
+
 - **The router matches the whole HTTP method name.** Before, it checked only
   the first two letters of 4- to 7-letter methods, so `POLL /users` or
   `POXX /users` ran the `POST /users` handler and answered 200. A rule in
@@ -300,6 +494,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a custom method such as `POLL` also replaced the `POST` tree. Now those
   requests get `405 Method Not Allowed`, and custom methods keep their own
   routes. Standard methods route exactly as before.
+
+- `contrib/otel` and `contrib/observability` require OpenTelemetry Go
+  v1.47.0 (contrib v0.72.0), which fixes GO-2026-6975 (memory amplification
+  in W3C baggage parsing) and GO-2026-6974 (attribute length limit bypass).
 
 - **The `kruda mcp` generator tools no longer overwrite files or write outside
   their folder.** Before, calling `kruda_add_handler` or `kruda_add_resource`

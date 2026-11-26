@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -263,6 +264,9 @@ func TestWingHostRejectionPreservesPartialResponseOrdering(t *testing.T) {
 	}
 
 	w, _ := newTestWorker(0)
+	if err := syscall.SetNonblock(int(writer.Fd()), true); err != nil { // as every Wing socket is
+		t.Fatal(err)
+	}
 	c := newTestConn(int32(writer.Fd()))
 	c.keepAlive = true
 	c.sendBuf = append(c.sendBuf, prefix...)

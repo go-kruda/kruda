@@ -104,7 +104,7 @@ func TestFailSendClosesOwnedSendfileDescriptor(t *testing.T) {
 	c.sendFileSize = int64(len("sendfile failure"))
 	w.conns[c.fd] = c
 
-	w.failSend(c)
+	w.retire(c)
 
 	if c.sendFileFd != 0 {
 		t.Fatalf("sendFileFd = %d, want released", c.sendFileFd)

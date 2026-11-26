@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -35,6 +36,14 @@ func newEngine() engine {
 		sendBufs: make(map[int32][]byte, 1024),
 		pipeR:    -1,
 		pipeW:    -1,
+	}
+}
+
+func (e *kqueueEngine) setWaitTimeout(ms int) {
+	e.waitTimeout = nil
+	if ms > 0 {
+		ts := syscall.NsecToTimespec(int64(ms) * 1000000)
+		e.waitTimeout = &ts
 	}
 }
 
@@ -106,14 +115,38 @@ func (e *kqueueEngine) SubmitSend(fd int32, data []byte) {
 }
 
 func (e *kqueueEngine) SubmitClose(fd int32) {
-	delete(e.recvBufs, fd)
-	delete(e.sendBufs, fd)
+	e.forget(fd)
 	syscall.Close(int(fd))
 }
 
-func (e *kqueueEngine) Detach(fd int32) {
+func (e *kqueueEngine) Detach(fd int32) { e.forget(fd) }
+
+// forget drops fd's state. A registration for fd may still be queued: Wait
+// drops it, as it would otherwise watch whatever socket reuses the number.
+func (e *kqueueEngine) forget(fd int32) {
 	delete(e.recvBufs, fd)
 	delete(e.sendBufs, fd)
+}
+
+// liveChanges keeps the queued changes whose socket is still registered: a
+// read or write interest stays only while its buffer entry does. The listener
+// and the wake pipe are not sockets Wing closes.
+func (e *kqueueEngine) liveChanges() {
+	kept := e.changes[:0]
+	for _, ch := range e.changes {
+		fd := int32(ch.Ident)
+		live := int(ch.Ident) == e.listenFd || int(ch.Ident) == e.pipeR
+		if !live && ch.Filter == syscall.EVFILT_READ {
+			_, live = e.recvBufs[fd]
+		} else if !live && ch.Filter == syscall.EVFILT_WRITE {
+			_, live = e.sendBufs[fd]
+		}
+		if live {
+			kept = append(kept, ch)
+		}
+	}
+	clear(e.changes[len(kept):])
+	e.changes = kept
 }
 
 func (e *kqueueEngine) SubmitPipeRecv(_ int, _ []byte) {}
@@ -123,6 +156,7 @@ func (e *kqueueEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
 func (e *kqueueEngine) Wait(events []event) (int, error) {
 	var changes []syscall.Kevent_t
 	if len(e.changes) > 0 {
+		e.liveChanges()
 		changes = e.changes
 		e.changes = e.changes[:0]
 	}
@@ -225,7 +259,21 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 	return count, nil
 }
 
-func (e *kqueueEngine) WaitNonBlock(events []event) (int, error) { return e.Wait(events) }
+func (e *kqueueEngine) WaitFor(events []event, ms int) (int, error) {
+	saved := e.waitTimeout
+	e.waitTimeout = nil
+	if ms >= 0 {
+		ts := syscall.NsecToTimespec(int64(ms) * int64(time.Millisecond))
+		e.waitTimeout = &ts
+	}
+	n, err := e.Wait(events)
+	e.waitTimeout = saved
+	return n, err
+}
+
+// StopAccept also drops a re-arm of the listener still queued: liveChanges
+// keeps a read interest only for the listener or a registered socket.
+func (e *kqueueEngine) StopAccept() { e.listenFd = -1 }
 
 func (e *kqueueEngine) Flush() error {
 	if len(e.changes) > 0 {

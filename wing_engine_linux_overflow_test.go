@@ -58,7 +58,7 @@ func TestEpollWaitPreservesReadinessBeyondWorkerBatch(t *testing.T) {
 	var events [maxEventsPerWait]event
 	total := 0
 	for range 4 {
-		n, err := e.WaitNonBlock(events[:])
+		n, err := e.WaitFor(events[:], 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func TestEpollAcceptContinuesAfterWorkerBatchFills(t *testing.T) {
 	var events [maxEventsPerWait]event
 	accepted := 0
 	for range 4 {
-		n, err := e.WaitNonBlock(events[:])
+		n, err := e.WaitFor(events[:], 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +182,7 @@ func TestEpollAcceptFanoutPreservesReturnedConnectionEvent(t *testing.T) {
 	e.epollAdd(int32(pipeFds[0]), epollin|epollet)
 
 	var events [maxEventsPerWait]event
-	n, err := e.WaitNonBlock(events[:])
+	n, err := e.WaitFor(events[:], 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,4 +198,10 @@ func TestEpollAcceptFanoutPreservesReturnedConnectionEvent(t *testing.T) {
 	if !sawConnection {
 		t.Fatal("accept fanout discarded a connection event already returned by epoll")
 	}
+}
+
+// watchTestConn registers c's socket for input, as handleAccept does.
+func watchTestConn(e engine, c *conn) {
+	e.(*epollEngine).epollAdd(c.fd, 0)
+	e.RegisterConn(c.fd, unsafe.Pointer(c))
 }

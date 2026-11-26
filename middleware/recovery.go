@@ -44,6 +44,11 @@ func Recovery(config ...RecoveryConfig) kruda.HandlerFunc {
 	return func(c *kruda.Ctx) (retErr error) {
 		defer func() {
 			if r := recover(); r != nil {
+				// The handler did not finish: a Wing StreamKeepAlive response
+				// must not hand its connection to the next request.
+				if a, ok := c.ResponseWriter().(interface{ AbortReuse() }); ok {
+					a.AbortReuse()
+				}
 				var logArgs []any
 				logArgs = append(logArgs, "panic", r)
 

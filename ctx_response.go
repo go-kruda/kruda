@@ -226,7 +226,13 @@ func (c *Ctx) Text(s string) error {
 		return nil
 	}
 	// Fast path for transports with a zero-copy string lane (e.g., Wing)
-	if sr, ok := c.writer.(transport.StringResponder); ok {
+	if sr, ok := c.writer.(ctxStringResponder); ok {
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			sr.ctxStringBody(c.status, "text/plain; charset=utf-8", s)
+			return nil
+		}
+	} else if sr, ok := c.writer.(transport.StringResponder); ok {
 		if c.canBypassHeaderWrite(true) {
 			c.responded = true
 			sr.SetStringBody(c.status, "text/plain; charset=utf-8", s)
@@ -271,7 +277,13 @@ func (c *Ctx) HTML(html string) error {
 	if c.responded {
 		return ErrAlreadyResponded
 	}
-	if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
+	if sr, ok := c.writer.(ctxStringResponder); ok {
+		if c.canBypassHeaderWrite(true) {
+			c.responded = true
+			sr.ctxStringBody(c.status, "text/html; charset=utf-8", html)
+			return nil
+		}
+	} else if sr, ok := c.writer.(transport.StringResponder); ok && c.canBypassHeaderWrite(true) {
 		c.responded = true
 		sr.SetStringBody(c.status, "text/html; charset=utf-8", html)
 		return nil
@@ -328,7 +340,17 @@ func (c *Ctx) Stream(reader io.Reader) error {
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	c.responded = true
+	tracker, tracked := c.writer.(interface {
+		streamCopyStart()
+		streamCopyResult(error)
+	})
+	if tracked {
+		tracker.streamCopyStart()
+	}
 	_, err := io.Copy(writerAdapter{c.writer}, reader)
+	if tracked {
+		tracker.streamCopyResult(err)
+	}
 	return err
 }
 
@@ -392,7 +414,7 @@ func (c *Ctx) SendBytesWithType(contentType string, data []byte) error {
 	}
 
 	// net/http and generic transport paths
-	c.contentType = contentType
+	c.contentType = sanitizeHeaderValue(contentType) // sent as a field Ctx vouches for
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -418,7 +440,7 @@ func (c *Ctx) SendBytesWithTypeBytes(contentType []byte, data []byte) error {
 
 	// net/http and generic transport paths — convert back to string
 	c.contentLength = len(data)
-	c.contentType = string(contentType)
+	c.contentType = sanitizeHeaderValue(string(contentType))
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -448,7 +470,7 @@ func (c *Ctx) SendStaticWithTypeBytes(contentType []byte, data []byte) error {
 
 	// net/http and generic transport paths — same as SendBytesWithTypeBytes
 	c.contentLength = len(data)
-	c.contentType = string(contentType)
+	c.contentType = sanitizeHeaderValue(string(contentType))
 	c.writeHeaders()
 	c.writer.WriteHeader(c.status)
 	_, err := c.writer.Write(data)
@@ -821,11 +843,26 @@ func (c *Ctx) writeHeadersNetHTTP() {
 	}
 }
 
+// ctxStringResponder is a string lane that skips the line-break check
+// transport.StringResponder does, for content types Ctx passes as constants.
+type ctxStringResponder interface {
+	ctxStringBody(status int, contentType, body string)
+}
+
+// ctxHeaderWriter is a writer that checks raw header fields when it sends
+// them. Ctx has checked its own fields as they were set, so it skips that.
+type ctxHeaderWriter interface{ ctxHeader() transport.HeaderMap }
+
 // writeHeadersGeneric writes all response headers using the transport interface
 // methods. Used as fallback for custom transports that are not the embedded
 // net/http adapter.
 func (c *Ctx) writeHeadersGeneric() {
-	h := c.writer.Header()
+	var h transport.HeaderMap
+	if cw, ok := c.writer.(ctxHeaderWriter); ok {
+		h = cw.ctxHeader()
+	} else {
+		h = c.writer.Header()
+	}
 
 	if c.contentType != "" {
 		h.Set("Content-Type", c.contentType)

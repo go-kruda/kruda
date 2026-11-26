@@ -4,6 +4,7 @@ package transport
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -425,5 +426,21 @@ func TestFastHTTPIntegration(t *testing.T) {
 	}
 	if string(ctx.Response.Body()) != "created" {
 		t.Errorf("expected created, got %s", ctx.Response.Body())
+	}
+}
+
+// TestFasthttpHeaderMapDropsInvalidNames passes raw header names with a line
+// break. fasthttp cleans values but writes names as given, so such a name could
+// add a field of its own.
+func TestFasthttpHeaderMapDropsInvalidNames(t *testing.T) {
+	var ctx fasthttp.RequestCtx
+	h := (&fasthttpResponseWriter{ctx: &ctx}).Header()
+	h.Set("X-Bad\r\nX-Injected", "1")
+	h.Add("X-Bad\nX-Injected", "2")
+	h.Add("X-Colon: x", "3")
+	h.Set("X-Good", "4")
+	out := ctx.Response.String()
+	if strings.Contains(out, "X-Injected") || strings.Contains(out, "X-Colon") || !strings.Contains(out, "X-Good: 4\r\n") {
+		t.Fatalf("response %q", out)
 	}
 }

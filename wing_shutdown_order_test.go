@@ -6,7 +6,9 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -120,5 +122,181 @@ func TestWingShutdownDeliversFinishingPoolResponse(t *testing.T) {
 	got, _ := io.ReadAll(conn)
 	if !strings.Contains(string(got), "late") {
 		t.Fatalf("response lost during shutdown, got %q", got)
+	}
+}
+
+// TestWingShutdownClosesFinishedTakeoverFD finishes a Takeover while a
+// dispatched handler never returns. Shutdown must still close its File.
+func TestWingShutdownClosesFinishedTakeoverFD(t *testing.T) {
+	socks, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(socks[1])
+	file := os.NewFile(uintptr(socks[0]), "takeover")
+	w, _ := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	c := newTestConn(int32(socks[0]))
+	c.pending, c.takenOver = 1, true
+	w.conns[c.fd] = c
+
+	closedWhileRunning := make(chan bool, 1)
+	w.dispatchWG.Add(1)
+	go func() {
+		defer w.dispatchWG.Done()
+		w.doneCh <- doneMsg{fd: c.fd, file: file}
+		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			if _, err := file.Stat(); err != nil {
+				closedWhileRunning <- true
+				return
+			}
+		}
+		closedWhileRunning <- false
+	}()
+	w.cleanup()
+	if !<-closedWhileRunning {
+		t.Fatal("Takeover fd kept open while a dispatched handler ran")
+	}
+}
+
+// TestWingShutdownNeverShutsARecycledFD finishes a Takeover while the Pool is
+// still draining. Its fd number may then belong to an unrelated socket, which
+// Shutdown must not touch.
+func TestWingShutdownNeverShutsARecycledFD(t *testing.T) {
+	socks, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(socks[1])
+	other, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(other[0])
+	defer syscall.Close(other[1])
+
+	fd := socks[0]
+	file := os.NewFile(uintptr(fd), "takeover")
+	w, _ := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	c := newTestConn(int32(fd))
+	c.pending, c.takenOver = 1, true
+	w.conns[c.fd] = c
+
+	// The Pool finishes only after the Takeover's fd was closed and reused.
+	recycled, closedDuringDrain := -1, false
+	w.pool = &workerPool{jobs: make(chan handlerJob)}
+	w.pool.wg.Add(1)
+	go func() {
+		defer w.pool.wg.Done()
+		for range w.pool.jobs {
+		}
+		w.doneCh <- doneMsg{fd: c.fd, file: file}
+		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+			if _, err := file.Stat(); err != nil {
+				closedDuringDrain = true
+				n, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(other[0]), syscall.F_DUPFD_CLOEXEC, uintptr(fd))
+				if errno == 0 {
+					recycled = int(n)
+				}
+				return
+			}
+		}
+	}()
+	w.cleanup()
+	if recycled >= 0 {
+		defer syscall.Close(recycled)
+	}
+	if !closedDuringDrain {
+		t.Fatal("finished Takeover File kept open while the Pool drained")
+	}
+	if recycled != fd {
+		t.Skipf("setup: fd %d was closed but the duplicate landed on %d", fd, recycled)
+	}
+	if _, err := syscall.Write(recycled, []byte("x")); err != nil {
+		t.Fatalf("Shutdown shut down an unrelated socket on the recycled fd: %v", err)
+	}
+}
+
+// TestWingRepeatedShutdownWakesOnce calls Shutdown twice. Only the first may
+// wake the workers: a stopped worker has closed its wake fd.
+func TestWingRepeatedShutdownWakesOnce(t *testing.T) {
+	w, eng := newTestWorker(0)
+	tr := &Transport{workers: []*worker{w}, ready: make(chan struct{})}
+	close(tr.ready)
+	for range 2 {
+		if err := tr.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if eng.wakes != 1 {
+		t.Fatalf("workers woken %d times", eng.wakes)
+	}
+}
+
+type notifyCloseEngine struct {
+	*mockEngine
+	closed chan int32
+}
+
+func (e notifyCloseEngine) SubmitClose(fd int32) { e.closed <- fd }
+
+// WaitFor reports input on fd -1, as the engine would once a lingering peer
+// closes.
+func (e notifyCloseEngine) WaitFor(events []event, _ int) (int, error) {
+	time.Sleep(time.Millisecond)
+	events[0] = event{Op: opRecv, Fd: -1}
+	return 1, nil
+}
+
+// TestWingShutdownClosesLingering stops a worker with a connection lingering
+// after its final response, while a dispatched handler still runs. Its peer
+// has gone, so Shutdown must close it then, not once the handler returns.
+func TestWingShutdownClosesLingering(t *testing.T) {
+	w, eng := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	closed := make(chan int32, 1)
+	w.eng = notifyCloseEngine{eng, closed}
+	c := newTestConn(-1)
+	c.lingerUntil = monoNow() + int64(time.Hour)
+	w.lingering = 1
+	w.conns[c.fd] = c
+	w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
+	closedWhileRunning := make(chan bool, 1)
+	w.dispatchWG.Add(1)
+	go func() {
+		defer w.dispatchWG.Done()
+		select {
+		case <-closed:
+			closedWhileRunning <- true
+		case <-time.After(time.Second):
+			closedWhileRunning <- false
+		}
+	}()
+	w.cleanup()
+	if !<-closedWhileRunning {
+		t.Fatal("lingering connection kept open while Shutdown waited")
+	}
+}
+
+// TestWingShutdownSkipsStoppedWorker calls Shutdown for a worker that has
+// already stopped and closed its wake fd. Waking it would write to whatever
+// reused that number.
+func TestWingShutdownSkipsStoppedWorker(t *testing.T) {
+	w, eng := newTestWorker(0)
+	w.evfd, w.listenFd = -1, -1
+	w.doneCh = make(chan doneMsg, 1)
+	w.cleanup()
+	before := eng.wakes // cleanup may wake its own stopped loop
+	tr := &Transport{workers: []*worker{w}, ready: make(chan struct{})}
+	close(tr.ready)
+	if err := tr.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if eng.wakes != before {
+		t.Fatalf("stopped worker woken %d times", eng.wakes-before)
 	}
 }

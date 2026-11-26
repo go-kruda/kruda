@@ -115,7 +115,7 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 			msec = e.waitTimeoutMillis
 		}
 	}
-	n, err := e.waitWithTimeout(events, msec)
+	n, err := e.waitWithTimeout(events, msec, e.rawMode)
 	if n > 0 {
 		e.idle = 0
 	} else {
@@ -127,16 +127,23 @@ func (e *epollEngine) Wait(events []event) (int, error) {
 	return n, err
 }
 
-func (e *epollEngine) WaitNonBlock(events []event) (int, error) {
-	return e.waitWithTimeout(events, 0)
+// WaitFor always waits through the scheduler: Shutdown calls it while the
+// goroutine that would wake it may need this thread's P.
+func (e *epollEngine) WaitFor(events []event, ms int) (int, error) {
+	return e.waitWithTimeout(events, ms, false)
 }
 
-func (e *epollEngine) waitWithTimeout(events []event, msec int) (int, error) {
+func (e *epollEngine) StopAccept() {
+	syscall.EpollCtl(e.epfd, epollCtlDel, e.listenFd, nil)
+	e.listenFd = -1
+}
+
+func (e *epollEngine) waitWithTimeout(events []event, msec int, raw bool) (int, error) {
 	kernelEvents := e.epevs
 	if len(kernelEvents) > len(events) {
 		kernelEvents = kernelEvents[:len(events)]
 	}
-	n, err := epollWait(e.epfd, kernelEvents, msec, e.rawMode)
+	n, err := epollWait(e.epfd, kernelEvents, msec, raw)
 	if err != nil {
 		if err == syscall.EINTR {
 			return 0, nil

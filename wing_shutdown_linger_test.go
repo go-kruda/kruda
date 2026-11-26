@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -38,7 +39,7 @@ func readBodyAfter(br *bufio.Reader, start <-chan struct{}) <-chan readResult {
 	return got
 }
 
-// TestWingShutdownKeepsAnEventLoopLinger runs Shutdown's linger pass over a
+// TestWingShutdownKeepsAnEventLoopLinger runs the stopped loop over a
 // connection lingering behind its final response. It must keep dropping input
 // until the peer closes, not close at once: closing over input that arrives
 // can reset the response's unread tail.
@@ -47,18 +48,24 @@ func TestWingShutdownKeepsAnEventLoopLinger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.Close(fds[0])
-	defer syscall.Close(fds[1])
+	defer syscall.Close(fds[1]) // fds[0] is the worker's to close
 	if err := syscall.SetNonblock(fds[0], true); err != nil {
 		t.Fatal(err)
 	}
 	w, _ := newTestWorker(0)
+	w.eng = newEngine()
+	if err := w.eng.Init(engineConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	defer w.eng.Close()
 	c := newTestConn(int32(fds[0]))
-	c.lingerUntil = monoNow() + int64(5*time.Second)
+	watchTestConn(w.eng, c)
+	c.lingerUntil = monoNow() + lingerDelay
 	w.conns[c.fd] = c
 	w.lingering++
+	w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
 	done := make(chan struct{})
-	go func() { w.lingerAtShutdown(true); close(done) }()
+	go func() { w.finishLingers(); close(done) }()
 	late := []byte("input after Shutdown began")
 	time.Sleep(20 * time.Millisecond)
 	if _, err := syscall.Write(fds[1], late); err != nil {
@@ -75,7 +82,7 @@ func TestWingShutdownKeepsAnEventLoopLinger(t *testing.T) {
 	}
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(200 * time.Millisecond): // well before the deadline
 		t.Fatal("still lingering after the peer closed")
 	}
 	if c.discarded != len(late) || w.conns[c.fd] != nil {
@@ -358,7 +365,7 @@ func TestWingShutdownDrainsBehindAKeepAliveReply(t *testing.T) {
 	if _, err := io.WriteString(conn, framingGet("/reply")); err != nil {
 		t.Fatal(err)
 	}
-	hold, _ := framingDial(t, addr)
+	hold, holdBr := framingDial(t, addr)
 	defer hold.Close()
 	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
 		t.Fatal(err)
@@ -381,6 +388,13 @@ func TestWingShutdownDrainsBehindAKeepAliveReply(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	close(release)
+	// The held client reads its answer and leaves, so its own drain cannot
+	// keep Shutdown open while this client reads.
+	if res, err := http.ReadResponse(holdBr, nil); err == nil {
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}
+	hold.Close()
 	time.Sleep(50 * time.Millisecond)
 	start := make(chan struct{})
 	got := readBodyAfter(br, start)
@@ -565,5 +579,264 @@ func TestWingShutdownStopsAcceptingAtOnce(t *testing.T) {
 	if late, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 		late.Close()
 		t.Fatal("a new connection was accepted while Shutdown waited")
+	}
+}
+
+// TestWingShutdownEndsIdleConnectionsAtOnce holds Shutdown on a Pool handler.
+// A keep-alive connection that already has its reply has nothing to wait for:
+// it must see the end of the stream now, not once the held handler returns.
+func TestWingShutdownEndsIdleConnectionsAtOnce(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	entered, release := make(chan struct{}), make(chan struct{})
+	app := New(Wing())
+	app.Get("/ok", func(c *Ctx) error { return c.Text("ok") })
+	app.Get("/hold", func(c *Ctx) error {
+		close(entered)
+		<-release
+		return c.Text("held")
+	}, Arrow)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	idle, br := framingDial(t, addr)
+	defer idle.Close()
+	if _, err := io.WriteString(idle, framingGet("/ok")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	hold, _ := framingDial(t, addr)
+	defer hold.Close()
+	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Pool handler never ran")
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stopped <- app.transport.Shutdown(ctx)
+	}()
+	defer func() { close(release); <-stopped }()
+	idle.SetReadDeadline(time.Now().Add(time.Second))
+	if n, err := br.Read(make([]byte, 1)); err != io.EOF {
+		t.Fatalf("idle connection read %d bytes, %v while Shutdown waited; want io.EOF", n, err)
+	}
+}
+
+// TestWingShutdownEndsAnsweredConnectionsAtOnce holds Shutdown on a Pool
+// handler while a Spawn handler returns. The connection that got its answer ends
+// then, not once the held handler returns too.
+func TestWingShutdownEndsAnsweredConnectionsAtOnce(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	entered, release := make(chan struct{}, 2), make(chan struct{})
+	quick, stopping := make(chan struct{}), make(chan struct{})
+	app := New(Wing())
+	app.Get("/quick", func(c *Ctx) error {
+		entered <- struct{}{}
+		<-quick
+		return c.Text("quick")
+	}, Preset{Dispatch: Spawn})
+	app.Get("/hold", func(c *Ctx) error {
+		entered <- struct{}{}
+		<-c.Context().Done() // Shutdown has begun
+		close(stopping)
+		<-release
+		return c.Text("held")
+	}, Arrow)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	answered, br := framingDial(t, addr)
+	defer answered.Close()
+	if _, err := io.WriteString(answered, framingGet("/quick")); err != nil {
+		t.Fatal(err)
+	}
+	hold, _ := framingDial(t, addr)
+	defer hold.Close()
+	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatal("handlers never ran")
+		}
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stopped <- app.transport.Shutdown(ctx)
+	}()
+	defer func() { close(release); <-stopped }()
+	select {
+	case <-stopping:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Shutdown never cancelled the held handler")
+	}
+	close(quick)
+	answered.SetReadDeadline(time.Now().Add(time.Second))
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil || string(body) != "quick" {
+		t.Fatalf("answer %q, %v", body, err)
+	}
+	if n, err := br.Read(make([]byte, 1)); err != io.EOF {
+		t.Fatalf("answered connection read %d bytes, %v while Shutdown waited; want io.EOF", n, err)
+	}
+}
+
+// waitRecorder is a mockEngine whose waits block for as long as asked, as a
+// real poller with nothing ready would, and remembers each timeout.
+type waitRecorder struct {
+	mockEngine
+	waits []int
+}
+
+func (m *waitRecorder) WaitFor(_ []event, ms int) (int, error) {
+	m.waits = append(m.waits, ms)
+	if ms < 0 {
+		ms = 2000 // a wait with no bound and nothing to end it
+	}
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+	return 0, nil
+}
+
+// lingeringTestWorker has one quiet connection lingering until d from now.
+func lingeringTestWorker(t *testing.T, d time.Duration) (*worker, *waitRecorder, *conn) {
+	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { syscall.Close(fds[0]); syscall.Close(fds[1]) }) // the mock closes nothing
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
+		t.Fatal(err)
+	}
+	w, _ := newTestWorker(0)
+	eng := &waitRecorder{}
+	w.eng = eng
+	c := newTestConn(int32(fds[0]))
+	c.lingerUntil = monoNow() + int64(d)
+	w.conns[c.fd] = c
+	w.lingering++
+	w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
+	return w, eng, c
+}
+
+// TestWingShutdownLingerWaitsForItsDeadline lingers one quiet connection
+// through the end of Shutdown. With no input the stopped loop has nothing to
+// do until the deadline: it waits there in the poller, rather than waking to
+// read the socket again every few milliseconds.
+func TestWingShutdownLingerWaitsForItsDeadline(t *testing.T) {
+	w, eng, c := lingeringTestWorker(t, 200*time.Millisecond)
+	start := time.Now()
+	w.finishLingers()
+	if took := time.Since(start); took < 150*time.Millisecond {
+		t.Fatalf("closed after %v, before its deadline", took)
+	}
+	if w.conns[c.fd] != nil || w.lingering != 0 {
+		t.Fatal("still lingering past its deadline")
+	}
+	if len(eng.waits) > 5 {
+		t.Fatalf("woke %d times for a quiet socket (%v); want it to wait for the deadline", len(eng.waits), eng.waits)
+	}
+}
+
+// TestWingShutdownLingerEndsWithTheLastOne closes the last lingering
+// connection at its deadline. Nothing is left to wait for, so Shutdown's
+// final phase returns then rather than waiting on an idle poller.
+func TestWingShutdownLingerEndsWithTheLastOne(t *testing.T) {
+	w, eng, _ := lingeringTestWorker(t, 0)
+	start := time.Now()
+	w.finishLingers()
+	if took := time.Since(start); took > time.Second || w.lingering != 0 {
+		t.Fatalf("returned after %v with %d lingering (waits %v)", took, w.lingering, eng.waits)
+	}
+}
+
+// TestWingShutdownDrainsBehindAHandlerThatNeverReturned leaves a reply unread,
+// then pipelines a request whose Spawn handler leaves through runtime.Goexit,
+// so it never sends a completion. Shutdown, held by a Pool handler, must
+// still drain that connection when a late request arrives, not reset it.
+func TestWingShutdownDrainsBehindAHandlerThatNeverReturned(t *testing.T) {
+	t.Setenv("KRUDA_WORKERS", "1")
+	reply := strings.Repeat("g", 256<<10)
+	entered, release := make(chan struct{}), make(chan struct{})
+	exited := make(chan struct{})
+	app := New(Wing())
+	app.Get("/reply", func(c *Ctx) error { return c.Text(reply) })
+	app.Get("/exit", func(c *Ctx) error {
+		close(exited)
+		runtime.Goexit()
+		return nil
+	}, Preset{Dispatch: Spawn})
+	app.Get("/hold", func(c *Ctx) error {
+		close(entered)
+		<-release
+		return c.Text("held")
+	}, Arrow)
+	app.Compile()
+	addr, _ := startWingHijackServer(t, app)
+	conn, br := framingDial(t, addr)
+	defer conn.Close()
+	if _, err := io.WriteString(conn, framingGet("/reply")+framingGet("/exit")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-exited:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Spawn handler never ran")
+	}
+	hold, holdBr := framingDial(t, addr)
+	defer hold.Close()
+	if _, err := io.WriteString(hold, framingGet("/hold")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Pool handler never ran")
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		stopped <- app.transport.Shutdown(ctx)
+	}()
+	time.Sleep(100 * time.Millisecond) // the loop has stopped; Shutdown waits for the Pool
+	if _, err := io.WriteString(conn, framingGet("/late")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	// The held client reads its answer and leaves, so its own drain cannot
+	// keep Shutdown open while this client reads.
+	if res, err := http.ReadResponse(holdBr, nil); err == nil {
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}
+	hold.Close()
+	time.Sleep(50 * time.Millisecond)
+	start := make(chan struct{})
+	got := readBodyAfter(br, start)
+	close(start)
+	r := <-got
+	if err := <-stopped; err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if r.err != nil || r.n != len(reply) {
+		t.Fatalf("reply %d of %d bytes, %v; want it whole", r.n, len(reply), r.err)
 	}
 }

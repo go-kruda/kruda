@@ -21,7 +21,12 @@ type engine interface {
 	RegisterConn(fd int32, ptr unsafe.Pointer) // store *conn for pointer-in-epoll
 	PostWake()
 	Wait(events []event) (int, error)
-	WaitNonBlock(events []event) (int, error)
+	// WaitFor waits at most ms milliseconds for events: 0 returns at once,
+	// and a negative ms waits until one arrives.
+	WaitFor(events []event, ms int) (int, error)
+	// StopAccept forgets the listener before it closes, so no later wait
+	// accepts on a number the kernel has since given to another socket.
+	StopAccept()
 	Flush() error
 	Close()
 }

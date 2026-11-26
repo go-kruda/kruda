@@ -31,3 +31,6 @@ func TestKqueueCloseDropsQueuedRegistration(t *testing.T) {
 		t.Fatalf("queued changes %+v, want only fd %d", e.changes, live[0])
 	}
 }
+
+// watchTestConn registers c's socket for input, as a linger does.
+func watchTestConn(e engine, c *conn) { e.SubmitRecv(c.fd, nil, 0) }

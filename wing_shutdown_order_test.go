@@ -243,9 +243,17 @@ type notifyCloseEngine struct {
 
 func (e notifyCloseEngine) SubmitClose(fd int32) { e.closed <- fd }
 
+// WaitFor reports input on fd -1, as the engine would once a lingering peer
+// closes.
+func (e notifyCloseEngine) WaitFor(events []event, _ int) (int, error) {
+	time.Sleep(time.Millisecond)
+	events[0] = event{Op: opRecv, Fd: -1}
+	return 1, nil
+}
+
 // TestWingShutdownClosesLingering stops a worker with a connection lingering
-// after its final response, while a dispatched handler still runs. The stopped
-// loop never sweeps, so Shutdown must close that connection first.
+// after its final response, while a dispatched handler still runs. Its peer
+// has gone, so Shutdown must close it then, not once the handler returns.
 func TestWingShutdownClosesLingering(t *testing.T) {
 	w, eng := newTestWorker(0)
 	w.evfd, w.listenFd = -1, -1
@@ -253,9 +261,10 @@ func TestWingShutdownClosesLingering(t *testing.T) {
 	closed := make(chan int32, 1)
 	w.eng = notifyCloseEngine{eng, closed}
 	c := newTestConn(-1)
-	c.lingerUntil = time.Now().Add(time.Hour).UnixNano()
+	c.lingerUntil = monoNow() + int64(time.Hour)
 	w.lingering = 1
 	w.conns[c.fd] = c
+	w.lingerQ = append(w.lingerQ, lingerEntry{c, c.lingerUntil})
 	closedWhileRunning := make(chan bool, 1)
 	w.dispatchWG.Add(1)
 	go func() {
@@ -281,12 +290,13 @@ func TestWingShutdownSkipsStoppedWorker(t *testing.T) {
 	w.evfd, w.listenFd = -1, -1
 	w.doneCh = make(chan doneMsg, 1)
 	w.cleanup()
+	before := eng.wakes // cleanup may wake its own stopped loop
 	tr := &Transport{workers: []*worker{w}, ready: make(chan struct{})}
 	close(tr.ready)
 	if err := tr.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if eng.wakes != 0 {
-		t.Fatalf("stopped worker woken %d times", eng.wakes)
+	if eng.wakes != before {
+		t.Fatalf("stopped worker woken %d times", eng.wakes-before)
 	}
 }

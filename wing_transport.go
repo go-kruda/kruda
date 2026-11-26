@@ -2685,26 +2685,89 @@ func (w *worker) removeConnBookkeeping(fd int32) {
 	}
 }
 
-// lingerPoll is how often Shutdown reads lingering connections; the stopped
-// loop no longer reports their input.
-const lingerPoll = 5 * time.Millisecond
-
-// lingerAtShutdown keeps dropping input behind final responses that linger,
-// as the running loop would: closing one early can reset the response's
-// unread tail. With wait it returns once all have closed, each by its deadline.
-func (w *worker) lingerAtShutdown(wait bool) {
-	for w.lingering > 0 {
-		now := monoNow()
-		for fd, c := range w.conns {
-			if c.lingerUntil > 0 && (now >= c.lingerUntil || w.discardInput(c) == discardEnded) {
-				w.closeConn(fd)
+// takeCompletionsAtShutdown handles the completions handlers have sent since
+// the loop stopped. A Takeover connection closes through its File. A
+// connection whose last handler returned ends as the loop would end it after
+// a final response; whatever that handler left unwritten is dropped.
+func (w *worker) takeCompletionsAtShutdown() {
+	for {
+		select {
+		case msg := <-w.doneCh:
+			msg.stream.close()
+			if msg.file != nil {
+				w.removeConnBookkeeping(msg.fd)
+				delete(w.conns, msg.fd)
+				msg.file.Close()
+				continue
 			}
-		}
-		if !wait || w.lingering == 0 {
+			if msg.readStream != nil {
+				continue // the stream was closed as Shutdown began
+			}
+			c := w.conns[msg.fd]
+			if c == nil || c.takenOver {
+				continue
+			}
+			c.pending--
+			if c.pending == 0 && c.lingerUntil == 0 {
+				w.retire(c)
+			}
+		default:
 			return
 		}
-		time.Sleep(lingerPoll)
 	}
+}
+
+// shutdownWaitMillis bounds each wait of the stopped loop. A completion's wake
+// usually ends it sooner; the bound covers a wake the poller cannot report,
+// as for a worker torn down before its loop registered the wake fd.
+const shutdownWaitMillis = 100
+
+// waitAtShutdown is one turn of the stopped loop. It waits in the engine for
+// input behind lingering final responses, a wake, the next linger deadline or
+// until, whichever comes first, then handles that input as the running loop
+// does and closes the lingers that are due. A zero until adds no bound.
+func (w *worker) waitAtShutdown(until time.Time) {
+	ms := shutdownWaitMillis
+	if w.lingering > 0 && w.lingerHead < len(w.lingerQ) {
+		ms = min(ms, waitMillis(time.Duration(w.lingerQ[w.lingerHead].until-monoNow())))
+	}
+	if !until.IsZero() {
+		ms = min(ms, waitMillis(time.Until(until)))
+	}
+	n, _ := w.eng.WaitFor(w.events[:], ms)
+	for _, ev := range w.events[:n] {
+		if ev.Op != opRecv && ev.Op != opSend {
+			continue
+		}
+		c := (*conn)(ev.ConnPtr)
+		if c == nil {
+			c = w.conns[ev.Fd]
+		}
+		if c != nil && c.lingerUntil > 0 && w.conns[c.fd] == c {
+			w.closeAfterFinal(c)
+		}
+	}
+	if w.lingering > 0 {
+		w.sweepLinger(monoNow())
+	}
+}
+
+// finishLingers runs the stopped loop until every lingering connection has
+// closed, each when its peer does or at its deadline. Every linger began by
+// now, so none lasts past lingerDelay from here.
+func (w *worker) finishLingers() {
+	for end := time.Now().Add(time.Duration(lingerDelay)); w.lingering > 0 && time.Now().Before(end); {
+		w.waitAtShutdown(end)
+	}
+}
+
+// waitMillis rounds d up to whole milliseconds, so a wait never ends before
+// the deadline it is for.
+func waitMillis(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	return int((d + time.Millisecond - 1) / time.Millisecond)
 }
 
 // rawRead is read(2) on a non-blocking socket. A signal can interrupt it
@@ -2763,6 +2826,7 @@ func (w *worker) externalWake() {
 func (w *worker) cleanup() {
 	// The loop accepts no more. A connection left in the listen backlog would
 	// wait out every drain below unserved, then be reset.
+	w.eng.StopAccept()
 	closeFd(w.listenFd)
 	w.fileReadOnce.Do(func() {
 		if w.fileReadStop != nil {
@@ -2798,58 +2862,48 @@ func (w *worker) cleanup() {
 			c.takeoverGate.wake(c.takeoverFile, c.fd) // its goroutine still owns the fd, so the number is not recycled yet
 		}
 	}
-	w.dropLingerQueue()
-	// Completions are taken here while the Pool and the dispatched handlers
-	// finish: a full doneCh would block a sender before its dispatchWG.Done.
-	// A Takeover completion carries the fd's *os.File; this goroutine removes
-	// the connection before closing it, so the raw shutdown pass below never
-	// reaches a number the kernel may have reused. Other completions are
-	// dropped: the stopped loop sends nothing more.
-	var lingerTick <-chan time.Time
-	if w.lingering > 0 {
-		t := time.NewTicker(lingerPoll)
-		defer t.Stop()
-		lingerTick = t.C
+	// A connection no handler holds has nothing left to wait for. Its linger
+	// starts now, alongside the handlers still running, rather than after them.
+	for _, c := range w.conns {
+		if c.pending == 0 && !c.takenOver && c.lingerUntil == 0 {
+			w.retire(c)
+		}
 	}
-	drainUntil := func(done <-chan struct{}, grace <-chan time.Time) {
+	// The stopped loop keeps running for the connections it still owns until
+	// done closes: it takes completions, and drops input behind lingering final
+	// responses until their peers close or their deadlines pass.
+	drainUntil := func(done <-chan struct{}, grace time.Time) {
 		for {
+			w.takeCompletionsAtShutdown()
 			select {
-			case msg := <-w.doneCh:
-				msg.stream.close()
-				if msg.file != nil {
-					w.removeConnBookkeeping(msg.fd)
-					delete(w.conns, msg.fd)
-					msg.file.Close()
-				}
-			case <-lingerTick:
-				w.lingerAtShutdown(false)
-			case <-grace:
+			case <-done:
+				return
+			default:
+			}
+			if !grace.IsZero() && !time.Now().Before(grace) {
 				// A Pool handler may be waiting on a Takeover writer that is
 				// blocked on its client, so the Takeover sockets cannot wait for
 				// the Pool past this.
 				w.shutTakeoverWrites()
-				grace = nil
-			case <-done:
-				return
+				grace = time.Time{}
 			}
+			w.waitAtShutdown(grace)
 		}
 	}
 	waitFor := func(wait func()) <-chan struct{} {
 		done := make(chan struct{})
-		go func() { wait(); close(done) }()
+		go func() { wait(); close(done); w.externalWake() }()
 		return done
 	}
 	if w.pool != nil {
 		close(w.pool.jobs)
 		// Wait for pool goroutines to finish any in-flight job's RawSyscall
-		// before we start closing fds. Otherwise a pool goroutine's write
-		// could land on an fd the kernel has already recycled. This waits
-		// only after the conn contexts are cancelled, so a Pool handler
-		// waiting on its context, or blocked publishing a completion, can
-		// return. Sockets are still open here.
-		grace := time.NewTimer(shutdownTakeoverGrace)
-		drainUntil(waitFor(w.pool.wg.Wait), grace.C)
-		grace.Stop()
+		// before their sockets close. Otherwise a pool goroutine's write could
+		// land on an fd the kernel has already recycled. Only connections no
+		// handler holds close during this wait. This waits only after the conn
+		// contexts are cancelled, so a Pool handler waiting on its context, or
+		// blocked publishing a completion, can return.
+		drainUntil(waitFor(w.pool.wg.Wait), time.Now().Add(shutdownTakeoverGrace))
 	}
 	w.shutTakeoverWrites()
 	// The write side alone: Spawn writes are non-blocking, and a response may
@@ -2860,32 +2914,19 @@ func (w *worker) cleanup() {
 		}
 	}
 	// Now safe to wait for Spawn + Takeover dispatch goroutines.
-	drainUntil(waitFor(w.dispatchWG.Wait), nil)
-	// Every handler has returned. A connection the loop left open may still
-	// have a response in its socket: it lingers too, rather than closing over
-	// input that arrives behind that response.
+	drainUntil(waitFor(w.dispatchWG.Wait), time.Time{})
+	// What was queued before the last sender returned.
+	w.takeCompletionsAtShutdown()
+	// A handler that left through runtime.Goexit returned without a
+	// completion. Its connection may still have an earlier response in the
+	// socket: it lingers too, rather than closing over input behind it.
 	for _, c := range w.conns {
 		if !c.takenOver && c.lingerUntil == 0 {
 			c.pending = 0
 			w.retire(c)
 		}
 	}
-	w.lingerAtShutdown(true)
-	// What was queued before the last sender returned.
-drainBuffered:
-	for {
-		select {
-		case msg := <-w.doneCh:
-			msg.stream.close()
-			if msg.file != nil {
-				w.removeConnBookkeeping(msg.fd)
-				delete(w.conns, msg.fd)
-				msg.file.Close()
-			}
-		default:
-			break drainBuffered
-		}
-	}
+	w.finishLingers()
 	for fd, c := range w.conns {
 		// Decrement connCnt and per-IP counts for every connection still open at
 		// shutdown. removeConnBookkeeping is idempotent (c.admitted guard) so

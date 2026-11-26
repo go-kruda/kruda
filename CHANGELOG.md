@@ -17,11 +17,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   disconnects or shuts its write side. On other platforms and transports the
   option changes nothing. Measured on Linux with 5,120 simulated viewers at
   4 Mbps (3 MB segments, one proxy CPU, Go client and origin), each run five
-  alternating 60 s rounds of Wing and net/http: the release tree (`82c65e4`)
+  alternating 60 s rounds of Wing and net/http: the release tree (`aa4fc99`)
   met the gate in every round on both, with zero failed requests and every
-  origin hit. Segment p99 was 8.8 ms median for Wing (6.5 to 10.9 ms) and
-  6.2 ms for net/http (5.0 to 8.2 ms). Across the earlier runs on other
-  revisions, Wing missed the gate in 2 of 45 rounds and net/http in 1 of 45,
+  origin hit. Segment p99 was 8.0 ms median for Wing (6.3 to 8.9 ms) and
+  6.2 ms for net/http (5.0 to 7.5 ms). Across the earlier runs on other
+  revisions, Wing missed the gate in 2 of 50 rounds and net/http in 1 of 50,
   with the same overload pattern on both.
 
 - `kruda generate binder` runs the generated-binding tool from the CLI:
@@ -110,10 +110,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   | The app closes a hijacked connection (`contrib/ws`, `http.Hijacker`) | both directions shut, fd reclaimed over unread input | write side shut, Wing drains, then closes |
   | `Shutdown` with a hijacked connection open | its read side was shut | its reads end, and it drains once the app or Shutdown closes it |
 
-  `Shutdown` can take up to 0.5 s longer while clients that keep idle
-  keep-alive connections open do not close them. It closes the listener
-  first, so no new connection waits in the backlog meanwhile. A connection
-  that never answered still closes at once.
+  Each worker closes its listener first, so no new connection waits in the
+  backlog during `Shutdown`. Idle connections that may have a response in
+  the socket start draining while handlers finish; a connection with a
+  running handler starts when that handler returns. Wing waits for socket
+  readiness and gives each drain up to 0.5 s from its start for the client
+  to close, so `Shutdown` can end about 0.5 s after its slowest handler. A
+  connection that never answered still closes at once.
 
   On a hijacked connection, after `Close` a `Read` returns `net.ErrClosed`
   and a `Write` returns `net.ErrClosed`. Once `Shutdown` begins, a `Read`

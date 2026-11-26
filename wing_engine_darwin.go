@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -258,7 +259,21 @@ func (e *kqueueEngine) Wait(events []event) (int, error) {
 	return count, nil
 }
 
-func (e *kqueueEngine) WaitNonBlock(events []event) (int, error) { return e.Wait(events) }
+func (e *kqueueEngine) WaitFor(events []event, ms int) (int, error) {
+	saved := e.waitTimeout
+	e.waitTimeout = nil
+	if ms >= 0 {
+		ts := syscall.NsecToTimespec(int64(ms) * int64(time.Millisecond))
+		e.waitTimeout = &ts
+	}
+	n, err := e.Wait(events)
+	e.waitTimeout = saved
+	return n, err
+}
+
+// StopAccept also drops a re-arm of the listener still queued: liveChanges
+// keeps a read interest only for the listener or a registered socket.
+func (e *kqueueEngine) StopAccept() { e.listenFd = -1 }
 
 func (e *kqueueEngine) Flush() error {
 	if len(e.changes) > 0 {

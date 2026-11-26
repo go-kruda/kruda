@@ -38,7 +38,8 @@ func (m *mockEngine) SubmitPipeRecv(_ int, _ []byte)         {}
 func (m *mockEngine) RegisterConn(_ int32, _ unsafe.Pointer) {}
 func (m *mockEngine) PostWake()                              { m.wakes++ }
 func (m *mockEngine) Wait(_ []event) (int, error)            { return 0, nil }
-func (m *mockEngine) WaitNonBlock(_ []event) (int, error)    { return 0, nil }
+func (m *mockEngine) WaitFor(_ []event, _ int) (int, error)  { return 0, nil }
+func (m *mockEngine) StopAccept()                            {}
 func (m *mockEngine) Flush() error                           { return nil }
 func (m *mockEngine) Close()                                 {}
 

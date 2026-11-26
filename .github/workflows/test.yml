@@ -20,13 +20,51 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A pull request that only touches files no check reads skips the checks
+  # below. Pushes and release calls always run everything.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: diff
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)
+          printf '%s\n' "$files"
+          # Tests read docs/guide and friends, and check-docs scans them, so only
+          # the docs site's build files are left out.
+          if printf '%s\n' "$files" | grep -qvE '^(bench/|examples/|docs/\.vitepress/|docs/public/|docs/package\.json$|docs/package-lock\.json$|\.github/dependabot\.yml$|LICENSE$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Required checks use these job names, so a skipped pull request still runs
+  # each job and skips its steps: a job skipped whole reports its name with the
+  # matrix unexpanded, and the required check would never arrive.
   test:
     name: Test (Go ${{ matrix.go-version }}, ${{ matrix.os }})
+    needs: changes
     runs-on: >-
       ${{ github.event_name == 'push' &&
           (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
           matrix.self_hosted || matrix.os }}
     timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.code }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,56 +83,35 @@ jobs:
             self_hosted: [self-hosted, kruda-windows]
 
     steps:
+      - name: Skipped, no checked files changed
+        if: env.RUN != 'true'
+        run: echo "Only files no check reads changed."
+
       - name: Checkout code
+        if: env.RUN == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Go
+        if: env.RUN == 'true'
         uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
           cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Record Windows runtime environment
-        if: runner.os == 'Windows'
+        if: env.RUN == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: |
           go version
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List
           Get-CimInstance Win32_Processor | Select-Object Name | Format-List
 
-      - name: Install revive
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
-        run: |
-          go install github.com/mgechev/revive@v1.12.0
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Check documentation
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
-        run: |
-          scripts/check-docs.sh
-          scripts/check-godoc.sh
-
-      - name: Verify contrib core security floor
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
-        shell: bash
-        run: scripts/check-contrib-core-floor.sh
-
-      - name: Test release tagging script
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
-        shell: bash
-        run: scripts/test-tag-release.sh
-
       - name: Go vet
+        if: env.RUN == 'true'
         run: go vet -tags kruda_stdjson ./...
 
-      - name: Lint (golangci-lint)
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
-        uses: golangci/golangci-lint-action@v9
-        with:
-          args: --build-tags kruda_stdjson
-          version: latest
-
       - name: Run tests
+        if: env.RUN == 'true'
         shell: bash
         run: |
           COVER_FLAG=""
@@ -105,15 +122,113 @@ jobs:
           fi
           go test -v -race -count=1 -tags kruda_stdjson $COVER_FLAG $SKIP_FLAG ./...
 
-      - name: Run Wing performance guard
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
+      - name: Test contrib packages
+        if: env.RUN == 'true'
         shell: bash
-        run: go test -v -tags kruda_stdjson -run '^TestPlaintextPerformanceGuard$' -count=3 .
+        # Dynamically discovers contrib modules so new modules cannot be missed
+        # by a stale hardcoded CI list.
+        run: scripts/test-standalone-modules.sh contrib
+
+      - name: Test CLI
+        if: env.RUN == 'true'
+        run: scripts/test-standalone-modules.sh cmd/kruda
+
+      - name: Upload coverage to Codecov
+        if: env.RUN == 'true' && matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
+        uses: codecov/codecov-action@v6
+        with:
+          files: coverage.out
+          flags: unittests
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  # Source checks: the same on every OS, so Linux runs them once, beside the
+  # tests rather than before them.
+  lint:
+    name: Lint and docs
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: >-
+      ${{ github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+          fromJSON('["self-hosted","kruda-linux"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.11'
+          cache: ${{ runner.environment == 'github-hosted' }}
+
+      - name: Install revive
+        run: |
+          go install github.com/mgechev/revive@v1.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check documentation
+        run: |
+          scripts/check-docs.sh
+          scripts/check-godoc.sh
+
+      - name: Verify contrib core security floor
+        shell: bash
+        run: scripts/check-contrib-core-floor.sh
+
+      - name: Test release tagging script
+        shell: bash
+        run: scripts/test-tag-release.sh
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          args: --build-tags kruda_stdjson
+          version: latest
+
+  # Linux-only checks: the default Sonic engine, the Wing performance guard
+  # and the architectures no runner covers.
+  # Gated by step, as the tests are: its matrix names are required checks.
+  linux-extras:
+    name: Linux extras (Go ${{ matrix.go-version }})
+    needs: changes
+    runs-on: >-
+      ${{ github.event_name == 'push' &&
+          (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+          fromJSON('["self-hosted","kruda-linux"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.code }}
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.26.11', 'stable']
+    steps:
+      - name: Skipped, no checked files changed
+        if: env.RUN != 'true'
+        run: echo "Only files no check reads changed."
+
+      - name: Checkout code
+        if: env.RUN == 'true'
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        if: env.RUN == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: ${{ runner.environment == 'github-hosted' }}
 
       - name: Run default JSON engine tests
-        if: matrix.os == 'ubuntu-latest'
+        if: env.RUN == 'true'
         shell: bash
         run: CGO_ENABLED=1 go test -race -count=1 -skip '^TestPlaintextPerformanceGuard$' ./...
+
+      - name: Run Wing performance guard
+        if: env.RUN == 'true' && matrix.go-version == '1.26.11'
+        shell: bash
+        run: go test -v -tags kruda_stdjson -run '^TestPlaintextPerformanceGuard$' -count=3 .
 
       # Sonic accelerates amd64 and arm64 only; on other 64-bit architectures it
       # routes its own API to encoding/json, and Kruda's json package takes a
@@ -121,7 +236,7 @@ jobs:
       # amd64 and arm64, so nothing else covers that path — this at least keeps it
       # compiling. Build-only: there is no runner for these.
       - name: Build the Sonic-fallback architectures
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.26.11'
+        if: env.RUN == 'true' && matrix.go-version == '1.26.11'
         shell: bash
         run: |
           for arch in ppc64le s390x riscv64; do
@@ -139,21 +254,3 @@ jobs:
           # syscall.SYS_ACCEPT4, which Go does not define for 386.
           echo "== linux/arm, kruda_stdjson =="
           GOOS=linux GOARCH=arm go build -tags kruda_stdjson ./...
-
-      - name: Test contrib packages
-        shell: bash
-        # Dynamically discovers contrib modules so new modules cannot be missed
-        # by a stale hardcoded CI list.
-        run: scripts/test-standalone-modules.sh contrib
-
-      - name: Test CLI
-        run: scripts/test-standalone-modules.sh cmd/kruda
-
-      - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
-        uses: codecov/codecov-action@v6
-        with:
-          files: coverage.out
-          flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false

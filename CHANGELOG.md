@@ -495,6 +495,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   requests get `405 Method Not Allowed`, and custom methods keep their own
   routes. Standard methods route exactly as before.
 
+- `contrib/otel` and `contrib/observability` require OpenTelemetry Go
+  v1.47.0 (contrib v0.72.0), which fixes GO-2026-6975 (memory amplification
+  in W3C baggage parsing) and GO-2026-6974 (attribute length limit bypass).
+
 - **The `kruda mcp` generator tools no longer overwrite files or write outside
   their folder.** Before, calling `kruda_add_handler` or `kruda_add_resource`
   a second time replaced `handlers/users.go` or `services/product_service.go`

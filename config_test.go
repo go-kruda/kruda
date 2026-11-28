@@ -1,7 +1,9 @@
 package kruda
 
 import (
+	"math"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -36,6 +38,8 @@ func TestParseSize(t *testing.T) {
 		{"1gb", 1 * 1024 * 1024 * 1024},
 		{"4096", 4096},
 		{" 2MB ", 2 * 1024 * 1024},
+		{"8589934591GB", math.MaxInt64 - (1<<30 - 1)},
+		{"-8589934592GB", math.MinInt64},
 	}
 	for _, tt := range tests {
 		got, err := parseSize(tt.input)
@@ -50,9 +54,10 @@ func TestParseSize(t *testing.T) {
 }
 
 func TestParseSizeError(t *testing.T) {
-	_, err := parseSize("abc")
-	if err == nil {
-		t.Error("expected error for invalid input")
+	for _, input := range []string{"abc", "8589934592GB", "-8589934593GB"} {
+		if _, err := parseSize(input); err == nil {
+			t.Errorf("parseSize(%q) succeeded, want an error", input)
+		}
 	}
 }
 
@@ -158,6 +163,30 @@ func TestApplyEnvConfigInvalidValues(t *testing.T) {
 	}
 	if cfg.BodyLimit != original.BodyLimit {
 		t.Error("BodyLimit changed with invalid env var")
+	}
+}
+
+func TestApplyEnvConfigSizeLimits(t *testing.T) {
+	app := New(WithBodyLimit(1024), WithHeaderLimit(256))
+	setLimits := func(value string) {
+		t.Setenv("SIZE_BODY_LIMIT", value)
+		t.Setenv("SIZE_HEADER_LIMIT", value)
+		WithEnvPrefix("SIZE")(app)
+	}
+
+	setLimits(strconv.Itoa(math.MaxInt))
+	if app.config.BodyLimit != math.MaxInt || app.config.HeaderLimit != math.MaxInt {
+		t.Fatalf("size limits = (%d, %d), want both %d", app.config.BodyLimit, app.config.HeaderLimit, math.MaxInt)
+	}
+
+	setLimits(strconv.FormatUint(uint64(math.MaxInt)+1, 10))
+	if app.config.BodyLimit != math.MaxInt || app.config.HeaderLimit != math.MaxInt {
+		t.Errorf("size limits = (%d, %d), want previous limits of %d", app.config.BodyLimit, app.config.HeaderLimit, math.MaxInt)
+	}
+
+	setLimits("8589934592GB")
+	if app.config.BodyLimit != math.MaxInt || app.config.HeaderLimit != math.MaxInt {
+		t.Errorf("size limits = (%d, %d), want previous limits of %d", app.config.BodyLimit, app.config.HeaderLimit, math.MaxInt)
 	}
 }
 

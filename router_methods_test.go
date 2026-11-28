@@ -387,6 +387,14 @@ func TestCleanPath_DotSegments(t *testing.T) {
 	}
 }
 
+func TestCleanPath_LeadingBackslash(t *testing.T) {
+	for _, raw := range []string{`\`, `/\`} {
+		if cleaned, err := cleanPath(raw); err == nil {
+			t.Errorf("cleanPath(%q) = %q, want an error", raw, cleaned)
+		}
+	}
+}
+
 // =============================================================================
 // router.go — isQuantifier
 // =============================================================================

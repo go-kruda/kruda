@@ -3,6 +3,7 @@ package kruda
 import (
 	"bytes"
 	"log/slog"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -365,12 +366,12 @@ func applyEnvConfig(prefix string, cfg *Config) {
 		}
 	}
 	if v := os.Getenv(prefix + "_BODY_LIMIT"); v != "" {
-		if n, err := parseSize(v); err == nil {
+		if n, err := parseSize(v); err == nil && n >= math.MinInt && n <= math.MaxInt {
 			cfg.BodyLimit = int(n)
 		}
 	}
 	if v := os.Getenv(prefix + "_HEADER_LIMIT"); v != "" {
-		if n, err := parseSize(v); err == nil {
+		if n, err := parseSize(v); err == nil && n >= math.MinInt && n <= math.MaxInt {
 			cfg.HeaderLimit = int(n)
 		}
 	}
@@ -416,29 +417,26 @@ func applyEnvConfig(prefix string, cfg *Config) {
 func parseSize(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	upper := strings.ToUpper(s)
-	if strings.HasSuffix(upper, "GB") {
-		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return n * 1024 * 1024 * 1024, nil
+	unit := int64(1)
+	switch {
+	case strings.HasSuffix(upper, "GB"):
+		unit = 1 << 30
+	case strings.HasSuffix(upper, "MB"):
+		unit = 1 << 20
+	case strings.HasSuffix(upper, "KB"):
+		unit = 1 << 10
 	}
-	if strings.HasSuffix(upper, "MB") {
-		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return n * 1024 * 1024, nil
-	}
-	if strings.HasSuffix(upper, "KB") {
-		n, err := strconv.ParseInt(strings.TrimSpace(s[:len(s)-2]), 10, 64)
-		if err != nil {
-			return 0, err
-		}
-		return n * 1024, nil
+	if unit != 1 {
+		s = strings.TrimSpace(s[:len(s)-2])
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
-	return n, err
+	if err != nil {
+		return 0, err
+	}
+	if n < math.MinInt64/unit || n > math.MaxInt64/unit {
+		return 0, strconv.ErrRange
+	}
+	return n * unit, nil
 }
 
 // WithValidator replaces the App's Validator, for registering custom rules or

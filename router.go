@@ -14,6 +14,8 @@ import (
 // errPathTraversal is returned when a request path contains directory traversal sequences.
 var errPathTraversal = errors.New("kruda: path traversal detected")
 
+var errInvalidPathPrefix = errors.New("kruda: invalid path prefix")
+
 // cleanPath normalizes a request path and rejects traversal attempts.
 // It decodes percent-encoded sequences, resolves . and .. segments via path.Clean,
 // and rejects any result that still contains "..".
@@ -46,6 +48,9 @@ func cleanPath(raw string) (string, error) {
 
 	// Normalize with path.Clean (resolves . and safe ..)
 	cleaned := path.Clean(decoded)
+	if strings.HasPrefix(cleaned, `/\`) || strings.HasPrefix(cleaned, `\`) {
+		return "", errInvalidPathPrefix
+	}
 
 	// Ensure leading slash
 	if !strings.HasPrefix(cleaned, "/") {

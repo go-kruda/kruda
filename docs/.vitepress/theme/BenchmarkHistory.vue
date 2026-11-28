@@ -101,6 +101,7 @@ const fmtDate = (d: number) => new Date(d).toLocaleDateString('en-GB', { day: 'n
       <h1>Continuous benchmarks</h1>
       <p class="lede">Go microbenchmarks run in CI on every push to <code>main</code>. Each point is the median of one run's samples, in nanoseconds per operation, so lower is better.</p>
       <p class="note">These run on shared CI machines and catch regressions between commits. For comparisons with other frameworks, see the <a href="/benchmarks/2026-09-21-v1.8.0-typed-binding.html">v1.8.0 benchmark report</a>.</p>
+      <p class="note"><a href="/benchmarks/2026-11-28-hls-proxy.html">HLS segment proxy benchmark</a> · Released v1.9.0 example and the separate Wing 256 KiB experiment.</p>
     </header>
 
     <p v-if="state === 'loading'" class="status">Loading benchmark history…</p>

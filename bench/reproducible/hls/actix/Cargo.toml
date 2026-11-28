@@ -1,0 +1,8 @@
+[package]
+name = "actix-proxy"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+actix-web = { version = "=4.20.0", default-features = false, features = ["macros"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["stream"] }
+futures-util = "0.3"

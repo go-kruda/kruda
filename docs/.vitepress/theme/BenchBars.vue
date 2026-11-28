@@ -24,6 +24,7 @@ defineProps<{ groups: Group[]; unit: string; direction: string }>()
 <style scoped>
 .bench-bars { margin: 20px 0 28px; }
 .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.groups:has(> :only-child) { grid-template-columns: 1fr; }
 figcaption { font-family: var(--kruda-display); font-size: 1rem; font-weight: 650; letter-spacing: -.01em; color: var(--vp-c-text-1); }
 figcaption small { display: block; margin-top: 2px; font-family: var(--vp-font-family-base); font-size: 12.5px; font-weight: 400; color: var(--vp-c-text-2); }
 .row { margin-top: 16px; }

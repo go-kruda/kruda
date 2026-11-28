@@ -1,0 +1,66 @@
+--- a/ctx_response.go
++++ b/ctx_response.go
+@@ -347,7 +347,14 @@
+ 	if tracked {
+ 		tracker.streamCopyStart()
+ 	}
+-	_, err := io.Copy(writerAdapter{c.writer}, reader)
++	var err error
++	if copier, ok := c.writer.(interface {
++		copyStream(io.Reader) (int64, error)
++	}); ok {
++		_, err = copier.copyStream(reader)
++	} else {
++		_, err = io.Copy(writerAdapter{c.writer}, reader)
++	}
+ 	if tracked {
+ 		tracker.streamCopyResult(err)
+ 	}
+--- a/wing_stream.go
++++ b/wing_stream.go
+@@ -16,6 +16,7 @@
+ 	"os"
+ 	"strconv"
+ 	"strings"
++	"sync"
+ 	"syscall"
+ 	"time"
+ 
+@@ -169,6 +170,37 @@
+ 	_ = w.flushHeaders()
+ }
+ 
++var wingStreamCopyBufferBytes = func() int {
++	if os.Getenv("TIINNO_BENCH_WING_COPY_256") == "1" {
++		return 256 << 10
++	}
++	return 64 << 10
++}()
++
++var wingStreamCopyPool = sync.Pool{
++	New: func() any {
++		buffer := make([]byte, wingStreamCopyBufferBytes)
++		return &buffer
++	},
++}
++
++func (w *wingStreamWriter) copyStream(reader io.Reader) (int64, error) {
++	dst := writerAdapter{w}
++	if !w.tryKeepAlive {
++		return io.Copy(dst, reader)
++	}
++	if _, framed := streamContentLength(w.status, &w.headers); !framed {
++		return io.Copy(dst, reader)
++	}
++	if writerTo, ok := reader.(io.WriterTo); ok {
++		return writerTo.WriteTo(dst)
++	}
++
++	buffer := wingStreamCopyPool.Get().(*[]byte)
++	defer wingStreamCopyPool.Put(buffer)
++	return io.CopyBuffer(dst, reader, *buffer)
++}
++
+ func (w *wingStreamWriter) Write(p []byte) (int, error) {
+ 	if len(p) == 0 && (w.copying || w.copyFailed) {
+ 		return 0, nil // commits nothing: the copy may still fail, or did

@@ -1,0 +1,7 @@
+# Measurement build identities
+
+- Experimental Wing is based on Kruda v1.9.0 commit `656cf9d46feee03e67f0af1caa7aea72089cdc3f`, with `StreamKeepAlive` and a pooled 256 KiB copy buffer enabled for the test. The fixture selects that buffer with `TIINNO_BENCH_WING_COPY_256=1`. In this archive, a build-local module replacement points to the patched v1.9.0 source.
+- Fiber v3.7.0 uses fasthttp v1.78.0 and fixed-length `SendStream`. Its upstream Go transport has 1,024 idle slots per host, a 65-second idle timeout, and an 8-second request timeout. The original Go builds used Go 1.26.11 on Linux amd64.
+- Actix Web v4.20.0 uses Reqwest v0.12.28 with a client per Actix worker, a 32 KiB HTTP/1 write buffer, and TCP_NODELAY. The upstream client has 1,024 idle slots per host per worker, a 65-second idle timeout, and an 8-second request timeout. The original build used Rust 1.98.1 in release mode.
+- Wing's shared upstream Go transport has 512 idle slots per host, a 90-second idle timeout, and a 10-second request timeout. Fiber and Actix use 65-second downstream keep-alive. Downstream reuse was checked at a six-second delay. Upstream TCP reuse was outside the captured data.
+- The long-run driver was compiled from `driver/main.go` and `driver/load.go`. The short-run driver was compiled into the same fixture binary that serves the RAM origin. Original executable and runner hashes are listed in the cohort's `original-sha256.txt`.

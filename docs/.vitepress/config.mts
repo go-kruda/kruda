@@ -5,6 +5,7 @@ export default defineConfig({
   description: 'Fast by default, type-safe by design — Go web framework',
   lang: 'en-US',
   base: '/',
+  srcExclude: ['superpowers/**'],
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32x32.png' }],

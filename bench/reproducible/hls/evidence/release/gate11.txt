@@ -1,0 +1,12 @@
+Release-tree qualification aa4fc99, Linux x86-64, one proxy vCPU. Retained per-round output.
+
+hls01 nethttp     5120 | pass=    1 p99=    5.0ms bad=    0 cpu=  76.6% rss=   21.3MiB origin=  70.3% load=  66.3% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls01 wing        5120 | pass=    1 p99=    6.3ms bad=    0 cpu=  77.6% rss=   22.2MiB origin=  69.8% load=  66.8% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls02 wing        5120 | pass=    1 p99=    7.7ms bad=    0 cpu=  77.8% rss=   22.0MiB origin=  70.2% load=  66.3% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls02 nethttp     5120 | pass=    1 p99=    7.2ms bad=    0 cpu=  77.0% rss=   21.4MiB origin=  70.0% load=  66.4% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls03 nethttp     5120 | pass=    1 p99=    6.2ms bad=    0 cpu=  77.1% rss=   21.4MiB origin=  70.1% load=  66.1% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls03 wing        5120 | pass=    1 p99=    8.8ms bad=    0 cpu=  77.5% rss=   21.9MiB origin=  69.3% load=  66.6% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls04 wing        5120 | pass=    1 p99=    8.0ms bad=    0 cpu=  77.8% rss=   21.5MiB origin=  70.1% load=  65.8% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls04 nethttp     5120 | pass=    1 p99=    5.4ms bad=    0 cpu=  76.4% rss=   21.1MiB origin=  70.5% load=  67.0% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls05 nethttp     5120 | pass=    1 p99=    7.5ms bad=    0 cpu=  77.3% rss=   21.4MiB origin=  70.7% load=  66.3% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440
+hls05 wing        5120 | pass=    1 p99=    8.9ms bad=    0 cpu=  77.7% rss=   21.2MiB origin=  70.3% load=  66.7% actual=20.48Gbps dispatch-p99=  1.9ms upstream=61440/61440

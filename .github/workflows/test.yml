@@ -30,7 +30,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -89,11 +89,11 @@ jobs:
 
       - name: Checkout code
         if: env.RUN == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Go
         if: env.RUN == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
           cache: ${{ runner.environment == 'github-hosted' }}
@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: env.RUN == 'true' && matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.out
           flags: unittests
@@ -155,10 +155,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.11'
           cache: ${{ runner.environment == 'github-hosted' }}
@@ -211,11 +211,11 @@ jobs:
 
       - name: Checkout code
         if: env.RUN == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Go
         if: env.RUN == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
           cache: ${{ runner.environment == 'github-hosted' }}

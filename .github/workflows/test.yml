@@ -106,6 +106,12 @@ jobs:
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List
           Get-CimInstance Win32_Processor | Select-Object Name | Format-List
 
+      - name: Limit Windows Go build parallelism
+        if: env.RUN == 'true' && runner.os == 'Windows'
+        shell: pwsh
+        # Bindgen tests inherit this limit when they start their own Go commands.
+        run: "'GOFLAGS=-p=2' >> $env:GITHUB_ENV"
+
       - name: Go vet
         if: env.RUN == 'true'
         run: go vet -tags kruda_stdjson ./...
